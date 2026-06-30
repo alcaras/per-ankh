@@ -20,6 +20,7 @@
 	import UserAutocomplete from "$lib/tournament/UserAutocomplete.svelte";
 	import SchedulePopover from "$lib/tournament/SchedulePopover.svelte";
 	import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
+	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import {
 		CHART_THEME,
 		getChartColor,
@@ -51,6 +52,11 @@
 		slotUserIds: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		user: UserMe | null;
+		// Global running match number (1-based across the whole tournament),
+		// supplied by the parent that has the full match list. Drives the
+		// "Match N" label + the copy-paste thread title. Omitted for byes /
+		// placeholder matches and views without the full list.
+		matchNumber?: number;
 		// Admin substitute: rename the named slot's occupant, optionally pre-
 		// linking to a registered user (userId from the autocomplete; null for
 		// free text). Wired by the parent to the same handler that drives the
@@ -73,6 +79,7 @@
 		slotUserIds,
 		slotAvatars,
 		user,
+		matchNumber,
 		onSubstitute,
 		onClose,
 	}: Props = $props();
@@ -140,6 +147,26 @@
 	// substitute anyway; unclaimed slots have handle == typed name == label).
 	const slotAHandle = $derived(match.slot_a_discord_username ?? slotALabel);
 	const slotBHandle = $derived(match.slot_b_discord_username ?? slotBLabel);
+
+	// Copy-paste of the Discord thread title — "Match N (Player1 v Player2)" —
+	// using each side's display name. Only offered when the parent supplied a
+	// (global) match number.
+	const threadTitle = $derived(
+		matchNumber != null
+			? `Match ${padMatchNumber(matchNumber)} (${slotALabel} v ${slotBLabel})`
+			: null,
+	);
+	let titleCopied = $state(false);
+	async function copyThreadTitle() {
+		if (!threadTitle) return;
+		try {
+			await navigator.clipboard.writeText(threadTitle);
+			titleCopied = true;
+			setTimeout(() => (titleCopied = false), 1500);
+		} catch {
+			// clipboard blocked (e.g. insecure context) — silently no-op
+		}
+	}
 	const winnerSide = $derived<"a" | "b" | null>(
 		match.winner_slot_id === null
 			? null
@@ -592,16 +619,31 @@
 					{isPlaceholder ? "awaiting prior round" : match.status}
 				</span>
 			</div>
-			<div class="mt-1 text-xs text-tan opacity-70">
-				{#if match.phase === "championship"}
-					Championship
-				{:else if match.division}
-					{match.division === "A"
-						? tournament.division_a_name
-						: tournament.division_b_name}
-				{/if}
-				{#if match.round_number}
-					· Round {match.round_number}
+			<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+				<span class="text-tan opacity-70">
+					{#if match.phase === "championship"}
+						Championship
+					{:else if match.division}
+						{match.division === "A"
+							? tournament.division_a_name
+							: tournament.division_b_name}
+					{/if}
+					{#if match.round_number}
+						· Round {match.round_number}
+					{/if}
+					{#if matchNumber != null}
+						· Match {padMatchNumber(matchNumber)}
+					{/if}
+				</span>
+				{#if threadTitle}
+					<button
+						type="button"
+						class="inline-flex items-center gap-1 rounded border border-surface px-1.5 py-0.5 text-[11px] text-tan hover:bg-surface-hover"
+						title={`Copy "${threadTitle}" for the Discord thread`}
+						onclick={copyThreadTitle}
+					>
+						{titleCopied ? "Copied!" : "Copy thread title"}
+					</button>
 				{/if}
 			</div>
 		</div>

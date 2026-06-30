@@ -27,6 +27,7 @@
 		TABLE_CELL_TD_CLASS,
 	} from "$lib/game-detail/helpers";
 	import MatchPopover from "$lib/tournament/MatchPopover.svelte";
+	import { matchNumbers, padMatchNumber } from "$lib/tournament/match-numbers";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import {
 		matchSlotAvatarUrl,
@@ -199,6 +200,61 @@
 			: null,
 	);
 
+	// Global "Match N" numbering, shared with the bracket cards + popover.
+	const matchNumberById = $derived(matchNumbers(data.matches));
+
+	// Admin "sesh.fyi"-style copy of upcoming (scheduled, still-pending) matches,
+	// soonest first, with Discord timestamps — paste into a Discord scheduling
+	// post. `<t:UNIX:F>` renders the full local date; `<t:UNIX:R>` the relative
+	// "in X hours/days".
+	let seshCopied = $state(false);
+	function seshExport() {
+		const num = (m: TournamentMatch) =>
+			padMatchNumber(matchNumberById.get(m.match_id));
+		const vs = (m: TournamentMatch) =>
+			`${matchSlotDisplayName(m, "a", slotMaps.labels) ?? "?"} v ${
+				matchSlotDisplayName(m, "b", slotMaps.labels) ?? "?"
+			}`;
+		// Still-to-play matches with both players resolved (excludes byes,
+		// completed, and placeholder future-round cells).
+		const pending = data.matches.filter(
+			(m) => m.status === "pending" && m.slot_b_id != null,
+		);
+
+		const scheduled = pending
+			.filter((m) => m.scheduled_at != null)
+			.sort((a, b) =>
+				(a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
+			)
+			.map((m) => {
+				const unix = Math.floor(Date.parse(m.scheduled_at as string) / 1000);
+				return `Match ${num(m)} - ${vs(m)} - <t:${unix}:F> (<t:${unix}:R>)`;
+			});
+		const unscheduled = pending
+			.filter((m) => m.scheduled_at == null)
+			.sort(
+				(a, b) =>
+					(matchNumberById.get(a.match_id) ?? 0) -
+					(matchNumberById.get(b.match_id) ?? 0),
+			)
+			.map((m) => `Match ${num(m)} - ${vs(m)}`);
+
+		const blocks = [
+			"Upcoming matches\n\n" +
+				(scheduled.length ? scheduled.join("\n") : "(none scheduled)"),
+		];
+		if (unscheduled.length) {
+			blocks.push("To be scheduled\n\n" + unscheduled.join("\n"));
+		}
+		navigator.clipboard
+			.writeText(blocks.join("\n\n"))
+			.then(() => {
+				seshCopied = true;
+				setTimeout(() => (seshCopied = false), 1500);
+			})
+			.catch(() => {});
+	}
+
 	function pick(matchId: string, e: MouseEvent) {
 		const x = e.clientX;
 		const y = e.clientY;
@@ -358,6 +414,16 @@
 				>
 					<h1 class="text-lg font-bold text-tan">Matches</h1>
 					<div class="flex items-center gap-2">
+						{#if isAdmin}
+							<button
+								type="button"
+								class="rounded border border-surface px-2 py-1 text-xs text-tan hover:bg-surface-hover"
+								title="Copy upcoming scheduled matches (soonest first) with Discord timestamps, for a sesh.fyi / Discord post"
+								onclick={seshExport}
+							>
+								{seshCopied ? "Copied!" : "Copy upcoming (sesh)"}
+							</button>
+						{/if}
 						<!-- UTC / Local: a segmented toggle picking the active clock. -->
 						<div
 							class="relative grid grid-cols-2 overflow-hidden rounded-lg border-2 border-surface"
@@ -509,11 +575,14 @@
 											<table class={TABLE_CLASS}>
 												<thead>
 													<tr>
+														<th
+															class="{TABLE_HEADER_TH_CLASS} rounded-l-lg border-l"
+															>Match</th
+														>
 														{#each MATCH_COLUMNS as column, i (column.key)}
 															<th
-																class="{TABLE_HEADER_TH_CLASS} {i === 0
-																	? 'rounded-l-lg border-l'
-																	: ''} {i === MATCH_COLUMNS.length - 1
+																class="{TABLE_HEADER_TH_CLASS} {i ===
+																MATCH_COLUMNS.length - 1
 																	? 'rounded-r-lg border-r'
 																	: ''}"
 																onclick={() =>
@@ -539,11 +608,16 @@
 															class="group cursor-pointer"
 															onclick={(e) => pick(m.match_id, e)}
 														>
+															<td
+																class="{TABLE_CELL_TD_CLASS} whitespace-nowrap rounded-l-lg font-mono text-tan opacity-70"
+																>{padMatchNumber(
+																	matchNumberById.get(m.match_id),
+																)}</td
+															>
 															{#each MATCH_COLUMNS as column, i (column.key)}
 																<td
-																	class="{TABLE_CELL_TD_CLASS} {i === 0
-																		? 'rounded-l-lg'
-																		: ''} {i === MATCH_COLUMNS.length - 1
+																	class="{TABLE_CELL_TD_CLASS} {i ===
+																	MATCH_COLUMNS.length - 1
 																		? 'rounded-r-lg'
 																		: ''} whitespace-nowrap"
 																>
@@ -739,6 +813,7 @@
 				slotUserIds={slotMaps.userIds}
 				slotAvatars={slotMaps.avatars}
 				{user}
+				matchNumber={matchNumberById.get(detailMatch.match_id)}
 				onSubstitute={isAdmin ? substituteSlot : undefined}
 				onClose={() => (detailMatchId = null)}
 			/>

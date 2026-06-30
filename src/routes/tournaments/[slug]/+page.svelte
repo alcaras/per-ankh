@@ -19,6 +19,7 @@
 	import ChampionshipStandings from "$lib/tournament/ChampionshipStandings.svelte";
 	import PickPreferenceNote from "$lib/tournament/PickPreferenceNote.svelte";
 	import MatchPopover from "$lib/tournament/MatchPopover.svelte";
+	import { matchNumbers } from "$lib/tournament/match-numbers";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import UserAutocomplete from "$lib/tournament/UserAutocomplete.svelte";
 	import SlotUsernameCell from "$lib/tournament/SlotUsernameCell.svelte";
@@ -111,6 +112,9 @@
 			(m) => m.phase === "swiss" && m.division === division,
 		);
 	}
+
+	// Global "Match N" numbering, shared by the bracket cards + the popover.
+	const matchNumberById = $derived(matchNumbers(data.matches));
 
 	const matchesByDivision = $derived({
 		A: swissMatchesFor("A"),
@@ -1104,6 +1108,7 @@
 													maxRounds={data.tournament.swiss_max_rounds}
 													standings={divisionData.standings}
 													matches={matchesByDivision[division]}
+													{matchNumberById}
 													tournamentSlug={data.tournament.slug}
 													mapPool={data.tournament.map_pool}
 													onMatchClick={openMatch}
@@ -1147,6 +1152,7 @@
 				{slotUserIds}
 				{slotAvatars}
 				{user}
+				matchNumber={matchNumberById.get(currentMatch.match_id)}
 				onSubstitute={isAdmin ? substituteSlot : undefined}
 				onClose={closeMatch}
 			/>
