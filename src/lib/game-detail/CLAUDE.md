@@ -1,6 +1,6 @@
 # Game Detail View (`src/lib/game-detail/`)
 
-Builds the `/games/[id]` page. **Shared with the legacy share viewer:** `web/src/routes/share/[id]/` symlinks back into `src/lib/` (specifically `game-detail/`, `types/`, `config/`, `generated/`, plus top-level shared components like `SpriteMap`, `Chart`, `MapTooltip`). So UI-only changes here propagate to the legacy share viewer automatically when `web/` redeploys.
+Builds the `/games/[id]` page.
 
 ## Adding to the view
 
@@ -9,10 +9,7 @@ Builds the `/games/[id]` page. **Shared with the legacy share viewer:** `web/src
 
 ## Changes that need new backend data
 
-UI-only changes work without touching the backend. But if a new chart/tab needs data not in the existing share blob, you must update both:
-
-1. The cloud Worker (`cloud/src/`) — add the field to the share blob shape and to the validation schemas (see `cloud/src/CLAUDE.md`).
-2. The `web/` viewer's `webApi` if the new field needs to be sliced from the cached blob.
+UI-only changes work without touching the backend. But if a new chart/tab needs data not in the existing game blob, update the cloud Worker (`cloud/src/`) — add the field to the game blob shape and to the validation schemas (see `cloud/src/CLAUDE.md`).
 
 Deploy the Worker schema change **before** releasing the frontend that depends on it.
 

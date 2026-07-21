@@ -24,7 +24,6 @@ This reference is drift-guarded: `cloud/src/routes-doc.test.ts` asserts it docum
 - [Site admin: games](#site-admin-games) — `/v1/admin/games/*`
 - [Site admin: featured videos](#site-admin-featured-videos) — `/v1/admin/featured-videos*`
 - [Diagnostics](#diagnostics) — `/v1/csp-report`
-- [Legacy share](#legacy-share) — `/v1/share/*` (frozen)
 
 ---
 
@@ -52,7 +51,6 @@ Auth is enforced inside each handler (not declared on the route). Every endpoint
 - **Tournament creator** — creator or site admin only (co-admins excluded).
 - **Match participant** — either match slot's claiming user (a fallback tier on the schedule endpoint).
 - **Beta** — the tournament-create allowlist (`isTournamentBeta`). Gates tournament creation only.
-- **App key (legacy)** — the frozen `/v1/share/*` surface; authenticated by `X-App-Key` / `X-Delete-Token` headers, not the session cookie.
 
 ### Authentication model
 
@@ -62,11 +60,10 @@ Auth is a session cookie (name `session`; `session_staging` on staging), `Domain
 
 - JSON bodies: `Content-Type: application/json`. Non-JSON where a body is required → `415 UNSUPPORTED_MEDIA_TYPE`; malformed JSON → `400 INVALID_JSON`; schema failure (Valibot) → `400 INVALID_BODY`.
 - `POST /v1/games` and `POST /v1/admin/games/:user_id/reparse-upload` take `multipart/form-data`.
-- `POST /v1/share` (legacy) takes a gzip binary body.
 
 ### Response & error envelope
 
-Success bodies are endpoint-specific JSON (or a binary stream for downloads/exports). Errors are `{ "error": string, "code"?: string }`, with optional extra fields (e.g. `qualifier_count`). Every response carries an `X-Request-Id` header; unhandled `500`s also include `request_id` in the body. **Legacy `/v1/share/*` errors are `{ "error": string }` only — no `code`.**
+Success bodies are endpoint-specific JSON (or a binary stream for downloads/exports). Errors are `{ "error": string, "code"?: string }`, with optional extra fields (e.g. `qualifier_count`). Every response carries an `X-Request-Id` header; unhandled `500`s also include `request_id` in the body.
 
 ### Identifiers
 
@@ -84,7 +81,7 @@ From there it's the user's: [`POST /v1/users/me/slug`](#post-v1usersmeslug) rena
 
 ### Rate limiting
 
-Counters live in the D1 `events` table (or the Cache API for legacy downloads) and are keyed per-user, per-IP, or globally depending on the endpoint. Notable buckets:
+Counters live in the D1 `events` table and are keyed per-user, per-IP, or globally depending on the endpoint. Notable buckets:
 
 Two things shape what "per IP" means for traffic that arrives through `per-ankh.app`'s server-side rendering, since those subrequests leave Cloudflare's SSR egress rather than the visitor's connection:
 
@@ -112,7 +109,7 @@ Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents
 
 ### CORS
 
-Cloud paths use **credentialed, echo-Origin** CORS (the request `Origin` is reflected when in `ALLOWED_ORIGINS = https://per-ankh.app, http://localhost:1420`) so cookies traverse `per-ankh.app ↔ api.per-ankh.app`. Legacy `/v1/share/*` uses **single-origin** CORS (`ALLOWED_ORIGIN`). CORS is browser-enforced only; a non-browser client is unaffected.
+All paths use **credentialed, echo-Origin** CORS (the request `Origin` is reflected when in `ALLOWED_ORIGINS = https://per-ankh.app, http://localhost:1420`) so cookies traverse `per-ankh.app ↔ api.per-ankh.app`. CORS is browser-enforced only; a non-browser client is unaffected.
 
 ### PII
 
@@ -858,35 +855,3 @@ Receive CSP violation reports from browsers.
 - **Errors:** `413` (> 64 KB), `400` (unreadable / invalid JSON).
 - **Notes:** Each violation is logged as `csp_violation`. No CORS headers on the response itself.
 
----
-
-## Legacy share — `/v1/share/*`
-
-The frozen desktop-era share surface. Authenticated by header app keys (not the session cookie), single-origin CORS, and **error bodies are `{ error }` only — no `code`**.
-
-### `POST /v1/share`
-Upload a share blob.
-
-- **Auth:** App key — `X-App-Key` header (UUID-v4), then blocklist + rate-limit checks.
-- **Body:** gzip binary (`Content-Type: application/gzip`); decompresses to a JSON payload validated by `validateSharePayload` (17 required fields, `version: 1`, array/collection length bounds).
-- **Response 201:** `{ share_id, url, delete_token }` (`url = https://per-ankh.app/share/<id>`).
-- **Errors:** `503` (`UPLOADS_ENABLED` kill switch), `400` (missing/invalid `X-App-Key`, wrong content-type, empty/invalid payload), `403` (blocklist), `429` (per-key/per-IP/global), `413` (compressed or decompressed size cap), `500` (D1 insert).
-- **Notes:** gzip-bomb guarded. Writes the R2 blob then the D1 row.
-
-### `GET /v1/share/:id`
-Download a share blob.
-
-- **Auth:** Public (per-IP download rate limit only).
-- **Path:** `id` (21-char).
-- **Response 200:** decompressed JSON stream; `Cache-Control: public, max-age=3600`.
-- **Errors:** `429` (download limit), `404` (not found).
-- **Notes:** CDN-cached 1h. No PII stripping (legacy blobs are stored as uploaded).
-
-### `DELETE /v1/share/:id`
-Delete a share blob.
-
-- **Auth:** App key — requires both `X-Delete-Token` and `X-App-Key` headers (compared timing-safe).
-- **Path:** `id` (21-char).
-- **Response:** `204 No Content`.
-- **Errors:** `400` (missing header), `404` (not found), `403` (invalid credentials).
-- **Notes:** Hard-deletes the R2 blob then the D1 row.

@@ -2,7 +2,7 @@
 name: admin-cli
 description: >-
   Operate the live Per-Ankh app via `./per-ankh admin` — inspect or manage
-  users, games, events, legacy shares, security, and tournaments — or run the
+  users, games, events, security, and tournaments — or run the
   local-only dev helpers (dev-login, tournament seed). Use when the user asks
   to look up a user/game, check stats or events, moderate/block/nuke shares,
   grant tournament beta/admin, seed a local fixture, or mint a local dev
@@ -15,7 +15,7 @@ metadata:
 
 **Red line — read first.** `./per-ankh admin` defaults to **production**. Never run it against production or with `--staging`/`--remote` — including read-only reads — unless the user's current message explicitly asks for that exact command; ask first. It authenticates against the user's Cloudflare account (a 1Password prompt on this machine). Only the `--local` path (and the hard-local-only `dev-login` / `tournament seed`) is safe to run unprompted.
 
-`./per-ankh admin` is the operator CLI for the live app — covers both the cloud-rewrite world (users, games, events) and the frozen legacy share world. Implementation lives under `scripts/admin/`. Calls `wrangler` directly (no API key — relies on `wrangler login`). Run `./per-ankh admin --help` for the full list. The list below is illustrative, not exhaustive — `--help` groups the full surface (Stats, Users, Creator channels, Games, Events, Shares, Security, Tournaments, Caches, Dev).
+`./per-ankh admin` is the operator CLI for the live app. Implementation lives under `scripts/admin/`. Calls `wrangler` directly (no API key — relies on `wrangler login`). Run `./per-ankh admin --help` for the full list. The list below is illustrative, not exhaustive — `--help` groups the full surface (Stats, Users, Creator channels, Games, Events, Security, Tournaments, Caches, Dev).
 
 ```bash
 ./per-ankh admin stats                       # Global counts + recent activity
@@ -26,9 +26,6 @@ metadata:
 ./per-ankh admin list-channels [--limit N]            # All linked creator channels (roster for the home strip)
 ./per-ankh admin games [--limit N] [--user U]
 ./per-ankh admin events [--type T] [--user U]
-./per-ankh admin shares list [--limit N]     # Legacy shares
-./per-ankh admin block-key <key> [reason]
-./per-ankh admin nuke-key <key>              # Block + delete all legacy shares (type "nuke")
 ./per-ankh admin nuke-user <user_id>         # Delete cloud user + games + R2 blobs (type "nuke")
 ```
 

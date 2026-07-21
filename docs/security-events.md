@@ -38,11 +38,10 @@ exclusive, so only the route reasons need to precede them):
 |---|--------|-----------|---------------|
 | 1 | `signup` | a new account was created | `POST /v1/auth/discord/callback` |
 | 2 | `dev_login_probe` | any request to `/v1/auth/dev/login` | `<METHOD> /v1/auth/dev/login` |
-| 3 | `legacy_share_write` | `POST /v1/share`, **any status** | `POST /v1/share` |
-| 4 | `rate_limited` | status 429 | matched route |
-| 5 | `server_error` | status 5xx | matched route |
-| 6 | `admin_probe` | status 404 under `/v1/admin/*` | matched route, or `<METHOD> /v1/admin/*` |
-| 7 | `auth_fail` | status 401 or 403 | matched route |
+| 3 | `rate_limited` | status 429 | matched route |
+| 4 | `server_error` | status 5xx | matched route |
+| 5 | `admin_probe` | status 404 under `/v1/admin/*` | matched route, or `<METHOD> /v1/admin/*` |
+| 6 | `auth_fail` | status 401 or 403 | matched route |
 | – | (none) | otherwise | no row |
 
 `signup` can't be inferred from status+route (a new account and a returning login
@@ -53,11 +52,10 @@ override before falling back to the status/route rules. (Sign-up is otherwise
 fully open behind Discord OAuth — there is no invite-code or allowlist gate — so
 new-account volume is the abuse signal.)
 
-The two "any status" routes deliberately swallow the status-scoped signal: a
-blocklist 403 or a 429 on `POST /v1/share` records as `legacy_share_write`, not
-`auth_fail` / `rate_limited`. That's fine — Skiff stores `status` as its own
-column, so `403/legacy_share_write` and `429/legacy_share_write` stay
-distinguishable.
+The "any status" route deliberately swallows the status-scoped signal: a 403 or
+a 429 on `/v1/auth/dev/login` records as `dev_login_probe`, not `auth_fail` /
+`rate_limited`. That's fine — Skiff stores `status` as its own column, so
+`403/dev_login_probe` and `429/dev_login_probe` stay distinguishable.
 
 ## Route patterns, never raw paths
 

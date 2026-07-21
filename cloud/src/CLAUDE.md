@@ -1,6 +1,6 @@
 # Cloud Worker (`cloud/src/`)
 
-The Cloudflare Worker API. Handlers here, validation via Valibot in `cloud/src/schemas/` and `cloud/src/validation.ts`. Routing is hand-rolled (URL pattern matching) — **no router library**; follow the existing dispatch, don't add one.
+The Cloudflare Worker API. Handlers here, validation via Valibot in `cloud/src/schemas/`. Routing is hand-rolled (URL pattern matching) — **no router library**; follow the existing dispatch, don't add one.
 
 ## Fit before you write (worker-side)
 

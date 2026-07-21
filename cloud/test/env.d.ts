@@ -17,7 +17,6 @@ declare global {
 			TEST_MIGRATIONS: D1Migration[];
 			TEST_SECURITY_MIGRATIONS: D1Migration[];
 			ALLOWED_ORIGINS: string;
-			ALLOWED_ORIGIN: string;
 			// Tunable per-IP read ceilings. Declared so the rate-limit tests can
 			// substitute a value the way `wrangler secret put` does in production
 			// (see tournament/rate-limit-view.test.ts).

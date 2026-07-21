@@ -127,17 +127,6 @@ describe("security_events tee — reason classification", () => {
 		});
 	});
 
-	it("legacy_share_write for a blocklist 403 on POST /v1/share (status preserved)", async () => {
-		const row = await emitOne({
-			method: "POST",
-			path: "/v1/share",
-			route: "POST /v1/share",
-			status: 403,
-		});
-		expect(row.reason).toBe("legacy_share_write");
-		expect(row.status).toBe(403);
-	});
-
 	it("dev_login_probe for a non-GET probe at the dev-login path", async () => {
 		const row = await emitOne({
 			method: "POST",

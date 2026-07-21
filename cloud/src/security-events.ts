@@ -26,7 +26,6 @@ export interface SecurityEventsEnv {
 export const SECURITY_REASONS = [
 	"signup", // new account created — handler-set (setSecurityReason), not derivable here
 	"dev_login_probe", // any request to /v1/auth/dev/login
-	"legacy_share_write", // POST /v1/share, any status
 	"rate_limited", // status 429
 	"server_error", // status 5xx
 	"admin_probe", // status 404 under /v1/admin/*
@@ -92,27 +91,24 @@ function build(
 // relevant (no row emitted). One reason per request — precedence is:
 //
 //   1. handler-set reason (signup) — can't be inferred from status+route
-//   2. route-scoped, "any status" (dev_login_probe, legacy_share_write)
+//   2. route-scoped, "any status" (dev_login_probe)
 //   3. status-scoped (rate_limited 429, server_error 5xx, admin_probe 404,
 //      auth_fail 401/403) — mutually exclusive by status code
 //
 // Route-scoped must precede status-scoped so a 429/403/5xx on those routes is
 // attributed to the route, not the status (Skiff carries `status` separately,
-// so a blocklist 403 on /v1/share still reads as 403/legacy_share_write).
+// so a 403 on /v1/auth/dev/login still reads as 403/dev_login_probe).
 export function resolveSecurityEvent(
 	input: SecurityEventInput,
 	status: number,
 ): ResolvedSecurityEvent | null {
-	const { method, path, securityReason } = input;
+	const { path, securityReason } = input;
 
 	if (securityReason && isSecurityReason(securityReason)) {
 		return build(securityReason, input);
 	}
 
 	if (path === "/v1/auth/dev/login") return build("dev_login_probe", input);
-	if (method === "POST" && path === "/v1/share") {
-		return build("legacy_share_write", input);
-	}
 
 	if (status === 429) return build("rate_limited", input);
 	if (status >= 500) return build("server_error", input);

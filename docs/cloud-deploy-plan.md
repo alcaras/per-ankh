@@ -34,12 +34,15 @@ the old doc stays as historical context.
   signed in yet get pinned on their first OAuth callback. (The feature
   originally 404-gated every endpoint behind this allowlist; it was opened
   to the public in `5e19cb4`.)
-- Legacy `/v1/share/*` endpoints stay live on the API Worker (desktop
-  v0.2.0 still mints share URLs against it). At cutover, deploy moved
-  `per-ankh.app` from the Pages project to the new SSR Worker,
-  reattached the legacy SPA to `legacy.per-ankh.app`, and added a
-  `/share/*` 302 from `per-ankh.app` to `legacy.per-ankh.app` to keep old
-  share URLs resolving (see §3.8 + §4 step 5).
+- Legacy `/v1/share/*` endpoints stayed live on the API Worker through
+  the cutover (desktop v0.2.0 minted share URLs against it). At cutover,
+  deploy moved `per-ankh.app` from the Pages project to the new SSR
+  Worker, reattached the legacy SPA to `legacy.per-ankh.app`, and added a
+  `/share/*` 302 from `per-ankh.app` to `legacy.per-ankh.app` (see §3.8 +
+  §4 step 5). **All of this has since been retired** — the endpoints, the
+  `web/` SPA, and the redirect are gone; `per-ankh.app/share/[id]` now
+  serves a static "link retired" page. §3.8 and §4 below are kept as the
+  historical cutover record.
 
 Real test users arrived with the next feature, providing live feedback;
 that's why this plan deliberately skipped formal bake stages.
@@ -485,7 +488,7 @@ In order:
 
 ## 5. Smoke test
 
-> **Status: now automated.** A 3-probe subset (anonymous home, auth/me, legacy share host) runs as part of `./per-ankh prod deploy`. The full functional smoke (OAuth, upload, download, reparse, delete, share-redirect) remains manual and is the authoritative checklist below.
+> **Status: now automated.** A 2-probe subset (anonymous home, auth/me) runs as part of `./per-ankh prod deploy`. The full functional smoke (OAuth, upload, download, reparse, delete) remains manual and is the authoritative checklist below.
 
 Against the live `https://per-ankh.app`. Run in this order:
 
@@ -503,11 +506,6 @@ Against the live `https://per-ankh.app`. Run in this order:
    they're equal, bump `PARSER_VERSION` locally to surface the button.
    The bulk equivalent is the dashboard's `BulkReparseModal`.
 7. Delete the test game.
-8. Load an old `https://per-ankh.app/share/[id]` URL in a browser —
-   confirms the SSR Worker 302-redirects to `legacy.per-ankh.app/share/[id]`
-   and the Pages deployment still serves the page. Also confirms
-   `/v1/share/*` legacy API endpoints (which the page calls under the
-   hood) still work — these stay live for desktop v0.2.0 users.
 
 If any step fails, do not announce. Fix and re-deploy.
 

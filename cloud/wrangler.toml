@@ -134,28 +134,6 @@ preview_id = "e4725d2a3a324ec98580f6d6cae1f209"
 crons = ["47 3 * * *"]
 
 [vars]
-# === Legacy share endpoints ===
-# Max compressed payload size (5 MB)
-MAX_COMPRESSED_SIZE = "5242880"
-# Max decompressed payload size (20 MB) — gzip bomb protection
-MAX_DECOMPRESSED_SIZE = "20971520"
-# CORS for legacy /v1/share/*: single origin only. The legacy share viewer
-# now lives at legacy.per-ankh.app (post-cutover), so its browser fetches
-# come from that origin. Desktop v0.2.0 (Tauri) is a native HTTP client
-# and doesn't enforce CORS, so it's unaffected by this value. The new
-# SSR app on per-ankh.app does not call /v1/share/* at all.
-ALLOWED_ORIGIN = "https://legacy.per-ankh.app"
-# Rate limit: max uploads per app key per hour
-RATE_LIMIT_PER_HOUR = "10"
-# Rate limit: max downloads per IP per hour (via Cache API)
-DOWNLOAD_RATE_LIMIT_PER_HOUR = "200"
-# Rate limit: max uploads per IP per hour (catches key rotation)
-IP_RATE_LIMIT_PER_HOUR = "20"
-# Global circuit breaker: max total uploads per hour across all users
-GLOBAL_UPLOAD_LIMIT_PER_HOUR = "200"
-# Kill switch: set to "false" via `wrangler secret put` to disable uploads without redeploying
-UPLOADS_ENABLED = "true"
-
 # === Cloud rewrite upload limits ===
 # Apply to uploads + reimports together (same R2/D1 work). Set generous —
 # reimports are forced by parser-version bumps (BulkReparseModal), so
@@ -297,16 +275,6 @@ preview_id = "be620b722e444391bc73cfed9b2863c8"
 # Every top-level [vars] key is duplicated here (wrangler does not inherit
 # vars; secrets.parity enforces the key sets match). Values differ only where
 # the environment differs.
-MAX_COMPRESSED_SIZE = "5242880"
-MAX_DECOMPRESSED_SIZE = "20971520"
-# Legacy share viewer has no staging deployment; the staging frontend origin
-# is the sanest value for the legacy single-origin CORS var.
-ALLOWED_ORIGIN = "https://staging.per-ankh.app"
-RATE_LIMIT_PER_HOUR = "10"
-DOWNLOAD_RATE_LIMIT_PER_HOUR = "200"
-IP_RATE_LIMIT_PER_HOUR = "20"
-GLOBAL_UPLOAD_LIMIT_PER_HOUR = "200"
-UPLOADS_ENABLED = "true"
 PER_USER_UPLOADS_PER_HOUR = "100"
 PER_IP_UPLOADS_PER_HOUR = "200"
 GLOBAL_UPLOADS_PER_HOUR = "5000"

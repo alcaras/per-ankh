@@ -14,8 +14,6 @@ Domain-specific detail lives in **nested `CLAUDE.md` files** (loaded automatical
 
 Per-Ankh is a web app at <https://per-ankh.app> for analyzing Old World save files. Saves are parsed in the browser, persisted to Cloudflare, and visualized through interactive charts and a hex-tile map. It also hosts **tournaments** — a Swiss-into-championship competition system — the largest, most active subsystem (see [Tournament subsystem](#tournament-subsystem)).
 
-- **Legacy share viewer:** static SvelteKit app under `web/`, serving `per-ankh.app/share/[id]` for links from the (removed) desktop app. Frozen.
-
 ## Environment
 
 A web app deployed to Cloudflare. There is no desktop runtime, no DuckDB, no Rust — assume browser semantics for the frontend and Cloudflare Worker semantics for the API.
@@ -109,4 +107,4 @@ Authoritative references in `docs/` (it also holds historical analyses — trust
 
 **Skills** (`.claude/skills/`, loaded on demand): `deploy` (prod/staging runbook), `admin-cli` (`./per-ankh admin` operator surface), `bake` (asset bake pipeline), `tournament-rules` (answering rules questions), `pr-review` (contributor-PR fit checks), `doc-audit` (docs staleness pass).
 
-**Nested `CLAUDE.md`** (loaded when you work there): `cloud/src/` (Worker), `src/lib/tournament/` (tournament UI), `src/lib/game-detail/` (game detail view + legacy `web/` share viewer).
+**Nested `CLAUDE.md`** (loaded when you work there): `cloud/src/` (Worker), `src/lib/tournament/` (tournament UI), `src/lib/game-detail/` (game detail view).

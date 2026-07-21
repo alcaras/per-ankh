@@ -20,8 +20,6 @@ export interface CloudEnv {
 	frontendOrigin: string;
 	apiOrigin: string;
 	apiBase: string;
-	// The legacy share viewer (web/) is frozen and has no staging deployment.
-	legacyOrigin: string | null;
 	// Extra process env exported when building the frontend for this
 	// environment. Empty for prod: the code defaults in src/lib/api-cloud.ts
 	// and src/lib/page-meta.ts already point at production, so a bare
@@ -46,7 +44,6 @@ export const ENVIRONMENTS: Record<CloudEnvName, CloudEnv> = {
 		frontendOrigin: "https://per-ankh.app",
 		apiOrigin: "https://api.per-ankh.app",
 		apiBase: "https://api.per-ankh.app/v1",
-		legacyOrigin: "https://legacy.per-ankh.app",
 		frontendBuildEnv: {},
 		runsChangelog: true,
 		disposableData: false,
@@ -59,7 +56,6 @@ export const ENVIRONMENTS: Record<CloudEnvName, CloudEnv> = {
 		frontendOrigin: "https://staging.per-ankh.app",
 		apiOrigin: "https://api-staging.per-ankh.app",
 		apiBase: "https://api-staging.per-ankh.app/v1",
-		legacyOrigin: null,
 		frontendBuildEnv: {
 			VITE_API_URL: "https://api-staging.per-ankh.app/v1",
 			VITE_PUBLIC_ORIGIN: "https://staging.per-ankh.app",

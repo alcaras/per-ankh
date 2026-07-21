@@ -338,8 +338,8 @@
 
 	// city_name → founding nation, the nation whose architecture the city renders
 	// in (see renderNationFor). Resolves each city's first_owner_player_xml_id
-	// through the player_nations sidecar. Empty when player_nations is absent
-	// (the legacy share viewer ships none), so callers fall back to owner_nation.
+	// through the player_nations sidecar. Empty when player_nations is absent,
+	// so callers fall back to owner_nation.
 	const cityFounderNationByName = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- locally-scoped Map, not reactive state
 		const map = new Map<string, string | null>();

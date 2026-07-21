@@ -25,7 +25,6 @@ This software is provided "as is" without warranty of any kind.
 - **Frontend:** SvelteKit + TypeScript, deployed to Cloudflare via `@sveltejs/adapter-cloudflare`. Source under `src/`.
 - **API Worker:** Cloudflare Worker under `cloud/`. Talks to D1 (relational metadata), R2 (raw save ZIPs + parsed game blobs), and KV (sessions).
 - **Parser:** TypeScript port of the original Rust parser. Runs in a Web Worker on the upload page.
-- **Legacy share viewer:** static SvelteKit app under `web/`, serves `per-ankh.app/share/[id]` for share links created by the desktop app. Frozen, deployed alongside the main app.
 
 ## Development
 

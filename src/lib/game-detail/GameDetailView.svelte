@@ -31,11 +31,7 @@
 		ProjectProducedInfo,
 	} from "$lib/parser/types";
 	import { Tabs } from "bits-ui";
-	import {
-		formatEnum,
-		formatDate,
-		formatGameTitle,
-	} from "$lib/utils/formatting";
+	import { formatEnum, formatDate } from "$lib/utils/formatting";
 	import { mapScriptLabel } from "$lib/map-settings";
 	import {
 		PLAYER_CHART_KEYS,
@@ -98,7 +94,6 @@
 		userNation = null,
 		userDisplayName = null,
 		userWon = null,
-		displayName = null,
 		titleSlot,
 		headerActions,
 		preTabs,
@@ -114,8 +109,7 @@
 		completedTechs: PlayerTech[];
 		unitsProduced: PlayerUnitProduced[];
 		// Ending unit roster (units alive at game end) — drives the Military tab's
-		// Ending Army comparison. Defaults to [] for legacy callers (frozen web/
-		// viewer) and any blob without it.
+		// Ending Army comparison. Defaults to [] for any blob without it.
 		units?: UnitInfo[];
 		cityStatistics: CityStatistics;
 		improvementData: ImprovementData;
@@ -123,20 +117,20 @@
 		playerWonders: PlayerWonder[];
 		// Canonical roster (player_index = the per-player join key). Present in
 		// every blob; used to recover player ids for pre-2.6.0 game_details
-		// rows that lack them. Defaults to [] for legacy callers.
+		// rows that lack them.
 		playerRoster?: PlayerRosterEntry[];
 		// player_xml_id → nation, used by the map to resolve each city's founding
-		// nation for architecture rendering. Defaults to [] for legacy callers.
+		// nation for architecture rendering.
 		playerNations?: PlayerNationEntry[];
-		// Leader/character data for the Leaders tab. All default to [] for legacy
-		// callers (frozen web/ viewer) and pre-2.8.0 blobs, where the tab is hidden.
+		// Leader/character data for the Leaders tab. All default to [] for
+		// pre-2.8.0 blobs, where the tab is hidden.
 		characters?: CharacterInfo[];
 		characterTraits?: CharacterTraitInfo[];
 		playerGoals?: PlayerGoalInfo[];
 		// Family, diplomatic-memory, and story-event data for the Techs tab's
 		// science annotations (Sages seat founding, steal-research missions,
-		// expedition events / spike attribution). All default to [] for legacy
-		// callers (frozen web/ viewer) and older blobs.
+		// expedition events / spike attribution). All default to [] for older
+		// blobs.
 		families?: FamilyInfo[];
 		memoryData?: MemoryInfo[];
 		storyEvents?: StoryEvent[];
@@ -163,28 +157,19 @@
 		selectedMapTurn?: number | null;
 		// The uploader's picked nation, sourced from the games row by the
 		// cloud detail endpoint. The Worker's COALESCE fallback (first human
-		// player's nation) means this is virtually always set for cloud
-		// games; nullable only for legacy callers (the frozen web/ viewer)
-		// that don't pass the prop.
+		// player's nation) means this is virtually always set.
 		userNation?: string | null;
 		// Uploader's Discord display_name + their user_won flag, both from
 		// the games row + users JOIN. Together they let the winner card and
 		// the uploader's nation card show the user's identity ("becked")
 		// when the save's leader-name field is empty — Old World writes ""
 		// for solo games whose player never set a custom leader name. Both
-		// are optional/null for legacy callers and observer-mode uploads.
+		// are optional/null for observer-mode uploads.
 		userDisplayName?: string | null;
 		userWon?: boolean | null;
-		// Owner-set rename for the save's title. When non-null/non-empty,
-		// formatGameTitle uses it verbatim; otherwise falls through to the
-		// save's original game_name and ultimately the nation/turns
-		// derivation. Null for legacy callers (frozen web/ viewer).
-		displayName?: string | null;
-		// Optional override for the heading. The cloud routes pass a
-		// breadcrumb trail here (whose final segment is the game title), which
-		// replaces the default <h1>. Legacy callers (frozen web/ viewer) omit
-		// it and get the plain title heading derived from `gameTitle`.
-		titleSlot?: Snippet;
+		// The heading: the route passes a breadcrumb trail here, whose final
+		// segment is the game title.
+		titleSlot: Snippet;
 		headerActions?: Snippet;
 		preTabs?: Snippet;
 		mapMissingMessage?: Snippet;
@@ -193,9 +178,9 @@
 	// ─── Persistent UI state ──────────────────────────────────────────
 	// Per-player iteration source: roster players enriched with a stable
 	// playerId + unique label + color. Mirror-match safe (nation alone isn't).
-	// `player_roster` is the id source; the legacy share viewer doesn't supply
-	// it, so fall back to one synthesized from player_history (which carries
-	// player_id) to recover ids for those id-less game_details.players rows.
+	// `player_roster` is the id source; when a blob lacks it, fall back to one
+	// synthesized from player_history (which carries player_id) to recover ids
+	// for those id-less game_details.players rows.
 	const effectiveRoster = $derived(
 		playerRoster.length > 0
 			? playerRoster
@@ -210,7 +195,7 @@
 	);
 
 	// The Leaders tab only appears when the blob has rulers — pre-2.8.0 games
-	// (and the frozen web/ viewer, which passes no characters) have none.
+	// have none.
 	const hasLeaders = $derived(
 		characters.some((c) => c.became_leader_turn != null),
 	);
@@ -280,22 +265,10 @@
 	// ─── Derived display values ───────────────────────────────────────
 	// Source of truth is the userNation prop, which the cloud Worker fills
 	// in via COALESCE(g.user_nation, first-human-player.nation) — see
-	// cloud/src/games.ts listGames / getGame / public-recent. The legacy
-	// web/ share viewer doesn't supply userNation, so fall through to the
-	// alphabetical-first-human heuristic (correct for single-human saves,
-	// which is the only shape the frozen viewer ever sees).
+	// cloud/src/games.ts listGames / getGame / public-recent. Falls through to
+	// the alphabetical-first-human heuristic when absent.
 	const humanNation = $derived(
 		userNation ?? gameDetails.players.find((p) => p.is_human)?.nation ?? null,
-	);
-
-	const gameTitle = $derived(
-		formatGameTitle({
-			display_name: displayName,
-			game_name: gameDetails.game_name,
-			save_owner_nation: humanNation,
-			total_turns: gameDetails.total_turns,
-			match_id: gameDetails.match_id,
-		}),
 	);
 
 	const victoryConditions = $derived(
@@ -329,18 +302,9 @@
 
 <!-- Header -->
 <div class="mb-4 flex items-baseline justify-between gap-4">
-	{#if titleSlot}
-		<!-- Cloud routes pass a breadcrumb trail; its final segment is the
-		     game title. Replaces the default heading below. -->
-		{@render titleSlot()}
-	{:else}
-		<!-- Legacy (frozen web/ viewer): plain title heading, no rename. -->
-		<h1
-			class="flex min-w-0 items-baseline gap-2 text-3xl font-bold text-gray-200"
-		>
-			<span class="truncate">{gameTitle}</span>
-		</h1>
-	{/if}
+	<!-- The route passes a breadcrumb trail; its final segment is the
+	     game title. -->
+	{@render titleSlot()}
 	<div class="flex items-center gap-4">
 		{#if headerActions}
 			{@render headerActions()}

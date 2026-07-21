@@ -249,7 +249,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		defaultVisible: false,
 		getValue: (c) => c.founder_nation,
 		// Blank (not "Unknown") when the founder can't be resolved — pre-2.6.0
-		// blobs and the legacy share viewer ship no player_nations sidecar.
+		// blobs ship no player_nations sidecar.
 		format: (v) => (v ? formatEnum(v as string, "NATION_") : ""),
 		iconCategory: "crests",
 	},

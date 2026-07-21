@@ -53,8 +53,8 @@
 		playerWonders: PlayerWonder[];
 		// Uploader's picked nation (cloud-only). When set, drives the
 		// save-owner flag below; otherwise falls back to the alphabetical-
-		// first-human heuristic (correct for single-human legacy shares
-		// from the frozen web/ viewer, wrong for multi-human cloud saves).
+		// first-human heuristic (correct for single-human saves, wrong for
+		// multi-human cloud saves).
 		userNation?: string | null;
 		// Uploader's Discord display_name (cloud-only). Used as the player
 		// label for the uploader's nation card when the save itself has no

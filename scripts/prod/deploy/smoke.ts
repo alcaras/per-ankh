@@ -108,15 +108,6 @@ export function probesFor(env: CloudEnv): SmokeProbe[] {
 		label: "api",
 	});
 
-	// The legacy share viewer only exists in prod.
-	if (env.legacyOrigin != null) {
-		probes.push({
-			url: `${env.legacyOrigin}/`,
-			expectStatus: 200,
-			label: "legacy",
-		});
-	}
-
 	return probes;
 }
 

@@ -162,7 +162,6 @@
 					userNation={game.user_nation ?? null}
 					userDisplayName={game.user_display_name ?? null}
 					userWon={game.user_won ?? null}
-					displayName={game.display_name ?? null}
 					{mapTiles}
 					{selectedMapTurn}
 					onMapTurnChange={handleMapTurnChange}

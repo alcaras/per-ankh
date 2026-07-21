@@ -89,33 +89,20 @@ describe("resolveSecurityEvent", () => {
 			});
 		});
 
-		it("classifies POST /v1/share at any status (wins over 403/429/5xx)", () => {
-			for (const status of [201, 403, 429, 500]) {
+		it("classifies /v1/auth/dev/login at any status (wins over 403/429/5xx)", () => {
+			for (const status of [200, 403, 429, 500]) {
 				expect(
 					resolveSecurityEvent(
 						input({
 							method: "POST",
-							path: "/v1/share",
-							route: "POST /v1/share",
+							path: "/v1/auth/dev/login",
+							route: "POST /v1/auth/dev/login",
 						}),
 						status,
 					)?.reason,
 					`status ${status}`,
-				).toBe("legacy_share_write");
+				).toBe("dev_login_probe");
 			}
-		});
-
-		it("does not treat GET /v1/share/:id (download) as a legacy write", () => {
-			expect(
-				resolveSecurityEvent(
-					input({
-						method: "GET",
-						path: "/v1/share/abc",
-						route: "GET /v1/share/:id",
-					}),
-					200,
-				),
-			).toBeNull();
 		});
 	});
 
@@ -198,10 +185,6 @@ describe("resolveSecurityEvent", () => {
 		const cases: Array<[SecurityEventInput, number]> = [
 			[input({ securityReason: "signup" }), 200],
 			[input({ path: "/v1/auth/dev/login", route: null }), 404],
-			[
-				input({ method: "POST", path: "/v1/share", route: "POST /v1/share" }),
-				201,
-			],
 			[input({}), 429],
 			[input({}), 500],
 			[input({ path: "/v1/admin/x", route: null }), 404],

@@ -1,11 +1,6 @@
-// Per-Ankh Worker — legacy share endpoints + cloud rewrite endpoints.
+// Per-Ankh Worker — the cloud API.
 //
-// Legacy (desktop, being decommissioned):
-//   POST   /v1/share       — Upload a shared game blob
-//   GET    /v1/share/{id}  — Download a shared game blob
-//   DELETE /v1/share/{id}  — Delete a shared game blob
-//
-// Cloud rewrite (browser-first):
+// Entry points (browser-first):
 //   POST   /v1/auth/discord/start
 //   POST   /v1/auth/discord/callback
 //   GET    /v1/auth/me
@@ -19,7 +14,6 @@
 import {
 	adoptTrustedFrontend,
 	cloudCorsHeaders,
-	legacyCorsHeaders,
 	type TrustedFrontendEnv,
 } from "./util";
 import { instrumentD1, staleTolerantSession } from "./d1";
@@ -36,8 +30,6 @@ import {
 import { sweepEvents, sweepSecurityEvents } from "./retention";
 import { emitSecurityEvent } from "./security-events";
 import type { SecurityEventsEnv } from "./security-events";
-import { handleDelete, handleDownload, handleUpload } from "./share-legacy";
-import type { ShareLegacyEnv } from "./share-legacy";
 import {
 	handleDevLogin,
 	handleDiscordCallback,
@@ -154,7 +146,6 @@ interface Env
 		TournamentPublicEnv,
 		TournamentPlayerEnv,
 		TournamentAdminEnv,
-		ShareLegacyEnv,
 		ChannelsEnv,
 		FeaturedVideosEnv,
 		SecurityEventsEnv,
@@ -163,7 +154,6 @@ interface Env
 	SHARE_DB: QueryableD1;
 	EVENTS_DB: D1Database;
 	SESSIONS_KV: KVNamespace;
-	ALLOWED_ORIGIN: string;
 	ALLOWED_ORIGINS: string;
 	DISCORD_CLIENT_ID: string;
 	DISCORD_CLIENT_SECRET: string;
@@ -946,26 +936,6 @@ const ROUTES: RouteSpec[] = [
 		route: "POST /v1/users/me/tournaments/:id/dismiss-banner",
 		handler: (r, e, m) => handleDismissBanner(m![1], r, e),
 	},
-
-	// Legacy: /v1/share/*
-	{
-		method: "POST",
-		match: { kind: "path", path: "/v1/share" },
-		route: "POST /v1/share",
-		handler: (r, e) => handleUpload(r, e),
-	},
-	{
-		method: "GET",
-		match: { kind: "regex", regex: /^\/v1\/share\/([A-Za-z0-9_-]{21})$/ },
-		route: "GET /v1/share/:id",
-		handler: (r, e, m) => handleDownload(m![1], r, e),
-	},
-	{
-		method: "DELETE",
-		match: { kind: "regex", regex: /^\/v1\/share\/([A-Za-z0-9_-]{21})$/ },
-		route: "DELETE /v1/share/:id",
-		handler: (r, e, m) => handleDelete(m![1], r, e),
-	},
 ];
 
 // The registered "METHOD /path" route keys, exported for the api-reference
@@ -980,25 +950,6 @@ export const ROUTE_KEYS: readonly string[] = ROUTES.map((r) => r.route);
 export const STALE_TOLERANT_ROUTE_KEYS: readonly string[] = ROUTES.filter(
 	(r) => r.staleTolerant,
 ).map((r) => r.route);
-
-// Cloud paths use credentialed (echo-Origin) CORS so cookies traverse
-// per-ankh.app ↔ api.per-ankh.app. Legacy /v1/share uses single-origin.
-// /v1/csp-report rides cloud-CORS too — browsers don't preflight CSP
-// reports, but listing it here keeps OPTIONS responses correct for any
-// tooling that does.
-function isCloudPath(pathname: string): boolean {
-	return (
-		pathname.startsWith("/v1/auth/") ||
-		pathname === "/v1/games" ||
-		pathname.startsWith("/v1/games/") ||
-		pathname === "/v1/collections" ||
-		pathname.startsWith("/v1/users/") ||
-		pathname.startsWith("/v1/admin/") ||
-		pathname === "/v1/csp-report" ||
-		pathname === "/v1/tournaments" ||
-		pathname.startsWith("/v1/tournaments/")
-	);
-}
 
 // Derive the per-request env from the raw bindings: split the events handle
 // off, and give `staleTolerant` routes a Sessions API handle for everything
@@ -1146,12 +1097,9 @@ function dispatch(
 			return r.handler(request, routeEnv(env, r), m, ctx);
 		}
 	}
-	// 404 — pick CORS based on path so error responses still allow the
-	// origin that asked. The cloud helper echoes the request Origin; the
-	// legacy helper returns the single ALLOWED_ORIGIN.
-	const cors = isCloudPath(url.pathname)
-		? cloudCorsHeaders(env, request)
-		: legacyCorsHeaders(env);
+	// 404 — echo the request Origin so error responses still allow the
+	// caller that asked.
+	const cors = cloudCorsHeaders(env, request);
 	return Promise.resolve(
 		new Response(JSON.stringify({ error: "Not found" }), {
 			status: 404,
@@ -1185,9 +1133,7 @@ export default {
 
 			try {
 				if (request.method === "OPTIONS") {
-					const headers = isCloudPath(url.pathname)
-						? cloudCorsHeaders(env, request)
-						: legacyCorsHeaders(env);
+					const headers = cloudCorsHeaders(env, request);
 					response = new Response(null, { status: 204, headers });
 				} else {
 					response = await dispatch(req, env, ctx);
@@ -1198,9 +1144,7 @@ export default {
 				// a bug report. Error class is captured for the access log.
 				logError("unhandled_handler_error", err);
 				const requestId = getRequestId();
-				const cors = isCloudPath(url.pathname)
-					? cloudCorsHeaders(env, request)
-					: legacyCorsHeaders(env);
+				const cors = cloudCorsHeaders(env, request);
 				response = new Response(
 					JSON.stringify({
 						error: "Internal server error",

@@ -1,1 +1,0 @@
-../../../src/lib/HexMap.svelte

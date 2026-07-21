@@ -11,7 +11,6 @@ import * as users from "./commands/users";
 import * as channels from "./commands/channels";
 import * as games from "./commands/games";
 import * as events from "./commands/events";
-import * as shares from "./commands/shares";
 import * as security from "./commands/security";
 import * as tournament from "./commands/tournament";
 import * as cache from "./commands/cache";
@@ -39,27 +38,14 @@ function printHelp(): void {
 			"  game <game_id>                   Show one game's detail",
 			"  delete-game <game_id>            Delete one game (D1 + R2); account stays",
 			"  purge-games --user <user_id>     Delete all of a user's games; account stays",
-			"  events [--type T] [--user U] [--share S] [--limit N]   Audit log",
+			"  events [--type T] [--user U] [--limit N]               Audit log",
 			"",
 			"Creator video channels:",
 			"  add-channel <user_id> <url|@handle>   Link a user's YouTube channel (resolves + upserts)",
 			"  remove-channel <user_id> <platform>   Unlink a user's channel for a platform",
 			"  list-channels [--limit N]             List all linked creator channels",
 			"",
-			"Legacy shares (frozen-but-served):",
-			"  shares list [--limit N]          List legacy shares",
-			"  shares info <share_id>           Show one share",
-			"  shares delete <share_id>         Delete share (D1 + R2)",
-			"  shares by-key <app_key>          List shares by app_key",
-			"  shares keys                      App_keys grouped by share count",
-			"",
 			"Security:",
-			"  block-key <key> [reason]         Block a legacy app_key",
-			"  unblock-key <key>                Unblock",
-			"  block-ip <ip> [reason]           Block an IP",
-			"  unblock-ip <ip>                  Unblock",
-			"  blocked                          List all blocked keys + IPs",
-			"  nuke-key <key> [reason]          Block key + delete all its shares",
 			"  nuke-user <user_id> [reason]     Delete user, their games, and R2 blobs",
 			"",
 			"Tournaments:",
@@ -162,20 +148,6 @@ export async function main(argv: string[]): Promise<void> {
 			return games.runPurge(subArgs, opts);
 		case "events":
 			return events.run(subArgs, opts);
-		case "shares":
-			return shares.run(subArgs, opts);
-		case "block-key":
-			return security.runBlockKey(subArgs, opts);
-		case "unblock-key":
-			return security.runUnblockKey(subArgs, opts);
-		case "block-ip":
-			return security.runBlockIp(subArgs, opts);
-		case "unblock-ip":
-			return security.runUnblockIp(subArgs, opts);
-		case "blocked":
-			return security.runBlocked(subArgs, opts);
-		case "nuke-key":
-			return security.runNukeKey(subArgs, opts);
 		case "nuke-user":
 			return security.runNukeUser(subArgs, opts);
 		case "tournament":

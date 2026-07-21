@@ -1,16 +1,14 @@
-// Shared helpers used by both legacy share endpoints and the new cloud
-// auth/games endpoints.
+// Shared helpers used across the cloud auth/games endpoints.
 
 import * as v from "valibot";
 import { logWarn, setErrorCode } from "./log";
 
 export interface CommonEnv {
-	ALLOWED_ORIGIN: string;
 	ALLOWED_ORIGINS: string;
 }
 
 // Constant-time string comparison to prevent timing attacks on secret tokens.
-// Used for delete-token verification (legacy) and OAuth state verification.
+// Used for OAuth state verification.
 export function timingSafeEqual(a: string, b: string): boolean {
 	const encoder = new TextEncoder();
 	const bufA = encoder.encode(a);
@@ -34,26 +32,6 @@ export function parseCookies(
 		if (name) out[name] = decodeURIComponent(value);
 	}
 	return out;
-}
-
-// CORS for legacy /v1/share/* — single allowed origin, no credentials.
-//
-// Vary: Origin is needed because /v1/share/:id is publicly cached
-// (Cache-Control: public, max-age=3600). Without it, the CDN and
-// browser disk cache key by URL alone and serve one response across
-// all origins — so a CORS-config change can leave the wrong ACL
-// header cached for up to an hour. Same value works as a shield for
-// OPTIONS preflight responses too.
-export function legacyCorsHeaders(
-	env: Pick<CommonEnv, "ALLOWED_ORIGIN">,
-): Record<string, string> {
-	return {
-		"Access-Control-Allow-Origin": env.ALLOWED_ORIGIN,
-		"Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-		"Access-Control-Allow-Headers": "Content-Type, X-App-Key, X-Delete-Token",
-		"Access-Control-Max-Age": "86400",
-		Vary: "Origin",
-	};
 }
 
 // CORS for new /v1/auth/* and (future) /v1/games/* routes.
@@ -410,7 +388,7 @@ export function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
 }
 
 // Decompress gzipped data with a size limit to prevent gzip bombs. Used by
-// both legacy /v1/share uploads and new /v1/games uploads.
+// /v1/games uploads.
 export async function decompressWithLimit(
 	compressed: ArrayBuffer,
 	maxBytes: number,
