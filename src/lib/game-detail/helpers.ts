@@ -1049,8 +1049,8 @@ export function formatCityCell(column: CityColumn, city: CityRow): string {
 
 // Augment each city with its founding nation, resolved through the player_nations
 // sidecar via CityInfo.first_owner_player_xml_id (the same lookup the hex map uses
-// for architecture). founder_nation is null when player_nations is absent (legacy
-// share viewer) or the city predates first_owner_player_xml_id (pre-2.6.0 blob).
+// for architecture). founder_nation is null when player_nations is absent or the
+// city predates first_owner_player_xml_id (pre-2.6.0 blob).
 export function resolveCityRows(
 	cities: CityInfo[],
 	playerNations: PlayerNationEntry[],

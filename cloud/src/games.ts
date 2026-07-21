@@ -1,8 +1,7 @@
 // /v1/games endpoints — upload, list, detail, delete.
 //
-// Mirrors the structure of legacy `handleUpload` (cloud/src/index.ts) but
-// adapted for the cloud-rewrite:
-//   - Auth: Discord session cookie (vs legacy app-key)
+// Upload shape:
+//   - Auth: Discord session cookie
 //   - Storage: gzipped JSON blob + raw ZIP, both in R2 under prefixes
 //   - Indexing: D1 inserts into games + player_summaries + game_player_turn
 //     + tech_events + law_events; OnlineID auto-link for picker pre-check

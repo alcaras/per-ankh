@@ -1,18 +1,15 @@
 // Valibot schemas for the cloud-rewrite /v1/games endpoints.
 //
-// Validation philosophy mirrors the legacy `cloud/src/validation.ts`:
-// validate the top-level envelope shape, the array bounds, and any field
+// Validation philosophy: validate the top-level envelope shape,
+// the array bounds, and any field
 // the upload pipeline reads server-side. Don't redefine every nested entity
 // — the parser is the source of truth, and we trust its output. The bounds
 // here just cap pathological inputs (zip bombs after decompression, abuse
 // payloads).
-//
-// Bounds match `cloud/src/validation.ts:19-29` for parity with the legacy
-// share validator.
 
 import * as v from "valibot";
 
-// ----- Bounds (match legacy validation.ts) -----
+// ----- Bounds -----
 
 export const MAX_PLAYERS = 20;
 export const MAX_YIELD_ENTRIES = 300;

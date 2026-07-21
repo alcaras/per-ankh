@@ -22,7 +22,7 @@ metadata:
                             #   [vars] vs secrets hygiene, required-secret presence, pending migrations)
 ./per-ankh prod deploy      # preflight → changelog → migrate → worker → frontend → smoke (with confirm)
 ./per-ankh prod migrate     # Apply pending D1 migrations (with confirm + preview)
-./per-ankh prod smoke       # GET probes against per-ankh.app, api.per-ankh.app/v1/auth/me, legacy
+./per-ankh prod smoke       # GET probes against per-ankh.app and api.per-ankh.app/v1/auth/me
 ./per-ankh prod status      # Local git, deployed worker versions, secrets, pending migrations
 ./per-ankh prod changelog   # Preview the next changelog entry; --write to persist + tag
 ```

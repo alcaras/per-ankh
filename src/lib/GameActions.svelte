@@ -1,7 +1,6 @@
 <script lang="ts">
 	// Inline action buttons rendered into GameDetailView's headerActions
-	// slot, next to the date in the main heading row. Mirrors the deleted
-	// desktop ShareControl pattern (f97c09a^:src/lib/ShareControl.svelte).
+	// slot, next to the date in the main heading row.
 	//
 	// All three buttons are icon-only; click opens a small popover with
 	// an explanation + confirm/cancel pair. Click-outside and Escape

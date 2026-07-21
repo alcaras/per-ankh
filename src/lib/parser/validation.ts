@@ -1,7 +1,6 @@
 // Cloud-blob validation. Used after the orchestrator runs to gate uploads.
-// The Tauri share path has no equivalent — the desktop import always
-// inserts whatever XML it parses. The cloud uploader rejects games without
-// a winner per spec §4 ("`match_metadata.winner` must exist").
+// The uploader rejects games without a winner per spec §4
+// ("`match_metadata.winner` must exist").
 
 import { ParseError } from "./extract-zip.js";
 import { requireStr } from "./parse-xml.js";

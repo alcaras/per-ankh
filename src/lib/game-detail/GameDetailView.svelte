@@ -313,7 +313,7 @@
 	</div>
 </div>
 
-<!-- Pre-tabs slot (e.g., share banner) -->
+<!-- Pre-tabs slot (e.g., the reparse banner) -->
 {#if preTabs}
 	{@render preTabs()}
 {/if}

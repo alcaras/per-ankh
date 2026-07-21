@@ -96,8 +96,7 @@
 	// even while the city is unowned mid-capture (owner_nation === null on every
 	// tile). So resolve the founder nation for the tile's city; fall back to the
 	// tile's current owner when the founder is unknown (pre-2.6.0 blob with no
-	// first_owner_player_xml_id, or the legacy share viewer, which ships no
-	// player_nations — both leave founderByCity empty).
+	// first_owner_player_xml_id, which leaves founderByCity empty).
 	function renderNationFor(
 		tile: MapTile,
 		founderByCity: Map<string, string | null>,
