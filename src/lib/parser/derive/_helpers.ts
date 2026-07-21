@@ -16,7 +16,7 @@ export function playerByXmlId(players: Player[]): Map<number, Player> {
 
 /**
  * Sort players by `player_name`, mirroring `get_match_players`'s
- * `ORDER BY player_name` (mod.rs:31). Several history derivations iterate
+ * `ORDER BY player_name`. Several history derivations iterate
  * players in this order; preserving it keeps the output equivalent to the
  * Rust share blob.
  */

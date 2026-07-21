@@ -184,7 +184,7 @@ export function parseCharacterMarriages(
 				spouseXmlId,
 				// Literal -1 sentinel: the parse layer doesn't have marriage-
 				// turn data; downstream code interprets -1 as "unknown turn".
-				// NOT null — keep parity with Rust character_data.rs:219.
+				// NOT null — keep parity with Rust.
 				marriedTurn: -1,
 				divorcedTurn: null,
 			});

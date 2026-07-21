@@ -79,7 +79,7 @@ function* eachPlayer(
 }
 
 // State name mapping for parseTechnologyStates. Order matters: Rust walks
-// these in this exact sequence (player_data.rs:218–224).
+// these in this exact sequence.
 const TECH_STATE_MAPPINGS: ReadonlyArray<[string, string]> = [
 	["TechAvailable", "available"],
 	["TechPassed", "passed"],
@@ -242,8 +242,7 @@ export function parseLaws(root: Record<string, unknown>): Law[] {
 				lawCategory,
 				law: value,
 				// Literal int placeholders — the parse layer doesn't have
-				// adoption-turn or change-count data. NOT null. Match Rust
-				// player_data.rs:324–325.
+				// adoption-turn or change-count data. NOT null. Match Rust.
 				adoptedTurn: 0,
 				changeCount: 1,
 			});

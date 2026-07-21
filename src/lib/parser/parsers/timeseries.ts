@@ -83,7 +83,7 @@ export function parseYieldPriceHistory(
 ): YieldPriceHistory[] {
 	const gameNode = root.Game;
 	if (!isElement(gameNode)) {
-		// Rust errors with MissingElement if Game is absent (timeseries.rs:99).
+		// Rust errors with MissingElement if Game is absent.
 		throw new ParseError("Game", "MISSING_FIELD");
 	}
 	const out: YieldPriceHistory[] = [];

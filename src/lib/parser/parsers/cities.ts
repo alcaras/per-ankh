@@ -238,9 +238,9 @@ export function parseCityProjectsCompleted(
 		const counts = new Map<string, number>();
 		for (const qi of asArray(completedNode.QueueInfo) as unknown[]) {
 			if (!isElement(qi)) continue;
-			// Missing Build/Type both default to literal "UNKNOWN" (matches
-			// city_data.rs:102, 108). A typical CompletedBuild record has
-			// both, but be defensive — that exact spelling is what Rust emits.
+			// Missing Build/Type both default to literal "UNKNOWN". A typical
+			// CompletedBuild record has both, but be defensive — that exact
+			// spelling is what Rust emits.
 			const buildType = optStr(qi.Build) ?? "UNKNOWN";
 			const itemType = optStr(qi.Type) ?? "UNKNOWN";
 			const projectType = `${buildType}.${itemType}`;
