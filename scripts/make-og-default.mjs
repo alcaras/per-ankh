@@ -3,8 +3,7 @@
 // dark-brown tile, then composites that onto the brand-tan card with
 // "Per-Ankh — Old World save analytics" text.
 //
-// Writes to BOTH `static/` (cloud SvelteKit app) and `web/static/`
-// (legacy share viewer) so both apps unfurl with the same brand.
+// Writes to `static/` (cloud SvelteKit app).
 //
 // Run with: npm run bake:og
 
@@ -140,12 +139,7 @@ const card = await sharp({
 	.png()
 	.toBuffer();
 
-const targets = [
-	path.join(root, "static", "og-default.png"),
-	path.join(root, "web", "static", "og-default.png"),
-];
+const out = path.join(root, "static", "og-default.png");
 
-for (const out of targets) {
-	await sharp(card).toFile(out);
-	console.log(`wrote ${out}`);
-}
+await sharp(card).toFile(out);
+console.log(`wrote ${out}`);

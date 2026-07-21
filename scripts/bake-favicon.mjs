@@ -1,12 +1,11 @@
 // Generate the per-ankh.app favicon set from the U+13251 hieroglyph (𓉑).
 // Renders the glyph in brand orange on the brand dark-brown background via
 // headless Chromium, then derives ICO + PNG variants and writes them to
-// both `static/` (cloud SvelteKit app) and `web/static/` (legacy share
-// viewer) so both apps stay in sync.
+// `static/`.
 //
 // Run with: npm run bake:favicon
 //
-// Outputs (per target dir):
+// Outputs:
 //   favicon.ico          — multi-res 16/32/48
 //   favicon-32.png       — 32×32
 //   apple-touch-icon.png — 180×180
@@ -110,12 +109,10 @@ const png512 = await resize(512);
 // Multi-resolution ICO from raw PNG buffers.
 const ico = await pngToIco([png16, png32, png48]);
 
-const targets = [path.join(root, "static"), path.join(root, "web", "static")];
+const dir = path.join(root, "static");
 
-for (const dir of targets) {
-	await writeFile(path.join(dir, "favicon.ico"), ico);
-	await writeFile(path.join(dir, "favicon-32.png"), png32);
-	await writeFile(path.join(dir, "apple-touch-icon.png"), png180);
-	await writeFile(path.join(dir, "favicon.png"), png512);
-	console.log(`wrote favicon set to ${dir}`);
-}
+await writeFile(path.join(dir, "favicon.ico"), ico);
+await writeFile(path.join(dir, "favicon-32.png"), png32);
+await writeFile(path.join(dir, "apple-touch-icon.png"), png180);
+await writeFile(path.join(dir, "favicon.png"), png512);
+console.log(`wrote favicon set to ${dir}`);

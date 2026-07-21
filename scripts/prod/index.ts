@@ -24,7 +24,7 @@ function printHelp(env: CloudEnv): void {
 			: "per-ankh staging — staging deploy & monitoring";
 	const smokeTargets =
 		env.name === "prod"
-			? "per-ankh.app, api, legacy"
+			? "per-ankh.app, api"
 			: "staging.per-ankh.app, api-staging";
 	const deploySteps = env.runsChangelog
 		? "preflight → changelog → migrate → worker → frontend → smoke"
