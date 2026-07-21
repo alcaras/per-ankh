@@ -1,6 +1,5 @@
-// Time-series data parsers. Direct port of
-// src-tauri/src/parser/parsers/timeseries.rs. Eight collections —
-// one game-level (yield_price_history) and seven per-Player.
+// Time-series data parsers. Eight collections — one game-level
+// (yield_price_history) and seven per-Player.
 
 import { ParseError } from "../extract-zip.js";
 import {
@@ -77,7 +76,7 @@ function* eachPlayer(
 	}
 }
 
-// ---------- Game-level: yield price history (timeseries.rs:94–111) ----------
+// ---------- Game-level: yield price history ----------
 
 export function parseYieldPriceHistory(
 	root: Record<string, unknown>,
@@ -97,7 +96,7 @@ export function parseYieldPriceHistory(
 	return out;
 }
 
-// ---------- Player-level: military power (timeseries.rs:140–147) ----------
+// ---------- Player-level: military power ----------
 
 export function parseMilitaryPowerHistory(
 	root: Record<string, unknown>,
@@ -114,7 +113,7 @@ export function parseMilitaryPowerHistory(
 	return out;
 }
 
-// ---------- Player-level: points (timeseries.rs:149–156) ----------
+// ---------- Player-level: points ----------
 
 export function parsePointsHistory(
 	root: Record<string, unknown>,
@@ -131,7 +130,7 @@ export function parsePointsHistory(
 	return out;
 }
 
-// ---------- Player-level: legitimacy (timeseries.rs:158–165) ----------
+// ---------- Player-level: legitimacy ----------
 
 export function parseLegitimacyHistory(
 	root: Record<string, unknown>,
@@ -148,7 +147,7 @@ export function parseLegitimacyHistory(
 	return out;
 }
 
-// ---------- Player-level: yield rates (timeseries.rs:167–177) ----------
+// ---------- Player-level: yield rates ----------
 
 export function parseYieldRateHistory(
 	root: Record<string, unknown>,
@@ -165,7 +164,7 @@ export function parseYieldRateHistory(
 	return out;
 }
 
-// ---------- Player-level: yield totals (timeseries.rs:179–190) ----------
+// ---------- Player-level: yield totals ----------
 // Available in game version 1.0.81366+ (January 2026). Older saves silently
 // produce zero rows — absence is not an error.
 
@@ -184,7 +183,7 @@ export function parseYieldTotalHistory(
 	return out;
 }
 
-// ---------- Player-level: family opinions (timeseries.rs:192–202) ----------
+// ---------- Player-level: family opinions ----------
 
 export function parseFamilyOpinionHistory(
 	root: Record<string, unknown>,
@@ -201,7 +200,7 @@ export function parseFamilyOpinionHistory(
 	return out;
 }
 
-// ---------- Player-level: religion opinions (timeseries.rs:204–214) ----------
+// ---------- Player-level: religion opinions ----------
 
 export function parseReligionOpinionHistory(
 	root: Record<string, unknown>,

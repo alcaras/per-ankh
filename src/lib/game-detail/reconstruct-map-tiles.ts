@@ -1,7 +1,5 @@
 // Reconstruct historical MapTile[] for the map turn slider in cloud /
-// browser-parser flows. Mirrors desktop's `get_map_tiles_at_turn` SQL
-// (src-tauri/src/db/queries/map.rs:82–228) but runs synchronously over
-// in-memory FullGameData — there's no DuckDB hop on the cloud path.
+// browser-parser flows. Runs synchronously over in-memory FullGameData.
 //
 // Inputs (all already in FullGameData):
 //   - map_tiles[]                final-turn snapshot (per-tile static + final state)
@@ -84,8 +82,7 @@ export function reconstructMapTiles(
 
 		// owner_city, religions, and city-center flags are visible only when
 		// the tile is owned at this turn AND the (final-turn) territory city
-		// existed by this turn. Mirrors desktop's gated LEFT JOINs at
-		// map.rs:166–169.
+		// existed by this turn.
 		const showCityChrome = owned && cityFoundedByTurn;
 
 		return {

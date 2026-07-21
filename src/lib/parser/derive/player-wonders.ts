@@ -1,5 +1,3 @@
-// derive/player-wonders.ts — port of get_player_wonders (match_data.rs:178–216).
-//
 // Wonder completion fires WONDER_ACTIVITY events for every player; we
 // dedupe by wonder name (data2) and keep the earliest turn. The builder is
 // resolved by finding the wonder's improvement on the map and reading who

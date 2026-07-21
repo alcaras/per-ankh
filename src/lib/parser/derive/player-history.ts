@@ -1,5 +1,3 @@
-// derive/player-history.ts — port of get_player_history (history.rs:13–99).
-//
 // Per player, generate a complete turn sequence [1..total_turns] and
 // forward-fill points / military_power / legitimacy from the sparse
 // time-series. Mirrors DuckDB's `LAST_VALUE(... IGNORE NULLS)` window.

@@ -1,5 +1,4 @@
-// Character entity parser. Direct port of
-// src-tauri/src/parser/parsers/characters.rs.
+// Character entity parser.
 
 import {
 	asArray,

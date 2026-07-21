@@ -1,6 +1,5 @@
-// Character extended data parsers. Direct port of
-// src-tauri/src/parser/parsers/character_data.rs. Four collections:
-// stats, traits, relationships, marriages.
+// Character extended data parsers. Four collections: stats, traits,
+// relationships, marriages.
 
 import { ParseError } from "../extract-zip.js";
 import {
@@ -55,7 +54,7 @@ function* eachCharacter(
 	}
 }
 
-// ---------- Character stats (character_data.rs:20–70) ----------
+// ---------- Character stats ----------
 
 export function parseCharacterStats(
 	root: Record<string, unknown>,
@@ -80,7 +79,7 @@ export function parseCharacterStats(
 	return out;
 }
 
-// ---------- Character traits (character_data.rs:76–109) ----------
+// ---------- Character traits ----------
 
 export function parseCharacterTraits(
 	root: Record<string, unknown>,
@@ -106,7 +105,7 @@ export function parseCharacterTraits(
 	return out;
 }
 
-// ---------- Character relationships (character_data.rs:115–188) ----------
+// ---------- Character relationships ----------
 
 export function parseCharacterRelationships(
 	root: Record<string, unknown>,
@@ -158,7 +157,7 @@ export function parseCharacterRelationships(
 	return out;
 }
 
-// ---------- Character marriages (character_data.rs:194–225) ----------
+// ---------- Character marriages ----------
 
 export function parseCharacterMarriages(
 	root: Record<string, unknown>,

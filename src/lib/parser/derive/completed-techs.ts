@@ -1,5 +1,3 @@
-// derive/completed-techs.ts — port of get_completed_techs (match_data.rs:139–170).
-//
 // Reads TECH_DISCOVERED event_logs (data1 carries the tech name); resolves
 // player_name + nation. ORDER BY p.nation, e.turn, e.data1.
 //

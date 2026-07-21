@@ -1,5 +1,3 @@
-// derive/current-laws.ts — port of get_current_laws (match_data.rs:80–134).
-//
 // Each non-succession law in `laws` becomes a PlayerLaw. The adopted_turn
 // comes from the most recent LAW_ADOPTED event_log for that (player, law);
 // falls back to 0 if no event found (matches the SQL COALESCE). Succession

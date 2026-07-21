@@ -1,5 +1,4 @@
-// Unit entity + 5 sub-entity parsers. Direct port of
-// src-tauri/src/parser/parsers/units.rs and unit_production.rs.
+// Unit entity + 5 sub-entity parsers.
 //
 // Units are nested inside Tile elements. The first 4 parsers walk
 // tiles → units; the last 2 (player_units_produced, city_units_produced)
@@ -74,7 +73,7 @@ export interface CityUnitProduction {
 
 /**
  * Yield [unitXmlId, tileXmlId, unitNode] for every <Unit> nested under a
- * <Tile>. Mirrors the two-level Rust iteration in units.rs:23–26.
+ * <Tile>.
  */
 function* eachUnit(
 	root: Record<string, unknown>,
@@ -93,7 +92,6 @@ function* eachUnit(
 /**
  * Strict-mode parser for `<UnitsProduced>` / `<UnitProductionCounts>` —
  * named-int-children where missing text or unparseable values throw.
- * Mirrors unit_production.rs:26–31 (uses `?` to propagate errors).
  */
 function parseStrictUnitCounts(
 	node: unknown,
@@ -117,7 +115,7 @@ function parseStrictUnitCounts(
 	return out;
 }
 
-// ---------- Units core (units.rs:23–80) ----------
+// ---------- Units core ----------
 
 export function parseUnits(root: Record<string, unknown>): Unit[] {
 	const units: Unit[] = [];
@@ -159,7 +157,7 @@ export function parseUnits(root: Record<string, unknown>): Unit[] {
 	return units;
 }
 
-// ---------- Unit promotions (units.rs:83–105) ----------
+// ---------- Unit promotions ----------
 
 export function parseUnitPromotions(
 	root: Record<string, unknown>,
@@ -187,7 +185,7 @@ export function parseUnitPromotions(
 	return out;
 }
 
-// ---------- Unit effects (units.rs:108–123) ----------
+// ---------- Unit effects ----------
 
 export function parseUnitEffects(root: Record<string, unknown>): UnitEffect[] {
 	const out: UnitEffect[] = [];
@@ -197,7 +195,7 @@ export function parseUnitEffects(root: Record<string, unknown>): UnitEffect[] {
 		if (!isElement(effectsNode)) continue;
 
 		for (const [effect, value] of getElementChildren(effectsNode)) {
-			// Default 1 (not 0) per units.rs:116 unwrap_or(1).
+			// Default 1, not 0.
 			const stacks = optInt(value) ?? 1;
 			out.push({ unitXmlId, effect, stacks });
 		}
@@ -206,7 +204,7 @@ export function parseUnitEffects(root: Record<string, unknown>): UnitEffect[] {
 	return out;
 }
 
-// ---------- Unit families (units.rs:126–145) ----------
+// ---------- Unit families ----------
 
 export function parseUnitFamilies(root: Record<string, unknown>): UnitFamily[] {
 	const out: UnitFamily[] = [];
@@ -231,7 +229,7 @@ export function parseUnitFamilies(root: Record<string, unknown>): UnitFamily[] {
 	return out;
 }
 
-// ---------- Player units produced (unit_production.rs:10–43) ----------
+// ---------- Player units produced ----------
 
 export function parsePlayerUnitsProduced(
 	root: Record<string, unknown>,
@@ -252,7 +250,7 @@ export function parsePlayerUnitsProduced(
 	return out;
 }
 
-// ---------- City units produced (unit_production.rs:48–84) ----------
+// ---------- City units produced ----------
 
 export function parseCityUnitsProduced(
 	root: Record<string, unknown>,

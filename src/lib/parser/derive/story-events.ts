@@ -1,5 +1,3 @@
-// derive/story-events.ts — port of get_story_events (match_data.rs:219–251).
-//
 // Parsed event_stories carry XML ids; resolve to player_name + first_name +
 // city_name. ORDER BY occurred_turn DESC, event_id DESC, LIMIT 100.
 

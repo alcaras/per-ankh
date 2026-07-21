@@ -1,6 +1,5 @@
-// Event parsers. Direct port of src-tauri/src/parser/parsers/events.rs.
-// Three collections: event_stories (3 sources), event_logs, memory_data
-// (with 2025 → 2024 fallback).
+// Event parsers. Three collections: event_stories (3 sources), event_logs,
+// memory_data (with 2025 → 2024 fallback).
 
 import {
 	asArray,
@@ -47,7 +46,7 @@ export interface MemoryData {
 /**
  * Walk a `<...EventStoryTurn>`-style container. Each child's tag name is the
  * event_type; text is parsed as occurred_turn (lenient — defaults to 0 on
- * missing/unparseable per Rust unwrap_or(0) at events.rs:84, 115, 145).
+ * missing/unparseable).
  */
 function collectEventTurns(
 	node: unknown,
@@ -60,8 +59,7 @@ function collectEventTurns(
 	return out;
 }
 
-// Fixed sequence Rust walks for player-level event stories
-// (events.rs:69–75).
+// Fixed sequence for player-level event stories.
 const PLAYER_EVENT_STORY_ELEMENTS: ReadonlyArray<string> = [
 	"AllEventStoryTurn",
 	"FamilyEventStoryTurn",
@@ -71,14 +69,14 @@ const PLAYER_EVENT_STORY_ELEMENTS: ReadonlyArray<string> = [
 ];
 
 // Filter for event_log Data1/Data2/Data3 — drop the literal string "None"
-// and empty values (events.rs:191, 198, 205).
+// and empty values.
 function logDataField(val: unknown): string | null {
 	const s = optStr(val);
 	if (s === null) return null;
 	return s === "None" ? null : s;
 }
 
-// ---------- Event stories (events.rs:65–159) ----------
+// ---------- Event stories ----------
 
 export function parseEventStories(root: Record<string, unknown>): EventStory[] {
 	const out: EventStory[] = [];
@@ -105,7 +103,7 @@ export function parseEventStories(root: Record<string, unknown>): EventStory[] {
 
 	// 2. Character-level: only emit if the character carries a parseable
 	//    `player` ATTRIBUTE (note the lowercase — `@_player`, NOT
-	//    `@_Player`; mirrors opt_attr("player") at events.rs:41).
+	//    `@_Player`).
 	for (const charNode of asArray(root.Character) as unknown[]) {
 		if (!isElement(charNode)) continue;
 		const charXmlId = requireInt(charNode["@_ID"], "Character.ID");
@@ -146,7 +144,7 @@ export function parseEventStories(root: Record<string, unknown>): EventStory[] {
 	return out;
 }
 
-// ---------- Event logs (events.rs:162–221) ----------
+// ---------- Event logs ----------
 
 export function parseEventLogs(root: Record<string, unknown>): EventLog[] {
 	const out: EventLog[] = [];
@@ -178,7 +176,7 @@ export function parseEventLogs(root: Record<string, unknown>): EventLog[] {
 	return out;
 }
 
-// ---------- Memory data (events.rs:224–323) ----------
+// ---------- Memory data ----------
 
 export function parseMemoryData(root: Record<string, unknown>): MemoryData[] {
 	const out: MemoryData[] = [];
@@ -198,8 +196,7 @@ export function parseMemoryData(root: Record<string, unknown>): MemoryData[] {
 			}
 		}
 
-		// Fall back to 2024 legacy if 2025 yielded nothing — mirrors
-		// `if memories.is_empty()` at events.rs:237.
+		// Fall back to 2024 legacy if 2025 yielded nothing.
 		if (playerMemories.length === 0) {
 			playerMemories.push(...parseLegacyMemoryLists(playerNode, playerXmlId));
 		}
@@ -238,8 +235,7 @@ function parseLegacyMemoryLists(
 
 /**
  * Parse one memory record. Missing `<Type>` text returns null (skip the row
- * silently — mirrors Rust's `match ... { Some => ..., None => return Ok(None) }`
- * at events.rs:246–249).
+ * silently).
  */
 function parseSingleMemory(
 	node: Record<string, unknown>,

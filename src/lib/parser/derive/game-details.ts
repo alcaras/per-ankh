@@ -1,5 +1,3 @@
-// derive/game-details.ts — port of get_game_details (match_data.rs:10–75).
-//
 // Combines match metadata + the resolved winner (player_name, nation, victory
 // type) + a player roster. The headline `difficulty` field carries the save
 // owner's tier (already derived in MatchMetadata); each PlayerInfo also

@@ -1,5 +1,3 @@
-// derive/game-religions.ts — port of get_game_religions (match_data.rs:254–273).
-//
 // Joins parsed Religion[] against players to resolve founder_nation. ORDER
 // BY r.founded_turn NULLS LAST, r.religion_name.
 

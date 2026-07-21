@@ -1,5 +1,3 @@
-// derive/event-logs.ts — port of get_event_logs (match_data.rs:277–310).
-//
 // Dedups events that have the same (turn, log_type, stripped-description).
 // For groups with > 1 row, player_name is set to null (the SQL `CASE` clause
 // at line 287); for single-row groups it resolves the player name.

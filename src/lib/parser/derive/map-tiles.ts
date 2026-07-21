@@ -1,5 +1,3 @@
-// derive/map-tiles.ts — port of get_map_tiles (map.rs:12–76).
-//
 // Direct projection over parsed Tile[] resolving owner metadata. Three
 // distinct tile→entity relationships are used (mirroring the Rust query's
 // three LEFT JOINs):

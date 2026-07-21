@@ -1,5 +1,4 @@
-// Religion entity parser. Direct port of
-// src-tauri/src/parser/parsers/religions.rs.
+// Religion entity parser.
 //
 // Religions don't appear as discrete <Religion> elements in saves. Instead,
 // the <Game> element holds four name-keyed-integer containers:

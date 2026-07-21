@@ -1,7 +1,5 @@
-// Player-nested data parsers. Direct port of
-// src-tauri/src/parser/parsers/player_data.rs. Seven collections per
-// <Player>: resources, technology progress/completed/states, council,
-// laws, goals.
+// Player-nested data parsers. Seven collections per <Player>: resources,
+// technology progress/completed/states, council, laws, goals.
 
 import { ParseError } from "../extract-zip.js";
 import {
@@ -91,7 +89,7 @@ const TECH_STATE_MAPPINGS: ReadonlyArray<[string, string]> = [
 	["TechTarget", "targeted"],
 ];
 
-// ---------- Player resources (player_data.rs:71–108) ----------
+// ---------- Player resources ----------
 
 export function parsePlayerResources(
 	root: Record<string, unknown>,
@@ -137,7 +135,7 @@ export function parseProjectsProduced(
 	return out;
 }
 
-// ---------- Technology progress (player_data.rs:119–150) ----------
+// ---------- Technology progress ----------
 
 export function parseTechnologyProgress(
 	root: Record<string, unknown>,
@@ -154,7 +152,7 @@ export function parseTechnologyProgress(
 	return out;
 }
 
-// ---------- Technologies completed (player_data.rs:163–197) ----------
+// ---------- Technologies completed ----------
 
 export function parseTechnologiesCompleted(
 	root: Record<string, unknown>,
@@ -178,7 +176,7 @@ export function parseTechnologiesCompleted(
 	return out;
 }
 
-// ---------- Technology states (player_data.rs:211–244) ----------
+// ---------- Technology states ----------
 
 export function parseTechnologyStates(
 	root: Record<string, unknown>,
@@ -198,7 +196,7 @@ export function parseTechnologyStates(
 	return out;
 }
 
-// ---------- Player council (player_data.rs:255–293) ----------
+// ---------- Player council ----------
 
 export function parsePlayerCouncil(
 	root: Record<string, unknown>,
@@ -221,7 +219,7 @@ export function parsePlayerCouncil(
 	return out;
 }
 
-// ---------- Laws (player_data.rs:304–331) ----------
+// ---------- Laws ----------
 
 export function parseLaws(root: Record<string, unknown>): Law[] {
 	const out: Law[] = [];
@@ -254,7 +252,7 @@ export function parseLaws(root: Record<string, unknown>): Law[] {
 	return out;
 }
 
-// ---------- Player goals (player_data.rs:351–457) ----------
+// ---------- Player goals ----------
 
 export function parsePlayerGoals(root: Record<string, unknown>): PlayerGoal[] {
 	const out: PlayerGoal[] = [];
@@ -301,7 +299,7 @@ export function parsePlayerGoals(root: Record<string, unknown>): PlayerGoal[] {
 
 			// <Finished/> presence check. If present, completed_turn =
 			// started_turn (literal "use started_turn as placeholder" hack
-			// per player_data.rs:412). NOT a separate read.
+			// hack). NOT a separate read.
 			const finished = "Finished" in goalData;
 			const completedTurn = finished ? startedTurn : null;
 

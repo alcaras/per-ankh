@@ -1,6 +1,3 @@
-// derive/tech-discovery-history.ts — port of get_tech_discovery_history
-// (history.rs:330–409).
-//
 // Per player, walk TECH_DISCOVERED events with running cumulative count.
 // Prepend a turn 0 starting point and append a final-turn endpoint.
 

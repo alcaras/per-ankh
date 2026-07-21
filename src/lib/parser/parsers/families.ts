@@ -1,5 +1,4 @@
-// Family entity parser. Direct port of
-// src-tauri/src/parser/parsers/families.rs.
+// Family entity parser.
 //
 // Families have no XML ID — they're identified by name (e.g. "FAMILY_FABIUS").
 // Per-player family state is encoded as three sibling elements on each Player:
@@ -61,8 +60,8 @@ export function parseFamilies(root: Record<string, unknown>): Family[] {
  * Parse the global `<FamilyClass>` element into a name → class map.
  *
  * Looks for a direct child of the root first, falling back to a depth-first
- * descendant search. Mirrors families.rs lines 95–116, where the fallback
- * exists because real saves may nest FamilyClass under unexpected wrappers.
+ * descendant search. The fallback exists because real saves may nest
+ * FamilyClass under unexpected wrappers.
  */
 function parseFamilyClasses(
 	root: Record<string, unknown>,

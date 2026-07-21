@@ -1,6 +1,3 @@
-// derive/law-adoption-history.ts — port of get_law_adoption_history
-// (history.rs:211–325).
-//
 // Per player, walk LAW_ADOPTED events with their law name extracted from
 // description, look up each law's law_category from the static LAW_TO_CLASS
 // table, and emit a series with running cumulative-distinct-class count.
@@ -71,7 +68,7 @@ export function deriveLawAdoptionHistory(
 		}
 
 		// For each event, count distinct categories whose first_adoption is ≤
-		// this event's turn. Mirrors the SQL subquery at history.rs:277.
+		// this event's turn.
 		events.sort((a, b) => a.turn - b.turn || a.seq - b.seq);
 		const data: LawAdoptionDataPoint[] = events.map((e) => {
 			let count = 0;

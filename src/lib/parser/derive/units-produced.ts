@@ -1,5 +1,3 @@
-// derive/units-produced.ts — port of get_units_produced (map.rs:323–353).
-//
 // Direct projection over PlayerUnitProduction with player_name/nation
 // resolved. ORDER BY p.nation, u.count DESC, u.unit_type.
 

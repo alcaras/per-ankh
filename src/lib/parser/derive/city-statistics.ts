@@ -1,5 +1,3 @@
-// derive/city-statistics.ts — port of get_city_statistics (map.rs:231–288).
-//
 // Projects parsed City[] with resolved owner nation, governor name, family
 // class, and culture level. Culture level is looked up by team_id from
 // city_culture; team_id falls back to player.xmlId per the Rust COALESCE.

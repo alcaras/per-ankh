@@ -25,8 +25,8 @@ export function validateCompletedGame(data: FullGameData): void {
 /**
  * Pull the XML game id from the root without invoking the full
  * orchestrator. Useful for callers that want the id before deciding to do
- * the heavy parse (e.g., dedup check). Mirrors the `<Root GameId="...">`
- * attribute read in import.rs:217.
+ * the heavy parse (e.g., dedup check). Reads the `<Root GameId="...">`
+ * attribute.
  */
 export function extractGameId(root: Record<string, unknown>): string {
 	return requireStr(root["@_GameId"], "Root.GameId");

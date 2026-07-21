@@ -1,7 +1,7 @@
 // XML parsing config + traversal helpers for the Old World save parser.
 //
-// fast-xml-parser produces nested plain JS objects. The helpers below mirror
-// the roxmltree-based access patterns used in src-tauri/src/parser/.
+// fast-xml-parser produces nested plain JS objects; the helpers below wrap
+// the access patterns the entity parsers need.
 
 import { XMLParser } from "fast-xml-parser";
 import { ParseError } from "./extract-zip.js";
@@ -213,8 +213,7 @@ export function getElementChildren(
  *   </FamilyHeadID>
  *
  * Returns child name → integer. Children whose text doesn't parse as int are
- * silently skipped (matches the Rust `child.text().and_then(parse).ok()`
- * pattern used in families.rs / religions.rs).
+ * silently skipped.
  */
 export function parseNameKeyedIntMap(node: unknown): Map<string, number> {
 	const out = new Map<string, number>();
@@ -272,7 +271,7 @@ export function collectStrictNamedInts(
  * Returns `[{turn, value}]` pairs. Non-`T`-prefixed children are silently
  * skipped (mirrors Rust's `if !turn_tag.starts_with('T') { continue; }`).
  * Invalid turn (after `T`-strip) and missing/unparseable text both throw
- * a ParseError — mirrors `?` propagation in timeseries.rs:32, 40.
+ * a ParseError.
  */
 export function parseSparseHistory(
 	node: unknown,
@@ -311,7 +310,7 @@ export function parseSparseHistory(
  *   </YieldRateHistory>
  *
  * Returns `[{typeName, turn, value}]` triples. Same strict T-prefix and
- * text semantics as `parseSparseHistory` — mirrors timeseries.rs:71, 81.
+ * text semantics as `parseSparseHistory`.
  */
 export function parseSparseHistoryByType(
 	node: unknown,

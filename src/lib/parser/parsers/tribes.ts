@@ -1,5 +1,4 @@
-// Tribe entity parser. Direct port of
-// src-tauri/src/parser/parsers/tribes.rs.
+// Tribe entity parser.
 //
 // Tribes use string IDs (e.g. "TRIBE_REBELS"), not numeric XML IDs.
 

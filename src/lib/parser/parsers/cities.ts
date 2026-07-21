@@ -1,9 +1,8 @@
-// City entity + 8 sub-entity parsers. Direct port of
-// src-tauri/src/parser/parsers/cities.rs and city_data.rs.
+// City entity + 8 sub-entity parsers.
 //
-// Per spec §394 these live in one consolidated module rather than splitting
-// per Rust file — all 9 collections share the same per-City iteration shape
-// and benefit from being read together.
+// Per spec §394 these live in one consolidated module rather than one per
+// collection — all 9 share the same per-City iteration shape and benefit
+// from being read together.
 
 import {
 	asArray,
@@ -116,7 +115,7 @@ function eachCity(
 	})();
 }
 
-// ---------- Cities core (cities.rs) ----------
+// ---------- Cities core ----------
 
 export function parseCities(root: Record<string, unknown>): City[] {
 	const cities: City[] = [];
@@ -139,7 +138,6 @@ export function parseCities(root: Record<string, unknown>): City[] {
 
 		// unit_production_count: prefer aggregate <UnitProductionCount>,
 		// fall back to sum of <UnitProductionCounts> children, default 0.
-		// (cities.rs:101–117)
 		const aggregateUpc = optInt(node.UnitProductionCount);
 		const unitProductionCount =
 			aggregateUpc !== null
@@ -148,7 +146,7 @@ export function parseCities(root: Record<string, unknown>): City[] {
 
 		// <PlayerFamily> holds <P.X>FAMILY_Y</P.X> for every player who has
 		// owned this city — the same string-valued prefix-keyed shape as unit
-		// families (units.rs:126–145). Skip non-P.* tags, unparseable player
+		// families. Skip non-P.* tags, unparseable player
 		// IDs, and empty values.
 		const playerFamilies: { playerXmlId: number; familyName: string }[] = [];
 		const familyNode = node.PlayerFamily;
@@ -197,7 +195,7 @@ function sumNamedIntChildren(node: unknown): number {
 	return sum;
 }
 
-// ---------- Production queue (city_data.rs:15–73) ----------
+// ---------- Production queue ----------
 
 export function parseCityProductionQueue(
 	root: Record<string, unknown>,
@@ -226,7 +224,7 @@ export function parseCityProductionQueue(
 	return items;
 }
 
-// ---------- Projects completed (city_data.rs:76–125) ----------
+// ---------- Projects completed ----------
 
 export function parseCityProjectsCompleted(
 	root: Record<string, unknown>,
@@ -257,7 +255,7 @@ export function parseCityProjectsCompleted(
 	return out;
 }
 
-// ---------- Project counts (city_data.rs:254–281) ----------
+// ---------- Project counts ----------
 
 export function parseCityProjectCounts(
 	root: Record<string, unknown>,
@@ -280,7 +278,7 @@ export function parseCityProjectCounts(
 	return out;
 }
 
-// ---------- Enemy agents (city_data.rs:303–336) ----------
+// ---------- Enemy agents ----------
 
 export function parseCityEnemyAgents(
 	root: Record<string, unknown>,
@@ -312,7 +310,7 @@ export function parseCityEnemyAgents(
 	return out;
 }
 
-// ---------- Luxuries (city_data.rs:339–364) ----------
+// ---------- Luxuries ----------
 
 export function parseCityLuxuries(root: Record<string, unknown>): CityLuxury[] {
 	const out: CityLuxury[] = [];
@@ -329,7 +327,7 @@ export function parseCityLuxuries(root: Record<string, unknown>): CityLuxury[] {
 	return out;
 }
 
-// ---------- Yields (city_data.rs:128–156) ----------
+// ---------- Yields ----------
 
 export function parseCityYields(root: Record<string, unknown>): CityYield[] {
 	const out: CityYield[] = [];
@@ -346,7 +344,7 @@ export function parseCityYields(root: Record<string, unknown>): CityYield[] {
 	return out;
 }
 
-// ---------- Religions (city_data.rs:159–182) ----------
+// ---------- Religions ----------
 
 export function parseCityReligions(
 	root: Record<string, unknown>,
@@ -366,7 +364,7 @@ export function parseCityReligions(
 	return out;
 }
 
-// ---------- Culture (city_data.rs:185–250) ----------
+// ---------- Culture ----------
 
 export function parseCityCulture(root: Record<string, unknown>): CityCulture[] {
 	const out: CityCulture[] = [];

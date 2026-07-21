@@ -1,5 +1,3 @@
-// derive/yield-history.ts — port of get_yield_history (history.rs:106–206).
-//
 // Per (player, yield_type), generate a complete turn sequence and forward-
 // fill rate from yield_rate_history and cumulative from yield_total_history.
 // Both raw values are divided by 10 (the game stores yields scaled by 10).
@@ -14,7 +12,7 @@ import type {
 import type { YieldDataPoint, YieldHistory } from "../types.js";
 import { playersOrderedByName } from "./_helpers.js";
 
-/** Yield types included in the share blob. Mirrors `SHARE_YIELD_TYPES` in share.rs:12. */
+/** Yield types included in the game blob. */
 export const SHARE_YIELD_TYPES = [
 	"YIELD_SCIENCE",
 	"YIELD_CIVICS",

@@ -1,5 +1,5 @@
-// Auto-generated types from Rust are in individual files
-// This index file re-exports them for convenient imports
+// Hand-maintained types, one per file. This index re-exports them for
+// convenient imports.
 
 export type { GameStatistics } from "./GameStatistics";
 export type { GameDetails } from "./GameDetails";

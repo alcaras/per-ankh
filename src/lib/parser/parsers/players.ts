@@ -1,5 +1,4 @@
-// Player entity parser. Direct port of
-// src-tauri/src/parser/parsers/players.rs.
+// Player entity parser.
 
 import {
 	asArray,
@@ -63,7 +62,7 @@ export function parsePlayers(
 		// the active player has AIControlledToTurn=0; every other human player
 		// has AIControlledToTurn>0 because they're not the active player.
 		// Without the OnlineID branch they'd be misflagged as AI. (See
-		// cloud-rewrite-spec §328 and players.rs:46–54.)
+		// cloud-rewrite-spec §328.)
 		const hasOnlineId = onlineId !== null && onlineId !== "";
 		const isHuman = hasOnlineId || aiControlledToTurn === 0;
 

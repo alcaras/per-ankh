@@ -1,5 +1,4 @@
-// Tile entity + tile_visibility + tile_changes parsers. Direct port of
-// src-tauri/src/parser/parsers/tiles.rs and tile_data.rs.
+// Tile entity + tile_visibility + tile_changes parsers.
 
 import { ParseError } from "../extract-zip.js";
 import {
@@ -68,7 +67,7 @@ function* eachTile(
 /**
  * Lenient parse of `<OwnerHistory>` returning the latest non-negative owner.
  *
- * Mirrors tiles.rs:70–96 — silently skips:
+ * Silently skips:
  *   - tags that don't start with `T`
  *   - tags whose `T`-stripped suffix isn't a parseable int
  *   - text values that aren't parseable ints
@@ -96,7 +95,7 @@ function parseLatestOwnerFromHistory(node: unknown): number | null {
 
 /**
  * Strict parse of a `TerrainHistory`/`VegetationHistory` section.
- * Mirrors tile_data.rs:121–146 — errors on bad turn tags or missing text.
+ * Errors on bad turn tags or missing text.
  * Non-`T`-prefixed tags are silently skipped (Rust does the same via the
  * `if let Some(turn_str) = ...strip_prefix('T')` early-out).
  */
@@ -134,7 +133,7 @@ function collectTileHistory(
 	return out;
 }
 
-// ---------- Tiles core (tiles.rs) ----------
+// ---------- Tiles core ----------
 
 export function parseTiles(root: Record<string, unknown>): Tile[] {
 	const mapWidth = requireInt(root["@_MapWidth"], "Root.MapWidth");
@@ -179,7 +178,7 @@ export function parseTiles(root: Record<string, unknown>): Tile[] {
 	return tiles;
 }
 
-// ---------- Tile visibility (tile_data.rs:18–93) ----------
+// ---------- Tile visibility ----------
 
 export function parseTileVisibility(
 	root: Record<string, unknown>,
@@ -195,7 +194,7 @@ export function parseTileVisibility(
 
 		// Asymmetric union: emit one row per RevealedTurn entry only.
 		// RevealedOwner entries without a matching RevealedTurn produce no
-		// row. Mirrors tile_data.rs:80–90.
+		// row.
 		for (const [teamId, revealedTurn] of revealedTurns) {
 			out.push({
 				tileXmlId,
@@ -209,13 +208,11 @@ export function parseTileVisibility(
 	return out;
 }
 
-// ---------- Tile ownership history (entities/tiles.rs:343–404) ----------
+// ---------- Tile ownership history ----------
 //
 // Each `<OwnerHistory>` block holds `<TX>player_xml_id</TX>` children
 // recording every change of ownership. Owner = -1 means "unowned" — emitted
-// as null. Cloud-blob equivalent of the desktop's `tile_ownership_history`
-// table. Mirrors `parse_tile_ownership_history` in
-// src-tauri/src/parser/entities/tiles.rs.
+// as null.
 
 export interface TileOwnership {
 	tileXmlId: number;
@@ -253,7 +250,7 @@ export function parseTileOwnershipHistory(
 	return out;
 }
 
-// ---------- Tile changes (tile_data.rs:99–179) ----------
+// ---------- Tile changes ----------
 
 export function parseTileChanges(root: Record<string, unknown>): TileChange[] {
 	const out: TileChange[] = [];

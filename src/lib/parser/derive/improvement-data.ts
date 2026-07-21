@@ -1,5 +1,3 @@
-// derive/improvement-data.ts — port of get_improvement_data (map.rs:291–320).
-//
 // One row per tile with a non-null improvement, joined against the tile's
 // owning city + player. The city is resolved via `tile.cityTerritoryXmlId`
 // (the tile's `<CityTerritory>` field) and the player via the owning

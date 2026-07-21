@@ -1,7 +1,5 @@
-// Match metadata parser. Pure-parse port of
-// `insert_match_metadata` (src-tauri/src/parser/import.rs:1134–1282) +
-// `update_winner` (same file lines 956–1008) — the DB-write paths are
-// dropped; this module returns a typed `MatchMetadata` struct.
+// Match metadata parser. Returns a typed `MatchMetadata` struct — parse
+// only, no persistence.
 //
 // The parser depends on already-parsed `Player[]` from `players.ts` so it
 // can resolve a winning-team-id back to a player XML id without a second
@@ -99,8 +97,7 @@ export function parseMatchMetadata(
 /**
  * Parse the `Version` attribute. Format:
  *   `Version: 1.0.70671+MOD_NAME=hash+MOD_NAME2=hash`
- * Returns `[version_number, joined_mod_names]`. Mirrors
- * `parse_version_string` in import.rs:889–913.
+ * Returns `[version_number, joined_mod_names]`.
  */
 function parseVersionString(version: string): [string | null, string | null] {
 	const parts = version.split("+");
@@ -120,8 +117,7 @@ function parseVersionString(version: string): [string | null, string | null] {
 // ---------- DLC content ----------
 
 /**
- * Walk `<GameContent>` children for `DLC_*` element names. Mirrors
- * `parse_game_content` in import.rs:918–933.
+ * Walk `<GameContent>` children for `DLC_*` element names.
  */
 function parseGameContent(root: Record<string, unknown>): string | null {
 	const gameContent = root.GameContent;
@@ -428,8 +424,7 @@ function resolveWinner(
 	}
 
 	// Strategy 3: SP fallback — the single human player. Only safe when
-	// exactly one human exists; otherwise we'd guess. Mirrors update_winner's
-	// "find the human player" path at import.rs:976.
+	// exactly one human exists; otherwise we'd guess.
 	const humans = players.filter((p) => p.isHuman);
 	if (humans.length === 1) {
 		return {

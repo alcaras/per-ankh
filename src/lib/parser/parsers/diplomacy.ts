@@ -1,5 +1,4 @@
-// Diplomacy relation parser. Direct port of
-// src-tauri/src/parser/parsers/diplomacy.rs.
+// Diplomacy relation parser.
 //
 // Two source elements under <Game>: <TribeDiplomacy> (player-vs-tribe
 // pairs) and <TeamDiplomacy> (player-vs-player pairs).

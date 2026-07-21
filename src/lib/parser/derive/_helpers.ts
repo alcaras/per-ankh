@@ -1,6 +1,5 @@
-// Shared helpers for derivation modules. Each module under derive/ ports
-// one Rust query function from src-tauri/src/db/queries/ into a pure-fn
-// over parsed entity arrays.
+// Shared helpers for derivation modules. Each module under derive/ is a
+// pure function over parsed entity arrays.
 
 import type { Player } from "../parsers/players.js";
 import { LAW_CLASSES, LAW_TO_CLASS } from "../../generated/law-classes.js";

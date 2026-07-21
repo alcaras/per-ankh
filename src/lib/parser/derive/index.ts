@@ -1,5 +1,4 @@
-// Re-export every derive function. Order roughly mirrors share.rs's
-// assemble_shared_game_data sequence.
+// Re-export every derive function.
 
 export { deriveGameDetails } from "./game-details.js";
 export { derivePlayerHistory } from "./player-history.js";
