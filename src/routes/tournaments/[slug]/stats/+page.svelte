@@ -11,6 +11,11 @@
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
+	import {
+		startingArchetypeWinLossOption,
+		startingTraitWinLossOption,
+		visibleTraitRowCount,
+	} from "$lib/stats/charts/leaders";
 	import { nationWinLossStackedOption } from "$lib/stats/charts/nations";
 	import {
 		AVATAR_LABEL_SIZE,
@@ -37,6 +42,8 @@
 	const casters = $derived(data.competition.caster_leaderboard);
 	const playerPicks = $derived(data.competition.player_picks);
 	const nationWinRate = $derived(data.games.nationWinRate);
+	const startingArchetypes = $derived(data.games.startingArchetypeWinRate);
+	const startingTraits = $derived(data.games.startingTraitWinRate);
 
 	// Circular avatar images for the players/casters axis labels, rasterized
 	// client-side from the Discord CDN (ECharts rich-text labels can't round
@@ -75,7 +82,7 @@
 	// The active tab lives in ?category (controlled: value derived from the
 	// URL, change → goto), mirroring the user-stats subtabs (StatsView) so a
 	// tab is deep-linkable and survives refresh.
-	const TABS = ["players", "nations", "yields", "casters"] as const;
+	const TABS = ["players", "nations", "leaders", "yields", "casters"] as const;
 	type StatsTab = (typeof TABS)[number];
 	const tab = $derived.by<StatsTab>(() => {
 		const fromUrl = page.url.searchParams.get("category");
@@ -106,6 +113,7 @@
 		>
 			<Tabs.Trigger value="players" class={triggerClass}>Players</Tabs.Trigger>
 			<Tabs.Trigger value="nations" class={triggerClass}>Nations</Tabs.Trigger>
+			<Tabs.Trigger value="leaders" class={triggerClass}>Leaders</Tabs.Trigger>
 			<Tabs.Trigger value="yields" class={triggerClass}>Yields</Tabs.Trigger>
 			<Tabs.Trigger value="casters" class={triggerClass}>Casters</Tabs.Trigger>
 		</Tabs.List>
@@ -156,6 +164,45 @@
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
 						No completed games yet.
+					</p>
+				{/if}
+			</section>
+		</Tabs.Content>
+
+		<!-- Leaders — the starting leader each player was dealt (Plane B1):
+		     archetype and the traits they began with, each as games played
+		     split by outcome. -->
+		<Tabs.Content value="leaders">
+			<section class="mb-8">
+				<h2 class="mb-3 text-base font-bold text-tan">Starting archetype</h2>
+				{#if startingArchetypes.length > 0}
+					<ChartContainer
+						option={startingArchetypeWinLossOption(data.games)}
+						height={barChartHeight(startingArchetypes.length)}
+						title="Starting archetype"
+					/>
+				{:else}
+					<p class="p-8 text-center italic text-tan opacity-60">
+						No leader data yet — saves parsed before characters were captured
+						don't carry one.
+					</p>
+				{/if}
+			</section>
+
+			<section class="mb-8">
+				<h2 class="mb-3 text-base font-bold text-tan">
+					Starting leader traits
+				</h2>
+				{#if startingTraits.length > 0}
+					<ChartContainer
+						option={startingTraitWinLossOption(data.games)}
+						height={barChartHeight(visibleTraitRowCount(data.games))}
+						title="Starting leader traits"
+					/>
+				{:else}
+					<p class="p-8 text-center italic text-tan opacity-60">
+						No leader data yet — saves parsed before characters were captured
+						don't carry one.
 					</p>
 				{/if}
 			</section>

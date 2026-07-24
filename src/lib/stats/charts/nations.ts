@@ -6,69 +6,32 @@ import type { ChartBundle, ChartBundleCore } from "../types";
 import {
 	CHART_THEME,
 	COMMON_GRID,
-	LOSS_COLOR,
 	WIN_COLOR,
 	crestAxisLabel,
 	fmtNation,
+	winLossStackedOption,
 } from "./helpers";
 
 function nationCrestUrl(nation: string): string | undefined {
 	return SPRITE_MANIFEST[`crests/CREST_${nation}`];
 }
 
-// Win rate by nation — stacked wins/losses bar (horizontal): bar length =
-// games played, the wins/losses split shows the rate. Sorted by games
-// played, most at top. Typed against ChartBundleCore (only reads nationWinRate)
-// so it renders unchanged at tournament scope, where the bundle has no Overview.
+// Win rate by nation — the shared stacked wins/losses bar: bar length = games
+// played, the split shows the rate. Typed against ChartBundleCore (only reads
+// nationWinRate) so it renders unchanged at tournament scope, where the bundle
+// has no Overview.
 export function nationWinLossStackedOption(
 	bundle: ChartBundleCore,
 ): ChartOption {
-	const rows = [...bundle.nationWinRate].sort((a, b) => a.games - b.games);
-	const nations = rows.map((r) => r.nation);
-	return {
-		...CHART_THEME,
-		tooltip: {
-			...CHART_THEME.tooltip,
-			axisPointer: { type: "shadow" },
-			formatter: (params: unknown) => {
-				const p = (params as { dataIndex: number }[])[0];
-				const row = rows[p.dataIndex];
-				if (!row) return "";
-				return `${fmtNation(row.nation)}<br/>Wins: ${row.wins} / ${row.games}<br/>Rate: ${Math.round(row.rate * 100)}%`;
-			},
-		},
-		grid: { ...COMMON_GRID, left: 140 },
-		xAxis: { type: "value" },
-		yAxis: {
-			type: "category",
-			data: nations,
-			// Larger crest + name (white from the theme) for the headline charts.
-			axisLabel: crestAxisLabel(
-				nations,
-				nationCrestUrl,
-				fmtNation,
-				132,
-				20,
-				14,
-			),
-		},
-		series: [
-			{
-				name: "Wins",
-				type: "bar",
-				stack: "outcome",
-				data: rows.map((r) => r.wins),
-				itemStyle: { color: WIN_COLOR },
-			},
-			{
-				name: "Losses",
-				type: "bar",
-				stack: "outcome",
-				data: rows.map((r) => r.games - r.wins),
-				itemStyle: { color: LOSS_COLOR },
-			},
-		],
-	};
+	return winLossStackedOption({
+		rows: bundle.nationWinRate.map((r) => ({
+			key: r.nation,
+			games: r.games,
+			wins: r.wins,
+		})),
+		label: fmtNation,
+		iconUrl: nationCrestUrl,
+	});
 }
 
 // Average final points by nation — horizontal bar sorted by points, best

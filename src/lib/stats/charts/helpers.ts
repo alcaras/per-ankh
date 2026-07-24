@@ -1,17 +1,21 @@
 // Shared helpers for the stats chart option builders. Reuses the
 // existing chart-theme constants from $lib/config.
 
+import type { ChartOption } from "$lib/echarts";
 import { CHART_THEME } from "$lib/config";
 import { formatEnum } from "$lib/utils/formatting";
 
 // Strip leaderless enum prefix for axis labels. The stats SQL returns
-// raw values (NATION_PERSIA, ARCHETYPE_BUILDER, etc.); the chart axes
+// raw values (NATION_PERSIA, TRAIT_SCHEMER_ARCHETYPE, etc.); the chart axes
 // need humanized text.
 export function fmtNation(value: string): string {
 	return formatEnum(value, "NATION_");
 }
+// A character's archetype is stored as the archetype *trait* it maps to
+// (TRAIT_SCHEMER_ARCHETYPE) — the game flags those traits bArchetype. Drop the
+// suffix for display, matching the game-detail leader cards.
 export function fmtArchetype(value: string): string {
-	return formatEnum(value, "ARCHETYPE_");
+	return formatEnum(value.replace(/_ARCHETYPE$/, ""), "TRAIT_");
 }
 export function fmtTrait(value: string): string {
 	return formatEnum(value, "TRAIT_");
@@ -98,6 +102,80 @@ export function crestAxisLabel(
 		formatter: (value: string) =>
 			crestUrl(value) ? `{${key(value)}|} ${name(value)}` : name(value),
 		rich,
+	};
+}
+
+// One category's outcome tally for a win/loss bar.
+export interface WinLossRow {
+	key: string;
+	games: number;
+	wins: number;
+}
+
+// Horizontal stacked wins/losses bar: bar length = games played, the split
+// shows the rate. Sorted by games ascending so the busiest category sits at
+// the top (ECharts stacks a category axis bottom-up). One builder behind every
+// outcome bar in the catalog — nations, leader archetypes, starting traits —
+// so they stay identical by construction rather than by copy.
+export function winLossStackedOption(opts: {
+	rows: WinLossRow[];
+	// Display name for a row key (fmtNation, fmtArchetype, …).
+	label: (value: string) => string;
+	// Sprite for a row key, when the category has icon art (nation crests,
+	// archetype glyphs). Omit for text-only labels.
+	iconUrl?: (value: string) => string | undefined;
+	// Room reserved for the axis labels; widen for long names.
+	labelWidth?: number;
+}): ChartOption {
+	const { rows, label, iconUrl, labelWidth = 140 } = opts;
+	const sorted = [...rows].sort((a, b) => a.games - b.games);
+	const keys = sorted.map((r) => r.key);
+	return {
+		...CHART_THEME,
+		tooltip: {
+			...CHART_THEME.tooltip,
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = (params as { dataIndex: number }[])[0];
+				const row = sorted[p.dataIndex];
+				if (!row) return "";
+				return `${label(row.key)}<br/>Wins: ${row.wins} / ${row.games}<br/>Rate: ${Math.round((row.wins / row.games) * 100)}%`;
+			},
+		},
+		grid: { ...COMMON_GRID, left: labelWidth },
+		xAxis: { type: "value" },
+		yAxis: {
+			type: "category",
+			data: keys,
+			// Larger icon + name (white from the theme) for the headline charts;
+			// an icon-less category renders the name alone at the same inset, so
+			// both variants align to the grid edge identically.
+			axisLabel: iconUrl
+				? crestAxisLabel(keys, iconUrl, label, labelWidth - 8, 20, 14)
+				: {
+						interval: 0,
+						align: "left" as const,
+						margin: labelWidth - 8,
+						fontSize: 14,
+						formatter: label,
+					},
+		},
+		series: [
+			{
+				name: "Wins",
+				type: "bar",
+				stack: "outcome",
+				data: sorted.map((r) => r.wins),
+				itemStyle: { color: WIN_COLOR },
+			},
+			{
+				name: "Losses",
+				type: "bar",
+				stack: "outcome",
+				data: sorted.map((r) => r.games - r.wins),
+				itemStyle: { color: LOSS_COLOR },
+			},
+		],
 	};
 }
 

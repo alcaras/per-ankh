@@ -6,10 +6,12 @@
 
 import type { ChartSpec, StatsCategory } from "../types";
 import { barChartHeight } from "./helpers";
+import { visibleTraitRowCount } from "./leaders";
 
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
 	{ id: "yields", label: "Yields" },
 	{ id: "nations", label: "Nations" },
+	{ id: "leaders", label: "Leaders" },
 	{ id: "families", label: "Families" },
 	{ id: "laws", label: "Laws" },
 	{ id: "cities", label: "Cities" },
@@ -31,6 +33,29 @@ export const CHART_SPECS: ChartSpec[] = [
 		title: "Average final points",
 		hasData: (b) => b.nationAvgPoints.length > 0,
 		height: (b) => barChartHeight(b.nationAvgPoints.length),
+	},
+	// Leaders — the starting leader's roll: their archetype, and the traits
+	// they began the game with. Both bars carry games (length) and wins
+	// (split), so each answers distribution and outcome at once.
+	{
+		id: "starting-archetype-winloss",
+		category: "leaders",
+		title: "Starting archetype",
+		subtitle: "Games played, split by outcome",
+		hasData: (b) => b.startingArchetypeWinRate.length > 0,
+		emptyMessage: () =>
+			"No leader data yet — saves parsed before characters were captured don't carry one.",
+		height: (b) => barChartHeight(b.startingArchetypeWinRate.length),
+	},
+	{
+		id: "starting-trait-winloss",
+		category: "leaders",
+		title: "Starting leader traits",
+		subtitle: "Games played, split by outcome",
+		hasData: (b) => b.startingTraitWinRate.length > 0,
+		emptyMessage: () =>
+			"No leader data yet — saves parsed before characters were captured don't carry one.",
+		height: (b) => barChartHeight(visibleTraitRowCount(b)),
 	},
 	// Families — category anchor only; rendered by FamilyStatsPanel
 	// (per-nation pick/win bars), not the generic spec loop.
