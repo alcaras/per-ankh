@@ -27,6 +27,11 @@ import {
 	crestAxisLabel,
 } from "./helpers";
 
+// One empty state, referenced from the registry spec and the tournament page
+// rather than retyped at each — they're empty for the same reason.
+export const WONDER_EMPTY_MESSAGE =
+	"No wonder data in these saves yet — they predate the parser that records which wonders a game enables.";
+
 // Wonders are improvements, so both the real in-game name ("The Pyramids", not
 // "Pyramids") and the icon come from the improvement tables.
 export function fmtWonder(value: string): string {

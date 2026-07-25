@@ -12,7 +12,10 @@
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
 	import { nationWinLossStackedOption } from "$lib/stats/charts/nations";
-	import { wonderOverviewOption } from "$lib/stats/charts/wonders";
+	import {
+		WONDER_EMPTY_MESSAGE,
+		wonderOverviewOption,
+	} from "$lib/stats/charts/wonders";
 	import {
 		AVATAR_LABEL_SIZE,
 		casterLeaderboardOption,
@@ -77,13 +80,7 @@
 	// The active tab lives in ?category (controlled: value derived from the
 	// URL, change → goto), mirroring the user-stats subtabs (StatsView) so a
 	// tab is deep-linkable and survives refresh.
-	const TABS = [
-		"players",
-		"nations",
-		"wonders",
-		"yields",
-		"casters",
-	] as const;
+	const TABS = ["players", "nations", "wonders", "yields", "casters"] as const;
 	type StatsTab = (typeof TABS)[number];
 	const tab = $derived.by<StatsTab>(() => {
 		const fromUrl = page.url.searchParams.get("category");
@@ -184,8 +181,7 @@
 					/>
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
-						No wonder data yet — these saves predate the parser that records
-						which wonders a game enables.
+						{WONDER_EMPTY_MESSAGE}
 					</p>
 				{/if}
 			</section>

@@ -6,6 +6,7 @@
 
 import type { ChartSpec, StatsCategory } from "../types";
 import { barChartHeight } from "./helpers";
+import { WONDER_EMPTY_MESSAGE } from "./wonders";
 
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
 	{ id: "yields", label: "Yields" },
@@ -41,9 +42,8 @@ export const CHART_SPECS: ChartSpec[] = [
 		title: "Wonders",
 		subtitle: "P25–P75 turn span, median colored by the builders' outcome",
 		hasData: (b) => b.wonderStats.length > 0,
-		emptyMessage: () =>
-			"No wonder data yet — these saves predate the parser that records which wonders a game enables.",
-		height: (b) => barChartHeight(b.wonderStats.length),
+		emptyMessage: () => WONDER_EMPTY_MESSAGE,
+		height: (b) => barChartHeight(b.wonderStats.length, { subtitle: true }),
 	},
 	// Families — category anchor only; rendered by FamilyStatsPanel
 	// (per-nation pick/win bars), not the generic spec loop.

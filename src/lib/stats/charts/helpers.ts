@@ -53,8 +53,17 @@ export const COMMON_GRID = { left: 60, right: 30, top: 40, bottom: 60 };
 // icon-bearing axis labels (crests, avatars) have breathing room, plus
 // padding for the grid margins. Shared by the registry specs and the
 // tournament stats charts so the same chart sizes identically everywhere.
-export function barChartHeight(rowCount: number): string {
-	return `${Math.max(rowCount, 1) * 34 + 90}px`;
+//
+// A spec that sets a subtitle needs the extra room StatsView's `titled()`
+// reserves for it (grid.top 64 → 92), or its bars render tighter than the
+// same chart without one.
+const SUBTITLE_HEIGHT = 28;
+export function barChartHeight(
+	rowCount: number,
+	opts?: { subtitle?: boolean },
+): string {
+	const extra = opts?.subtitle ? SUBTITLE_HEIGHT : 0;
+	return `${Math.max(rowCount, 1) * 34 + 90 + extra}px`;
 }
 
 // Axis-title placement, mirroring the game-detail charts: the title sits
