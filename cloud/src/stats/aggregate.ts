@@ -733,7 +733,13 @@ export async function buildChartBundle(
 		const rank = cultureRank(r.best_culture_level);
 		if (rank < 0) continue;
 		for (const wonder of pool) {
-			if (rank >= cultureRank(WONDER_CULTURE_PREREQ[wonder] ?? "")) {
+			// A pool row always names a baked wonder (the pool is derived from
+			// that same table), but read the prereq explicitly rather than
+			// leaning on cultureRank's -1 for a miss — that would read as
+			// "eligible for everyone".
+			const prereq = WONDER_CULTURE_PREREQ[wonder];
+			if (prereq === undefined) continue;
+			if (rank >= cultureRank(prereq)) {
 				eligibleByWonder.set(wonder, (eligibleByWonder.get(wonder) ?? 0) + 1);
 			}
 		}

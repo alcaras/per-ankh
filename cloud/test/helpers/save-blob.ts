@@ -36,6 +36,23 @@ export interface UploadFixtureOpts {
 	// save against a bye match with WRONG_HUMAN_COUNT. With humans=1 the
 	// only valid winnerIndex is 0.
 	readonly humans?: 1 | 2;
+	// Wonder-stats inputs (see cloud/test/integration/games/wonder-stats.test.ts).
+	// `wonders` seeds player_wonders — a null nation marks a build whose builder
+	// the parser couldn't resolve. `cities` seeds city_statistics with the
+	// culture levels that gate wonder eligibility. `disabledImprovements` seeds
+	// the game-level list parser 2.12.0 captures; omit it to model an older
+	// blob, which carries no wonder pool at all.
+	readonly wonders?: ReadonlyArray<{
+		player_id: number;
+		wonder: string;
+		completed_turn: number;
+		nation?: string | null;
+	}>;
+	readonly cities?: ReadonlyArray<{
+		owner_player_xml_id: number;
+		culture_level: string;
+	}>;
+	readonly disabledImprovements?: readonly string[];
 }
 
 export async function buildUploadFormData(
@@ -47,6 +64,7 @@ export async function buildUploadFormData(
 		opts.winnerIndex,
 		opts.parserVersion,
 		opts.humans ?? 2,
+		opts,
 	);
 	const jsonBytes = new TextEncoder().encode(JSON.stringify(blob));
 	const gzippedJson = await gzip(jsonBytes);
@@ -80,6 +98,7 @@ function buildMinimalGameBlob(
 	winnerIndex: 0 | 1,
 	parserVersion: string | undefined,
 	humans: 1 | 2,
+	opts: UploadFixtureOpts,
 ): Record<string, unknown> {
 	// Player 1 (NATION_ROME) only exists in the two-human shape; a single-human
 	// save (a bye) has just Player 0.
@@ -156,6 +175,11 @@ function buildMinimalGameBlob(
 			winner_name: "Player " + winnerIndex,
 			winner_civilization: "NATION_EGYPT",
 			winner_victory_type: "VICTORY_AMBITION",
+			// Only a 2.12.0+ blob carries this; omitting it models an older save,
+			// which leaves the game out of the wonder-eligibility denominator.
+			...(opts.disabledImprovements
+				? { disabled_improvements: [...opts.disabledImprovements] }
+				: {}),
 			players,
 		},
 		player_history: [],
@@ -166,11 +190,28 @@ function buildMinimalGameBlob(
 		tech_discovery_history: [],
 		completed_techs: [],
 		units_produced: [],
-		city_statistics: { cities: [] },
+		city_statistics: {
+			cities: (opts.cities ?? []).map((c, i) => ({
+				city_id: i + 1,
+				city_name: `CITYNAME_TEST_${i}`,
+				owner_nation: "NATION_EGYPT",
+				owner_player_xml_id: c.owner_player_xml_id,
+				first_owner_player_xml_id: c.owner_player_xml_id,
+				founded_turn: 5,
+				culture_level: c.culture_level,
+			})),
+		},
 		improvement_data: {},
 		map_tiles: [],
 		game_religions: [],
-		player_wonders: [],
+		player_wonders: (opts.wonders ?? []).map((w) => ({
+			player_id: w.player_id,
+			player_name: `Player ${w.player_id}`,
+			// The parser leaves nation null when it can't resolve the builder.
+			nation: w.nation === undefined ? "NATION_EGYPT" : w.nation,
+			wonder: w.wonder,
+			completed_turn: w.completed_turn,
+		})),
 		tile_ownership_history: [],
 		player_nations: [],
 		// Read by derivePlayerSummary (cloud/src/derive-player-summary.ts).

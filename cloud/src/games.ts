@@ -668,7 +668,9 @@ function buildWonderPoolStatements(
 	const disabled = (blob.game_details as { disabled_improvements?: unknown })
 		?.disabled_improvements;
 	if (!Array.isArray(disabled)) return [];
-	const off = new Set(disabled.filter((d): d is string => typeof d === "string"));
+	const off = new Set(
+		disabled.filter((d): d is string => typeof d === "string"),
+	);
 	const enabled = Object.keys(WONDER_CULTURE_PREREQ).filter((w) => !off.has(w));
 	if (enabled.length === 0) return [];
 
@@ -689,16 +691,27 @@ function buildWonderPoolStatements(
 // Wonder completions (PlayerWonder wire shape: { player_id, player_name,
 // nation, wonder, completed_turn }). One row per wonder — a wonder is unique
 // within a game, so the blob never carries the same one twice.
+//
+// Rows whose builder the parser couldn't resolve are dropped. It finds the
+// builder by locating the wonder's improvement on the map and reading the
+// tile's owner; when that lookup fails it falls back to player_id 0 with a
+// null nation (derive/player-wonders.ts). Indexing those would credit whoever
+// holds player index 0 — a real player — with someone else's wonder and its
+// outcome. ~2% of wonder rows across a public-game sample, always landing on
+// index 0, so the bias is systematic rather than noise.
 function buildWonderEventStatements(
 	db: D1Database,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
-	const wonders = blob.player_wonders as Array<{
-		player_id: number;
-		wonder: string;
-		completed_turn: number;
-	}>;
+	const wonders = (
+		blob.player_wonders as Array<{
+			player_id: number;
+			wonder: string;
+			completed_turn: number;
+			nation: string | null;
+		}>
+	)?.filter((w) => w.nation !== null);
 	if (!wonders || wonders.length === 0) return [];
 
 	const columns = ["game_id", "wonder", "player_index", "turn"];
