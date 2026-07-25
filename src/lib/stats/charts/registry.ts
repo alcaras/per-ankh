@@ -6,7 +6,7 @@
 
 import type { ChartSpec, StatsCategory } from "../types";
 import { barChartHeight } from "./helpers";
-import { visibleTraitRowCount } from "./leaders";
+import { LEADER_EMPTY_MESSAGE, visibleTraitRowCount } from "./leaders";
 
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
 	{ id: "yields", label: "Yields" },
@@ -43,9 +43,9 @@ export const CHART_SPECS: ChartSpec[] = [
 		title: "Starting archetype",
 		subtitle: "Games played, split by outcome",
 		hasData: (b) => b.startingArchetypeWinRate.length > 0,
-		emptyMessage: () =>
-			"No leader data yet — saves parsed before characters were captured don't carry one.",
-		height: (b) => barChartHeight(b.startingArchetypeWinRate.length),
+		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		height: (b) =>
+			barChartHeight(b.startingArchetypeWinRate.length, { subtitle: true }),
 	},
 	{
 		id: "starting-trait-winloss",
@@ -53,9 +53,8 @@ export const CHART_SPECS: ChartSpec[] = [
 		title: "Starting leader traits",
 		subtitle: "Games played, split by outcome",
 		hasData: (b) => b.startingTraitWinRate.length > 0,
-		emptyMessage: () =>
-			"No leader data yet — saves parsed before characters were captured don't carry one.",
-		height: (b) => barChartHeight(visibleTraitRowCount(b)),
+		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		height: (b) => barChartHeight(visibleTraitRowCount(b), { subtitle: true }),
 	},
 	// Families — category anchor only; rendered by FamilyStatsPanel
 	// (per-nation pick/win bars), not the generic spec loop.

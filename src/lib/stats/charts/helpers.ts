@@ -11,12 +11,6 @@ import { formatEnum } from "$lib/utils/formatting";
 export function fmtNation(value: string): string {
 	return formatEnum(value, "NATION_");
 }
-// A character's archetype is stored as the archetype *trait* it maps to
-// (TRAIT_SCHEMER_ARCHETYPE) — the game flags those traits bArchetype. Drop the
-// suffix for display, matching the game-detail leader cards.
-export function fmtArchetype(value: string): string {
-	return formatEnum(value.replace(/_ARCHETYPE$/, ""), "TRAIT_");
-}
 export function fmtTrait(value: string): string {
 	return formatEnum(value, "TRAIT_");
 }
@@ -57,8 +51,17 @@ export const COMMON_GRID = { left: 60, right: 30, top: 40, bottom: 60 };
 // icon-bearing axis labels (crests, avatars) have breathing room, plus
 // padding for the grid margins. Shared by the registry specs and the
 // tournament stats charts so the same chart sizes identically everywhere.
-export function barChartHeight(rowCount: number): string {
-	return `${Math.max(rowCount, 1) * 34 + 90}px`;
+//
+// A spec that sets a subtitle needs the extra room StatsView's `titled()`
+// reserves for it (grid.top 64 → 92), or its bars render tighter than the
+// same chart without one.
+const SUBTITLE_HEIGHT = 28;
+export function barChartHeight(
+	rowCount: number,
+	opts?: { subtitle?: boolean },
+): string {
+	const extra = opts?.subtitle ? SUBTITLE_HEIGHT : 0;
+	return `${Math.max(rowCount, 1) * 34 + 90 + extra}px`;
 }
 
 // Axis-title placement, mirroring the game-detail charts: the title sits
@@ -105,11 +108,15 @@ export function crestAxisLabel(
 	};
 }
 
-// One category's outcome tally for a win/loss bar.
+// One category's outcome tally for a win/loss bar. `rate` is the server's
+// own wins/games — passed through rather than recomputed here, so the value
+// the tooltip shows is the one the aggregator guarded against a zero
+// denominator.
 export interface WinLossRow {
 	key: string;
 	games: number;
 	wins: number;
+	rate: number;
 }
 
 // Horizontal stacked wins/losses bar: bar length = games played, the split
@@ -139,7 +146,7 @@ export function winLossStackedOption(opts: {
 				const p = (params as { dataIndex: number }[])[0];
 				const row = sorted[p.dataIndex];
 				if (!row) return "";
-				return `${label(row.key)}<br/>Wins: ${row.wins} / ${row.games}<br/>Rate: ${Math.round((row.wins / row.games) * 100)}%`;
+				return `${label(row.key)}<br/>Wins: ${row.wins} / ${row.games}<br/>Rate: ${Math.round(row.rate * 100)}%`;
 			},
 		},
 		grid: { ...COMMON_GRID, left: labelWidth },

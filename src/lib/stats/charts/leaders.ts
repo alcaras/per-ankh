@@ -7,14 +7,25 @@
 
 import type { ChartOption } from "$lib/echarts";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
+import { archetypeSpriteKey, formatArchetype } from "$lib/utils/formatting";
 import type { ChartBundleCore } from "../types";
-import { fmtArchetype, fmtTrait, winLossStackedOption } from "./helpers";
+import { fmtTrait, winLossStackedOption } from "./helpers";
 
-// Archetype glyphs ship under the archetype trait's name with the _ARCHETYPE
-// suffix dropped (TRAIT_SCHEMER_ARCHETYPE → traits/TRAIT_SCHEMER), the same
-// mapping the game-detail leader cards use.
+// Both leader charts share an empty state: they're empty for the same reason,
+// and the copy is referenced from the registry specs and the tournament page
+// rather than retyped at each.
+export const LEADER_EMPTY_MESSAGE =
+	"No leader data in these saves yet — they were parsed before characters were captured.";
+
 function archetypeIconUrl(archetype: string): string | undefined {
-	return SPRITE_MANIFEST[`traits/${archetype.replace(/_ARCHETYPE$/, "")}`];
+	return SPRITE_MANIFEST[`traits/${archetypeSpriteKey(archetype)}`];
+}
+
+// Art ships for the archetypes and a couple of the plain traits (Strength,
+// Weakness); crestAxisLabel falls back to a name-only label per value, so a
+// resolver that misses most traits still lights up the ones that have one.
+function traitIconUrl(trait: string): string | undefined {
+	return SPRITE_MANIFEST[`traits/${trait}`];
 }
 
 // The ten archetypes are a fixed, small set, so every one that appears fits on
@@ -28,16 +39,16 @@ export function startingArchetypeWinLossOption(
 			key: r.archetype,
 			games: r.games,
 			wins: r.wins,
+			rate: r.rate,
 		})),
-		label: fmtArchetype,
+		label: formatArchetype,
 		iconUrl: archetypeIconUrl,
 	});
 }
 
 // Starting traits have a long tail (~40 across a large corpus, most of them
 // one-offs), so the chart keeps the traits with the most games behind them —
-// the same cap the tech and law charts use to stay readable. No sprite ships
-// for personality traits, so these are name-only rows.
+// the same cap the tech and law charts use to stay readable.
 const MAX_TRAIT_ROWS = 15;
 
 export function startingTraitWinLossOption(
@@ -46,10 +57,16 @@ export function startingTraitWinLossOption(
 	const rows = [...bundle.startingTraitWinRate]
 		.sort((a, b) => b.games - a.games)
 		.slice(0, MAX_TRAIT_ROWS)
-		.map((r) => ({ key: r.trait, games: r.games, wins: r.wins }));
+		.map((r) => ({
+			key: r.trait,
+			games: r.games,
+			wins: r.wins,
+			rate: r.rate,
+		}));
 	return winLossStackedOption({
 		rows,
 		label: fmtTrait,
+		iconUrl: traitIconUrl,
 		// Trait names run longer than nation names ("Compassionate"), so the
 		// labels get more room than the shared default.
 		labelWidth: 160,

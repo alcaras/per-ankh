@@ -130,5 +130,8 @@ describe("derivePlayerSummary — starting leader", () => {
 		const summary = derive(blob);
 		expect(summary.starting_ruler_archetype).toBe("TRAIT_SCHOLAR_ARCHETYPE");
 		expect(summary.succession_count).toBe(2);
+		// The successor's own trait, acquired on the turn they took the throne,
+		// must not land in the starting leader's list.
+		expect(summary.starting_ruler_traits).toBeNull();
 	});
 });

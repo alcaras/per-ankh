@@ -12,6 +12,7 @@
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
 	import {
+		LEADER_EMPTY_MESSAGE,
 		startingArchetypeWinLossOption,
 		startingTraitWinLossOption,
 		visibleTraitRowCount,
@@ -183,8 +184,7 @@
 					/>
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
-						No leader data yet — saves parsed before characters were captured
-						don't carry one.
+						{LEADER_EMPTY_MESSAGE}
 					</p>
 				{/if}
 			</section>
@@ -201,8 +201,7 @@
 					/>
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
-						No leader data yet — saves parsed before characters were captured
-						don't carry one.
+						{LEADER_EMPTY_MESSAGE}
 					</p>
 				{/if}
 			</section>
