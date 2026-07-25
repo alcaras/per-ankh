@@ -20,6 +20,10 @@
 		nationAvgPointsOption,
 		nationWinLossStackedOption,
 	} from "./charts/nations";
+	import {
+		startingArchetypeWinLossOption,
+		startingTraitWinLossOption,
+	} from "./charts/leaders";
 	import { expansionWinRateOption } from "./charts/cities";
 	import type { ChartBundle, StatsCategory } from "./types";
 
@@ -65,6 +69,10 @@
 				return nationWinLossStackedOption(bundle);
 			case "nation-avg-points":
 				return nationAvgPointsOption(bundle);
+			case "starting-archetype-winloss":
+				return startingArchetypeWinLossOption(bundle);
+			case "starting-trait-winloss":
+				return startingTraitWinLossOption(bundle);
 			case "city-expansion-winrate":
 				return expansionWinRateOption(bundle);
 			default:

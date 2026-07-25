@@ -21,8 +21,16 @@ import type { UserScope, UserStatsScope } from "./types";
 // Bumping this is equivalent to a global cache flush — every read
 // becomes a miss and recomputes. Use when the ChartBundle shape itself
 // changes in a backwards-incompatible way (e.g. dropping a field). For
-// data-only changes (a new chart, a new aggregation), no bump needed.
-export const BUNDLE_SCHEMA_VERSION = 5;
+// data-only changes (a chart drawn from fields the bundle already
+// carries), no bump needed.
+//
+// Adding a field counts: entries live for 24h, so without a bump a
+// frontend deployed behind the Worker would read a cached bundle that
+// predates the field and blow up on it (the bundle types declare every
+// field required, so consumers dereference them directly).
+//
+// 6: starting-leader archetype + trait win rates.
+export const BUNDLE_SCHEMA_VERSION = 6;
 
 export interface StatsCacheEnv extends SessionEnv {
 	// SESSIONS_KV is the existing KV binding; this module reuses it

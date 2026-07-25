@@ -7,7 +7,13 @@
 	import type { DetailPlayer, Reign } from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import Popover from "$lib/ui/Popover.svelte";
-	import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
+	import {
+		archetypeSpriteKey,
+		formatArchetype,
+		formatEnum,
+		isArchetypeTrait,
+		toRomanNumeral,
+	} from "$lib/utils/formatting";
 	import { getCivilizationColor } from "$lib/config";
 	import { GOAL_NAMES } from "$lib/generated/goal-names";
 
@@ -45,14 +51,11 @@
 		c.cognomen ? formatEnum(c.cognomen, "COGNOMEN_") : null;
 
 	const archetypeLabel = (c: CharacterInfo): string | null =>
-		c.archetype
-			? formatEnum(c.archetype.replace(/_ARCHETYPE$/, ""), "TRAIT_")
-			: null;
+		c.archetype ? formatArchetype(c.archetype) : null;
 
-	// Archetype icon key for the `traits` sprite category: the save's
-	// TRAIT_<X>_ARCHETYPE trait maps to the icon file TRAIT_<X> (suffix dropped).
+	// Archetype icon key for the `traits` sprite category.
 	const archetypeIcon = (c: CharacterInfo): string | null =>
-		c.archetype ? c.archetype.replace(/_ARCHETYPE$/, "") : null;
+		c.archetype ? archetypeSpriteKey(c.archetype) : null;
 
 	const deathLabel = (reason: string | null): string | null =>
 		reason
@@ -90,7 +93,7 @@
 
 	// Traits excluding the archetype marker (shown separately as the archetype).
 	const detailTraits = $derived(
-		reign.traits.filter((t) => !t.trait_name.endsWith("_ARCHETYPE")),
+		reign.traits.filter((t) => !isArchetypeTrait(t.trait_name)),
 	);
 </script>
 
