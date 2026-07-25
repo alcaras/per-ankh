@@ -51,7 +51,7 @@ export const CHART_SPECS: ChartSpec[] = [
 		id: "starting-trait-winloss",
 		category: "leaders",
 		title: "Starting leader traits",
-		subtitle: "Games played, split by outcome",
+		subtitle: "Top 15 by games played, split by outcome",
 		hasData: (b) => b.startingTraitWinRate.length > 0,
 		emptyMessage: () => LEADER_EMPTY_MESSAGE,
 		height: (b) => barChartHeight(visibleTraitRowCount(b), { subtitle: true }),
