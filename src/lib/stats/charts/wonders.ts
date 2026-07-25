@@ -38,8 +38,10 @@ import {
 export const WONDER_EMPTY_MESSAGE = "No wonder data available.";
 
 // Wonders are improvements, so both the real in-game name ("The Pyramids", not
-// "Pyramids") and the icon come from the improvement tables.
-export function fmtWonder(value: string): string {
+// "Pyramids") and the icon come from the improvement tables. Local, like
+// tech.ts's techLabel: charts/helpers.ts holds the bare enum-strip helpers,
+// name-table lookups stay with the tab that needs them.
+function fmtWonder(value: string): string {
 	return IMPROVEMENT_NAMES[value] ?? formatEnum(value, "IMPROVEMENT_");
 }
 
