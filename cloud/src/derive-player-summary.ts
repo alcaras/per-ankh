@@ -39,6 +39,9 @@ interface CityRow {
 	owner_nation: string | null;
 	owner_player_xml_id: number | null;
 	first_owner_player_xml_id: number | null;
+	// One entry per player who has ever owned the city (parser 2.10.0+);
+	// absent on older blobs.
+	player_families?: Array<{ player_xml_id: number }>;
 	founded_turn: number;
 	culture_level: string | null;
 }
@@ -206,11 +209,25 @@ export function derivePlayerSummary(
 	const cities = cityStats.cities;
 	let cities_total = 0;
 	const founderTurns: number[] = [];
-	// Highest culture level across the player's cities — the wonder charts'
-	// eligibility gate (a wonder needs a city at its <CulturePrereq>). Keyed on
-	// owner_player_xml_id rather than nation so a mirror match doesn't credit
-	// one side with the other's cities; culture only ever climbs, so the
-	// end-state snapshot is also the best level the player ever held.
+	// Highest culture level across every city the player ever held — the wonder
+	// charts' eligibility gate (a wonder needs a city at its <CulturePrereq>).
+	// Keyed on player xml_id rather than nation so a mirror match doesn't credit
+	// one side with the other's cities.
+	//
+	// "Ever held" rather than the end-state owner: culture only ever climbs per
+	// CITY, but a player does not monotonically keep their cities. Reading the
+	// final snapshot gives a player conquered out of the game no culture level
+	// at all and so no eligibility for anything — and those are exactly the
+	// players who didn't build wonders, so the denominator would close in around
+	// the builders and inflate every build rate. Conquest finishes are common in
+	// a 1v1 corpus, so that isn't a tail case.
+	//
+	// The cost: culture_level is an end-state value, so an earlier owner is
+	// credited with culture the city reached after they lost it. That errs
+	// toward counting a player eligible, which understates build rates instead
+	// of flattering them — the safer direction for a chart about what gets
+	// passed over. Resolving it exactly needs per-turn city culture, which the
+	// blob doesn't carry (derive/city-statistics.ts reads one level per city).
 	let best_culture_level: string | null = null;
 	for (const c of cities) {
 		if (player.nation !== null && c.owner_nation === player.nation) {
@@ -219,8 +236,13 @@ export function derivePlayerSummary(
 		if (c.first_owner_player_xml_id === idx) {
 			founderTurns.push(c.founded_turn);
 		}
+		// Pre-2.10.0 blobs carry no ownership record, leaving the end-state
+		// owner as the only signal available.
+		const everHeld =
+			c.player_families?.some((f) => f.player_xml_id === idx) ??
+			c.owner_player_xml_id === idx;
 		if (
-			c.owner_player_xml_id === idx &&
+			everHeld &&
 			cultureRank(c.culture_level) > cultureRank(best_culture_level)
 		) {
 			best_culture_level = c.culture_level;

@@ -30,13 +30,15 @@ function derive(blob: FullGameData) {
 	return derivePlayerSummary(blob, PLAYER, buildSummaryGameContext(blob));
 }
 
-// A city at the given culture level, owned by player 0 unless stated.
-function city(culture: string | null, owner = 0) {
+// A city at the given culture level, owned by player 0 unless stated. `held`
+// defaults to the sole owner — pass it to describe a city that changed hands.
+function city(culture: string | null, owner = 0, held = [owner]) {
 	return {
 		city_id: 1,
 		owner_nation: "NATION_ROME",
 		owner_player_xml_id: owner,
-		first_owner_player_xml_id: owner,
+		first_owner_player_xml_id: held[0],
+		player_families: held.map((player_xml_id) => ({ player_xml_id })),
 		founded_turn: 3,
 		culture_level: culture,
 	};
@@ -77,5 +79,40 @@ describe("derivePlayerSummary — best culture level", () => {
 			derive(blobWith({ city_statistics: { cities: [city(null)] } }))
 				.best_culture_level,
 		).toBeNull();
+	});
+
+	// A player conquered out of the game owns nothing at the end. Reading the
+	// end-state owner would give them no culture level and so no eligibility
+	// for any wonder, dropping them out of every build-rate denominator.
+	it("counts a city the player held and then lost", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [city("CULTURE_LEGENDARY", 1, [0, 1])],
+				},
+			}),
+		);
+		expect(summary.best_culture_level).toBe("CULTURE_LEGENDARY");
+	});
+
+	it("still ignores a city the player never held", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [city("CULTURE_WEAK"), city("CULTURE_LEGENDARY", 1, [1, 2])],
+				},
+			}),
+		);
+		expect(summary.best_culture_level).toBe("CULTURE_WEAK");
+	});
+
+	// player_families arrived in parser 2.10.0; older blobs have only the
+	// end-state owner to go on.
+	it("falls back to the end-state owner when player_families is absent", () => {
+		const legacy = { ...city("CULTURE_STRONG"), player_families: undefined };
+		expect(
+			derive(blobWith({ city_statistics: { cities: [legacy] } }))
+				.best_culture_level,
+		).toBe("CULTURE_STRONG");
 	});
 });
