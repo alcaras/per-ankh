@@ -95,9 +95,11 @@ export interface MatchMetadata {
 	game_options: Record<string, true>;
 	// Improvement zTypes switched off for this game (sorted). Old World enables
 	// only a subset of the wonders per game and disables the rest, so this is
-	// what makes "buildable here" answerable. Empty on saves that carry no
-	// <ImprovementDisabled> block. PARSER_VERSION 2.12.0+.
-	disabled_improvements: string[];
+	// what makes "buildable here" answerable. Null on saves that carry no
+	// <ImprovementDisabled> block — the pool is unknown there, which is not the
+	// same claim as the empty list a save with nothing disabled produces.
+	// PARSER_VERSION 2.12.0+.
+	disabled_improvements: string[] | null;
 	game_mode: string | null;
 	difficulty: string | null;
 	opponent_level: string | null;

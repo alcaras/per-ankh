@@ -102,7 +102,8 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         <ImprovementDisabled> list). Old World enables only a subset of the
 //         wonders per game — a base save disables 15 of 28 — so this is what
 //         lets the wonder charts count "could have built it" rather than
-//         assuming every wonder was on the board. Absent = unknown.
+//         assuming every wonder was on the board. Absent or null = unknown;
+//         an empty list means the save disabled nothing.
 //         Also changes what player_wonders means: the builder is now the
 //         player who owned the wonder's tile on the turn it completed, read
 //         from the ownership history, rather than whoever holds the tile at
@@ -188,8 +189,9 @@ const GameDetailsSchema = v.object({
 	// is always `true` — the save encodes a set option as an empty element, so
 	// presence IS the value and an unset option is simply absent.
 	game_options: v.optional(v.nullable(v.record(v.string(), v.literal(true)))),
-	// Improvement zTypes disabled for this game (2.12.0+). Absent on older
-	// blobs, which means "unknown", not "everything was enabled".
+	// Improvement zTypes disabled for this game (2.12.0+). Absent or null means
+	// "unknown" — an older blob, or a save carrying no <ImprovementDisabled>
+	// block — not "everything was enabled". An empty array is that other claim.
 	disabled_improvements: v.optional(
 		v.nullable(
 			v.pipe(v.array(v.string()), v.maxLength(MAX_DISABLED_IMPROVEMENTS)),
@@ -239,8 +241,9 @@ const MatchMetadataSchema = v.object({
 	// Added in parser_version 2.11.0; `optional` for the same deploy-gap reason
 	// as in GameDetailsSchema above.
 	game_options: v.optional(v.nullable(v.record(v.string(), v.literal(true)))),
-	// Improvement zTypes disabled for this game (2.12.0+). Absent on older
-	// blobs, which means "unknown", not "everything was enabled".
+	// Improvement zTypes disabled for this game (2.12.0+). Absent or null means
+	// "unknown" — an older blob, or a save carrying no <ImprovementDisabled>
+	// block — not "everything was enabled". An empty array is that other claim.
 	disabled_improvements: v.optional(
 		v.nullable(
 			v.pipe(v.array(v.string()), v.maxLength(MAX_DISABLED_IMPROVEMENTS)),

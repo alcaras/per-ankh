@@ -658,8 +658,10 @@ function buildTechEventStatements(
 }
 
 // The wonders that were enabled for this game: every baked wonder minus the
-// blob's disabled list. Empty for pre-2.12.0 blobs, which carry no list —
-// those games contribute no eligibility rather than a wrong one.
+// blob's disabled list. Empty when the blob carries no list — pre-2.12.0, or a
+// save with no <ImprovementDisabled> block — so those games contribute no
+// eligibility rather than a wrong one. A list that is present but empty is a
+// different answer: nothing was disabled, so every wonder was on the board.
 function buildWonderPoolStatements(
 	db: D1Database,
 	gameId: string,
