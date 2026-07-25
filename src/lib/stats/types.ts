@@ -112,6 +112,16 @@ export interface ChartBundleCore {
 		p75_turn: Nullable<number>;
 	}>;
 
+	// The family class holding each focal player's capital, and how those games
+	// ended — distinct from familyByNation, which only asks whether a class was
+	// among the player's three.
+	capitalFamilyWinRate: Array<{
+		family_class: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
 	familyByNation: Array<{
 		nation: string;
 		class: string;

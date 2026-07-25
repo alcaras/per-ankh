@@ -3,11 +3,13 @@
 import type { ChartOption } from "$lib/echarts";
 import { getChartColor } from "$lib/config";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
-import type { ChartBundle } from "../types";
+import type { ChartBundle, ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	CHART_THEME,
 	COMMON_GRID,
+	LOSS_COLOR,
+	WIN_COLOR,
 	crestAxisLabel,
 	fmtClass,
 	nationLabel,
@@ -104,6 +106,65 @@ export function familyNationPicksOption(
 				type: "bar",
 				data: rows.map((r) => r.winRate),
 				itemStyle: { color: getChartColor(5) },
+			},
+		],
+	};
+}
+
+// Which family class ran the capital, as a stacked wins/losses bar: length is
+// how often that class held the capital, the split how those games ended. The
+// same encoding as the nation win-rate bar, and the same reason — one bar
+// answers both "how often" and "how well".
+//
+// Nation-agnostic on purpose: a family class means the same thing whichever
+// nation fields it, and splitting by nation here would shred the sample.
+// Typed against ChartBundleCore (only reads capitalFamilyWinRate) so it renders
+// unchanged at tournament scope.
+export function capitalFamilyWinLossOption(
+	bundle: ChartBundleCore,
+): ChartOption {
+	// Ascending so the most common capital family sits at the top (ECharts
+	// stacks a category axis bottom-up).
+	const rows = [...bundle.capitalFamilyWinRate].sort(
+		(a, b) => a.games - b.games,
+	);
+	const classes = rows.map((r) => r.family_class);
+	return {
+		...CHART_THEME,
+		// Titled in-chart like the per-nation bars beside it, so the two charts
+		// in the Families panel are self-describing.
+		title: { ...CHART_THEME.title, text: "Capital family" },
+		tooltip: {
+			...CHART_THEME.tooltip,
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = (params as { dataIndex: number }[])[0];
+				const row = rows[p.dataIndex];
+				if (!row) return "";
+				return `${fmtClass(row.family_class)} capital<br/>Wins: ${row.wins} / ${row.games}<br/>Rate: ${Math.round(row.rate * 100)}%`;
+			},
+		},
+		grid: { ...COMMON_GRID, left: 150 },
+		xAxis: { type: "value" },
+		yAxis: {
+			type: "category",
+			data: classes,
+			axisLabel: crestAxisLabel(classes, classCrestUrl, fmtClass, 142, 20, 14),
+		},
+		series: [
+			{
+				name: "Wins",
+				type: "bar",
+				stack: "outcome",
+				data: rows.map((r) => r.wins),
+				itemStyle: { color: WIN_COLOR },
+			},
+			{
+				name: "Losses",
+				type: "bar",
+				stack: "outcome",
+				data: rows.map((r) => r.games - r.wins),
+				itemStyle: { color: LOSS_COLOR },
 			},
 		],
 	};

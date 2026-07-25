@@ -44,6 +44,8 @@ interface CityRow {
 	player_families?: Array<{ player_xml_id: number }>;
 	founded_turn: number;
 	culture_level: string | null;
+	is_capital: boolean;
+	family_class: string | null;
 }
 
 interface FamilyRow {
@@ -112,6 +114,7 @@ export function buildSummaryGameContext(
 
 export interface DerivedSummary {
 	family_classes: string | null; // JSON array
+	capital_family_class: string | null;
 	starting_ruler_archetype: string | null;
 	starting_ruler_traits: string | null; // JSON array
 	starting_ruler_reign_turns: number | null;
@@ -235,6 +238,11 @@ export function derivePlayerSummary(
 	// passed over. Resolving it exactly needs per-turn city culture, which the
 	// blob doesn't carry (derive/city-statistics.ts reads one level per city).
 	let best_culture_level: string | null = null;
+	// The family running the capital — the city every early bonus compounds
+	// through, so a distinct decision from which three families the player has.
+	// Keyed on owner_player_xml_id rather than nation so a mirror match doesn't
+	// credit one side with the other's capital.
+	let capital_family_class: string | null = null;
 	for (const c of cities) {
 		if (player.nation !== null && c.owner_nation === player.nation) {
 			cities_total += 1;
@@ -252,6 +260,9 @@ export function derivePlayerSummary(
 			cultureRank(c.culture_level) > cultureRank(best_culture_level)
 		) {
 			best_culture_level = c.culture_level;
+		}
+		if (c.is_capital && c.owner_player_xml_id === idx && c.family_class) {
+			capital_family_class = c.family_class;
 		}
 	}
 	founderTurns.sort((a, b) => a - b);
@@ -302,6 +313,7 @@ export function derivePlayerSummary(
 
 	return {
 		family_classes,
+		capital_family_class,
 		starting_ruler_archetype,
 		starting_ruler_traits,
 		starting_ruler_reign_turns,

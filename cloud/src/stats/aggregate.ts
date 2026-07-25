@@ -67,6 +67,7 @@ interface BaseRow {
 	player_index: number;
 	nation: string | null;
 	family_classes: string | null; // JSON array of strings
+	capital_family_class: string | null;
 	is_human: number;
 	is_uploader: number;
 	starting_ruler_archetype: string | null;
@@ -224,7 +225,8 @@ async function loadBaseRows(
 	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
 			`SELECT ps.game_id, ps.player_index,
-			        ps.nation, ps.family_classes, ps.is_human, ps.is_uploader,
+			        ps.nation, ps.family_classes, ps.capital_family_class,
+			        ps.is_human, ps.is_uploader,
 			        ps.starting_ruler_archetype, ps.starting_ruler_traits,
 			        ps.best_culture_level,
 			        ps.final_points, ps.cities_total,
@@ -863,6 +865,29 @@ export async function buildChartBundle(
 		};
 	});
 
+	// --- Capital family ----------------------------------------------
+	// Which family class runs the focal player's capital, and how those games
+	// went. Distinct from familyByNation below, which asks whether a class was
+	// among the player's three at all: the capital is where the early bonuses
+	// compound, so its class is the sharper read. Same wins/games shape as
+	// nationWinRate, so one bar carries both the distribution and the rate.
+	const capitalStats = new Map<string, { games: number; wins: number }>();
+	for (const r of selfRows) {
+		if (!r.capital_family_class) continue;
+		const s = capitalStats.get(r.capital_family_class) ?? { games: 0, wins: 0 };
+		s.games += 1;
+		if (r.is_winner === 1) s.wins += 1;
+		capitalStats.set(r.capital_family_class, s);
+	}
+	const capitalFamilyWinRate = [...capitalStats.entries()].map(
+		([family_class, { games, wins }]) => ({
+			family_class,
+			games,
+			wins,
+			rate: games > 0 ? wins / games : 0,
+		}),
+	);
+
 	// --- Family classes ----------------------------------------------
 	// Each player picks 3 family classes from their nation's pool. We track,
 	// per (nation, class): how often it was picked and how many of those
@@ -1082,6 +1107,7 @@ export async function buildChartBundle(
 		startingArchetypeWinRate,
 		startingTraitWinRate,
 		wonderStats,
+		capitalFamilyWinRate,
 		familyByNation,
 		yieldCurves,
 		lawTiming,
@@ -1158,6 +1184,7 @@ function emptyCore(parserVersion: string): ChartBundleCore {
 		startingArchetypeWinRate: [],
 		startingTraitWinRate: [],
 		wonderStats: [],
+		capitalFamilyWinRate: [],
 		familyByNation: [],
 		yieldCurves: { turns: [], counts: [], series: {}, outcome: null },
 		lawTiming: [],

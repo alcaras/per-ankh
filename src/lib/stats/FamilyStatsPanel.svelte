@@ -1,11 +1,17 @@
 <script lang="ts">
-	// Families category: pick a nation, see which family classes its players
-	// pick (pick rate) and whether some win more (win rate), as paired bars.
+	// Families category: which family class ran the capital (nation-agnostic —
+	// the earliest of the family decisions), then a nation selector for which
+	// classes that nation's players pick and whether some win more.
 
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import NationSelect from "./NationSelect.svelte";
 	import type { ChartBundle } from "./types";
-	import { familyNations, familyNationPicksOption } from "./charts/families";
+	import {
+		capitalFamilyWinLossOption,
+		familyNations,
+		familyNationPicksOption,
+	} from "./charts/families";
+	import { barChartHeight } from "./charts/helpers";
 	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
 
 	let { bundle }: { bundle: ChartBundle } = $props();
@@ -20,6 +26,14 @@
 		chosen && options.includes(chosen) ? chosen : ALL_NATIONS,
 	);
 </script>
+
+{#if bundle.capitalFamilyWinRate.length > 0}
+	<ChartContainer
+		option={capitalFamilyWinLossOption(bundle)}
+		height={barChartHeight(bundle.capitalFamilyWinRate.length)}
+		title="Capital family"
+	/>
+{/if}
 
 {#if nations.length === 0}
 	<p class="p-8 text-center italic text-brown">No family data available.</p>

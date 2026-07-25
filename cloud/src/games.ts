@@ -456,6 +456,7 @@ function buildSummaryStatements(
 	const stmt = db.prepare(
 		`INSERT INTO player_summaries (
 			game_id, player_index, player_name, nation, family_classes,
+			capital_family_class,
 			is_human, is_uploader,
 			starting_ruler_archetype, starting_ruler_traits,
 			starting_ruler_reign_turns, succession_count,
@@ -464,7 +465,7 @@ function buildSummaryStatements(
 			techs_completed, laws_count,
 			fifth_city_turn, tenth_city_turn, fourth_law_turn, seventh_law_turn,
 			is_winner, vp_margin
-		) VALUES (?,?,?,?,?, ?,?, ?,?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?, ?,?)`,
+		) VALUES (?,?,?,?,?, ?, ?,?, ?,?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?, ?,?)`,
 	);
 
 	return roster.map((p) => {
@@ -475,6 +476,7 @@ function buildSummaryStatements(
 			p.player_name,
 			p.nation,
 			s.family_classes,
+			s.capital_family_class,
 			p.is_human ? 1 : 0,
 			uploaderIndex !== null && p.player_index === uploaderIndex ? 1 : 0,
 			s.starting_ruler_archetype,

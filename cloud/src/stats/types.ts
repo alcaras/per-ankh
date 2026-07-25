@@ -169,6 +169,18 @@ export interface ChartBundleCore {
 	}>;
 
 	// --- Families ----------------------------------------------------
+	// The family class holding each focal player's capital, with how those
+	// games ended. Distinct from familyByNation: that asks whether a class was
+	// among the player's three, this asks which one ran the city the early
+	// bonuses compound through. Over an all-humans corpus the overall rate is
+	// ~50% by construction, so the signal is a class's deviation from it.
+	capitalFamilyWinRate: Array<{
+		family_class: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
 	// Per (nation, class): games where the player picked that class for
 	// that nation, and how many they won. The frontend derives pick rate
 	// (count ÷ nation games) and win rate (wins ÷ count) per nation.

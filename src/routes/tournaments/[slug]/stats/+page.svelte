@@ -13,6 +13,7 @@
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
+	import { capitalFamilyWinLossOption } from "$lib/stats/charts/families";
 	import {
 		ARCHETYPE_EMPTY_MESSAGE,
 		TRAIT_EMPTY_MESSAGE,
@@ -53,6 +54,7 @@
 	const startingArchetypes = $derived(data.games.startingArchetypeWinRate);
 	const startingTraits = $derived(data.games.startingTraitWinRate);
 	const wonders = $derived(data.games.wonderStats);
+	const capitalFamilies = $derived(data.games.capitalFamilyWinRate);
 
 	// Circular avatar images for the players/casters axis labels, rasterized
 	// client-side from the Discord CDN (ECharts rich-text labels can't round
@@ -96,6 +98,7 @@
 		"nations",
 		"leaders",
 		"wonders",
+		"families",
 		"yields",
 		"casters",
 	] as const;
@@ -131,6 +134,8 @@
 			<Tabs.Trigger value="nations" class={triggerClass}>Nations</Tabs.Trigger>
 			<Tabs.Trigger value="leaders" class={triggerClass}>Leaders</Tabs.Trigger>
 			<Tabs.Trigger value="wonders" class={triggerClass}>Wonders</Tabs.Trigger>
+			<Tabs.Trigger value="families" class={triggerClass}>Families</Tabs.Trigger
+			>
 			<Tabs.Trigger value="yields" class={triggerClass}>Yields</Tabs.Trigger>
 			<Tabs.Trigger value="casters" class={triggerClass}>Casters</Tabs.Trigger>
 		</Tabs.List>
@@ -238,6 +243,25 @@
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
 						{WONDER_EMPTY_MESSAGE}
+					</p>
+				{/if}
+			</section>
+		</Tabs.Content>
+
+		<!-- Families — which family class ran each player's capital, the
+		     earliest of the family decisions (Plane B1). -->
+		<Tabs.Content value="families">
+			<section class="mb-8">
+				<h2 class="mb-3 text-base font-bold text-tan">Capital family</h2>
+				{#if capitalFamilies.length > 0}
+					<ChartContainer
+						option={capitalFamilyWinLossOption(data.games)}
+						height={barChartHeight(capitalFamilies.length)}
+						title="Capital family"
+					/>
+				{:else}
+					<p class="p-8 text-center italic text-tan opacity-60">
+						No completed games yet.
 					</p>
 				{/if}
 			</section>
