@@ -15,6 +15,7 @@
 // because all the aggregates are commutative.
 
 import { LAW_CLASSES } from "../generated/law-classes";
+import { WONDER_CULTURE_PREREQ, cultureRank } from "../generated/wonders";
 import type { StatsCorpus } from "./resolve";
 import type {
 	ChartBundle,
@@ -64,6 +65,7 @@ interface BaseRow {
 	is_human: number;
 	is_uploader: number;
 	starting_ruler_archetype: string | null;
+	best_culture_level: string | null;
 	final_points: number | null;
 	cities_total: number | null;
 	fifth_city_turn: number | null;
@@ -131,6 +133,13 @@ interface LawEventRow {
 	game_id: string;
 	player_index: number;
 	law: string;
+	turn: number;
+}
+
+interface WonderEventRow {
+	game_id: string;
+	player_index: number;
+	wonder: string;
 	turn: number;
 }
 
@@ -206,7 +215,7 @@ async function loadBaseRows(
 		const res = await env.SHARE_DB.prepare(
 			`SELECT ps.game_id, ps.player_index,
 			        ps.nation, ps.family_classes, ps.is_human, ps.is_uploader,
-			        ps.starting_ruler_archetype,
+			        ps.starting_ruler_archetype, ps.best_culture_level,
 			        ps.final_points, ps.cities_total,
 			        ps.fifth_city_turn, ps.tenth_city_turn,
 			        ps.is_winner,
@@ -405,6 +414,53 @@ async function loadLawEvents(
 	return out;
 }
 
+// Wonder completions across the corpus. Unlike techs and laws these aren't
+// per-player choices from a menu everyone shares: a wonder is unique within a
+// game, so at most one row exists per (game, wonder) — whoever finished it.
+async function loadWonderEvents(
+	env: AggregateEnv,
+	gameIds: string[],
+): Promise<WonderEventRow[]> {
+	const out: WonderEventRow[] = [];
+	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT we.game_id, we.player_index, we.wonder, we.turn
+			 FROM wonder_events we
+			 JOIN player_summaries ps ON ps.game_id = we.game_id
+			                          AND ps.player_index = we.player_index
+			 WHERE ps.is_human = 1
+			   AND we.game_id IN (${placeholders(ids.length)})`,
+		)
+			.bind(...ids)
+			.all<WonderEventRow>();
+		out.push(...((res.results ?? []) as WonderEventRow[]));
+	}
+	return out;
+}
+
+// The wonders enabled in each game (parser 2.12.0+ blobs only). Games missing
+// from this table carry no pool and are excluded from wonder eligibility.
+async function loadWonderPool(
+	env: AggregateEnv,
+	gameIds: string[],
+): Promise<Map<string, Set<string>>> {
+	const out = new Map<string, Set<string>>();
+	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT game_id, wonder FROM game_wonder_pool
+			 WHERE game_id IN (${placeholders(ids.length)})`,
+		)
+			.bind(...ids)
+			.all<{ game_id: string; wonder: string }>();
+		for (const row of res.results ?? []) {
+			const set = out.get(row.game_id) ?? new Set<string>();
+			set.add(row.wonder);
+			out.set(row.game_id, set);
+		}
+	}
+	return out;
+}
+
 interface SaveDateRow {
 	date: string;
 	weekday: number | null;
@@ -488,14 +544,23 @@ export async function buildChartBundle(
 				});
 	}
 
-	const [baseRows, yieldCurves, techEvents, lawEvents, saveDateRows] =
-		await Promise.all([
-			loadBaseRows(env, corpus.gameIds),
-			loadYieldCurves(env, corpus.gameIds, focal),
-			loadTechEvents(env, corpus.gameIds),
-			loadLawEvents(env, corpus.gameIds),
-			loadSaveDates(env, corpus.gameIds),
-		]);
+	const [
+		baseRows,
+		yieldCurves,
+		techEvents,
+		lawEvents,
+		wonderEvents,
+		wonderPool,
+		saveDateRows,
+	] = await Promise.all([
+		loadBaseRows(env, corpus.gameIds),
+		loadYieldCurves(env, corpus.gameIds, focal),
+		loadTechEvents(env, corpus.gameIds),
+		loadLawEvents(env, corpus.gameIds),
+		loadWonderEvents(env, corpus.gameIds),
+		loadWonderPool(env, corpus.gameIds),
+		loadSaveDates(env, corpus.gameIds),
+	]);
 
 	const selfMembership = buildSelfMembership(baseRows, focal);
 	const selfRows = baseRows.filter((r) =>
@@ -626,6 +691,76 @@ export async function buildChartBundle(
 			games: s.games,
 			avg_points: s.totalPoints / s.pointsCount,
 		}));
+
+	// --- Wonders ------------------------------------------------------
+	// Per wonder: how often it got built out of how often it *could* be, how
+	// those builders fared, and when it lands. The denominator is the point —
+	// a wonder passed over reads nothing like one that was never on the board.
+	//
+	// Two gates, both required. Old World enables only a subset of the wonders
+	// per game (a base save disables 15 of 28), so the wonder has to be in that
+	// game's pool; and a wonder's only build requirement is a city at its
+	// <CulturePrereq>, so the player has to have reached that level
+	// (best_culture_level, which only climbs). Games whose blob predates the
+	// parser that captures the pool have no rows in it and drop out entirely
+	// rather than inflating every wonder's denominator.
+	//
+	// Note the asymmetry: eligibility is per focal player, but a wonder is
+	// unique per game, so at most one eligible player can have taken it. Build
+	// rate reads as "of the players who could have built this, how many did",
+	// which in a 1v1 with both sides eligible tops out near 50%.
+	// Focal rows that won their game, for crediting a wonder's builder.
+	const winnerRows = new Set(
+		selfRows
+			.filter((r) => r.is_winner === 1)
+			.map((r) => `${r.game_id}|${r.player_index}`),
+	);
+	const wonderTurns = new Map<string, number[]>();
+	const wonderWins = new Map<string, number>();
+	for (const w of wonderEvents) {
+		if (!selfMembership.has(`${w.game_id}|${w.player_index}`)) continue;
+		const turns = wonderTurns.get(w.wonder) ?? [];
+		turns.push(w.turn);
+		wonderTurns.set(w.wonder, turns);
+		if (winnerRows.has(`${w.game_id}|${w.player_index}`)) {
+			wonderWins.set(w.wonder, (wonderWins.get(w.wonder) ?? 0) + 1);
+		}
+	}
+	const eligibleByWonder = new Map<string, number>();
+	for (const r of selfRows) {
+		const pool = wonderPool.get(r.game_id);
+		if (!pool) continue;
+		const rank = cultureRank(r.best_culture_level);
+		if (rank < 0) continue;
+		for (const wonder of pool) {
+			if (rank >= cultureRank(WONDER_CULTURE_PREREQ[wonder] ?? "")) {
+				eligibleByWonder.set(wonder, (eligibleByWonder.get(wonder) ?? 0) + 1);
+			}
+		}
+	}
+	// Every wonder someone could have built or did build, so an available one
+	// that nobody took still shows up with its zero.
+	const wonderKeys = new Set([
+		...eligibleByWonder.keys(),
+		...wonderTurns.keys(),
+	]);
+	const wonderStats = [...wonderKeys].map((wonder) => {
+		const turns = (wonderTurns.get(wonder) ?? []).sort((a, b) => a - b);
+		const eligible = eligibleByWonder.get(wonder) ?? 0;
+		const wins = wonderWins.get(wonder) ?? 0;
+		return {
+			wonder,
+			culture_prereq: WONDER_CULTURE_PREREQ[wonder] ?? null,
+			eligible,
+			built: turns.length,
+			rate: eligible > 0 ? turns.length / eligible : 0,
+			wins,
+			win_rate: turns.length > 0 ? wins / turns.length : null,
+			median_turn: turns.length > 0 ? median(turns) : null,
+			p25_turn: percentile(turns, 25),
+			p75_turn: percentile(turns, 75),
+		};
+	});
 
 	// --- Family classes ----------------------------------------------
 	// Each player picks 3 family classes from their nation's pool. We track,
@@ -843,6 +978,7 @@ export async function buildChartBundle(
 		nations,
 		nationWinRate,
 		nationAvgPoints,
+		wonderStats,
 		familyByNation,
 		yieldCurves,
 		lawTiming,
@@ -916,6 +1052,7 @@ function emptyCore(parserVersion: string): ChartBundleCore {
 		nations: [],
 		nationWinRate: [],
 		nationAvgPoints: [],
+		wonderStats: [],
 		familyByNation: [],
 		yieldCurves: { turns: [], counts: [], series: {}, outcome: null },
 		lawTiming: [],

@@ -12,6 +12,7 @@
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
 	import { nationWinLossStackedOption } from "$lib/stats/charts/nations";
+	import { wonderOverviewOption } from "$lib/stats/charts/wonders";
 	import {
 		AVATAR_LABEL_SIZE,
 		casterLeaderboardOption,
@@ -37,6 +38,7 @@
 	const casters = $derived(data.competition.caster_leaderboard);
 	const playerPicks = $derived(data.competition.player_picks);
 	const nationWinRate = $derived(data.games.nationWinRate);
+	const wonders = $derived(data.games.wonderStats);
 
 	// Circular avatar images for the players/casters axis labels, rasterized
 	// client-side from the Discord CDN (ECharts rich-text labels can't round
@@ -75,7 +77,13 @@
 	// The active tab lives in ?category (controlled: value derived from the
 	// URL, change → goto), mirroring the user-stats subtabs (StatsView) so a
 	// tab is deep-linkable and survives refresh.
-	const TABS = ["players", "nations", "yields", "casters"] as const;
+	const TABS = [
+		"players",
+		"nations",
+		"wonders",
+		"yields",
+		"casters",
+	] as const;
 	type StatsTab = (typeof TABS)[number];
 	const tab = $derived.by<StatsTab>(() => {
 		const fromUrl = page.url.searchParams.get("category");
@@ -106,6 +114,7 @@
 		>
 			<Tabs.Trigger value="players" class={triggerClass}>Players</Tabs.Trigger>
 			<Tabs.Trigger value="nations" class={triggerClass}>Nations</Tabs.Trigger>
+			<Tabs.Trigger value="wonders" class={triggerClass}>Wonders</Tabs.Trigger>
 			<Tabs.Trigger value="yields" class={triggerClass}>Yields</Tabs.Trigger>
 			<Tabs.Trigger value="casters" class={triggerClass}>Casters</Tabs.Trigger>
 		</Tabs.List>
@@ -156,6 +165,27 @@
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
 						No completed games yet.
+					</p>
+				{/if}
+			</section>
+		</Tabs.Content>
+
+		<!-- Wonders — when each wonder lands (P25–P75 turn span, median colored
+		     by the builders' outcome) and how often the players who could build
+		     it did (Plane B1). -->
+		<Tabs.Content value="wonders">
+			<section class="mb-8">
+				<h2 class="mb-3 text-base font-bold text-tan">Wonders</h2>
+				{#if wonders.length > 0}
+					<ChartContainer
+						option={wonderOverviewOption(data.games)}
+						height={barChartHeight(wonders.length)}
+						title="Wonders"
+					/>
+				{:else}
+					<p class="p-8 text-center italic text-tan opacity-60">
+						No wonder data yet — these saves predate the parser that records
+						which wonders a game enables.
 					</p>
 				{/if}
 			</section>

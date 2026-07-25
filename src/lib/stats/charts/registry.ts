@@ -10,6 +10,7 @@ import { barChartHeight } from "./helpers";
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
 	{ id: "yields", label: "Yields" },
 	{ id: "nations", label: "Nations" },
+	{ id: "wonders", label: "Wonders" },
 	{ id: "families", label: "Families" },
 	{ id: "laws", label: "Laws" },
 	{ id: "cities", label: "Cities" },
@@ -31,6 +32,18 @@ export const CHART_SPECS: ChartSpec[] = [
 		title: "Average final points",
 		hasData: (b) => b.nationAvgPoints.length > 0,
 		height: (b) => barChartHeight(b.nationAvgPoints.length),
+	},
+	// Wonders — one row per wonder on a turn axis: when it lands, how its
+	// builders' games ended, and how often the players who could build it did.
+	{
+		id: "wonder-overview",
+		category: "wonders",
+		title: "Wonders",
+		subtitle: "P25–P75 turn span, median colored by the builders' outcome",
+		hasData: (b) => b.wonderStats.length > 0,
+		emptyMessage: () =>
+			"No wonder data yet — these saves predate the parser that records which wonders a game enables.",
+		height: (b) => barChartHeight(b.wonderStats.length),
 	},
 	// Families — category anchor only; rendered by FamilyStatsPanel
 	// (per-nation pick/win bars), not the generic spec loop.

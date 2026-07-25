@@ -1,0 +1,198 @@
+// Wonders tab option builder.
+//
+// One row per wonder on a turn axis: the P25–P75 span of when it gets built
+// with the median marked, so the chart reads as a timeline of the game — early
+// wonders at short turns, late ones stretching right.
+//
+// The builders' outcome rides on that timeline twice over: the median marker
+// is colored by it in three buckets (rather than a gradient — samples per
+// wonder are small, and a bucket is honest about that), and the trailing label
+// spells out the rate with its sample. How often a wonder was passed over —
+// built vs the players who could have built it, meaning it was enabled in
+// their game AND they had a city at its culture level — is in the tooltip.
+
+import type { ChartOption } from "$lib/echarts";
+import { IMPROVEMENT_NAMES } from "$lib/generated/improvement-names";
+import { IMPROVEMENT_ICON } from "$lib/generated/science-yields";
+import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
+import { CULTURE_LEVELS } from "$lib/generated/wonders";
+import { formatEnum } from "$lib/utils/formatting";
+import type { ChartBundleCore } from "../types";
+import {
+	AXIS_NAME_X,
+	CHART_THEME,
+	COMMON_GRID,
+	LOSS_COLOR,
+	WIN_COLOR,
+	crestAxisLabel,
+} from "./helpers";
+
+// Wonders are improvements, so both the real in-game name ("The Pyramids", not
+// "Pyramids") and the icon come from the improvement tables.
+export function fmtWonder(value: string): string {
+	return IMPROVEMENT_NAMES[value] ?? formatEnum(value, "IMPROVEMENT_");
+}
+
+// Some wonders render another entry's art (zIconName — The Acropolis draws the
+// Parthenon, the Via Recta Souk the Grand Bazaar), which the baked alias map
+// resolves; the same indirection the improvements table and map tooltip use.
+function wonderIconUrl(wonder: string): string | undefined {
+	const icon = IMPROVEMENT_ICON[wonder] ?? wonder;
+	return SPRITE_MANIFEST[`improvements/${icon}`];
+}
+
+function tierLabel(culturePrereq: string | null): string {
+	return culturePrereq ? formatEnum(culturePrereq, "CULTURE_") : "—";
+}
+
+// Row order: culture level (the tier the game unlocks them at), then how often
+// they're built, then name. ECharts stacks a category axis bottom-up, so every
+// comparison runs backwards from how it reads — the earliest tier, and the
+// most-built wonder within it, end up at the top.
+function orderRows(rows: ChartBundleCore["wonderStats"]) {
+	return [...rows].sort((a, b) => {
+		const tier =
+			CULTURE_LEVELS.indexOf(b.culture_prereq ?? "") -
+			CULTURE_LEVELS.indexOf(a.culture_prereq ?? "");
+		if (tier !== 0) return tier;
+		if (a.built !== b.built) return a.built - b.built;
+		return fmtWonder(b.wonder).localeCompare(fmtWonder(a.wonder));
+	});
+}
+
+const pct = (v: number) => Math.round(v * 100);
+
+// Outcome buckets for the median marker. A wonder's builders are few, so the
+// read is "did building this tend to go with winning", not a precise rate —
+// three buckets say that honestly where a gradient would imply precision.
+// Shape carries the split as well as color: solid copper for won, solid muted
+// for mixed, hollow for lost. Two dark fills on a dark span would be a color
+// difference only, and a faint one at marker size.
+const OUTCOME_BUCKETS = [
+	{
+		name: "Builders mostly won",
+		min: 0.6,
+		itemStyle: { color: WIN_COLOR },
+	},
+	{
+		name: "Mixed",
+		min: 0.4,
+		itemStyle: { color: "#9b8f7d" },
+	},
+	{
+		name: "Builders mostly lost",
+		min: 0,
+		itemStyle: {
+			color: LOSS_COLOR,
+			borderColor: "#cfc9bd",
+			borderWidth: 2,
+		},
+	},
+] as const;
+
+function bucketIndex(winRate: number): number {
+	return OUTCOME_BUCKETS.findIndex((b) => winRate >= b.min);
+}
+
+export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
+	const rows = orderRows(bundle.wonderStats);
+	const wonders = rows.map((r) => r.wonder);
+	const built = rows.filter((r) => r.built > 0);
+	// Axis headroom for the trailing build-rate labels.
+	const maxTurn = Math.max(...built.map((r) => r.p75_turn ?? 0), 10);
+
+	return {
+		...CHART_THEME,
+		tooltip: {
+			...CHART_THEME.tooltip,
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = (params as { dataIndex: number }[])[0];
+				const row = rows[p.dataIndex];
+				if (!row) return "";
+				const lines = [
+					`<b>${fmtWonder(row.wonder)}</b>`,
+					`Needs ${tierLabel(row.culture_prereq)} culture`,
+					row.eligible === 0
+						? "Not available to anyone in these games"
+						: `Built by ${row.built} of ${row.eligible} eligible (${pct(row.rate)}%)`,
+				];
+				if (row.built > 0) {
+					lines.push(
+						`Median turn ${Math.round(row.median_turn ?? 0)} · P25–P75 ${Math.round(row.p25_turn ?? 0)}–${Math.round(row.p75_turn ?? 0)}`,
+						`Builders won ${row.wins}/${row.built} (${pct(row.win_rate ?? 0)}%)`,
+					);
+				}
+				return lines.join("<br/>");
+			},
+		},
+		legend: {
+			show: true,
+			top: 0,
+			right: 8,
+			data: OUTCOME_BUCKETS.map((b) => b.name),
+			textStyle: { color: CHART_THEME.textStyle.color },
+		},
+		grid: { ...COMMON_GRID, left: 190, right: 110, top: 56 },
+		xAxis: {
+			type: "value",
+			name: "Turn built",
+			...AXIS_NAME_X,
+			min: 0,
+			max: Math.ceil(maxTurn * 1.02),
+		},
+		yAxis: {
+			type: "category",
+			data: wonders,
+			axisLabel: crestAxisLabel(wonders, wonderIconUrl, fmtWonder, 182, 20, 13),
+		},
+		series: [
+			{
+				// Transparent riser: the visible span then starts at P25.
+				type: "bar",
+				stack: "span",
+				silent: true,
+				data: rows.map((r) => r.p25_turn ?? 0),
+				itemStyle: { color: "transparent" },
+			},
+			{
+				// The P25–P75 span itself, with the build rate trailing it.
+				type: "bar",
+				stack: "span",
+				data: rows.map((r) =>
+					r.built > 0 ? (r.p75_turn ?? 0) - (r.p25_turn ?? 0) : 0,
+				),
+				itemStyle: { color: WIN_COLOR, opacity: 0.28 },
+				label: {
+					show: true,
+					position: "right",
+					color: CHART_THEME.textStyle.color,
+					fontSize: 11,
+					// The builders' win rate, with the sample beside it — the marker
+					// buckets it, this gives the number. A wonder nobody built has no
+					// outcome to report; how often it was passed over is in the tooltip.
+					formatter: (p: { dataIndex: number }) => {
+						const row = rows[p.dataIndex];
+						if (!row || row.built === 0) return "";
+						return `${pct(row.win_rate ?? 0)}% won (${row.wins}/${row.built})`;
+					},
+				},
+			},
+			// One median series per outcome bucket, so the legend explains the
+			// marker colors without a separate visualMap.
+			...OUTCOME_BUCKETS.map((bucket, bi) => ({
+				name: bucket.name,
+				type: "line" as const,
+				symbol: "circle",
+				symbolSize: 11,
+				lineStyle: { opacity: 0 },
+				itemStyle: bucket.itemStyle,
+				data: rows.map((r, i) =>
+					r.built > 0 && bucketIndex(r.win_rate ?? 0) === bi
+						? [r.median_turn ?? 0, i]
+						: [null, i],
+				),
+			})),
+		],
+	};
+}

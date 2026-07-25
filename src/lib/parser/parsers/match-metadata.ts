@@ -77,6 +77,7 @@ export function parseMatchMetadata(
 		map_aspect_ratio: optAttrStr(root["@_MapAspectRatio"]),
 		map_options: parseMapOptions(root),
 		game_options: parseGameOptions(root),
+		disabled_improvements: parseDisabledImprovements(root),
 		game_mode: optAttrStr(root["@_GameMode"]),
 		// Difficulty is per-player in the save (`<Difficulty><PlayerDifficulty>`);
 		// the match-level "Difficulty" stamp is the save owner's tier, set by
@@ -203,6 +204,18 @@ function parseGameOptions(root: Record<string, unknown>): Record<string, true> {
 
 	for (const [name] of getElementChildren(options)) out[name] = true;
 	return out;
+}
+
+// Improvements switched off for this game, as a sorted list of zTypes. Old
+// World rolls a subset of the wonders into each game and disables the rest —
+// a base-game save typically carries 15 disabled, leaving 13 buildable — so
+// this is what separates "nobody built it" from "it wasn't in this game".
+// Non-wonder improvements can appear here too; consumers filter by the
+// baked wonder table.
+function parseDisabledImprovements(root: Record<string, unknown>): string[] {
+	const disabled = root.ImprovementDisabled;
+	if (!isElement(disabled)) return [];
+	return [...getElementChildren(disabled)].map(([name]) => name).sort();
 }
 
 // ---------- Save date ----------

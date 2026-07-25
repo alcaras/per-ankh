@@ -18,6 +18,7 @@
 // shapes mirror the auto-generated wire types in src/lib/types/ and
 // src/lib/parser/types.ts (referenced in comments below).
 
+import { cultureRank } from "./generated/wonders";
 import type { FullGameData, PlayerRosterEntry } from "./schemas/game";
 
 // ---------- Wire-shape mirrors (kept in sync with src/lib/parser/types.ts
@@ -36,8 +37,10 @@ interface PlayerHistoryEntry {
 interface CityRow {
 	city_id: number;
 	owner_nation: string | null;
+	owner_player_xml_id: number | null;
 	first_owner_player_xml_id: number | null;
 	founded_turn: number;
+	culture_level: string | null;
 }
 
 interface FamilyRow {
@@ -115,6 +118,7 @@ export interface DerivedSummary {
 	final_legitimacy: number | null;
 	cities_total: number;
 	cities_founded: number;
+	best_culture_level: string | null;
 	techs_completed: number;
 	laws_count: number | null;
 	fifth_city_turn: number | null;
@@ -202,12 +206,24 @@ export function derivePlayerSummary(
 	const cities = cityStats.cities;
 	let cities_total = 0;
 	const founderTurns: number[] = [];
+	// Highest culture level across the player's cities — the wonder charts'
+	// eligibility gate (a wonder needs a city at its <CulturePrereq>). Keyed on
+	// owner_player_xml_id rather than nation so a mirror match doesn't credit
+	// one side with the other's cities; culture only ever climbs, so the
+	// end-state snapshot is also the best level the player ever held.
+	let best_culture_level: string | null = null;
 	for (const c of cities) {
 		if (player.nation !== null && c.owner_nation === player.nation) {
 			cities_total += 1;
 		}
 		if (c.first_owner_player_xml_id === idx) {
 			founderTurns.push(c.founded_turn);
+		}
+		if (
+			c.owner_player_xml_id === idx &&
+			cultureRank(c.culture_level) > cultureRank(best_culture_level)
+		) {
+			best_culture_level = c.culture_level;
 		}
 	}
 	founderTurns.sort((a, b) => a - b);
@@ -267,6 +283,7 @@ export function derivePlayerSummary(
 		final_legitimacy,
 		cities_total,
 		cities_founded,
+		best_culture_level,
 		techs_completed,
 		laws_count,
 		fifth_city_turn,

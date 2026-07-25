@@ -20,6 +20,7 @@
 		nationAvgPointsOption,
 		nationWinLossStackedOption,
 	} from "./charts/nations";
+	import { wonderOverviewOption } from "./charts/wonders";
 	import { expansionWinRateOption } from "./charts/cities";
 	import type { ChartBundle, StatsCategory } from "./types";
 
@@ -65,6 +66,8 @@
 				return nationWinLossStackedOption(bundle);
 			case "nation-avg-points":
 				return nationAvgPointsOption(bundle);
+			case "wonder-overview":
+				return wonderOverviewOption(bundle);
 			case "city-expansion-winrate":
 				return expansionWinRateOption(bundle);
 			default:

@@ -93,6 +93,11 @@ export const MAX_TILE_OWNERSHIP_ENTRIES = 200_000;
 //         science exactly: GAMEOPTION_COMPETITIVE_MODE selects the rating
 //         curve and grants a flat science stipend. A blob without
 //         game_options means "unknown", not "no options set".
+// 2.12.0 — game_details.disabled_improvements (the game-level
+//         <ImprovementDisabled> list). Old World enables only a subset of the
+//         wonders per game — a base save disables 15 of 28 — so this is what
+//         lets the wonder charts count "could have built it" rather than
+//         assuming every wonder was on the board. Absent = unknown.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -111,13 +116,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.9.1",
 	"2.10.0",
 	"2.11.0",
+	"2.12.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.11.0";
+export const CURRENT_PARSER_VERSION = "2.12.0";
 
 // ----- Reusable atoms -----
 
@@ -173,6 +179,11 @@ const GameDetailsSchema = v.object({
 	// is always `true` — the save encodes a set option as an empty element, so
 	// presence IS the value and an unset option is simply absent.
 	game_options: v.optional(v.nullable(v.record(v.string(), v.literal(true)))),
+	// Improvement zTypes disabled for this game (2.12.0+). Absent on older
+	// blobs, which means "unknown", not "everything was enabled".
+	disabled_improvements: v.optional(
+		v.nullable(v.pipe(v.array(v.string()), v.maxLength(200))),
+	),
 	game_mode: v.nullable(v.string()),
 	difficulty: v.nullable(v.string()),
 	opponent_level: v.nullable(v.string()),
@@ -217,6 +228,11 @@ const MatchMetadataSchema = v.object({
 	// Added in parser_version 2.11.0; `optional` for the same deploy-gap reason
 	// as in GameDetailsSchema above.
 	game_options: v.optional(v.nullable(v.record(v.string(), v.literal(true)))),
+	// Improvement zTypes disabled for this game (2.12.0+). Absent on older
+	// blobs, which means "unknown", not "everything was enabled".
+	disabled_improvements: v.optional(
+		v.nullable(v.pipe(v.array(v.string()), v.maxLength(200))),
+	),
 	game_mode: v.nullable(v.string()),
 	difficulty: v.nullable(v.string()),
 	opponent_level: v.nullable(v.string()),
