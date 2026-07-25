@@ -35,7 +35,7 @@ import {
 // only when nothing at all is indexed: a save that predates the wonder tables
 // but has a wonder in it still produces rows, so "these saves are too old"
 // would be the wrong story to tell here.
-export const WONDER_EMPTY_MESSAGE = "No wonders recorded in these games yet.";
+export const WONDER_EMPTY_MESSAGE = "No wonder data available.";
 
 // Wonders are improvements, so both the real in-game name ("The Pyramids", not
 // "Pyramids") and the icon come from the improvement tables.
