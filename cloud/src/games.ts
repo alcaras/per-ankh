@@ -635,10 +635,18 @@ function buildGamePlayerTurnStatements(
 }
 
 // Per-(player, family class) city footprint: how many of the player's
-// end-of-game cities that class holds, and when its first one was founded.
-// Cities are keyed on owner_player_xml_id so a mirror match doesn't credit one
-// side with the other's; a city with no family (unassigned or pre-2.6.0 blob)
-// simply doesn't contribute.
+// end-of-game cities that class holds, and when the player founded their first
+// one. Cities are keyed on owner_player_xml_id so a mirror match doesn't credit
+// one side with the other's; a city with no family (unassigned or pre-2.6.0
+// blob) simply doesn't contribute.
+//
+// `first_founded_turn` deliberately counts only cities this player founded
+// (first_owner_player_xml_id). A captured city keeps the turn its *original*
+// owner founded it, so counting captures would date a family to a turn the
+// player had nothing to do with — measured at 0.8% of rows, and enough to flip
+// the founding order for 1.4% of players. A family that only ever arrived by
+// conquest therefore has no founding turn, which is the honest answer for a
+// stat about founding order.
 function buildFamilyCityStatements(
 	db: D1Database,
 	gameId: string,
@@ -647,6 +655,7 @@ function buildFamilyCityStatements(
 	const cityStats = blob.city_statistics as {
 		cities?: Array<{
 			owner_player_xml_id: number | null;
+			first_owner_player_xml_id: number | null;
 			family_class: string | null;
 			founded_turn: number | null;
 		}>;
@@ -657,7 +666,12 @@ function buildFamilyCityStatements(
 	// key = `${player_index}|${family_class}`
 	const tally = new Map<
 		string,
-		{ player: number; familyClass: string; cities: number; firstTurn: number | null }
+		{
+			player: number;
+			familyClass: string;
+			cities: number;
+			firstTurn: number | null;
+		}
 	>();
 	for (const c of cities) {
 		if (c.owner_player_xml_id == null || !c.family_class) continue;
@@ -670,6 +684,7 @@ function buildFamilyCityStatements(
 		};
 		e.cities += 1;
 		if (
+			c.first_owner_player_xml_id === c.owner_player_xml_id &&
 			c.founded_turn != null &&
 			(e.firstTurn === null || c.founded_turn < e.firstTurn)
 		) {

@@ -74,9 +74,9 @@ export function familyNationPicksOption(
 		};
 		e.count += r.count;
 		e.wins += r.wins;
-		if (r.avg_share != null) {
-			e.shareSum += r.avg_share * r.count;
-			e.shareCount += r.count;
+		if (r.avg_share != null && r.share_samples > 0) {
+			e.shareSum += r.avg_share * r.share_samples;
+			e.shareCount += r.share_samples;
 		}
 		for (let i = 0; i < 3; i++) e.slots[i] += r.slot_counts[i] ?? 0;
 		byClass.set(r.class, e);

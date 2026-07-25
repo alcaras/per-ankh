@@ -38,19 +38,27 @@ export interface UploadFixtureOpts {
 	readonly humans?: 1 | 2;
 	// Wonder-stats inputs (see cloud/test/integration/games/wonder-stats.test.ts).
 	// `wonders` seeds player_wonders — a null nation marks a build whose builder
-	// the parser couldn't resolve. `cities` seeds city_statistics with the
-	// culture levels that gate wonder eligibility. `disabledImprovements` seeds
-	// the game-level list parser 2.12.0 captures; omit it to model an older
-	// blob, which carries no wonder pool at all.
+	// the parser couldn't resolve. `disabledImprovements` seeds the game-level
+	// list parser 2.12.0 captures; omit it to model an older blob, which carries
+	// no wonder pool at all.
 	readonly wonders?: ReadonlyArray<{
 		player_id: number;
 		wonder: string;
 		completed_turn: number;
 		nation?: string | null;
 	}>;
+	// Cities seeded into city_statistics — one seed feeding both the culture
+	// levels that gate wonder eligibility (wonder-stats tests) and the family
+	// city footprint (family-stats tests). Defaults mark the city as founded by
+	// its owner on turn 5; pass `capturedFrom` to model a city taken from
+	// another player (which keeps its original founding turn).
 	readonly cities?: ReadonlyArray<{
-		owner_player_xml_id: number;
-		culture_level: string;
+		owner: number;
+		culture_level?: string;
+		familyClass?: string | null;
+		foundedTurn?: number;
+		isCapital?: boolean;
+		capturedFrom?: number;
 	}>;
 	readonly disabledImprovements?: readonly string[];
 	// Append a non-human player at index 2. The wonder stats count only human
@@ -228,10 +236,12 @@ function buildMinimalGameBlob(
 				city_id: i + 1,
 				city_name: `CITYNAME_TEST_${i}`,
 				owner_nation: "NATION_EGYPT",
-				owner_player_xml_id: c.owner_player_xml_id,
-				first_owner_player_xml_id: c.owner_player_xml_id,
-				founded_turn: 5,
+				owner_player_xml_id: c.owner,
+				first_owner_player_xml_id: c.capturedFrom ?? c.owner,
+				founded_turn: c.foundedTurn ?? 5,
 				culture_level: c.culture_level,
+				is_capital: c.isCapital ?? false,
+				family_class: c.familyClass ?? null,
 			})),
 		},
 		improvement_data: {},
@@ -252,7 +262,24 @@ function buildMinimalGameBlob(
 		// summary derivation iterates them unconditionally — empty arrays
 		// keep the derivation happy without seeding meaningful per-player
 		// data (which isn't relevant to tournament-link tests).
-		families: [],
+		// The player's families, mirrored from the seeded cities: a class the
+		// player holds a city of is a class they run. player_summaries
+		// .family_classes (and so familyByNation) is derived from this list, not
+		// from the cities themselves. A captured city doesn't add a family.
+		families: [
+			...new Map(
+				(opts.cities ?? [])
+					.filter((c) => c.familyClass && c.capturedFrom === undefined)
+					.map((c) => [
+						`${c.owner}|${c.familyClass}`,
+						{
+							family_name: `FAMILY_TEST_${c.familyClass}`,
+							family_class: c.familyClass,
+							player_xml_id: c.owner,
+						},
+					]),
+			).values(),
+		],
 		characters: [],
 		character_traits: [],
 		player_roster: playerRoster,

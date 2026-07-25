@@ -962,9 +962,7 @@ export async function buildChartBundle(
 		// contribute no slot.
 		const order = own
 			.filter((fc) => fc.first_founded_turn != null)
-			.sort(
-				(a, b) => (a.first_founded_turn ?? 0) - (b.first_founded_turn ?? 0),
-			)
+			.sort((a, b) => (a.first_founded_turn ?? 0) - (b.first_founded_turn ?? 0))
 			.map((fc) => fc.family_class);
 		for (const c of parseJsonArray(r.family_classes)) {
 			const k = `${r.nation}|${c}`;
@@ -999,6 +997,10 @@ export async function buildChartBundle(
 		count: f.count,
 		wins: f.wins,
 		avg_share: f.shareCount > 0 ? f.shareSum / f.shareCount : null,
+		// The mean's own sample — picks with city data, which can be fewer than
+		// `count`. The frontend weights by this when recombining nations, so a
+		// nation with sparse city data doesn't pull the cross-nation mean.
+		share_samples: f.shareCount,
 		slot_counts: f.slotCounts,
 	}));
 
