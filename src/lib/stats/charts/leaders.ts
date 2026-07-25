@@ -21,13 +21,6 @@ function archetypeIconUrl(archetype: string): string | undefined {
 	return SPRITE_MANIFEST[`traits/${archetypeSpriteKey(archetype)}`];
 }
 
-// Art ships for the archetypes and a couple of the plain traits (Strength,
-// Weakness); crestAxisLabel falls back to a name-only label per value, so a
-// resolver that misses most traits still lights up the ones that have one.
-function traitIconUrl(trait: string): string | undefined {
-	return SPRITE_MANIFEST[`traits/${trait}`];
-}
-
 // The ten archetypes are a fixed, small set, so every one that appears fits on
 // one chart. Typed against ChartBundleCore — it renders identically for a user
 // library and a tournament corpus.
@@ -66,7 +59,18 @@ export function startingTraitWinLossOption(
 	return winLossStackedOption({
 		rows,
 		label: fmtTrait,
-		iconUrl: traitIconUrl,
+		// No icon resolver — these are name-only rows. `trait.xml` is the
+		// authority through zIconName, and only 28 of its 306 records declare
+		// art: the ten bArchetype archetypes (each pointing at the bare id,
+		// which is what archetypeSpriteKey reproduces), seventeen
+		// TRAIT_CLERGY_* pointing into the `religions` sprite category, and
+		// TRAIT_PRESET_ARCHETYPE. The sprite manifest is not the authority
+		// here — its `traits` category is baked from the art folder, so it also
+		// carries HUD icons that aren't trait records at all (TRAIT_STRENGTH,
+		// TRAIT_WEAKNESS: a trait's classification is bStrength/bWeakness on
+		// the record) plus one DLC connection trait. None of those is a trait a
+		// leader can start with, so a `traits/<trait>` lookup can only miss.
+		//
 		// Trait names run longer than nation names ("Compassionate"), so the
 		// labels get more room than the shared default.
 		labelWidth: 160,
