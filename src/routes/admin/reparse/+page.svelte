@@ -75,7 +75,7 @@
 			>
 				<p class="mb-3 text-xs text-tan">
 					Rebuild every game's derived D1 tables (summaries, per-turn series,
-					tech, law &amp; wonder events, wonder pools) from its stored blob. No
+					tech/law/wonder events, wonder pools) from its stored blob. No
 					re-parse — reads each game's existing cloud blob and re-runs the
 					database pivot in the Worker. Use this to backfill columns added after
 					upload (e.g. per-turn victory points). Audited as <code
