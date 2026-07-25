@@ -16,6 +16,45 @@ import {
 
 // Family classes reuse the ARCHETYPE crest art (FAMILYCLASS_CHAMPIONS →
 // crests/CREST_ARCHETYPE_CHAMPIONS).
+// The wins/losses stack both family charts draw: bar length is games, the
+// split is how they ended, and a trailing label can hang off the loss segment.
+// Kept local to this module — #155 introduces a catalog-wide
+// `winLossStackedOption` in charts/helpers.ts, and both of these route through
+// it on rebase once that lands.
+function outcomeSeries(opts: {
+	wins: number[];
+	losses: number[];
+	label?: { formatter: (p: { dataIndex: number }) => string };
+}) {
+	return [
+		{
+			name: "Wins",
+			type: "bar" as const,
+			stack: "outcome",
+			data: opts.wins,
+			itemStyle: { color: WIN_COLOR },
+		},
+		{
+			name: "Losses",
+			type: "bar" as const,
+			stack: "outcome",
+			data: opts.losses,
+			itemStyle: { color: LOSS_COLOR },
+			...(opts.label
+				? {
+						label: {
+							show: true,
+							position: "right" as const,
+							color: CHART_THEME.textStyle.color,
+							fontSize: 11,
+							formatter: opts.label.formatter,
+						},
+					}
+				: {}),
+		},
+	];
+}
+
 // Founding-order slots, in order. A player runs three families; which one
 // seeded the first city is a different commitment from the third.
 const SLOT_LABELS = ["1st family", "2nd", "3rd"] as const;
@@ -137,36 +176,20 @@ export function familyNationPicksOption(
 			data: classes,
 			axisLabel: crestAxisLabel(classes, classCrestUrl, fmtClass, 132, 20, 14),
 		},
-		series: [
-			{
-				name: "Wins",
-				type: "bar",
-				stack: "outcome",
-				data: rows.map((r) => r.wins),
-				itemStyle: { color: WIN_COLOR },
-			},
-			{
-				name: "Losses",
-				type: "bar",
-				stack: "outcome",
-				data: rows.map((r) => r.count - r.wins),
-				itemStyle: { color: LOSS_COLOR },
-				// How much of the empire this class ran, at the end of its bar. The
-				// founding-order split is in the tooltip — three percentages would
-				// crowd the axis.
-				label: {
-					show: true,
-					position: "right",
-					color: CHART_THEME.textStyle.color,
-					fontSize: 11,
-					formatter: (p: { dataIndex: number }) => {
-						const r = rows[p.dataIndex];
-						if (!r || r.avgShare == null) return "";
-						return `${pct(r.avgShare)} of cities`;
-					},
+		series: outcomeSeries({
+			wins: rows.map((r) => r.wins),
+			losses: rows.map((r) => r.count - r.wins),
+			// How much of the empire this class ran, at the end of its bar. The
+			// founding-order split is in the tooltip — three percentages would
+			// crowd the axis.
+			label: {
+				formatter: (p: { dataIndex: number }) => {
+					const r = rows[p.dataIndex];
+					if (!r || r.avgShare == null) return "";
+					return `${pct(r.avgShare)} of cities`;
 				},
 			},
-		],
+		}),
 	};
 }
 
@@ -210,21 +233,9 @@ export function capitalFamilyWinLossOption(
 			data: classes,
 			axisLabel: crestAxisLabel(classes, classCrestUrl, fmtClass, 142, 20, 14),
 		},
-		series: [
-			{
-				name: "Wins",
-				type: "bar",
-				stack: "outcome",
-				data: rows.map((r) => r.wins),
-				itemStyle: { color: WIN_COLOR },
-			},
-			{
-				name: "Losses",
-				type: "bar",
-				stack: "outcome",
-				data: rows.map((r) => r.games - r.wins),
-				itemStyle: { color: LOSS_COLOR },
-			},
-		],
+		series: outcomeSeries({
+			wins: rows.map((r) => r.wins),
+			losses: rows.map((r) => r.games - r.wins),
+		}),
 	};
 }
