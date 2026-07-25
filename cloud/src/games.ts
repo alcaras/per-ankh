@@ -634,6 +634,74 @@ function buildGamePlayerTurnStatements(
 	return statements;
 }
 
+// Per-(player, family class) city footprint: how many of the player's
+// end-of-game cities that class holds, and when its first one was founded.
+// Cities are keyed on owner_player_xml_id so a mirror match doesn't credit one
+// side with the other's; a city with no family (unassigned or pre-2.6.0 blob)
+// simply doesn't contribute.
+function buildFamilyCityStatements(
+	db: D1Database,
+	gameId: string,
+	blob: FullGameData,
+): D1PreparedStatement[] {
+	const cityStats = blob.city_statistics as {
+		cities?: Array<{
+			owner_player_xml_id: number | null;
+			family_class: string | null;
+			founded_turn: number | null;
+		}>;
+	};
+	const cities = cityStats?.cities;
+	if (!Array.isArray(cities) || cities.length === 0) return [];
+
+	// key = `${player_index}|${family_class}`
+	const tally = new Map<
+		string,
+		{ player: number; familyClass: string; cities: number; firstTurn: number | null }
+	>();
+	for (const c of cities) {
+		if (c.owner_player_xml_id == null || !c.family_class) continue;
+		const key = `${c.owner_player_xml_id}|${c.family_class}`;
+		const e = tally.get(key) ?? {
+			player: c.owner_player_xml_id,
+			familyClass: c.family_class,
+			cities: 0,
+			firstTurn: null,
+		};
+		e.cities += 1;
+		if (
+			c.founded_turn != null &&
+			(e.firstTurn === null || c.founded_turn < e.firstTurn)
+		) {
+			e.firstTurn = c.founded_turn;
+		}
+		tally.set(key, e);
+	}
+	if (tally.size === 0) return [];
+
+	const columns = [
+		"game_id",
+		"player_index",
+		"family_class",
+		"cities",
+		"first_founded_turn",
+	];
+	const statements: D1PreparedStatement[] = [];
+	for (const chunk of chunked([...tally.values()], TECH_LAW_ROWS_PER_INSERT)) {
+		const sql = buildMultiRowInsert(
+			"player_family_cities",
+			columns,
+			chunk.length,
+		);
+		const bindings: unknown[] = [];
+		for (const e of chunk) {
+			bindings.push(gameId, e.player, e.familyClass, e.cities, e.firstTurn);
+		}
+		statements.push(db.prepare(sql).bind(...bindings));
+	}
+	return statements;
+}
+
 function buildTechEventStatements(
 	db: D1Database,
 	gameId: string,
@@ -1657,6 +1725,7 @@ export async function handleGameUpload(
 		winnerIndex,
 	});
 	const gptStmts = buildGamePlayerTurnStatements(env.SHARE_DB, gameId, blob);
+	const familyCityStmts = buildFamilyCityStatements(env.SHARE_DB, gameId, blob);
 	const techStmts = buildTechEventStatements(env.SHARE_DB, gameId, blob);
 	const lawStmts = buildLawEventStatements(env.SHARE_DB, gameId, blob);
 	const wonderStmts = [
@@ -1668,6 +1737,7 @@ export async function handleGameUpload(
 		env.SHARE_DB.prepare(gameRow.sql).bind(...gameRow.bindings),
 		...summaryStmts,
 		...gptStmts,
+		...familyCityStmts,
 		...techStmts,
 		...lawStmts,
 		...wonderStmts,
@@ -3067,6 +3137,9 @@ export async function handleAdminReindex(
 		env.SHARE_DB.prepare("DELETE FROM game_wonder_pool WHERE game_id = ?").bind(
 			gameId,
 		),
+		env.SHARE_DB.prepare(
+			"DELETE FROM player_family_cities WHERE game_id = ?",
+		).bind(gameId),
 		...buildSummaryStatements(env.SHARE_DB, {
 			gameId,
 			blob,
@@ -3074,6 +3147,7 @@ export async function handleAdminReindex(
 			winnerIndex,
 		}),
 		...buildGamePlayerTurnStatements(env.SHARE_DB, gameId, blob),
+		...buildFamilyCityStatements(env.SHARE_DB, gameId, blob),
 		...buildTechEventStatements(env.SHARE_DB, gameId, blob),
 		...buildLawEventStatements(env.SHARE_DB, gameId, blob),
 		...buildWonderEventStatements(env.SHARE_DB, gameId, blob),

@@ -189,6 +189,14 @@ export interface ChartBundleCore {
 		class: string;
 		count: number;
 		wins: number;
+		// Mean share of the player's end-of-game cities this class held. Null
+		// when no in-scope player has city data for it — older blobs carry no
+		// family on their cities.
+		avg_share: Nullable<number>;
+		// Picks where this class was the player's 1st / 2nd / 3rd family, ranked
+		// by when its first city was founded. Sums to at most `count` — a pick
+		// with no founding data contributes to none of them.
+		slot_counts: [number, number, number];
 	}>;
 
 	// --- Yields ------------------------------------------------------

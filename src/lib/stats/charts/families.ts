@@ -1,9 +1,8 @@
 // Families tab option builders.
 
 import type { ChartOption } from "$lib/echarts";
-import { getChartColor } from "$lib/config";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
-import type { ChartBundle, ChartBundleCore } from "../types";
+import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	CHART_THEME,
@@ -17,6 +16,10 @@ import {
 
 // Family classes reuse the ARCHETYPE crest art (FAMILYCLASS_CHAMPIONS →
 // crests/CREST_ARCHETYPE_CHAMPIONS).
+// Founding-order slots, in order. A player runs three families; which one
+// seeded the first city is a different commitment from the third.
+const SLOT_LABELS = ["1st family", "2nd", "3rd"] as const;
+
 function classCrestUrl(familyClass: string): string | undefined {
 	const name = familyClass.replace(/^FAMILYCLASS_/, "");
 	return SPRITE_MANIFEST[`crests/CREST_ARCHETYPE_${name}`];
@@ -24,7 +27,7 @@ function classCrestUrl(familyClass: string): string | undefined {
 
 // Nations that have any family-class data, most-played first — drives the
 // selector in FamilyStatsPanel.
-export function familyNations(bundle: ChartBundle): string[] {
+export function familyNations(bundle: ChartBundleCore): string[] {
 	const games = new Map(bundle.nationWinRate.map((r) => [r.nation, r.games]));
 	return Array.from(new Set(bundle.familyByNation.map((r) => r.nation))).sort(
 		(a, b) => (games.get(b) ?? 0) - (games.get(a) ?? 0),
@@ -36,7 +39,7 @@ export function familyNations(bundle: ChartBundle): string[] {
 // this nation" and "do some win more" in one read, with no cross-nation
 // availability confound.
 export function familyNationPicksOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
 ): ChartOption {
 	const isAll = nation === ALL_NATIONS;
@@ -47,23 +50,49 @@ export function familyNationPicksOption(
 	const games = isAll
 		? bundle.nationWinRate.reduce((s, r) => s + r.games, 0)
 		: (bundle.nationWinRate.find((r) => r.nation === nation)?.games ?? 0);
-	const byClass = new Map<string, { count: number; wins: number }>();
+	// City share is a per-nation mean, so recombining across nations weights
+	// each nation by how often the class was picked there — the same weighting
+	// the pick/win counts already carry. Slot counts are plain sums.
+	const byClass = new Map<
+		string,
+		{
+			count: number;
+			wins: number;
+			shareSum: number;
+			shareCount: number;
+			slots: [number, number, number];
+		}
+	>();
 	for (const r of bundle.familyByNation) {
 		if (!isAll && r.nation !== nation) continue;
-		const e = byClass.get(r.class) ?? { count: 0, wins: 0 };
+		const e = byClass.get(r.class) ?? {
+			count: 0,
+			wins: 0,
+			shareSum: 0,
+			shareCount: 0,
+			slots: [0, 0, 0] as [number, number, number],
+		};
 		e.count += r.count;
 		e.wins += r.wins;
+		if (r.avg_share != null) {
+			e.shareSum += r.avg_share * r.count;
+			e.shareCount += r.count;
+		}
+		for (let i = 0; i < 3; i++) e.slots[i] += r.slot_counts[i] ?? 0;
 		byClass.set(r.class, e);
 	}
 	const rows = [...byClass.entries()]
 		.map(([cls, e]) => ({
 			class: cls,
 			pickRate: games > 0 ? e.count / games : 0,
-			winRate: e.count > 0 ? e.wins / e.count : 0,
 			count: e.count,
 			wins: e.wins,
+			avgShare: e.shareCount > 0 ? e.shareSum / e.shareCount : null,
+			slots: e.slots,
 		}))
-		.sort((a, b) => a.pickRate - b.pickRate);
+		// Ascending so the most-picked class sits at the top (ECharts stacks a
+		// category axis bottom-up).
+		.sort((a, b) => a.count - b.count);
 	const classes = rows.map((r) => r.class);
 	const pct = (v: number) => `${Math.round(v * 100)}%`;
 	return {
@@ -79,16 +108,30 @@ export function familyNationPicksOption(
 				const p = (params as { dataIndex: number }[])[0];
 				const r = rows[p.dataIndex];
 				if (!r) return "";
-				return `${fmtClass(r.class)}<br/>Picked: ${pct(r.pickRate)} (${r.count} games)<br/>Win rate: ${pct(r.winRate)}`;
+				const lines = [
+					`${fmtClass(r.class)}`,
+					`Picked in ${r.count} games (${pct(r.pickRate)} of this nation's)`,
+					`Wins: ${r.wins} / ${r.count} (${pct(r.count > 0 ? r.wins / r.count : 0)})`,
+				];
+				if (r.avgShare != null) {
+					lines.push(`Avg share of cities: ${pct(r.avgShare)}`);
+				}
+				// Founding order — which of the player's three families this was,
+				// by the turn its first city landed.
+				const slotTotal = r.slots.reduce((a, b) => a + b, 0);
+				if (slotTotal > 0) {
+					lines.push(
+						SLOT_LABELS.map(
+							(label, i) => `${label} ${pct(r.slots[i] / slotTotal)}`,
+						).join(" · "),
+					);
+				}
+				return lines.join("<br/>");
 			},
 		},
-		grid: { ...COMMON_GRID, left: 140, top: 64 },
-		xAxis: {
-			type: "value",
-			min: 0,
-			max: 1,
-			axisLabel: { formatter: (v: number) => pct(v) },
-		},
+		// Room on the right for the city-share label.
+		grid: { ...COMMON_GRID, left: 140, right: 120, top: 64 },
+		xAxis: { type: "value" },
 		yAxis: {
 			type: "category",
 			data: classes,
@@ -96,16 +139,32 @@ export function familyNationPicksOption(
 		},
 		series: [
 			{
-				name: "Pick rate",
+				name: "Wins",
 				type: "bar",
-				data: rows.map((r) => r.pickRate),
-				itemStyle: { color: getChartColor(0) },
+				stack: "outcome",
+				data: rows.map((r) => r.wins),
+				itemStyle: { color: WIN_COLOR },
 			},
 			{
-				name: "Win rate",
+				name: "Losses",
 				type: "bar",
-				data: rows.map((r) => r.winRate),
-				itemStyle: { color: getChartColor(5) },
+				stack: "outcome",
+				data: rows.map((r) => r.count - r.wins),
+				itemStyle: { color: LOSS_COLOR },
+				// How much of the empire this class ran, at the end of its bar. The
+				// founding-order split is in the tooltip — three percentages would
+				// crowd the axis.
+				label: {
+					show: true,
+					position: "right",
+					color: CHART_THEME.textStyle.color,
+					fontSize: 11,
+					formatter: (p: { dataIndex: number }) => {
+						const r = rows[p.dataIndex];
+						if (!r || r.avgShare == null) return "";
+						return `${pct(r.avgShare)} of cities`;
+					},
+				},
 			},
 		],
 	};

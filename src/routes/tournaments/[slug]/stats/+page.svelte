@@ -11,9 +11,9 @@
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
 	import ChartContainer from "$lib/ChartContainer.svelte";
+	import FamilyStatsPanel from "$lib/stats/FamilyStatsPanel.svelte";
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
-	import { capitalFamilyWinLossOption } from "$lib/stats/charts/families";
 	import {
 		ARCHETYPE_EMPTY_MESSAGE,
 		TRAIT_EMPTY_MESSAGE,
@@ -248,23 +248,18 @@
 			</section>
 		</Tabs.Content>
 
-		<!-- Families — which family class ran each player's capital, the
-		     earliest of the family decisions (Plane B1). -->
+		<!-- Families — which class ran the capital, then which classes each
+		     nation's players run and the city footprint behind each. The same
+		     panel the player page uses, pointed at the tournament's games
+		     (Plane B1). -->
 		<Tabs.Content value="families">
-			<section class="mb-8">
-				<h2 class="mb-3 text-base font-bold text-tan">Capital family</h2>
-				{#if capitalFamilies.length > 0}
-					<ChartContainer
-						option={capitalFamilyWinLossOption(data.games)}
-						height={barChartHeight(capitalFamilies.length)}
-						title="Capital family"
-					/>
-				{:else}
-					<p class="p-8 text-center italic text-tan opacity-60">
-						No completed games yet.
-					</p>
-				{/if}
-			</section>
+			{#if capitalFamilies.length > 0 || data.games.familyByNation.length > 0}
+				<FamilyStatsPanel bundle={data.games} />
+			{:else}
+				<p class="p-8 text-center italic text-tan opacity-60">
+					No completed games yet.
+				</p>
+			{/if}
 		</Tabs.Content>
 
 		<!-- Yields — per-turn yield curves across the tournament's games
