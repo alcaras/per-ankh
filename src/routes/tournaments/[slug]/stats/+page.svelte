@@ -172,12 +172,12 @@
 		     it did (Plane B1). -->
 		<Tabs.Content value="wonders">
 			<section class="mb-8">
-				<h2 class="mb-3 text-base font-bold text-tan">Wonders</h2>
+				<h2 class="mb-3 text-base font-bold text-tan">Wonder built win rate</h2>
 				{#if wonders.length > 0}
 					<ChartContainer
 						option={wonderOverviewOption(data.games)}
 						height={barChartHeight(wonders.length)}
-						title="Wonders"
+						title="Wonder built win rate"
 					/>
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">

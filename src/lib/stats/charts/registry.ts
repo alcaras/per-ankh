@@ -39,7 +39,7 @@ export const CHART_SPECS: ChartSpec[] = [
 	{
 		id: "wonder-overview",
 		category: "wonders",
-		title: "Wonders",
+		title: "Wonder built win rate",
 		hasData: (b) => b.wonderStats.length > 0,
 		emptyMessage: () => WONDER_EMPTY_MESSAGE,
 		height: (b) => barChartHeight(b.wonderStats.length),

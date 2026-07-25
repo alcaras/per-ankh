@@ -53,8 +53,10 @@ function wonderIconUrl(wonder: string): string | undefined {
 	return SPRITE_MANIFEST[`improvements/${icon}`];
 }
 
-function tierLabel(culturePrereq: string | null): string {
-	return culturePrereq ? formatEnum(culturePrereq, "CULTURE_") : "—";
+// Old World's own noun for the gate: the four Culture Levels a city passes
+// through (Weak → Developing → Strong → Legendary).
+function tierLabel(culturePrereq: string): string {
+	return formatEnum(culturePrereq, "CULTURE_");
 }
 
 // Row order: culture level (the tier the game unlocks them at), then how often
@@ -130,22 +132,33 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 				// with itself. Zero is the leftover case: a build got indexed but
 				// no player's recorded culture reached the prereq, so say that
 				// much and no more.
-				const lines = [
-					`<b>${fmtWonder(row.wonder)}</b>`,
-					`Needs ${tierLabel(row.culture_prereq)} culture`,
+				const facts: string[] = [];
+				// A wonder the baked prereq table doesn't carry — a mod, or new
+				// content since the last bake — has no level to name. Drop the
+				// line rather than stand a dash in for the noun.
+				if (row.culture_prereq) {
+					facts.push(`Needs ${tierLabel(row.culture_prereq)} Culture`);
+				}
+				facts.push(
 					row.eligible === null
 						? "No record of which games offered it"
 						: row.eligible === 0
 							? "No eligible players recorded"
-							: `Built by ${row.built} of ${row.eligible} eligible (${pct(row.rate ?? 0)}%)`,
-				];
+							: `Built in ${row.built} of ${row.eligible} matches (${pct(row.rate ?? 0)}%)`,
+				);
 				if (row.built > 0) {
-					lines.push(
-						`Median turn ${Math.round(row.median_turn ?? 0)} · P25–P75 ${Math.round(row.p25_turn ?? 0)}–${Math.round(row.p75_turn ?? 0)}`,
+					facts.push(
+						`Median turn ${Math.round(row.median_turn ?? 0)} (P25–P75: ${Math.round(row.p25_turn ?? 0)}–${Math.round(row.p75_turn ?? 0)})`,
 						`Builders won ${row.wins}/${row.built} (${pct(row.win_rate ?? 0)}%)`,
 					);
 				}
-				return lines.join("<br/>");
+				// Name as the heading, every fact under it as a list item. The
+				// margins are inline because ECharts renders the tooltip outside
+				// any stylesheet scope — browser defaults would indent the list
+				// 40px and space it a full line off the name. (Hex/inline styles
+				// inside tooltip HTML are the norm here — see EventRail.)
+				const items = facts.map((f) => `<li>${f}</li>`).join("");
+				return `<b>${fmtWonder(row.wonder)}</b><ul style="margin:4px 0 0;padding-left:18px">${items}</ul>`;
 			},
 		},
 		legend: {
