@@ -6,7 +6,7 @@ import { CHART_THEME } from "$lib/config";
 import { formatEnum } from "$lib/utils/formatting";
 
 // Strip leaderless enum prefix for axis labels. The stats SQL returns
-// raw values (NATION_PERSIA, TRAIT_SCHEMER_ARCHETYPE, etc.); the chart axes
+// raw values (NATION_PERSIA, TRAIT_INTELLIGENT, etc.); the chart axes
 // need humanized text.
 export function fmtNation(value: string): string {
 	return formatEnum(value, "NATION_");
@@ -51,17 +51,8 @@ export const COMMON_GRID = { left: 60, right: 30, top: 40, bottom: 60 };
 // icon-bearing axis labels (crests, avatars) have breathing room, plus
 // padding for the grid margins. Shared by the registry specs and the
 // tournament stats charts so the same chart sizes identically everywhere.
-//
-// A spec that sets a subtitle needs the extra room StatsView's `titled()`
-// reserves for it (grid.top 64 → 92), or its bars render tighter than the
-// same chart without one.
-const SUBTITLE_HEIGHT = 28;
-export function barChartHeight(
-	rowCount: number,
-	opts?: { subtitle?: boolean },
-): string {
-	const extra = opts?.subtitle ? SUBTITLE_HEIGHT : 0;
-	return `${Math.max(rowCount, 1) * 34 + 90 + extra}px`;
+export function barChartHeight(rowCount: number): string {
+	return `${Math.max(rowCount, 1) * 34 + 90}px`;
 }
 
 // Axis-title placement, mirroring the game-detail charts: the title sits
@@ -126,7 +117,7 @@ export interface WinLossRow {
 // so they stay identical by construction rather than by copy.
 export function winLossStackedOption(opts: {
 	rows: WinLossRow[];
-	// Display name for a row key (fmtNation, fmtArchetype, …).
+	// Display name for a row key (fmtNation, fmtTrait, …).
 	label: (value: string) => string;
 	// Sprite for a row key, when the category has icon art (nation crests,
 	// archetype glyphs). Omit for text-only labels.

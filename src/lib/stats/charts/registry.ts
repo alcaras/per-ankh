@@ -41,20 +41,17 @@ export const CHART_SPECS: ChartSpec[] = [
 		id: "starting-archetype-winloss",
 		category: "leaders",
 		title: "Starting archetype",
-		subtitle: "Games played, split by outcome",
 		hasData: (b) => b.startingArchetypeWinRate.length > 0,
 		emptyMessage: () => LEADER_EMPTY_MESSAGE,
-		height: (b) =>
-			barChartHeight(b.startingArchetypeWinRate.length, { subtitle: true }),
+		height: (b) => barChartHeight(b.startingArchetypeWinRate.length),
 	},
 	{
 		id: "starting-trait-winloss",
 		category: "leaders",
 		title: "Starting leader traits",
-		subtitle: "Top 15 by games played, split by outcome",
 		hasData: (b) => b.startingTraitWinRate.length > 0,
 		emptyMessage: () => LEADER_EMPTY_MESSAGE,
-		height: (b) => barChartHeight(visibleTraitRowCount(b), { subtitle: true }),
+		height: (b) => barChartHeight(visibleTraitRowCount(b)),
 	},
 	// Families — category anchor only; rendered by FamilyStatsPanel
 	// (per-nation pick/win bars), not the generic spec loop.
