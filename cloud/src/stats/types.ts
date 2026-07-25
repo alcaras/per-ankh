@@ -110,11 +110,17 @@ export interface ChartBundleCore {
 	// Per wonder: how often the focal players built it, out of how many were
 	// eligible to, how those builders' games ended, and when it lands.
 	//
-	// `eligible` counts focal players who cleared both gates: the wonder was in
-	// their game's enabled pool (Old World enables only a subset per game) and
+	// `eligible` counts focal players who cleared all three gates: the wonder was
+	// in their game's enabled pool (Old World enables only a subset per game),
 	// they reached its culture prereq — a wonder's only build requirement, read
-	// off best_culture_level. Games whose blob predates parser 2.12.0 carry no
-	// pool and are excluded rather than counted as "everything enabled".
+	// off best_culture_level — and no non-human had already taken it off the
+	// board. Games whose blob predates parser 2.12.0 carry no pool and are
+	// excluded rather than counted as "everything enabled".
+	//
+	// `eligible` and `rate` are **null**, not zero, for a wonder no covered game
+	// accounted for — one built only in pre-2.12.0 games, say. Zero means the
+	// wonder was on the board and nobody qualified; null means there's no
+	// denominator to report, which is not the same claim.
 	//
 	// A wonder is unique per game, so `built` can never exceed the number of
 	// games even when every player qualified: the rate is "of those who could
@@ -128,9 +134,9 @@ export interface ChartBundleCore {
 	wonderStats: Array<{
 		wonder: string;
 		culture_prereq: Nullable<string>;
-		eligible: number;
+		eligible: Nullable<number>;
 		built: number;
-		rate: number;
+		rate: Nullable<number>;
 		wins: number;
 		win_rate: Nullable<number>;
 		median_turn: Nullable<number>;

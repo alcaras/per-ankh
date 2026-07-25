@@ -36,6 +36,14 @@ export function fmtLaw(value: string): string {
 export const WIN_COLOR = "#C87941";
 export const LOSS_COLOR = "#5a4d3f";
 
+// The third tone for a chart that buckets an outcome rather than splitting it
+// two ways: warm enough to sit between the two above, desaturated enough not to
+// read as either. MARKER_OUTLINE is the light rule that keeps a LOSS_COLOR fill
+// legible against a dark span — the same tooltip-text shade the game-detail
+// rails use, kept here so the chart palette stays in one file.
+export const MIXED_COLOR = "#9b8f7d";
+export const MARKER_OUTLINE = "#cfc9bd";
+
 // Sentinel selector value for the cross-nation aggregate ("All nations")
 // option shared by the nation-selector panels (Families, Opening laws). Not a
 // real NATION_* enum, so it never collides with one.
@@ -53,17 +61,8 @@ export const COMMON_GRID = { left: 60, right: 30, top: 40, bottom: 60 };
 // icon-bearing axis labels (crests, avatars) have breathing room, plus
 // padding for the grid margins. Shared by the registry specs and the
 // tournament stats charts so the same chart sizes identically everywhere.
-//
-// A spec that sets a subtitle needs the extra room StatsView's `titled()`
-// reserves for it (grid.top 64 → 92), or its bars render tighter than the
-// same chart without one.
-const SUBTITLE_HEIGHT = 28;
-export function barChartHeight(
-	rowCount: number,
-	opts?: { subtitle?: boolean },
-): string {
-	const extra = opts?.subtitle ? SUBTITLE_HEIGHT : 0;
-	return `${Math.max(rowCount, 1) * 34 + 90 + extra}px`;
+export function barChartHeight(rowCount: number): string {
+	return `${Math.max(rowCount, 1) * 34 + 90}px`;
 }
 
 // Axis-title placement, mirroring the game-detail charts: the title sits

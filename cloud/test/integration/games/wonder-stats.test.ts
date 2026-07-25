@@ -1,11 +1,12 @@
 // Integration tests for the wonder slice of the stats bundle.
 //
 // The interesting part is the denominator: a player counts as *eligible* for a
-// wonder only when both gates are open — the wonder was enabled in that game
-// (Old World disables most of them per game) and the player held a city at the
-// wonder's <CulturePrereq>. These go through the real upload pipeline so the
-// blob → wonder_events / game_wonder_pool / best_culture_level indexing is
-// exercised end to end, then read back through GET /v1/users/:id/stats.
+// wonder only when all three gates are open — the wonder was enabled in that
+// game (Old World disables most of them per game), the player held a city at
+// the wonder's <CulturePrereq>, and no AI had already taken it off the board.
+// These go through the real upload pipeline so the blob → wonder_events /
+// game_wonder_pool / best_culture_level indexing is exercised end to end, then
+// read back through GET /v1/users/:id/stats.
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -32,7 +33,10 @@ const DISABLE_ALL_BUT_TEST_WONDERS = Object.keys(WONDER_CULTURE_PREREQ).filter(
 
 type WonderRow = {
 	wonder: string;
-	eligible: number;
+	// null when no pool-carrying game accounted for this wonder — distinct from
+	// a zero, which says it was on the board and nobody qualified.
+	eligible: number | null;
+	rate: number | null;
 	built: number;
 	wins: number;
 	win_rate: number | null;
@@ -75,9 +79,11 @@ describe("wonder stats — eligibility", () => {
 			win_rate: 1,
 			median_turn: 30,
 		});
-		// Enabled, but a Weak-culture player can never start it.
-		expect(stats.get(LEGENDARY_WONDER)?.eligible ?? 0).toBe(0);
-		// Disabled in this game — absent entirely, not a zero row.
+		// Enabled, but a Weak-culture player can never start it — and a row
+		// exists only for a wonder someone could build or did, so being enabled
+		// isn't on its own enough to earn one.
+		expect(stats.has(LEGENDARY_WONDER)).toBe(false);
+		// Disabled in this game — absent for the same reason.
 		expect(stats.has("IMPROVEMENT_ORACLE")).toBe(false);
 	});
 
@@ -101,7 +107,7 @@ describe("wonder stats — eligibility", () => {
 		});
 	});
 
-	it("excludes games whose blob predates the parser that records the pool", async () => {
+	it("reports no denominator, rather than a zero one, for a game with no pool", async () => {
 		const user = await makeUser();
 		// Same culture and the same build, but an older blob carries no
 		// disabled-improvements list — so there's no pool, and the game adds
@@ -113,9 +119,39 @@ describe("wonder stats — eligibility", () => {
 		});
 
 		const row = (await wonderStats(user)).get(WEAK_WONDER);
-		expect(row?.eligible ?? 0).toBe(0);
+		// Zero here would say "available to nobody" directly above this
+		// wonder's own build — null says we have nothing to divide by.
+		expect(row?.eligible).toBeNull();
+		expect(row?.rate).toBeNull();
 		// The build itself is still indexed — it just has no denominator behind it.
 		expect(row?.built ?? 0).toBe(1);
+	});
+
+	it("drops a wonder an AI took from the human's denominator", async () => {
+		const user = await makeUser();
+		await upload(user, {
+			winnerIndex: 0,
+			parserVersion: "2.12.0",
+			disabledImprovements: DISABLE_ALL_BUT_TEST_WONDERS,
+			// Legendary culture, so both test wonders are within reach and the
+			// only thing separating them is who took them.
+			cities: [{ owner_player_xml_id: 0, culture_level: "CULTURE_LEGENDARY" }],
+			aiPlayer: true,
+			// The AI finishes it on turn 12; it's off the board from then on.
+			wonders: [{ player_id: 2, wonder: WEAK_WONDER, completed_turn: 12 }],
+		});
+
+		const stats = await wonderStats(user);
+		// Counting the human eligible here would read as them passing over a
+		// wonder that wasn't theirs to build, and the AI's build can't offset
+		// it — only human builds reach the numerator.
+		expect(stats.has(WEAK_WONDER)).toBe(false);
+		// The one the AI didn't take still counts, so this drops the wonder and
+		// not the game.
+		expect(stats.get(LEGENDARY_WONDER)).toMatchObject({
+			eligible: 1,
+			built: 0,
+		});
 	});
 
 	it("drops a build whose builder the parser couldn't resolve", async () => {

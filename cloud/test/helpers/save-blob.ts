@@ -53,6 +53,10 @@ export interface UploadFixtureOpts {
 		culture_level: string;
 	}>;
 	readonly disabledImprovements?: readonly string[];
+	// Append a non-human player at index 2. The wonder stats count only human
+	// builders, so an AI build has to be visible to the eligibility gate — a
+	// wonder it finished is off the board for the humans in that game.
+	readonly aiPlayer?: boolean;
 }
 
 export async function buildUploadFormData(
@@ -117,8 +121,28 @@ function buildMinimalGameBlob(
 			legitimacy: 50,
 			state_religion: null,
 		},
-	].slice(0, humans);
-	const playerRoster = [
+	]
+		.slice(0, humans)
+		.concat(
+			opts.aiPlayer
+				? [
+						{
+							player_name: "Player 2",
+							nation: "NATION_GREECE",
+							is_human: false,
+							legitimacy: 50,
+							state_religion: null,
+						},
+					]
+				: [],
+		);
+	const playerRoster: Array<{
+		player_index: number;
+		player_name: string;
+		nation: string;
+		is_human: boolean;
+		online_id: string | null;
+	}> = [
 		{
 			player_index: 0,
 			player_name: "Player 0",
@@ -134,6 +158,15 @@ function buildMinimalGameBlob(
 			online_id: "steam:000000000000002",
 		},
 	].slice(0, humans);
+	if (opts.aiPlayer) {
+		playerRoster.push({
+			player_index: 2,
+			player_name: "Player 2",
+			nation: "NATION_GREECE",
+			is_human: false,
+			online_id: null,
+		});
+	}
 	return {
 		version: 2,
 		parser_version: parserVersion ?? PARSER_VERSION,

@@ -8,8 +8,9 @@
 // is colored by it in three buckets (rather than a gradient — samples per
 // wonder are small, and a bucket is honest about that), and the trailing label
 // spells out the rate with its sample. How often a wonder was passed over —
-// built vs the players who could have built it, meaning it was enabled in
-// their game AND they had a city at its culture level — is in the tooltip.
+// built vs the players who could have built it: it was enabled in their game,
+// they had a city at its culture level, and no AI had already taken it — is in
+// the tooltip.
 
 import type { ChartOption } from "$lib/echarts";
 import { IMPROVEMENT_NAMES } from "$lib/generated/improvement-names";
@@ -23,14 +24,18 @@ import {
 	CHART_THEME,
 	COMMON_GRID,
 	LOSS_COLOR,
+	MARKER_OUTLINE,
+	MIXED_COLOR,
 	WIN_COLOR,
 	crestAxisLabel,
 } from "./helpers";
 
 // One empty state, referenced from the registry spec and the tournament page
-// rather than retyped at each — they're empty for the same reason.
-export const WONDER_EMPTY_MESSAGE =
-	"No wonder data in these saves yet — they predate the parser that records which wonders a game enables.";
+// rather than retyped at each — they're empty for the same reason. This fires
+// only when nothing at all is indexed: a save that predates the wonder tables
+// but has a wonder in it still produces rows, so "these saves are too old"
+// would be the wrong story to tell here.
+export const WONDER_EMPTY_MESSAGE = "No wonders recorded in these games yet.";
 
 // Wonders are improvements, so both the real in-game name ("The Pyramids", not
 // "Pyramids") and the icon come from the improvement tables.
@@ -82,14 +87,14 @@ const OUTCOME_BUCKETS = [
 	{
 		name: "Mixed",
 		min: 0.4,
-		itemStyle: { color: "#9b8f7d" },
+		itemStyle: { color: MIXED_COLOR },
 	},
 	{
 		name: "Builders mostly lost",
 		min: 0,
 		itemStyle: {
 			color: LOSS_COLOR,
-			borderColor: "#cfc9bd",
+			borderColor: MARKER_OUTLINE,
 			borderWidth: 2,
 		},
 	},
@@ -103,7 +108,8 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 	const rows = orderRows(bundle.wonderStats);
 	const wonders = rows.map((r) => r.wonder);
 	const built = rows.filter((r) => r.built > 0);
-	// Axis headroom for the trailing build-rate labels.
+	// Axis extent runs to the latest P75; the trailing labels sit outside the
+	// grid (grid.right) rather than needing headroom inside it.
 	const maxTurn = Math.max(...built.map((r) => r.p75_turn ?? 0), 10);
 
 	return {
@@ -115,12 +121,21 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 				const p = (params as { dataIndex: number }[])[0];
 				const row = rows[p.dataIndex];
 				if (!row) return "";
+				// Three states, not two. A wonder no pool-carrying save accounted
+				// for has no denominator at all — a different claim from a zero
+				// one, and stating "available to nobody" directly above this
+				// wonder's own build turns is how the tooltip ends up arguing
+				// with itself. Zero is the leftover case: a build got indexed but
+				// no player's recorded culture reached the prereq, so say that
+				// much and no more.
 				const lines = [
 					`<b>${fmtWonder(row.wonder)}</b>`,
 					`Needs ${tierLabel(row.culture_prereq)} culture`,
-					row.eligible === 0
-						? "Not available to anyone in these games"
-						: `Built by ${row.built} of ${row.eligible} eligible (${pct(row.rate)}%)`,
+					row.eligible === null
+						? "No record of which games offered it"
+						: row.eligible === 0
+							? "No eligible players recorded"
+							: `Built by ${row.built} of ${row.eligible} eligible (${pct(row.rate ?? 0)}%)`,
 				];
 				if (row.built > 0) {
 					lines.push(
@@ -161,7 +176,7 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 				itemStyle: { color: "transparent" },
 			},
 			{
-				// The P25–P75 span itself, with the build rate trailing it.
+				// The P25–P75 span itself, with the builders' win rate trailing it.
 				type: "bar",
 				stack: "span",
 				data: rows.map((r) =>
