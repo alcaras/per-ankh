@@ -16,8 +16,13 @@
 //
 // OUTPUT: src/lib/generated/wonders.ts (frontend) and cloud/src/generated/
 // wonders.ts (Worker) — same module, both generated, no hand-mirroring (the
-// law-classes pattern, minus the sidecar: this bake writes its module directly,
-// so bake:finalize never wipes it when this hasn't run).
+// law-classes pattern, minus the sidecar). law-classes routes through
+// .bake/law-classes.json so bake:finalize emits it alongside the manifests it
+// has to reconcile against the atlases; this bake has no asset output, so it
+// writes its two modules directly rather than adding a hop that buys nothing.
+// Nothing is at risk either way — finalize's reconciliation only unlinks under
+// static/atlases/, static/sprites/, and assets/atlas-sources/, never a
+// generated module (build-manifests.ts).
 //
 // Deterministic — re-running with the same XML is byte-identical.
 //

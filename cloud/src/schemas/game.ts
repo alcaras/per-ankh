@@ -28,6 +28,11 @@ export const MAX_TOTAL_TURNS = 1_500;
 export const MAX_CHARACTERS = 5_000;
 export const MAX_FAMILIES = 50;
 export const MAX_TILE_OWNERSHIP_ENTRIES = 200_000;
+// The whole disabled list, not just its wonders: Reference/XML names 159
+// IMPROVEMENT_* zTypes, so a base save can already fill four-fifths of a
+// 200-wide cap and a mod that adds improvements would blow it — rejecting the
+// entire upload over a field only the wonder charts read.
+export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 
 // Versions accepted by /v1/games. Update before releasing a frontend that
 // produces a new PARSER_VERSION (Worker first, frontend second — see
@@ -98,6 +103,10 @@ export const MAX_TILE_OWNERSHIP_ENTRIES = 200_000;
 //         wonders per game — a base save disables 15 of 28 — so this is what
 //         lets the wonder charts count "could have built it" rather than
 //         assuming every wonder was on the board. Absent = unknown.
+//         Also changes what player_wonders means: the builder is now the
+//         player who owned the wonder's tile on the turn it completed, read
+//         from the ownership history, rather than whoever holds the tile at
+//         the end. Blobs below 2.12.0 credit a captured wonder to its captor.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -182,7 +191,9 @@ const GameDetailsSchema = v.object({
 	// Improvement zTypes disabled for this game (2.12.0+). Absent on older
 	// blobs, which means "unknown", not "everything was enabled".
 	disabled_improvements: v.optional(
-		v.nullable(v.pipe(v.array(v.string()), v.maxLength(200))),
+		v.nullable(
+			v.pipe(v.array(v.string()), v.maxLength(MAX_DISABLED_IMPROVEMENTS)),
+		),
 	),
 	game_mode: v.nullable(v.string()),
 	difficulty: v.nullable(v.string()),
@@ -231,7 +242,9 @@ const MatchMetadataSchema = v.object({
 	// Improvement zTypes disabled for this game (2.12.0+). Absent on older
 	// blobs, which means "unknown", not "everything was enabled".
 	disabled_improvements: v.optional(
-		v.nullable(v.pipe(v.array(v.string()), v.maxLength(200))),
+		v.nullable(
+			v.pipe(v.array(v.string()), v.maxLength(MAX_DISABLED_IMPROVEMENTS)),
+		),
 	),
 	game_mode: v.nullable(v.string()),
 	difficulty: v.nullable(v.string()),
