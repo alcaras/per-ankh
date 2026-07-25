@@ -1,10 +1,11 @@
 <script lang="ts">
-	// Tournament stats page. Three tabs — Players (standings), Nations (nation
-	// win rate), Casters (caster leaderboard) — spanning both stats subsystems:
-	// Plane A tournament-native (standings + casters) and Plane B1 (the
-	// ChartBundle pointed at the tournament's games). Renders the charts directly
-	// (no chart registry) through the shared ChartContainer, reusing the chart
-	// theme/grid; the tab bar mirrors the user-stats chip tabs.
+	// Tournament stats page. Five tabs — Players (standings + nation picks),
+	// Nations (nation win rate), Leaders (starting archetype and traits), Yields
+	// (per-turn curves) and Casters (caster leaderboard) — spanning both stats
+	// subsystems: Plane A tournament-native (standings + casters) and Plane B1
+	// (the ChartBundle pointed at the tournament's games). Renders the charts
+	// directly (no chart registry) through the shared ChartContainer, reusing the
+	// chart theme/grid; the tab bar mirrors the user-stats chip tabs.
 	import { Tabs } from "bits-ui";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
