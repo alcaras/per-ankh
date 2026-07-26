@@ -3173,11 +3173,17 @@ export async function handleAdminReindex(
 		.first<{ player_index: number }>();
 	const uploaderIndex = uploaderRow?.player_index ?? null;
 
-	// Read + decompress the parsed blob (same path as the detail endpoint).
-	const obj = await env.SHARE_BUCKET.get(`games/${gameId}.json.gz`);
-	if (!obj) return errorResponse("Blob missing", 404, cors, "BLOB_MISSING");
+	// Read + decompress the parsed blob. Uncached, like the owner branch of the
+	// detail endpoint — a rebuild has to read the bytes R2 holds now.
+	const compressed = await readBlob(
+		env.SHARE_BUCKET,
+		`games/${gameId}.json.gz`,
+	);
+	if (!compressed) {
+		return errorResponse("Blob missing", 404, cors, "BLOB_MISSING");
+	}
 	const decompressed = await decompressWithLimit(
-		await obj.arrayBuffer(),
+		compressed,
 		MAX_BLOB_DECOMPRESSED,
 	);
 	const blob = JSON.parse(
