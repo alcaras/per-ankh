@@ -23,7 +23,21 @@ routes = [{ pattern = "api.per-ankh.app", custom_domain = true }]
 binding = "SHARE_BUCKET"
 bucket_name = "per-ankh-shares"
 
-# D1 database for share index, cloud users/games, and event logging
+# D1 database for share index, cloud users/games, and event logging.
+#
+# Read replication is ENABLED on this database (`read_replication.mode =
+# "auto"`). That is not a wrangler setting — it lives on the database itself
+# and is set out-of-band, so nothing in this repo applies it:
+#
+#   Dashboard: D1 → per-ankh-share-index → Settings → Enable Read Replication
+#   API:       PUT /accounts/{account_id}/d1/database/{database_id}
+#              {"read_replication": {"mode": "auto"}}     (token needs D1:Edit)
+#
+# Both halves are required and neither errors without the other: the setting is
+# inert until a request opens a Sessions API handle (cloud/src/d1.ts), and those
+# handles just stay on the primary if the setting is off. A fresh environment
+# provisioned without this silently loses the latency win with no signal — so
+# it's also a step in docs/cloud-deploy-plan.md §3.10.
 [[d1_databases]]
 binding = "SHARE_DB"
 database_name = "per-ankh-share-index"
@@ -157,6 +171,9 @@ crons = []
 binding = "SHARE_BUCKET"
 bucket_name = "per-ankh-shares-staging"
 
+# Read replication is enabled here too — same out-of-band step as the prod
+# database (see the top-level SHARE_DB comment). Staging carries it so a
+# replica-served route is exercised before prod, not first discovered there.
 [[env.staging.d1_databases]]
 binding = "SHARE_DB"
 database_name = "per-ankh-share-index-staging"

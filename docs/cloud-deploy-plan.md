@@ -372,6 +372,27 @@ step rather than a change to the safety-critical deploy pipeline (which targets
   rows don't auto-prune — fine (low volume, disposable, recloned). Skiff's
   credential stays read-only; deletion is ours, never the drain's.
 
+### 3.10. D1 read replication on `SHARE_DB` (issue #149)
+
+`per-ankh-share-index` lives in ENAM, so every query from a Worker running elsewhere crosses to Eastern North America and back. Read replication puts a copy nearer the reader; routes flagged `staleTolerant` in `cloud/src/index.ts` read through it. Both prod and staging are enabled — this section is the procedure of record for a fresh environment.
+
+Replication is a property of the **database**, not of `wrangler.toml`, so nothing in this repo turns it on and no deploy step applies it:
+
+```bash
+# Dashboard: D1 → <database> → Settings → Enable Read Replication
+# Or the API (token needs D1:Edit):
+curl -X PUT "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database/$DATABASE_ID" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"read_replication": {"mode": "auto"}}'
+```
+
+Apply it to **both** `per-ankh-share-index` and `per-ankh-share-index-staging`, so a replica-served route is exercised on staging before prod.
+
+**It fails silent in both directions**, which is the whole reason this is written down. The setting alone does nothing — a plain binding queries the primary regardless, and only the Sessions API handles built in `cloud/src/d1.ts` can leave it. The code alone does nothing either — `withSession` against a non-replicated database just runs on the primary. Skip this step on a new environment and everything works, only slower, with no error anywhere.
+
+Verify on a deployed environment: `D1Result.meta` carries `served_by_region` and `served_by_primary`. Both are `undefined` under `wrangler dev`, so this can't be checked locally. Disabling is not instant — Cloudflare's docs note replicas take up to 24h to stop serving.
+
 ## 4. Deploy
 
 > **Status: completed; now automated.** The first deploy ran via these manual steps at cutover. Day-to-day deploys now run through `./per-ankh prod deploy` (see top-of-file status banner). Steps below are kept for re-deploy runbook reference.
