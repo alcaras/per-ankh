@@ -26,17 +26,14 @@ const REVIEWED: Record<string, string> = {
 
 // `events` is both audit log and rate-limit counter, so it always runs on the
 // primary via EVENTS_DB (see d1.ts). The compiler enforces that for reads —
-// `countEventsSince` takes a real `D1Database`, which a session handle isn't —
-// but an inline `SHARE_DB.prepare("INSERT INTO events …")` would still compile,
-// so the writes are checked here.
+// every helper that counts events takes a real `D1Database`, which a session
+// handle isn't — but an inline `SHARE_DB.prepare("INSERT INTO events …")` would
+// still compile, so the writes are checked here.
 //
-// Two sites are exempt, both on routes that are never `staleTolerant` and so
-// hold a raw primary binding anyway. Counts are exact: a new SHARE_DB events
-// write in either file fails this test rather than joining the exemption.
+// One site is exempt, on a route that is never `staleTolerant` and so holds a
+// raw primary binding anyway. The count is exact: a second SHARE_DB events
+// write in that file fails this test rather than joining the exemption.
 const EXEMPT_EVENTS_WRITES: Record<string, number> = {
-	// Frozen, being decommissioned — kept out so the shut-off stays a
-	// single-file deletion.
-	"share-legacy.ts": 1,
 	// Member of the tournament-create transactional batch; the slug-UNIQUE 409
 	// depends on that batch failing as a unit.
 	"tournament/admin.ts": 1,
