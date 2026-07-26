@@ -743,6 +743,12 @@ const ROUTES: RouteSpec[] = [
 		},
 		route: "GET /v1/users/:user_id/stats",
 		handler: (r, e, m) => handleUserStats(m![1], r, e),
+		// The one route with no D1 write anywhere in its call graph:
+		// stats/resolve.ts and stats/aggregate.ts are SELECT-only and the
+		// bundle cache lives in KV (stats/cache.ts), not D1. Already
+		// stale-tolerant by construction — the cached bundle it usually
+		// returns is up to 24h old.
+		staleTolerant: true,
 	},
 	// Public recent videos merged across the user's linked channels — feeds
 	// the profile "Videos" tab. Passes ctx so the cache can refresh in the

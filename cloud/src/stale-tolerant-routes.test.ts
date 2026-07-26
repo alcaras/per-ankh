@@ -14,9 +14,13 @@ import { STALE_TOLERANT_ROUTE_KEYS } from "./index";
 
 // Every route allowed to serve replica reads, with the audit that justified it.
 // A route qualifies only if nothing in its call graph writes to D1 and nothing
-// decides on another request's recent write. Empty until the first route opts
-// in — the plumbing lands before any route uses it.
-const REVIEWED: Record<string, string> = {};
+// decides on another request's recent write.
+const REVIEWED: Record<string, string> = {
+	// stats/resolve.ts + stats/aggregate.ts are SELECT-only; the bundle cache
+	// is KV (stats/cache.ts:83), not D1. Stale by construction already — the
+	// cached bundle it usually returns lives 24h.
+	"GET /v1/users/:user_id/stats": "SELECT-only call graph, KV-cached bundle",
+};
 
 // `events` is both audit log and rate-limit counter, so it always runs on the
 // primary via EVENTS_DB (see d1.ts). The compiler enforces that for reads —
