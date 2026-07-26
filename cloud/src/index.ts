@@ -177,15 +177,26 @@ interface RouteSpec {
 	match: { kind: "path"; path: string } | { kind: "regex"; regex: RegExp };
 	route: string;
 	handler: RouteHandler;
-	// Opt this route's `SHARE_DB` into D1 read replication, accepting reads
-	// that may lag the primary. Omitted — the default — keeps the route on the
-	// primary exactly as before.
+	// Opt this route's `SHARE_DB` into D1 read replication. The session
+	// anchors `first-primary` (see d1.ts), so its reads are as fresh as the
+	// database was when the request arrived — the route serves replicas, not
+	// stale data. Omitted — the default — keeps the route on the primary
+	// exactly as before.
 	//
-	// Only set it on a route whose handler, transitively, issues no D1 write
-	// and makes no decision that must see another request's recent write. The
-	// flag is route-level, so it cannot express "read-only for some callers":
-	// if either branch writes, the route doesn't qualify. `events` queries are
-	// exempt from the audit — they run on EVENTS_DB, off the session.
+	// Two things disqualify a route, and its handler's whole transitive call
+	// graph has to clear both:
+	//
+	//   - It writes to D1. A write anchors the bookmark forward, so every
+	//     later read in the request waits for a replica to catch up to it —
+	//     the latency cost with none of the benefit.
+	//   - It decides something on a *concurrent* request's write (a counter,
+	//     a uniqueness probe, a CAS guard). Anchoring at request arrival
+	//     can't see what landed mid-flight.
+	//
+	// The flag is route-level, so it cannot express "read-only for some
+	// callers": if either branch disqualifies, the route doesn't qualify.
+	// `events` queries are exempt from the audit — they run on EVENTS_DB, off
+	// the session, which is what settles the counter case for every route.
 	//
 	// Adding one here also needs an entry in stale-tolerant-routes.test.ts.
 	staleTolerant?: true;
@@ -745,9 +756,12 @@ const ROUTES: RouteSpec[] = [
 		handler: (r, e, m) => handleUserStats(m![1], r, e),
 		// The one route with no D1 write anywhere in its call graph:
 		// stats/resolve.ts and stats/aggregate.ts are SELECT-only and the
-		// bundle cache lives in KV (stats/cache.ts), not D1. Already
-		// stale-tolerant by construction — the cached bundle it usually
-		// returns is up to 24h old.
+		// bundle cache lives in KV (stats/cache.ts), not D1. Its 11 query
+		// sites all ride the one session: two sequential in resolveUserCorpus,
+		// then eight loaders in a single Promise.all (loadYieldCurves is
+		// itself two). The KV cache is a reason for care rather than
+		// comfort: a bundle is stored for 24h, so whatever this route reads is
+		// served for a day, which is why the session anchors first-primary.
 		staleTolerant: true,
 	},
 	// Public recent videos merged across the user's linked channels — feeds

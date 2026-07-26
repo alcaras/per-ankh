@@ -7,19 +7,21 @@ import { STALE_TOLERANT_ROUTE_KEYS } from "./index";
 
 // Guards the two halves of the D1 read-replication scheme in d1.ts.
 //
-// Flagging a route `staleTolerant` accepts reads that lag the primary, which is
-// a correctness decision and not a perf tweak — so it takes two edits, the flag
+// Flagging a route `staleTolerant` moves its reads onto replicas, which is a
+// correctness decision and not a perf tweak — so it takes two edits, the flag
 // in the ROUTES table and an entry here. A route that shows up in one and not
 // the other fails this file.
 
 // Every route allowed to serve replica reads, with the audit that justified it.
 // A route qualifies only if nothing in its call graph writes to D1 and nothing
-// decides on another request's recent write.
+// decides on a concurrent request's write — the flag's doc comment in index.ts
+// spells out both tests.
 const REVIEWED: Record<string, string> = {
-	// stats/resolve.ts + stats/aggregate.ts are SELECT-only; the bundle cache
-	// is KV (stats/cache.ts:83), not D1. Stale by construction already — the
-	// cached bundle it usually returns lives 24h.
-	"GET /v1/users/:user_id/stats": "SELECT-only call graph, KV-cached bundle",
+	// stats/resolve.ts + stats/aggregate.ts are SELECT-only, and the bundle
+	// cache is KV (stats/cache.ts:83), not D1. Note the 24h cache entry is why
+	// the session anchors first-primary and not first-unconstrained: whatever
+	// this route reads is then served for a day.
+	"GET /v1/users/:user_id/stats": "SELECT-only call graph",
 };
 
 // `events` is both audit log and rate-limit counter, so it always runs on the
