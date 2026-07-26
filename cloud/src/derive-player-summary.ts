@@ -261,7 +261,15 @@ export function derivePlayerSummary(
 		) {
 			best_culture_level = c.culture_level;
 		}
-		if (c.is_capital && c.owner_player_xml_id === idx && c.family_class) {
+		// First match wins. A player holds one capital, so the guard should never
+		// fire — but the blob is an unordered list, and without it a second
+		// is_capital row would silently make attribution depend on array order.
+		if (
+			capital_family_class === null &&
+			c.is_capital &&
+			c.owner_player_xml_id === idx &&
+			c.family_class
+		) {
 			capital_family_class = c.family_class;
 		}
 	}
