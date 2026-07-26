@@ -15,7 +15,7 @@ metadata:
 
 **Red line — read first.** `./per-ankh admin` defaults to **production**. Never run it against production or with `--staging`/`--remote` — including read-only reads — unless the user's current message explicitly asks for that exact command; ask first. It authenticates against the user's Cloudflare account (a 1Password prompt on this machine). Only the `--local` path (and the hard-local-only `dev-login` / `tournament seed`) is safe to run unprompted.
 
-`./per-ankh admin` is the operator CLI for the live app — covers both the cloud-rewrite world (users, games, events) and the frozen legacy share world. Implementation lives under `scripts/admin/`. Calls `wrangler` directly (no API key — relies on `wrangler login`). Run `./per-ankh admin --help` for the full list. The list below is illustrative, not exhaustive — `--help` groups the full surface (Stats, Users, Creator channels, Games, Events, Shares, Security, Tournaments, Dev).
+`./per-ankh admin` is the operator CLI for the live app — covers both the cloud-rewrite world (users, games, events) and the frozen legacy share world. Implementation lives under `scripts/admin/`. Calls `wrangler` directly (no API key — relies on `wrangler login`). Run `./per-ankh admin --help` for the full list. The list below is illustrative, not exhaustive — `--help` groups the full surface (Stats, Users, Creator channels, Games, Events, Shares, Security, Tournaments, Caches, Dev).
 
 ```bash
 ./per-ankh admin stats                       # Global counts + recent activity
@@ -43,6 +43,18 @@ metadata:
 ```
 
 Build a full local fixture (Swiss + championship via the real planner) with `./per-ankh admin --local tournament seed <slug> [name]`, flags `--qualifiers N` (default 6), `--players-per-division N` (default 8), `--fill mid-swiss|swiss-done|mid-championship|complete` (default `mid-championship`).
+
+## Caches (KV)
+
+`./per-ankh admin cache list [--kind stats|videos] [--match S] [--limit N]` and `./per-ankh admin cache clear <stats|videos|all> [--match S]` inspect and drop the two KV caches — stats bundles (`cloud/src/stats/cache.ts`) and YouTube feeds (`cloud/src/video/cache.ts`). Both share the `SESSIONS_KV` namespace with `session:`/`oauth:` keys; the command's prefix allowlist is what keeps those unreachable, so no flag combination can sign users out.
+
+```bash
+./per-ankh admin cache list --kind stats --match ':user:abc123:'   # One user's bundles
+./per-ankh admin cache clear stats --match 'stats:v7-'             # Drop one schema version
+./per-ankh admin cache clear videos                                # Force a YouTube refetch
+```
+
+Unlike the Worker's `invalidateStatsCache` (which walks only the current `BUNDLE_SCHEMA_VERSION`), `clear` sweeps every schema version under the prefix — that's what reaches entries orphaned by a version bump. Clearing `videos` costs YouTube Data API quota on the next playlist view. Edge-cached responses (`Cache-Control: s-maxage`) are a separate layer and are **not** touched.
 
 ## Dev (local only)
 

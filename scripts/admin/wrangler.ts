@@ -9,7 +9,9 @@
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { getEnv } from "../lib/environments";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -175,6 +177,22 @@ export function sqlStr(s: string): string {
 	return "'" + s.replace(/'/g, "''") + "'";
 }
 
+// Namespace selection for every SESSIONS_KV call. SESSIONS_KV declares both
+// `id` and `preview_id` in wrangler.toml, so --preview must be passed
+// explicitly — wrangler otherwise can't tell which of the two is meant.
+// `wrangler dev` binds the preview namespace in local mode, so --local mirrors
+// that (otherwise reads and writes land in a separate local store the running
+// worker can't see); remote targets take the production namespace.
+function kvFlags(): string[] {
+	return [
+		"--binding",
+		"SESSIONS_KV",
+		"--preview",
+		isLocal() ? "true" : "false",
+		...targetFlags(),
+	];
+}
+
 // Write a single key/value to the SESSIONS_KV namespace. Used by the
 // dev-login command to mint a local session without going through Discord
 // OAuth. ttl is in seconds; SESSIONS_KV's app-level TTL is 30d (see
@@ -184,21 +202,13 @@ export async function kvPutSession(
 	value: string,
 	ttlSeconds: number,
 ): Promise<void> {
-	// SESSIONS_KV has both `id` and `preview_id` in wrangler.toml; wrangler
-	// refuses an ambiguous put without an explicit --preview flag.
-	// `wrangler dev` defaults to the preview namespace in local mode, so
-	// we mirror that — otherwise the session lands in a separate local KV
-	// store that the running worker can't see.
 	const { stdout, stderr, code } = await runWrangler([
 		"kv",
 		"key",
 		"put",
-		"--binding",
-		"SESSIONS_KV",
-		"--preview",
+		...kvFlags(),
 		"--ttl",
 		String(ttlSeconds),
-		...targetFlags(),
 		key,
 		value,
 	]);
@@ -206,6 +216,63 @@ export async function kvPutSession(
 		throw new Error(
 			`wrangler kv put failed (exit ${code}):\n${stderr.trim() || stdout.trim()}`,
 		);
+	}
+}
+
+export interface KvKey {
+	name: string;
+	// Unix epoch seconds. Absent for keys written without a TTL.
+	expiration?: number;
+}
+
+// Every key under a prefix. `wrangler kv key list` walks the list cursor
+// itself and emits the whole set as one JSON array, so there's no pagination
+// to do here.
+export async function kvList(prefix: string): Promise<KvKey[]> {
+	const { stdout, stderr, code } = await runWrangler([
+		"kv",
+		"key",
+		"list",
+		...kvFlags(),
+		"--prefix",
+		prefix,
+	]);
+	if (code !== 0) {
+		throw new Error(
+			`wrangler kv key list failed (exit ${code}):\n${stderr.trim() || stdout.trim()}`,
+		);
+	}
+	return JSON.parse(extractJson(stdout)) as KvKey[];
+}
+
+// Cloudflare's bulk endpoint caps a single request at 10k keys.
+const KV_BULK_LIMIT = 10_000;
+
+// Delete many keys. `wrangler kv bulk delete` takes a JSON file of key names,
+// so each chunk is staged in a temp file and cleaned up after.
+export async function kvBulkDelete(keys: string[]): Promise<void> {
+	for (let i = 0; i < keys.length; i += KV_BULK_LIMIT) {
+		const chunk = keys.slice(i, i + KV_BULK_LIMIT);
+		const file = join(tmpdir(), `per-ankh-kv-delete-${process.pid}-${i}.json`);
+		await writeFile(file, JSON.stringify(chunk), "utf8");
+		try {
+			const { stdout, stderr, code } = await runWrangler([
+				"kv",
+				"bulk",
+				"delete",
+				file,
+				...kvFlags(),
+				// Skip wrangler's own prompt — the command already confirmed.
+				"--force",
+			]);
+			if (code !== 0) {
+				throw new Error(
+					`wrangler kv bulk delete failed (exit ${code}):\n${stderr.trim() || stdout.trim()}`,
+				);
+			}
+		} finally {
+			await rm(file, { force: true });
+		}
 	}
 }
 

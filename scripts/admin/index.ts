@@ -14,6 +14,7 @@ import * as events from "./commands/events";
 import * as shares from "./commands/shares";
 import * as security from "./commands/security";
 import * as tournament from "./commands/tournament";
+import * as cache from "./commands/cache";
 import * as devLogin from "./commands/dev-login";
 
 function printHelp(): void {
@@ -68,6 +69,12 @@ function printHelp(): void {
 			"  tournament grant-admin <t_id> <u_id>   Grant per-tournament admin",
 			"  tournament revoke-admin <t_id> <u_id>  Revoke per-tournament admin",
 			"  tournament delete <t_id>         Delete tournament (cascades to slots/rounds/matches)",
+			"",
+			"Caches (KV):",
+			"  cache list [--kind K] [--match S] [--limit N]",
+			"                                   Show cached stats bundles / video feeds",
+			"  cache clear <stats|videos|all> [--match S]",
+			"                                   Delete cached entries (never session:/oauth:)",
 			"",
 			"Dev (local only):",
 			"  dev-login [--username NAME]      Provision a fake local user + session.",
@@ -164,6 +171,8 @@ export async function main(argv: string[]): Promise<void> {
 			return security.runNukeUser(subArgs, opts);
 		case "tournament":
 			return tournament.run(subArgs, opts);
+		case "cache":
+			return cache.run(subArgs, opts);
 		case "dev-login":
 			return devLogin.run(subArgs, opts);
 		case undefined:
