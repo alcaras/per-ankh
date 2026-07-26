@@ -8,6 +8,15 @@
 // invalidateStatsCache in the Worker walks only `stats:v{BUNDLE_SCHEMA_VERSION}`,
 // leaving entries orphaned by a version bump to age out over 24h. Sweeping
 // those is the point of an operator command.
+//
+// Scope note: the parsed-game blob cache (cloud/src/blob-cache.ts) is NOT
+// reachable from here, and can't be. It lives in each POP's Cache API storage
+// rather than KV — wrangler has no cache command, and zone purge can't address
+// the keys because they're synthetic and belong to no zone. It also doesn't
+// need an operator lever: the cache key carries the game's parser_version, so a
+// reparse drifts the key and every POP misses at once. Stale bytes despite that
+// mean the D1-batch-rollback path in handleGameUpload, which the Worker evicts
+// locally, and which expires on its own inside 24h.
 
 import { kvBulkDelete, kvList, type KvKey } from "../wrangler";
 import { confirmTyping } from "../../lib/confirm";
@@ -80,6 +89,12 @@ function printHelp(): void {
 			"",
 			"Only the stats: and videos: prefixes are reachable — session: and",
 			"oauth: keys share the namespace and are never touched.",
+			"",
+			"The parsed-game blob cache is a separate layer and is NOT reachable",
+			"here: it lives in each POP's Cache API storage, which has no CLI or",
+			"purge surface. It needs no operator action — a reparse advances the",
+			"game's parser_version, which drifts the cache key so every POP misses.",
+			"Anything still stale expires within 24h. See cloud/src/blob-cache.ts.",
 			"",
 		].join("\n"),
 	);
