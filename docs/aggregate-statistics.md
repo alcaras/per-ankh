@@ -117,9 +117,7 @@ stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:user:{user_id}:{viewerScope}:{s
   entries so a private upload can't leak into the public-scope cache.
 - `parser_version` (`CURRENT_PARSER_VERSION`) in the key means a parser bump
   naturally orphans every old entry — there's no separate `stats_schema_version`.
-- `BUNDLE_SCHEMA_VERSION` (currently **4**) is a manual flush lever: bump it when
-  the `ChartBundle` shape changes in a backwards-incompatible way. Data-only
-  changes (a new chart over existing fields) need no bump.
+- `BUNDLE_SCHEMA_VERSION` is a manual flush lever: bump it when the `ChartBundle` shape changes — a dropped field, or a new one. Data-only changes (a new chart over fields the bundle already carries) need no bump. The current value and what each version changed live in `BUNDLE_SCHEMA_CHANGELOG` (`cloud/src/stats/cache.ts`), which is the source of truth. This doc deliberately doesn't restate the number: it sat four versions stale here before it was noticed.
 - **Invalidation** is a prefix walk (`invalidateStatsCache`) over every
   viewerScope × scope variant for the user, fired on upload, patch, and delete
   in `cloud/src/games.ts`. 24h TTL is the safety net.

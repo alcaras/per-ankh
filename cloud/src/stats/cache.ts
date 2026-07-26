@@ -5,11 +5,12 @@
 // to the public-scope cache. PARSER_VERSION (echoed by the Worker via
 // KNOWN_PARSER_VERSIONS) is embedded in the key so a frontend that
 // bumps parser naturally orphans every old entry instead of needing a
-// purge step.
+// purge step; BUNDLE_SCHEMA_VERSION is embedded beside it and does the
+// same for a change to the bundle's own shape.
 //
 // Key shape:
-//   stats:v{parser_version}:user:{user_id}:{viewerScope}:{scope}
-//   stats:v{parser_version}:tournament:{tournament_id}:{updated_at}
+//   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:user:{user_id}:{viewerScope}:{scope}
+//   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:tournament:{tournament_id}:{updated_at}
 //
 // We reuse the existing SESSIONS_KV binding (no new infra) — the
 // `stats:` prefix keeps these distinct from `session:` and `oauth:`
@@ -18,23 +19,30 @@
 import type { SessionEnv } from "../session";
 import type { UserScope, UserStatsScope } from "./types";
 
-// Bumping this is equivalent to a global cache flush — every read
-// becomes a miss and recomputes. Use when the ChartBundle shape itself
-// changes in a backwards-incompatible way (e.g. dropping a field). For
-// data-only changes (a chart drawn from fields the bundle already
-// carries), no bump needed.
+// What each version of the bundle shape changed. This table *is* the version:
+// BUNDLE_SCHEMA_VERSION below is its highest key, so a bump can't happen
+// without saying what changed, and the two can't drift apart.
 //
-// Adding a field counts: entries live for 24h, so without a bump a
-// frontend deployed behind the Worker would read a cached bundle that
-// predates the field and blow up on it (the bundle types declare every
-// field required, so consumers dereference them directly).
+// Bumping is equivalent to a global cache flush — every read becomes a miss
+// and recomputes. Bump when the ChartBundle shape itself changes: dropping a
+// field, or adding one. Adding counts because entries live for 24h, so without
+// a bump a frontend deployed behind the Worker would read a cached bundle that
+// predates the field and blow up on it (the bundle types declare every field
+// required, so consumers dereference them directly). A data-only change — a
+// chart drawn from fields the bundle already carries — needs no bump.
 //
-// 6: starting-leader archetype + trait win rates.
-// 7: per-wonder build rate, builder win rate, and build-turn distribution.
-// 8: capital family class win rate, plus avg_share / share_samples /
-//    slot_counts on familyByNation (per-class city footprint and founding
-//    order).
-export const BUNDLE_SCHEMA_VERSION = 8;
+// Versions 1-3 never shipped; the constant was introduced at 4.
+const BUNDLE_SCHEMA_CHANGELOG: Record<number, string> = {
+	4: "initial cached bundle shape",
+	5: "winner/loser split on the yield curves (yieldCurves.outcome)",
+	6: "starting-leader archetype + trait win rates",
+	7: "per-wonder build rate, builder win rate, and build-turn distribution",
+	8: "capital family class win rate, plus avg_share / share_samples / slot_counts on familyByNation (per-class city footprint and founding order)",
+};
+
+export const BUNDLE_SCHEMA_VERSION = Math.max(
+	...Object.keys(BUNDLE_SCHEMA_CHANGELOG).map(Number),
+);
 
 export interface StatsCacheEnv extends SessionEnv {
 	// SESSIONS_KV is the existing KV binding; this module reuses it

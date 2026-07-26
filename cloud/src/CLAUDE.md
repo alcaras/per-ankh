@@ -32,6 +32,10 @@ Run from `cloud/`: `npm test` (both projects), or filter with `--project unit` /
 
 When you bump `PARSER_VERSION` in `src/lib/parser/types.ts`, also add the new string to `KNOWN_PARSER_VERSIONS` in `cloud/src/schemas/game.ts` with a one-line changelog entry above the set. The Worker rejects unknown versions with `INVALID_BLOB: Unknown parser_version`, so a frontend that ships ahead of the Worker breaks all uploads. **Deploy ordering: Worker first, frontend second.**
 
+## Bumping `BUNDLE_SCHEMA_VERSION`
+
+The stats bundle's cache-flush lever (`cloud/src/stats/cache.ts`). **Don't edit the constant** — it's derived as the highest key of the `BUNDLE_SCHEMA_CHANGELOG` table right above it, so you bump it by adding an entry saying what changed. Bump whenever the `ChartBundle` gains or loses a field: entries live 24h and consumers dereference every field directly, so a frontend deployed behind the Worker would read a pre-field bundle and blow up on it. A chart drawn from fields the bundle already carries needs no bump. The value is deliberately **not** restated in `docs/aggregate-statistics.md` — it sat four versions stale there across four stats PRs, so don't reintroduce it.
+
 ## Events retention
 
 A nightly cron (03:47 UTC, `[triggers]` in `cloud/wrangler.toml`) prunes the `events` table per the policy in `cloud/src/retention.ts`: 24h for rate-limit counters, 90d for general audit, never for tournament audit. Two rules when touching events:
