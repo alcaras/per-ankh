@@ -1,7 +1,7 @@
 // ZIP extraction for Old World save files.
 //
-// Mirrors src-tauri/src/parser/save_file.rs validation rules. Used by both
-// the parity test harness (Node) and the eventual Web Worker upload path.
+// Mirrors src-tauri/src/parser/save_file.rs validation rules. Used by the
+// Web Worker upload path (worker.ts).
 
 import { unzipSync, strFromU8 } from "fflate";
 
