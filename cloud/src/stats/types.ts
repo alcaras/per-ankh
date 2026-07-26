@@ -130,6 +130,44 @@ export interface ChartBundleCore {
 		rate: number;
 	}>;
 
+	// --- Wonders -----------------------------------------------------
+	// Per wonder: how often the focal players built it, out of how many were
+	// eligible to, how those builders' games ended, and when it lands.
+	//
+	// `eligible` counts focal players who cleared all three gates: the wonder was
+	// in their game's enabled pool (Old World enables only a subset per game),
+	// they reached its culture prereq — a wonder's only build requirement, read
+	// off best_culture_level — and no non-human had already taken it off the
+	// board. Games whose blob predates parser 2.12.0 carry no pool and are
+	// excluded rather than counted as "everything enabled".
+	//
+	// `eligible` and `rate` are **null**, not zero, for a wonder no covered game
+	// accounted for — one built only in pre-2.12.0 games, say. Zero means the
+	// wonder was on the board and nobody qualified; null means there's no
+	// denominator to report, which is not the same claim.
+	//
+	// A wonder is unique per game, so `built` can never exceed the number of
+	// games even when every player qualified: the rate is "of those who could
+	// have taken it, how many did", which in a 1v1 with both sides eligible
+	// tops out near 50%.
+	//
+	// `wins` counts builders who went on to win, `win_rate` their share (null
+	// when nobody built it). median/p25/p75 are likewise null then.
+	// culture_prereq is echoed so the chart can group by tier without re-baking
+	// the table.
+	wonderStats: Array<{
+		wonder: string;
+		culture_prereq: Nullable<string>;
+		eligible: Nullable<number>;
+		built: number;
+		rate: Nullable<number>;
+		wins: number;
+		win_rate: Nullable<number>;
+		median_turn: Nullable<number>;
+		p25_turn: Nullable<number>;
+		p75_turn: Nullable<number>;
+	}>;
+
 	// --- Families ----------------------------------------------------
 	// Per (nation, class): games where the player picked that class for
 	// that nation, and how many they won. The frontend derives pick rate

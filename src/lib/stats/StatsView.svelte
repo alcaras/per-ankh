@@ -24,6 +24,7 @@
 		startingArchetypeWinLossOption,
 		startingTraitWinLossOption,
 	} from "./charts/leaders";
+	import { wonderOverviewOption } from "./charts/wonders";
 	import { expansionWinRateOption } from "./charts/cities";
 	import type { ChartBundle, StatsCategory } from "./types";
 
@@ -73,6 +74,8 @@
 				return startingArchetypeWinLossOption(bundle);
 			case "starting-trait-winloss":
 				return startingTraitWinLossOption(bundle);
+			case "wonder-overview":
+				return wonderOverviewOption(bundle);
 			case "city-expansion-winrate":
 				return expansionWinRateOption(bundle);
 			default:

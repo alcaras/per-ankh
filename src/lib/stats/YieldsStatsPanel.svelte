@@ -40,7 +40,7 @@
 </script>
 
 {#if !hasData}
-	<p class="p-8 text-center italic text-brown">Not enough data.</p>
+	<p class="p-8 text-center italic text-brown">No yield data available.</p>
 {:else}
 	<Toolbar.Root
 		class="sticky top-1 z-10 -ml-4 mb-4 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg"

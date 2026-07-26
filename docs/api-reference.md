@@ -305,7 +305,7 @@ User-corpus aggregate stats bundle.
 - **Auth:** Public (owner extras) — owner (`self`) corpus includes private games; visitor/anon forced to public.
 - **Path:** `user_id` (21-char).
 - **Query:** `scope` (default `all`; `public`|`vs_ai`|`mp`|`tournament`|`<collection_id>`; collection and `public` narrowing are owner-only).
-- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, yield curves, law/tech timing…) plus user-only `win_rate` and `games_with_outcome`.
+- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, wonder build/timing stats, yield curves, law/tech timing…) plus user-only `win_rate` and `games_with_outcome`.
 - **Errors:** `400 INVALID_USER_ID`, `404 NOT_FOUND`.
 - **Notes:** KV-cached, keyed on `{ user_id, viewerScope, scope, parser_version }`.
 

@@ -11,11 +11,12 @@ import { archetypeSpriteKey, formatArchetype } from "$lib/utils/formatting";
 import type { ChartBundleCore } from "../types";
 import { fmtTrait, winLossStackedOption } from "./helpers";
 
-// Both leader charts share an empty state: they're empty for the same reason,
-// and the copy is referenced from the registry specs and the tournament page
-// rather than retyped at each.
-export const LEADER_EMPTY_MESSAGE =
-	"No leader data in these saves yet — they were parsed before characters were captured.";
+// One empty state per chart, each naming the domain its panel is short of and
+// referenced from the registry spec and the tournament page rather than
+// retyped at each. The two charts read from separate summary columns
+// (starting_ruler_archetype, starting_ruler_traits) and go empty independently.
+export const ARCHETYPE_EMPTY_MESSAGE = "No leader archetype data available.";
+export const TRAIT_EMPTY_MESSAGE = "No leader trait data available.";
 
 function archetypeIconUrl(archetype: string): string | undefined {
 	return SPRITE_MANIFEST[`traits/${archetypeSpriteKey(archetype)}`];

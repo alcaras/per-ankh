@@ -194,7 +194,12 @@ export function extractAllGameData(
 		players,
 	);
 	const gameReligions = deriveGameReligions(religions, players);
-	const playerWonders = derivePlayerWonders(eventLogs, tiles, players);
+	const playerWonders = derivePlayerWonders(
+		eventLogs,
+		tiles,
+		tileOwnership,
+		players,
+	);
 	const storyEvents = deriveStoryEvents(
 		eventStories,
 		players,

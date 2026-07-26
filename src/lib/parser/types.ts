@@ -93,6 +93,13 @@ export interface MatchMetadata {
 	// Game-wide option flags that are set, as `zType → true`. PARENT options
 	// only — see parseGameOptions for why a sub-option never appears here.
 	game_options: Record<string, true>;
+	// Improvement zTypes switched off for this game (sorted). Old World enables
+	// only a subset of the wonders per game and disables the rest, so this is
+	// what makes "buildable here" answerable. Null on saves that carry no
+	// <ImprovementDisabled> block — the pool is unknown there, which is not the
+	// same claim as the empty list a save with nothing disabled produces.
+	// PARSER_VERSION 2.12.0+.
+	disabled_improvements: string[] | null;
 	game_mode: string | null;
 	difficulty: string | null;
 	opponent_level: string | null;
@@ -373,4 +380,4 @@ export interface FullGameData {
  * fixes, MINOR for additive fields, MAJOR for breaking schema changes.
  * Initial value `2.0.0` mirrors `FullGameData.version: 2`.
  */
-export const PARSER_VERSION = "2.11.0";
+export const PARSER_VERSION = "2.12.0";

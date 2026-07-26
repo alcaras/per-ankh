@@ -27,6 +27,7 @@ import {
 	jsonResponse,
 	sha256Hex,
 } from "./util";
+import { WONDER_CULTURE_PREREQ } from "./generated/wonders";
 import { sessionFromRequest } from "./session";
 import { buildUserScopeWhere, parseScopeParam } from "./games-scope";
 import type { SessionData, SessionEnv } from "./session";
@@ -454,10 +455,11 @@ function buildSummaryStatements(
 			starting_ruler_archetype, starting_ruler_traits,
 			starting_ruler_reign_turns, succession_count,
 			final_points, final_military_power, final_legitimacy,
-			cities_total, cities_founded, techs_completed, laws_count,
+			cities_total, cities_founded, best_culture_level,
+			techs_completed, laws_count,
 			fifth_city_turn, tenth_city_turn, fourth_law_turn, seventh_law_turn,
 			is_winner, vp_margin
-		) VALUES (?,?,?,?,?, ?,?, ?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?, ?,?)`,
+		) VALUES (?,?,?,?,?, ?,?, ?,?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?, ?,?)`,
 	);
 
 	return roster.map((p) => {
@@ -479,6 +481,7 @@ function buildSummaryStatements(
 			s.final_legitimacy,
 			s.cities_total,
 			s.cities_founded,
+			s.best_culture_level,
 			s.techs_completed,
 			s.laws_count,
 			s.fifth_city_turn,
@@ -647,6 +650,81 @@ function buildTechEventStatements(
 		const bindings: unknown[] = [];
 		for (const t of chunk) {
 			bindings.push(gameId, t.player_id, t.tech, t.completed_turn);
+		}
+		statements.push(db.prepare(sql).bind(...bindings));
+	}
+
+	return statements;
+}
+
+// The wonders that were enabled for this game: every baked wonder minus the
+// blob's disabled list. Empty when the blob carries no list — pre-2.12.0, or a
+// save with no <ImprovementDisabled> block — so those games contribute no
+// eligibility rather than a wrong one. A list that is present but empty is a
+// different answer: nothing was disabled, so every wonder was on the board.
+function buildWonderPoolStatements(
+	db: D1Database,
+	gameId: string,
+	blob: FullGameData,
+): D1PreparedStatement[] {
+	const disabled = (blob.game_details as { disabled_improvements?: unknown })
+		?.disabled_improvements;
+	if (!Array.isArray(disabled)) return [];
+	const off = new Set(
+		disabled.filter((d): d is string => typeof d === "string"),
+	);
+	const enabled = Object.keys(WONDER_CULTURE_PREREQ).filter((w) => !off.has(w));
+	if (enabled.length === 0) return [];
+
+	const statements: D1PreparedStatement[] = [];
+	for (const chunk of chunked(enabled, TECH_LAW_ROWS_PER_INSERT)) {
+		const sql = buildMultiRowInsert(
+			"game_wonder_pool",
+			["game_id", "wonder"],
+			chunk.length,
+		);
+		const bindings: unknown[] = [];
+		for (const w of chunk) bindings.push(gameId, w);
+		statements.push(db.prepare(sql).bind(...bindings));
+	}
+	return statements;
+}
+
+// Wonder completions (PlayerWonder wire shape: { player_id, player_name,
+// nation, wonder, completed_turn }). One row per wonder — a wonder is unique
+// within a game, so the blob never carries the same one twice.
+//
+// Rows whose builder the parser couldn't resolve are dropped. It finds the
+// builder by locating the wonder's improvement on the map and reading who
+// owned that tile on the completion turn; when that lookup fails it falls back
+// to player_id 0 with a null nation (derive/player-wonders.ts). Indexing those
+// would credit whoever holds player index 0 — a real player — with someone
+// else's wonder and its outcome. ~2% of wonder rows across a public-game
+// sample, always landing on index 0, so the bias is systematic rather than
+// noise.
+function buildWonderEventStatements(
+	db: D1Database,
+	gameId: string,
+	blob: FullGameData,
+): D1PreparedStatement[] {
+	const wonders = (
+		blob.player_wonders as Array<{
+			player_id: number;
+			wonder: string;
+			completed_turn: number;
+			nation: string | null;
+		}>
+	)?.filter((w) => w.nation !== null);
+	if (!wonders || wonders.length === 0) return [];
+
+	const columns = ["game_id", "wonder", "player_index", "turn"];
+	const statements: D1PreparedStatement[] = [];
+
+	for (const chunk of chunked(wonders, TECH_LAW_ROWS_PER_INSERT)) {
+		const sql = buildMultiRowInsert("wonder_events", columns, chunk.length);
+		const bindings: unknown[] = [];
+		for (const w of chunk) {
+			bindings.push(gameId, w.wonder, w.player_id, w.completed_turn);
 		}
 		statements.push(db.prepare(sql).bind(...bindings));
 	}
@@ -1574,6 +1652,10 @@ export async function handleGameUpload(
 	const gptStmts = buildGamePlayerTurnStatements(env.SHARE_DB, gameId, blob);
 	const techStmts = buildTechEventStatements(env.SHARE_DB, gameId, blob);
 	const lawStmts = buildLawEventStatements(env.SHARE_DB, gameId, blob);
+	const wonderStmts = [
+		...buildWonderEventStatements(env.SHARE_DB, gameId, blob),
+		...buildWonderPoolStatements(env.SHARE_DB, gameId, blob),
+	];
 
 	const allStatements: D1PreparedStatement[] = [
 		env.SHARE_DB.prepare(gameRow.sql).bind(...gameRow.bindings),
@@ -1581,6 +1663,7 @@ export async function handleGameUpload(
 		...gptStmts,
 		...techStmts,
 		...lawStmts,
+		...wonderStmts,
 	];
 
 	// Restore tournament_matches.game_id for any matches that referenced this
@@ -2954,6 +3037,12 @@ export async function handleAdminReindex(
 		env.SHARE_DB.prepare("DELETE FROM law_events WHERE game_id = ?").bind(
 			gameId,
 		),
+		env.SHARE_DB.prepare("DELETE FROM wonder_events WHERE game_id = ?").bind(
+			gameId,
+		),
+		env.SHARE_DB.prepare("DELETE FROM game_wonder_pool WHERE game_id = ?").bind(
+			gameId,
+		),
 		...buildSummaryStatements(env.SHARE_DB, {
 			gameId,
 			blob,
@@ -2963,6 +3052,8 @@ export async function handleAdminReindex(
 		...buildGamePlayerTurnStatements(env.SHARE_DB, gameId, blob),
 		...buildTechEventStatements(env.SHARE_DB, gameId, blob),
 		...buildLawEventStatements(env.SHARE_DB, gameId, blob),
+		...buildWonderEventStatements(env.SHARE_DB, gameId, blob),
+		...buildWonderPoolStatements(env.SHARE_DB, gameId, blob),
 	];
 
 	try {

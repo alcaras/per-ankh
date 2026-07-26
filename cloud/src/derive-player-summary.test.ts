@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { FullGameData, PlayerRosterEntry } from "./schemas/game";
 import {
 	buildSummaryGameContext,
 	derivePlayerSummary,
 } from "./derive-player-summary";
+import type { FullGameData, PlayerRosterEntry } from "./schemas/game";
 
-// A minimal blob carrying only what the starting-leader derivation reads.
-// The real FullGameData is far wider (the Valibot schema treats most entries as
+// A minimal blob carrying only what the derivations under test read. The real
+// FullGameData is far wider (the Valibot schema treats most entries as
 // unknown), so the fixture is cast the same way the module narrows its input.
 function blobWith(over: {
 	characters?: Array<Record<string, unknown>>;
 	character_traits?: Array<Record<string, unknown>>;
+	city_statistics?: { cities: Array<Record<string, unknown>> };
 }): FullGameData {
 	return {
 		match_metadata: { total_turns: 60 },
@@ -25,6 +26,12 @@ function blobWith(over: {
 	} as unknown as FullGameData;
 }
 
+const PLAYER = { player_index: 0 } as unknown as PlayerRosterEntry;
+
+function derive(blob: FullGameData) {
+	return derivePlayerSummary(blob, PLAYER, buildSummaryGameContext(blob));
+}
+
 // One leader for player 0, crowned on turn 1 (a starting leader is born
 // pre-game — birth_turn is negative — and takes the throne on the first turn).
 const LEADER = {
@@ -35,12 +42,6 @@ const LEADER = {
 	death_turn: null,
 	archetype: "TRAIT_SCHOLAR_ARCHETYPE",
 };
-
-const PLAYER = { player_index: 0 } as unknown as PlayerRosterEntry;
-
-function derive(blob: FullGameData) {
-	return derivePlayerSummary(blob, PLAYER, buildSummaryGameContext(blob));
-}
 
 describe("derivePlayerSummary — starting leader", () => {
 	it("captures the traits the leader starts with, stamped on turn 1", () => {
@@ -133,5 +134,92 @@ describe("derivePlayerSummary — starting leader", () => {
 		// The successor's own trait, acquired on the turn they took the throne,
 		// must not land in the starting leader's list.
 		expect(summary.starting_ruler_traits).toBeNull();
+	});
+});
+
+// A city at the given culture level, owned by player 0 unless stated. `held`
+// defaults to the sole owner — pass it to describe a city that changed hands.
+function city(culture: string | null, owner = 0, held = [owner]) {
+	return {
+		city_id: 1,
+		owner_nation: "NATION_ROME",
+		owner_player_xml_id: owner,
+		first_owner_player_xml_id: held[0],
+		player_families: held.map((player_xml_id) => ({ player_xml_id })),
+		founded_turn: 3,
+		culture_level: culture,
+	};
+}
+
+// best_culture_level is what makes a wonder's eligibility answerable: a wonder
+// can only be built in a city that has reached its <CulturePrereq>.
+describe("derivePlayerSummary — best culture level", () => {
+	it("takes the highest level across the player's cities", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [
+						city("CULTURE_WEAK"),
+						city("CULTURE_STRONG"),
+						city("CULTURE_DEVELOPING"),
+					],
+				},
+			}),
+		);
+		expect(summary.best_culture_level).toBe("CULTURE_STRONG");
+	});
+
+	it("ignores cities owned by someone else", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [city("CULTURE_WEAK"), city("CULTURE_LEGENDARY", 1)],
+				},
+			}),
+		);
+		expect(summary.best_culture_level).toBe("CULTURE_WEAK");
+	});
+
+	it("is null when the player holds no cities with a known level", () => {
+		expect(derive(blobWith({})).best_culture_level).toBeNull();
+		expect(
+			derive(blobWith({ city_statistics: { cities: [city(null)] } }))
+				.best_culture_level,
+		).toBeNull();
+	});
+
+	// A player conquered out of the game owns nothing at the end. Reading the
+	// end-state owner would give them no culture level and so no eligibility
+	// for any wonder, dropping them out of every build-rate denominator.
+	it("counts a city the player held and then lost", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [city("CULTURE_LEGENDARY", 1, [0, 1])],
+				},
+			}),
+		);
+		expect(summary.best_culture_level).toBe("CULTURE_LEGENDARY");
+	});
+
+	it("still ignores a city the player never held", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [city("CULTURE_WEAK"), city("CULTURE_LEGENDARY", 1, [1, 2])],
+				},
+			}),
+		);
+		expect(summary.best_culture_level).toBe("CULTURE_WEAK");
+	});
+
+	// player_families arrived in parser 2.10.0; older blobs have only the
+	// end-state owner to go on.
+	it("falls back to the end-state owner when player_families is absent", () => {
+		const legacy = { ...city("CULTURE_STRONG"), player_families: undefined };
+		expect(
+			derive(blobWith({ city_statistics: { cities: [legacy] } }))
+				.best_culture_level,
+		).toBe("CULTURE_STRONG");
 	});
 });

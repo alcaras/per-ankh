@@ -15,6 +15,7 @@
 // because all the aggregates are commutative.
 
 import { LAW_CLASSES } from "../generated/law-classes";
+import { WONDER_CULTURE_PREREQ, cultureRank } from "../generated/wonders";
 import type { StatsCorpus } from "./resolve";
 import type {
 	ChartBundle,
@@ -70,6 +71,7 @@ interface BaseRow {
 	is_uploader: number;
 	starting_ruler_archetype: string | null;
 	starting_ruler_traits: string | null; // JSON array of strings
+	best_culture_level: string | null;
 	final_points: number | null;
 	cities_total: number | null;
 	fifth_city_turn: number | null;
@@ -138,6 +140,17 @@ interface LawEventRow {
 	player_index: number;
 	law: string;
 	turn: number;
+}
+
+interface WonderEventRow {
+	game_id: string;
+	player_index: number;
+	wonder: string;
+	turn: number;
+	// Carried rather than filtered in SQL: an AI's build is excluded from the
+	// stats but still has to be visible, because it takes the wonder off the
+	// board for the humans in that game. See the wonders section below.
+	is_human: number;
 }
 
 export function chunk<T>(arr: T[], size: number): T[][] {
@@ -213,6 +226,7 @@ async function loadBaseRows(
 			`SELECT ps.game_id, ps.player_index,
 			        ps.nation, ps.family_classes, ps.is_human, ps.is_uploader,
 			        ps.starting_ruler_archetype, ps.starting_ruler_traits,
+			        ps.best_culture_level,
 			        ps.final_points, ps.cities_total,
 			        ps.fifth_city_turn, ps.tenth_city_turn,
 			        ps.is_winner,
@@ -411,6 +425,56 @@ async function loadLawEvents(
 	return out;
 }
 
+// Wonder completions across the corpus. Unlike techs and laws these aren't
+// per-player choices from a menu everyone shares: a wonder is unique within a
+// game, so at most one row exists per (game, wonder) — whoever finished it.
+//
+// Non-human builders come back too, unlike the tech and law loaders above.
+// They're excluded from the stats, but a wonder an AI finished is gone for
+// everyone else in that game, which the eligibility denominator has to know.
+async function loadWonderEvents(
+	env: AggregateEnv,
+	gameIds: string[],
+): Promise<WonderEventRow[]> {
+	const out: WonderEventRow[] = [];
+	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT we.game_id, we.player_index, we.wonder, we.turn, ps.is_human
+			 FROM wonder_events we
+			 JOIN player_summaries ps ON ps.game_id = we.game_id
+			                          AND ps.player_index = we.player_index
+			 WHERE we.game_id IN (${placeholders(ids.length)})`,
+		)
+			.bind(...ids)
+			.all<WonderEventRow>();
+		out.push(...((res.results ?? []) as WonderEventRow[]));
+	}
+	return out;
+}
+
+// The wonders enabled in each game (parser 2.12.0+ blobs only). Games missing
+// from this table carry no pool and are excluded from wonder eligibility.
+async function loadWonderPool(
+	env: AggregateEnv,
+	gameIds: string[],
+): Promise<Map<string, Set<string>>> {
+	const out = new Map<string, Set<string>>();
+	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT game_id, wonder FROM game_wonder_pool
+			 WHERE game_id IN (${placeholders(ids.length)})`,
+		)
+			.bind(...ids)
+			.all<{ game_id: string; wonder: string }>();
+		for (const row of res.results ?? []) {
+			const set = out.get(row.game_id) ?? new Set<string>();
+			set.add(row.wonder);
+			out.set(row.game_id, set);
+		}
+	}
+	return out;
+}
+
 interface SaveDateRow {
 	date: string;
 	weekday: number | null;
@@ -494,14 +558,23 @@ export async function buildChartBundle(
 				});
 	}
 
-	const [baseRows, yieldCurves, techEvents, lawEvents, saveDateRows] =
-		await Promise.all([
-			loadBaseRows(env, corpus.gameIds),
-			loadYieldCurves(env, corpus.gameIds, focal),
-			loadTechEvents(env, corpus.gameIds),
-			loadLawEvents(env, corpus.gameIds),
-			loadSaveDates(env, corpus.gameIds),
-		]);
+	const [
+		baseRows,
+		yieldCurves,
+		techEvents,
+		lawEvents,
+		wonderEvents,
+		wonderPool,
+		saveDateRows,
+	] = await Promise.all([
+		loadBaseRows(env, corpus.gameIds),
+		loadYieldCurves(env, corpus.gameIds, focal),
+		loadTechEvents(env, corpus.gameIds),
+		loadLawEvents(env, corpus.gameIds),
+		loadWonderEvents(env, corpus.gameIds),
+		loadWonderPool(env, corpus.gameIds),
+		loadSaveDates(env, corpus.gameIds),
+	]);
 
 	const selfMembership = buildSelfMembership(baseRows, focal);
 	const selfRows = baseRows.filter((r) =>
@@ -680,6 +753,115 @@ export async function buildChartBundle(
 			rate: games > 0 ? wins / games : 0,
 		}),
 	);
+
+	// --- Wonders ------------------------------------------------------
+	// Per wonder: how often it got built out of how often it *could* be, how
+	// those builders fared, and when it lands. The denominator is the point —
+	// a wonder passed over reads nothing like one that was never on the board.
+	//
+	// Three gates, all required.
+	//
+	// 1. The pool. Old World enables only a subset of the wonders per game (a
+	//    base save disables 15 of 28), so the wonder has to be in that game's
+	//    pool. Blobs predating the parser that captures the pool have no rows in
+	//    it; they contribute no denominator rather than a wrong one.
+	// 2. Culture. A wonder's only build requirement is a city at its
+	//    <CulturePrereq>, so the player has to have reached that level
+	//    (best_culture_level — see derive-player-summary.ts for what that
+	//    measures and where it errs).
+	// 3. Still on the board. A wonder someone else already finished can't be
+	//    built, and the stats only count human builders — so a wonder taken by
+	//    a non-human has to leave the denominator too, or an AI rushing it on
+	//    turn 20 reads as the human passing it over all game. Only the
+	//    user-stats corpus mixes AI games in (scope=all); a tournament corpus
+	//    is human-only.
+	//
+	// Gate 3 stops at non-humans deliberately. When a *human* rival takes a
+	// wonder the numerator can still fire, so both sides stay in the
+	// denominator, and the rate reads "of the players who could have started
+	// this, how many finished it" — which in a 1v1 with both sides eligible
+	// tops out near 50%. Narrowing it to "could have finished it" would need to
+	// know whether the rival had reached the culture level *before* the build
+	// turn, and the blob carries only an end-state culture level.
+	//
+	// Focal rows that won their game, for crediting a wonder's builder.
+	const winnerRows = new Set(
+		selfRows
+			.filter((r) => r.is_winner === 1)
+			.map((r) => `${r.game_id}|${r.player_index}`),
+	);
+	// game_id → wonders a non-human finished there (gate 3).
+	const takenByNonHuman = new Map<string, Set<string>>();
+	for (const w of wonderEvents) {
+		if (w.is_human === 1) continue;
+		const taken = takenByNonHuman.get(w.game_id) ?? new Set<string>();
+		taken.add(w.wonder);
+		takenByNonHuman.set(w.game_id, taken);
+	}
+	const wonderTurns = new Map<string, number[]>();
+	const wonderWins = new Map<string, number>();
+	for (const w of wonderEvents) {
+		if (w.is_human !== 1) continue;
+		if (!selfMembership.has(`${w.game_id}|${w.player_index}`)) continue;
+		const turns = wonderTurns.get(w.wonder) ?? [];
+		turns.push(w.turn);
+		wonderTurns.set(w.wonder, turns);
+		if (winnerRows.has(`${w.game_id}|${w.player_index}`)) {
+			wonderWins.set(w.wonder, (wonderWins.get(w.wonder) ?? 0) + 1);
+		}
+	}
+	// Wonders we have pool coverage for at all — named by at least one focal
+	// row's game pool. Distinguishes "on the board, nobody qualified" (a real
+	// zero) from "we don't know what this game enabled" (no answer). Without it
+	// a wonder built only in pre-pool games reads as available to nobody while
+	// its own build turns sit beside that in the tooltip.
+	const coveredWonders = new Set<string>();
+	const eligibleByWonder = new Map<string, number>();
+	for (const r of selfRows) {
+		const pool = wonderPool.get(r.game_id);
+		if (!pool) continue;
+		const taken = takenByNonHuman.get(r.game_id);
+		const rank = cultureRank(r.best_culture_level);
+		for (const wonder of pool) {
+			if (taken?.has(wonder)) continue;
+			coveredWonders.add(wonder);
+			if (rank < 0) continue;
+			// A pool row always names a baked wonder (the pool is derived from
+			// that same table), but read the prereq explicitly rather than
+			// leaning on cultureRank's -1 for a miss — that would read as
+			// "eligible for everyone".
+			const prereq = WONDER_CULTURE_PREREQ[wonder];
+			if (prereq === undefined) continue;
+			if (rank >= cultureRank(prereq)) {
+				eligibleByWonder.set(wonder, (eligibleByWonder.get(wonder) ?? 0) + 1);
+			}
+		}
+	}
+	// Every wonder someone could have built or did build, so an available one
+	// that nobody took still shows up with its zero.
+	const wonderKeys = new Set([
+		...eligibleByWonder.keys(),
+		...wonderTurns.keys(),
+	]);
+	const wonderStats = [...wonderKeys].map((wonder) => {
+		const turns = (wonderTurns.get(wonder) ?? []).sort((a, b) => a - b);
+		const eligible = coveredWonders.has(wonder)
+			? (eligibleByWonder.get(wonder) ?? 0)
+			: null;
+		const wins = wonderWins.get(wonder) ?? 0;
+		return {
+			wonder,
+			culture_prereq: WONDER_CULTURE_PREREQ[wonder] ?? null,
+			eligible,
+			built: turns.length,
+			rate: eligible !== null && eligible > 0 ? turns.length / eligible : null,
+			wins,
+			win_rate: turns.length > 0 ? wins / turns.length : null,
+			median_turn: turns.length > 0 ? median(turns) : null,
+			p25_turn: percentile(turns, 25),
+			p75_turn: percentile(turns, 75),
+		};
+	});
 
 	// --- Family classes ----------------------------------------------
 	// Each player picks 3 family classes from their nation's pool. We track,
@@ -899,6 +1081,7 @@ export async function buildChartBundle(
 		nationAvgPoints,
 		startingArchetypeWinRate,
 		startingTraitWinRate,
+		wonderStats,
 		familyByNation,
 		yieldCurves,
 		lawTiming,
@@ -974,6 +1157,7 @@ function emptyCore(parserVersion: string): ChartBundleCore {
 		nationAvgPoints: [],
 		startingArchetypeWinRate: [],
 		startingTraitWinRate: [],
+		wonderStats: [],
 		familyByNation: [],
 		yieldCurves: { turns: [], counts: [], series: {}, outcome: null },
 		lawTiming: [],

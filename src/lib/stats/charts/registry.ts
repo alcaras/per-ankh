@@ -6,12 +6,18 @@
 
 import type { ChartSpec, StatsCategory } from "../types";
 import { barChartHeight } from "./helpers";
-import { LEADER_EMPTY_MESSAGE, visibleTraitRowCount } from "./leaders";
+import {
+	ARCHETYPE_EMPTY_MESSAGE,
+	TRAIT_EMPTY_MESSAGE,
+	visibleTraitRowCount,
+} from "./leaders";
+import { WONDER_EMPTY_MESSAGE } from "./wonders";
 
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
 	{ id: "yields", label: "Yields" },
 	{ id: "nations", label: "Nations" },
 	{ id: "leaders", label: "Leaders" },
+	{ id: "wonders", label: "Wonders" },
 	{ id: "families", label: "Families" },
 	{ id: "laws", label: "Laws" },
 	{ id: "cities", label: "Cities" },
@@ -42,7 +48,7 @@ export const CHART_SPECS: ChartSpec[] = [
 		category: "leaders",
 		title: "Starting archetype",
 		hasData: (b) => b.startingArchetypeWinRate.length > 0,
-		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		emptyMessage: () => ARCHETYPE_EMPTY_MESSAGE,
 		height: (b) => barChartHeight(b.startingArchetypeWinRate.length),
 	},
 	{
@@ -50,8 +56,18 @@ export const CHART_SPECS: ChartSpec[] = [
 		category: "leaders",
 		title: "Starting leader traits",
 		hasData: (b) => b.startingTraitWinRate.length > 0,
-		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		emptyMessage: () => TRAIT_EMPTY_MESSAGE,
 		height: (b) => barChartHeight(visibleTraitRowCount(b)),
+	},
+	// Wonders — one row per wonder on a turn axis: when it lands, how its
+	// builders' games ended, and how often the players who could build it did.
+	{
+		id: "wonder-overview",
+		category: "wonders",
+		title: "Wonder built win rate",
+		hasData: (b) => b.wonderStats.length > 0,
+		emptyMessage: () => WONDER_EMPTY_MESSAGE,
+		height: (b) => barChartHeight(b.wonderStats.length),
 	},
 	// Families — category anchor only; rendered by FamilyStatsPanel
 	// (per-nation pick/win bars), not the generic spec loop.

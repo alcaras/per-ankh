@@ -19,6 +19,13 @@ export type GameDetails = {
 	// PARSER_VERSION 2.11.0; null/absent on older blobs, which means "unknown",
 	// NOT "no options set".
 	game_options: Record<string, true> | null;
+	/**
+	 * Improvement zTypes disabled for this game — Old World enables only a
+	 * subset of the wonders per game. Null when unknown: a pre-2.12.0 blob, or
+	 * a save carrying no <ImprovementDisabled> block. An empty array is the
+	 * other answer — the block was there and disabled nothing.
+	 */
+	disabled_improvements: string[] | null;
 	game_mode: string | null;
 	opponent_level: string | null;
 	difficulty: string | null;

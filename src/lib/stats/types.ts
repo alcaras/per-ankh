@@ -90,6 +90,28 @@ export interface ChartBundleCore {
 		rate: number;
 	}>;
 
+	// Per wonder: how often the focal players built it, out of how many were
+	// eligible — the wonder was enabled in their game (Old World enables only a
+	// subset per game), they reached its culture prereq, and no AI had already
+	// taken it. A wonder is unique per game, so the rate reads as "of those who
+	// could have taken it, how many did". `win_rate` is the builders' share of
+	// wins. Turn stats and win_rate are null when nobody in the corpus built it.
+	//
+	// `eligible`/`rate` are null when no game we have a wonder pool for
+	// accounted for this wonder — no denominator rather than a zero one.
+	wonderStats: Array<{
+		wonder: string;
+		culture_prereq: Nullable<string>;
+		eligible: Nullable<number>;
+		built: number;
+		rate: Nullable<number>;
+		wins: number;
+		win_rate: Nullable<number>;
+		median_turn: Nullable<number>;
+		p25_turn: Nullable<number>;
+		p75_turn: Nullable<number>;
+	}>;
+
 	familyByNation: Array<{
 		nation: string;
 		class: string;
@@ -158,6 +180,7 @@ export type UserScope =
 export type StatsCategory =
 	| "nations"
 	| "leaders"
+	| "wonders"
 	| "families"
 	| "yields"
 	| "laws"

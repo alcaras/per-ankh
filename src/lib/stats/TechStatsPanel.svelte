@@ -38,7 +38,7 @@
 </script>
 
 {#if bundle.techTiming.length === 0 && bundle.techFirst.length === 0}
-	<p class="p-8 text-center italic text-brown">Not enough data.</p>
+	<p class="p-8 text-center italic text-brown">No tech data available.</p>
 {:else}
 	<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
 
