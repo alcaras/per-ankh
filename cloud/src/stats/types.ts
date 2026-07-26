@@ -106,6 +106,30 @@ export interface ChartBundleCore {
 		avg_points: number;
 	}>;
 
+	// --- Leaders -----------------------------------------------------
+	// The focal players' starting leaders — the character who first held the
+	// throne — split into the two things the game rolls for them: their
+	// archetype (exactly one each) and the personality traits they begin with
+	// (zero or more, archetype excluded). `games` is the distribution, `wins`
+	// the outcome, so one wins/games bar answers both.
+	//
+	// Read per row, not in aggregate: over an all-humans corpus the overall
+	// rate is ~50% by construction (a 1v1 contributes one winner and one
+	// loser), so the signal is how far a given archetype/trait sits from that.
+	startingArchetypeWinRate: Array<{
+		archetype: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
+	startingTraitWinRate: Array<{
+		trait: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
 	// --- Wonders -----------------------------------------------------
 	// Per wonder: how often the focal players built it, out of how many were
 	// eligible to, how those builders' games ended, and when it lands.

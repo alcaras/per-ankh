@@ -71,6 +71,25 @@ export interface ChartBundleCore {
 		avg_points: number;
 	}>;
 
+	// The focal players' starting leaders, split into what the game rolls for
+	// them: the archetype (one each) and the personality traits they begin with
+	// (archetype excluded). `games` is the distribution, `wins` the outcome.
+	// Over an all-humans corpus the overall rate is ~50% by construction, so
+	// the signal is the deviation per archetype/trait.
+	startingArchetypeWinRate: Array<{
+		archetype: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
+	startingTraitWinRate: Array<{
+		trait: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
 	// Per wonder: how often the focal players built it, out of how many were
 	// eligible — the wonder was enabled in their game (Old World enables only a
 	// subset per game), they reached its culture prereq, and no AI had already
@@ -160,6 +179,7 @@ export type UserScope =
 
 export type StatsCategory =
 	| "nations"
+	| "leaders"
 	| "wonders"
 	| "families"
 	| "yields"

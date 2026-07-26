@@ -272,8 +272,76 @@ const MATCH_COLUMN_NAMES = [
 ] as const;
 const MATCH_COLUMNS = MATCH_COLUMN_NAMES.join(", ");
 // Qualified for JOIN queries where round columns would shadow (round_id,
-// status exist on both tables).
-const MATCH_COLUMNS_M = MATCH_COLUMN_NAMES.map((c) => `m.${c}`).join(", ");
+// status exist on both tables). Exported for the match+round projections in
+// public.ts, which join rounds (and, per user, slots) on top of these.
+export const MATCH_COLUMNS_M = MATCH_COLUMN_NAMES.map((c) => `m.${c}`).join(
+	", ",
+);
+
+// Every match attributable to one player, as a match_id sub-select taking FOUR
+// binds of the same user_id. Two readers must agree on this rule or the profile
+// contradicts itself: the Tournaments tab payload (handleUserTournaments) and
+// the `tournament_participant` flag that decides whether that tab renders at
+// all (handleUserProfile) — hence one fragment rather than two predicates.
+//
+// The rule mirrors what the render layer applies in
+// src/lib/tournament/match-occupant.ts: prefer the report-time occupant
+// snapshot (migration 0024) for a decided match, and fall through to the LIVE
+// slot exactly where the render layer does. Both halves are load-bearing — the
+// snapshot is what keeps a substitution from retroactively reassigning played
+// matches to the substitute, and it doesn't exist for pending matches, which
+// are exactly the tab's upcoming rows.
+//
+// The fallthrough is PER SIDE and has two triggers, mirroring
+// matchSlotDisplayName's `status !== "pending" && snap != null` branch:
+//   • the match is still pending — no snapshot has been taken yet; or
+//   • it decided with a NULL snapshot on that side, which happens whenever the
+//     occupant hadn't claimed their slot at report time (the snapshot writers
+//     store `slot?.user_id ?? null`, and the login auto-claim in auth.ts never
+//     backfills it). Without this the match would be unattributable to anyone:
+//     the render layer already shows that side's live occupant, so keying
+//     selection off the live slot agrees with it.
+// A decided match with a non-null snapshot never takes the fallthrough, so the
+// substitute still can't inherit a game they didn't play.
+//
+// Written as a UNION of four single-table legs rather than one OR'd predicate,
+// because an OR that spans tables can't be indexed: SQLite's MULTI-INDEX OR
+// optimization only fires when every branch searches the SAME table, and the
+// live halves sit on the joined tournament_slots row. The combined form plans
+// as a full `SCAN m` even with the snapshot columns indexed (see migration
+// 0035); as a UNION each leg takes an index and the caller resolves the id list
+// through the matches PK.
+//
+// Each leg is one side of one rule, in the order stated above. UNION (not UNION
+// ALL) de-duplicates, which covers a player owning both sides of one match —
+// the case the old live-only OR-join needed a DISTINCT for.
+//
+// Byes are NOT filtered here: both callers exclude them on the outer query (see
+// USER_MATCHES_WHERE) so the filter isn't repeated in all four legs.
+export const USER_MATCH_IDS_SQL = `
+	SELECT match_id FROM tournament_matches
+	 WHERE slot_a_user_id = ? AND status != 'pending'
+	UNION
+	SELECT match_id FROM tournament_matches
+	 WHERE slot_b_user_id = ? AND status != 'pending'
+	UNION
+	SELECT lm.match_id FROM tournament_slots s
+	  JOIN tournament_matches lm ON lm.slot_a_id = s.slot_id
+	 WHERE s.user_id = ?
+	   AND (lm.status = 'pending' OR lm.slot_a_user_id IS NULL)
+	UNION
+	SELECT lm.match_id FROM tournament_slots s
+	  JOIN tournament_matches lm ON lm.slot_b_id = s.slot_id
+	 WHERE s.user_id = ?
+	   AND (lm.status = 'pending' OR lm.slot_b_user_id IS NULL)`;
+
+// The whole predicate, for a query that has aliased tournament_matches as `m`:
+// attributable to the player AND not a bye. Byes auto-resolve, were never
+// played or scheduled, and the shared match table filters them out anyway
+// (matchStatusGroup → null) — so a player whose only match in a tournament was
+// a bye has nothing to render, and both readers must agree on that too.
+export const USER_MATCHES_WHERE = `m.status != 'bye'
+	   AND m.match_id IN (${USER_MATCH_IDS_SQL})`;
 
 export async function loadMatches(
 	env: TournamentEnv,
@@ -367,7 +435,12 @@ export async function bumpTournamentUpdatedAt(
 // once discord_id is present — falling back to Discord's default avatar when
 // the user has no custom one — so null here means "show the unclaimed
 // fallback" (the EFFECTUNIT_ENLIST_ICON sprite) on the client.
-export function slotAvatarUrl(row: SlotRow): string | null {
+//
+// Takes only the columns it reads so callers that project a narrow slot row
+// (the per-user tournaments read) can reuse it instead of re-inlining the rule.
+export function slotAvatarUrl(
+	row: Pick<SlotRow, "discord_id" | "user_avatar_hash">,
+): string | null {
 	return row.discord_id
 		? buildAvatarUrl(row.discord_id, row.user_avatar_hash)
 		: null;
@@ -378,8 +451,11 @@ export function slotAvatarUrl(row: SlotRow): string | null {
 // slots (for free-text admin adds that's whatever name the admin typed, so
 // the fallback shows it verbatim). The site labels people by display_name
 // everywhere; the raw @handle stays storage-level (claim matching, pre-link
-// canonicalization) and is never the rendered label.
-export function slotDisplayName(row: SlotRow): string | null {
+// canonicalization) and is never the rendered label. Narrow param, same reason
+// as slotAvatarUrl above.
+export function slotDisplayName(
+	row: Pick<SlotRow, "user_display_name" | "discord_username">,
+): string | null {
 	return row.user_display_name ?? row.discord_username;
 }
 
@@ -507,6 +583,45 @@ export function parseLinks(t: TournamentRow): { label: string; url: string }[] {
 		out.push({ label: e.label, url: e.url });
 	}
 	return out;
+}
+
+// Rebuild one match's rows in tournament_match_casters (migration 0034) from
+// the match's STORED `parts` blob — never from the array a writer happens to
+// hold in memory. Deriving from the persisted value is what makes this
+// idempotent and self-healing: re-running it can't drift from the blob, and
+// player.ts's CAS retry loop can re-enter it safely.
+//
+// Call it from EVERY `parts` writer, immediately after that writer's
+// `parts_rev` CAS lands (there are exactly two: the admin schedule PATCH and
+// caster self-service). The delete + re-insert pair goes through one batch so a
+// reader can't observe the match mid-rebuild.
+//
+// Joining `users` both filters out free-text casters (null user_id — only
+// linked casters can be attributed to a profile) and guarantees the FK, so a
+// corrupt blob naming an unknown user degrades to a missing row rather than
+// failing the write that already committed. OR IGNORE absorbs a blob that lists
+// the same user twice on one part.
+export async function syncMatchCasters(
+	env: TournamentEnv,
+	matchId: string,
+): Promise<void> {
+	await env.SHARE_DB.batch([
+		env.SHARE_DB.prepare(
+			"DELETE FROM tournament_match_casters WHERE match_id = ?",
+		).bind(matchId),
+		env.SHARE_DB.prepare(
+			`INSERT OR IGNORE INTO tournament_match_casters (match_id, part_id, user_id)
+			 SELECT m.match_id, json_extract(p.value, '$.id'), u.user_id
+			 FROM tournament_matches m,
+			      json_each(m.parts) AS p,
+			      json_each(p.value, '$.casters') AS c,
+			      users u
+			 WHERE m.match_id = ?
+			   AND json_valid(m.parts)
+			   AND json_extract(p.value, '$.id') IS NOT NULL
+			   AND u.user_id = json_extract(c.value, '$.user_id')`,
+		).bind(matchId),
+	]);
 }
 
 // Parse the JSON-encoded parts column (migration 0029) into MatchPart[].

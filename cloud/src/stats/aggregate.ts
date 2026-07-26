@@ -47,6 +47,11 @@ export const CHUNK_SIZE = 50;
 // charts/helpers.ts — kept in sync by eye (no shared module across packages).
 const ALL_NATIONS = "__all__";
 
+// A character's archetype is itself a trait, flagged bArchetype in the game
+// data and suffixed _ARCHETYPE (TRAIT_SCHEMER_ARCHETYPE). It rides along in
+// starting_ruler_traits; the leader charts split the two apart.
+const ARCHETYPE_TRAIT = /_ARCHETYPE$/;
+
 // Succession laws (the inheritance rule, one class flagged bSuccession in the
 // game data) are a different kind of law from civic laws — they start at turn 1
 // and change mainly via forced events — so they're excluded from the law-adoption
@@ -65,6 +70,7 @@ interface BaseRow {
 	is_human: number;
 	is_uploader: number;
 	starting_ruler_archetype: string | null;
+	starting_ruler_traits: string | null; // JSON array of strings
 	best_culture_level: string | null;
 	final_points: number | null;
 	cities_total: number | null;
@@ -219,7 +225,8 @@ async function loadBaseRows(
 		const res = await env.SHARE_DB.prepare(
 			`SELECT ps.game_id, ps.player_index,
 			        ps.nation, ps.family_classes, ps.is_human, ps.is_uploader,
-			        ps.starting_ruler_archetype, ps.best_culture_level,
+			        ps.starting_ruler_archetype, ps.starting_ruler_traits,
+			        ps.best_culture_level,
 			        ps.final_points, ps.cities_total,
 			        ps.fifth_city_turn, ps.tenth_city_turn,
 			        ps.is_winner,
@@ -699,6 +706,54 @@ export async function buildChartBundle(
 			avg_points: s.totalPoints / s.pointsCount,
 		}));
 
+	// --- Starting leader: archetype + starting traits -----------------
+	// One row per focal player, keyed off the leader who first held the throne
+	// (player_summaries.starting_ruler_*). Old World rolls that leader's
+	// archetype and personality traits at game start rather than letting the
+	// player pick them, so these read as "how did this draw fare", not "what
+	// did players choose" — the same wins/games shape as nationWinRate, so the
+	// bar doubles as the distribution.
+	// The archetype trait itself is excluded from the trait tally: every leader
+	// has exactly one and it's already the other chart's whole dimension.
+	const archetypeStats = new Map<string, { games: number; wins: number }>();
+	const traitStats = new Map<string, { games: number; wins: number }>();
+	const bumpOutcome = (
+		stats: Map<string, { games: number; wins: number }>,
+		key: string,
+		won: boolean,
+	) => {
+		const s = stats.get(key) ?? { games: 0, wins: 0 };
+		s.games += 1;
+		if (won) s.wins += 1;
+		stats.set(key, s);
+	};
+	for (const r of selfRows) {
+		const won = r.is_winner === 1;
+		if (r.starting_ruler_archetype) {
+			bumpOutcome(archetypeStats, r.starting_ruler_archetype, won);
+		}
+		for (const t of parseJsonArray(r.starting_ruler_traits)) {
+			if (ARCHETYPE_TRAIT.test(t)) continue;
+			bumpOutcome(traitStats, t, won);
+		}
+	}
+	const startingArchetypeWinRate = [...archetypeStats.entries()].map(
+		([archetype, { games, wins }]) => ({
+			archetype,
+			games,
+			wins,
+			rate: games > 0 ? wins / games : 0,
+		}),
+	);
+	const startingTraitWinRate = [...traitStats.entries()].map(
+		([trait, { games, wins }]) => ({
+			trait,
+			games,
+			wins,
+			rate: games > 0 ? wins / games : 0,
+		}),
+	);
+
 	// --- Wonders ------------------------------------------------------
 	// Per wonder: how often it got built out of how often it *could* be, how
 	// those builders fared, and when it lands. The denominator is the point —
@@ -1024,6 +1079,8 @@ export async function buildChartBundle(
 		nations,
 		nationWinRate,
 		nationAvgPoints,
+		startingArchetypeWinRate,
+		startingTraitWinRate,
 		wonderStats,
 		familyByNation,
 		yieldCurves,
@@ -1098,6 +1155,8 @@ function emptyCore(parserVersion: string): ChartBundleCore {
 		nations: [],
 		nationWinRate: [],
 		nationAvgPoints: [],
+		startingArchetypeWinRate: [],
+		startingTraitWinRate: [],
 		wonderStats: [],
 		familyByNation: [],
 		yieldCurves: { turns: [], counts: [], series: {}, outcome: null },

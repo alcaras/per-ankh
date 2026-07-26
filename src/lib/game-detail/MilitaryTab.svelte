@@ -7,7 +7,11 @@
 	import type { ChartOption, ECharts } from "$lib/echarts";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import Chart from "$lib/Chart.svelte";
-	import { formatEnum } from "$lib/utils/formatting";
+	import {
+		archetypeSpriteKey,
+		formatArchetype,
+		formatEnum,
+	} from "$lib/utils/formatting";
 	import { CHART_THEME, getNationChartColor } from "$lib/config";
 	import { LAW_TO_CLASS } from "$lib/generated/law-classes";
 	import { TECH_BONUS_UNITS, UNIT_STATS } from "$lib/generated/unit-stats";
@@ -244,9 +248,7 @@
 	): string {
 		const name = c.first_name ? formatEnum(c.first_name, "NAME_") : "New ruler";
 		const cog = c.cognomen ? ` ‘${formatEnum(c.cognomen, "COGNOMEN_")}’` : "";
-		const arch = c.archetype
-			? formatEnum(c.archetype.replace(/_ARCHETYPE$/, ""), "TRAIT_")
-			: null;
+		const arch = c.archetype ? formatArchetype(c.archetype) : null;
 		const ratings = [
 			ratingChip("Wis", "RATING_WISDOM", c.wisdom),
 			ratingChip("Cha", "RATING_CHARISMA", c.charisma),
@@ -392,9 +394,7 @@
 					(a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0),
 				)) {
 				const turn = c.became_leader_turn as number;
-				const archKey = c.archetype
-					? c.archetype.replace(/_ARCHETYPE$/, "")
-					: null;
+				const archKey = c.archetype ? archetypeSpriteKey(c.archetype) : null;
 				events.push({
 					kind: "leader",
 					turn,

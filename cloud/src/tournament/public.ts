@@ -27,6 +27,7 @@ import {
 	loadTournamentById,
 	loadTournamentBySlug,
 	MapConfigError,
+	MATCH_COLUMNS_M,
 	matchRowToRef,
 	parseLinks,
 	parseMapPool,
@@ -35,9 +36,11 @@ import {
 	slotDisplayName,
 	slotRowToRef,
 	tournamentConfig,
+	USER_MATCHES_WHERE,
 	type MatchPart,
 	type MatchRow,
 	type RoundRow,
+	type SlotRow,
 	type TournamentEnv,
 	type TournamentRow,
 } from "./data";
@@ -114,6 +117,22 @@ async function enforceTournamentViewRateLimit(
 			logError("tournament_view_audit_failed", e, { ip });
 		});
 	return null;
+}
+
+// Public-read leniency for the map_pool column: render the tournament even when
+// its JSON is corrupted rather than failing a public page (admins see the
+// breakage via round generation; the admin write paths still reject it with
+// MAP_CONFIG_INVALID). Shared by the tournament detail read and the per-user
+// tournaments read so the two can't drift on the fallback.
+function parseMapPoolLenient(
+	t: TournamentRow,
+): ReturnType<typeof parseMapPool> {
+	try {
+		return parseMapPool(t);
+	} catch (e) {
+		if (!(e instanceof MapConfigError)) throw e;
+		return [];
+	}
 }
 
 export async function handleTournamentList(
@@ -499,17 +518,7 @@ export async function handleTournamentDetail(
 	const owner = adminList[0] ?? null;
 	const admins = adminList.slice(1);
 
-	// Public-read leniency: render the tournament detail even if the map_pool
-	// JSON is corrupted (admins will see the failure surface via round
-	// generation; no need to break the public-facing page). Admin write
-	// paths still throw MAP_CONFIG_INVALID via parseMapPoolOrError.
-	let map_pool: ReturnType<typeof parseMapPool>;
-	try {
-		map_pool = parseMapPool(tournament);
-	} catch (e) {
-		if (!(e instanceof MapConfigError)) throw e;
-		map_pool = [];
-	}
+	const map_pool = parseMapPoolLenient(tournament);
 	// Links parse leniently (never throws), so no try/catch needed.
 	const links = parseLinks(tournament);
 	return jsonResponse(
@@ -1336,6 +1345,255 @@ export async function handleTournamentMatchDetail(
 	);
 }
 
+// ----------------------------------------------------------------------
+// GET /v1/users/:user_id/tournaments — one player's whole tournament record.
+//
+// Backs the Tournaments tab on the player profile (issue #154), which is
+// match-shaped rather than save-shaped: a match links exactly one save, so half
+// of a player's tournament games are in their opponent's library (and an admin
+// observer upload is in neither), pending matches have no save at all, and a
+// cast isn't a game. Two sections in one lazy fetch (the Videos-tab precedent),
+// with `tournaments` carrying the compact per-tournament context the shared
+// match table needs.
+//
+// Public: tournament reads already are, tournament-linked saves are forced
+// public by linkTournamentMatch, and the caster leaderboard already credits
+// casters publicly — owner-only would hide what a visitor can reach from the
+// tournament side anyway.
+// ----------------------------------------------------------------------
+
+// Per-player caps. Generous: a busy player across a decade of tournaments is
+// well under either, and every leg of both queries takes an index
+// (idx_matches_slot_a/b_user + idx_slots_user + idx_matches_slot_a/b for the
+// matches read, idx_match_casters_user for the casts read).
+const USER_MATCHES_LIMIT = 400;
+const USER_CASTS_LIMIT = 400;
+
+// Live occupant identity (display label + avatar) per slot_id — the same two
+// maps the per-tournament pages build client-side via buildSlotMaps(standings,
+// bracket). serializeMatch deliberately leaves slot_a/b_display_name null for
+// PENDING matches and lets the render layer fall through to exactly these, and
+// pending matches are precisely the tab's "upcoming" rows; a profile tab
+// spanning tournaments has no cheap way to fetch standings + bracket per
+// tournament, so the endpoint resolves them server-side instead of changing
+// serializeMatch's contract. Sides of decided matches are included too:
+// harmless (the render layer prefers the report-time snapshot for those) and it
+// keeps a legacy match predating migration 0024's snapshot columns from
+// rendering as "—".
+async function loadLiveSlotIdentities(
+	env: TournamentEnv,
+	slotIds: string[],
+): Promise<
+	Map<string, { display_name: string | null; avatar_url: string | null }>
+> {
+	const out = new Map<
+		string,
+		{ display_name: string | null; avatar_url: string | null }
+	>();
+	for (const ids of chunk(slotIds, CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT s.slot_id, s.discord_id, s.discord_username,
+			        u.avatar_hash AS user_avatar_hash,
+			        ${displayNameSql("u")} AS user_display_name
+			 FROM tournament_slots s
+			 LEFT JOIN users u ON u.user_id = s.user_id
+			 WHERE s.slot_id IN (${ids.map(() => "?").join(",")})`,
+		)
+			.bind(...ids)
+			.all<
+				Pick<
+					SlotRow,
+					| "slot_id"
+					| "discord_id"
+					| "discord_username"
+					| "user_avatar_hash"
+					| "user_display_name"
+				>
+			>();
+		for (const row of res.results ?? []) {
+			out.set(row.slot_id, {
+				display_name: slotDisplayName(row),
+				avatar_url: slotAvatarUrl(row),
+			});
+		}
+	}
+	return out;
+}
+
+export async function handleUserTournaments(
+	userId: string,
+	request: Request,
+	env: TournamentPublicEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const rl = await enforceTournamentViewRateLimit(env, request, cors);
+	if (rl) return rl;
+	const session = await sessionFromRequest(env, request);
+
+	// --- Matches. USER_MATCHES_WHERE is the attribution rule (snapshot for a
+	// decided match, live slot per side where the render layer falls through)
+	// plus the bye exclusion, shared with the `tournament_participant` flag that
+	// gates this tab — see the rationale on the fragment. Four binds of userId.
+	const matchRes = await env.SHARE_DB.prepare(
+		`SELECT ${MATCH_WITH_ROUND_COLUMNS}
+		 FROM tournament_matches m
+		 JOIN tournament_rounds r ON r.round_id = m.round_id
+		 WHERE ${USER_MATCHES_WHERE}
+		 ORDER BY m.created_at DESC
+		 LIMIT ?`,
+	)
+		.bind(userId, userId, userId, userId, USER_MATCHES_LIMIT)
+		.all<MatchWithRoundRow>();
+	const matchesWithRound = (matchRes.results ?? []).map(splitMatchWithRound);
+
+	// --- Casts. Indexed lookup against the tournament_match_casters join table
+	// (migration 0034), which carries LINKED casters only — a free-text caster
+	// has no user_id and so can't be attributed to a profile. One row per
+	// (match, part) the player appears on: casting is per-sitting, so a player
+	// can cast one sitting of a two-sitting match, which is why casts are their
+	// own section rather than interleaved with the match rows.
+	const castRes = await env.SHARE_DB.prepare(
+		`SELECT c.part_id, ${MATCH_WITH_ROUND_COLUMNS}
+		 FROM tournament_match_casters c
+		 JOIN tournament_matches m ON m.match_id = c.match_id
+		 JOIN tournament_rounds r ON r.round_id = m.round_id
+		 WHERE c.user_id = ?
+		 ORDER BY m.created_at DESC, c.part_id
+		 LIMIT ?`,
+	)
+		.bind(userId, USER_CASTS_LIMIT)
+		.all<MatchWithRoundRow & { part_id: string }>();
+	const castsWithRound = (castRes.results ?? []).map((row) => ({
+		...splitMatchWithRound(row),
+		partId: row.part_id,
+	}));
+
+	// --- Tournaments referenced by either section. A cast names a tournament the
+	// player may hold no slot in, so the index is the union of both rather than
+	// the set they play in.
+	const tournamentIds = [
+		...new Set([
+			...matchesWithRound.map(({ round }) => round.tournament_id),
+			...castsWithRound.map(({ round }) => round.tournament_id),
+		]),
+	];
+	const tournamentRows: TournamentRow[] = [];
+	for (const ids of chunk(tournamentIds, CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT * FROM tournaments
+			 WHERE tournament_id IN (${ids.map(() => "?").join(",")})`,
+		)
+			.bind(...ids)
+			.all<TournamentRow>();
+		tournamentRows.push(...(res.results ?? []));
+	}
+	// The same setup gate every per-tournament public read applies: a setup
+	// tournament with signups closed is invisible to non-admins, so a public
+	// profile can't name one (with a slug linking to a 404) — the leak class of
+	// #110. Per tournament, not one global admin check, since admin rights are
+	// per tournament. Belt-and-braces now that both sections are match-derived:
+	// rounds only exist from the setup → swiss transition on and status never
+	// moves backwards, so a setup tournament reaches neither section. Free when
+	// it doesn't fire — setupGateHides short-circuits on status before querying.
+	const visible: TournamentRow[] = [];
+	for (const t of tournamentRows) {
+		if (!(await setupGateHides(env, session, t))) visible.push(t);
+	}
+	// Newest tournament first, matching the header's my-tournaments list.
+	visible.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+	const visibleIds = new Set(visible.map((t) => t.tournament_id));
+
+	const shownMatches = matchesWithRound.filter(({ round }) =>
+		visibleIds.has(round.tournament_id),
+	);
+	const shownCasts = castsWithRound.filter(({ round }) =>
+		visibleIds.has(round.tournament_id),
+	);
+
+	// Caster/occupant identity + played nations for every match in either
+	// section, batched once across the whole payload.
+	const allMatches = [
+		...new Map(
+			[...shownMatches, ...shownCasts].map(({ match }) => [
+				match.match_id,
+				match,
+			]),
+		).values(),
+	];
+	const partsByMatchId = new Map(
+		allMatches.map((m) => [m.match_id, parseParts(m)]),
+	);
+	const identityByUserId = await loadUserIdentitiesForMatches(
+		env,
+		allMatches,
+		partsByMatchId,
+	);
+	const nationByGamePlayer = await loadNationsForMatches(env, allMatches);
+	const slotIds = new Set<string>();
+	for (const m of allMatches) {
+		slotIds.add(m.slot_a_id);
+		if (m.slot_b_id) slotIds.add(m.slot_b_id);
+	}
+	const liveBySlotId = await loadLiveSlotIdentities(env, [...slotIds]);
+
+	// No handleBySlotId argument: the four admin-only slot_a/b_discord_* keys are
+	// then absent from the payload rather than present-and-null, so this public
+	// endpoint's contract can't be quietly populated later (see serializeMatch).
+	const serialize = (match: MatchRow, round: RoundRow) => ({
+		...serializeMatch(
+			match,
+			identityByUserId,
+			nationByGamePlayer,
+			undefined,
+			partsByMatchId.get(match.match_id),
+		),
+		tournament_id: round.tournament_id,
+		round_id: round.round_id,
+		round_number: round.round_number,
+		phase: round.phase,
+		division: round.division,
+	});
+
+	const slotLabels: Record<string, string> = {};
+	const slotAvatars: Record<string, string | null> = {};
+	for (const [slotId, identity] of liveBySlotId) {
+		if (identity.display_name !== null)
+			slotLabels[slotId] = identity.display_name;
+		slotAvatars[slotId] = identity.avatar_url;
+	}
+
+	return jsonResponse(
+		{
+			user_id: userId,
+			// Index + per-group context: the shared match table reads
+			// division_a/b_name and map_pool off this.
+			tournaments: visible.map((t) => ({
+				tournament_id: t.tournament_id,
+				slug: t.slug,
+				name: t.name,
+				status: t.status,
+				// status + signups_open is the pair every tournament surface renders
+				// its status chip from (headerStatusMeta), so the tab reuses that
+				// rather than inventing a second status vocabulary.
+				signups_open: t.signups_open === 1,
+				division_a_name: t.division_a_name,
+				division_b_name: t.division_b_name,
+				map_pool: parseMapPoolLenient(t),
+			})),
+			matches: shownMatches.map(({ match, round }) => serialize(match, round)),
+			// Part-granularity rows: `part_id` names which sitting the player cast.
+			casts: shownCasts.map(({ match, round, partId }) => ({
+				...serialize(match, round),
+				part_id: partId,
+			})),
+			slot_labels: slotLabels,
+			slot_avatars: slotAvatars,
+		},
+		200,
+		cors,
+	);
+}
+
 // GET /v1/games/:game_id/tournament-link — returns the tournament+match
 // pair if the game is linked, or null. Used by the /games/[id] page to
 // render the "linked to tournament X" preTabs banner. Public like the rest
@@ -1504,23 +1762,37 @@ function serializeMatch(
 		slot_a_user_id: m.slot_a_user_id,
 		slot_a_avatar_url: slotAIdentity?.avatar_url ?? null,
 		slot_a_nation: slotANation,
-		// Admin-only — raw handle + numeric Discord id of the live slot occupant
-		// (null for public viewers, pending/bye sides, and unclaimed slots with
-		// no linked account). The handle seeds the substitute editor; the id backs
-		// `<@id>` mentions in the sesh export.
-		slot_a_discord_username:
-			handleBySlotId?.get(m.slot_a_id)?.discord_username ?? null,
-		slot_a_discord_id: handleBySlotId?.get(m.slot_a_id)?.discord_id ?? null,
 		slot_b_display_name: slotBIdentity?.display_name ?? m.slot_b_username,
 		slot_b_user_id: m.slot_b_user_id,
 		slot_b_avatar_url: slotBIdentity?.avatar_url ?? null,
 		slot_b_nation: slotBNation,
-		slot_b_discord_username: m.slot_b_id
-			? (handleBySlotId?.get(m.slot_b_id)?.discord_username ?? null)
-			: null,
-		slot_b_discord_id: m.slot_b_id
-			? (handleBySlotId?.get(m.slot_b_id)?.discord_id ?? null)
-			: null,
+		// Admin-only — raw handle + numeric Discord id of each side's live slot
+		// occupant (null for non-admin viewers of the per-tournament endpoints,
+		// for pending/bye sides, and for unclaimed slots with no linked account).
+		// The handle seeds the substitute editor; the id backs `<@id>` mentions in
+		// the sesh export.
+		//
+		// The four keys are present (as nulls) whenever a caller supplies a map at
+		// all — the per-tournament reads pass an empty one for non-admins, which is
+		// their established public shape. A caller that passes NO map gets the keys
+		// OMITTED instead: the public per-user endpoint takes that path so these
+		// admin-only fields are absent by construction rather than null-valued,
+		// which would leave them in its contract for a later change to quietly
+		// populate (the #110 leak shape).
+		...(handleBySlotId
+			? {
+					slot_a_discord_username:
+						handleBySlotId.get(m.slot_a_id)?.discord_username ?? null,
+					slot_a_discord_id:
+						handleBySlotId.get(m.slot_a_id)?.discord_id ?? null,
+					slot_b_discord_username: m.slot_b_id
+						? (handleBySlotId.get(m.slot_b_id)?.discord_username ?? null)
+						: null,
+					slot_b_discord_id: m.slot_b_id
+						? (handleBySlotId.get(m.slot_b_id)?.discord_id ?? null)
+						: null,
+				}
+			: {}),
 		// Scheduled parts (migration 0029). Each carries its own time, caster
 		// (rendered by display name when linked, else caster_name), and stream
 		// links. An empty array means the match has no scheduled sittings yet.
@@ -1593,14 +1865,17 @@ export interface UserIdentity {
 }
 
 // Resolve avatar URL + display name for every distinct snapshot user_id
-// referenced by the supplied matches. One batched SELECT per call. Returns a
-// Map keyed by user_id; missing rows map to nothing (callers fall back), a
-// NULL discord_id maps to a null avatar (placeholder on the client). The
-// snapshot pins WHO played (user_id, substitution-proof); presentation —
-// avatar and display name — follows that user's current profile, matching
-// how the rest of the site renders people. For pending matches (snapshot
-// user_ids are NULL) callers can pass an empty match list — no users → no
-// query.
+// referenced by the supplied matches. Chunked at CHUNK_SIZE like every other
+// IN (…) read here — the distinct-user count is bounded by one tournament's
+// roster for the per-tournament callers, but the per-user read
+// (handleUserTournaments) spans every tournament a player has ever been in, so
+// it can exceed D1's ~100 bind-parameter cap. Returns a Map keyed by user_id;
+// missing rows map to nothing (callers fall back), a NULL discord_id maps to a
+// null avatar (placeholder on the client). The snapshot pins WHO played
+// (user_id, substitution-proof); presentation — avatar and display name —
+// follows that user's current profile, matching how the rest of the site
+// renders people. For pending matches (snapshot user_ids are NULL) callers can
+// pass an empty match list — no users → no query.
 export async function loadUserIdentitiesForMatches(
 	env: TournamentEnv,
 	matches: MatchRow[],
@@ -1620,27 +1895,26 @@ export async function loadUserIdentitiesForMatches(
 		}
 	}
 	const map = new Map<string, UserIdentity>();
-	if (userIds.size === 0) return map;
-	const ids = [...userIds];
-	const placeholders = ids.map(() => "?").join(",");
-	const res = await env.SHARE_DB.prepare(
-		`SELECT user_id, discord_id, ${displayNameSql("users")} AS display_name, avatar_hash
-		 FROM users WHERE user_id IN (${placeholders})`,
-	)
-		.bind(...ids)
-		.all<{
-			user_id: string;
-			discord_id: string | null;
-			display_name: string | null;
-			avatar_hash: string | null;
-		}>();
-	for (const row of res.results ?? []) {
-		map.set(row.user_id, {
-			avatar_url: row.discord_id
-				? buildAvatarUrl(row.discord_id, row.avatar_hash)
-				: null,
-			display_name: row.display_name,
-		});
+	for (const ids of chunk([...userIds], CHUNK_SIZE)) {
+		const res = await env.SHARE_DB.prepare(
+			`SELECT user_id, discord_id, ${displayNameSql("users")} AS display_name, avatar_hash
+			 FROM users WHERE user_id IN (${ids.map(() => "?").join(",")})`,
+		)
+			.bind(...ids)
+			.all<{
+				user_id: string;
+				discord_id: string | null;
+				display_name: string | null;
+				avatar_hash: string | null;
+			}>();
+		for (const row of res.results ?? []) {
+			map.set(row.user_id, {
+				avatar_url: row.discord_id
+					? buildAvatarUrl(row.discord_id, row.avatar_hash)
+					: null,
+				display_name: row.display_name,
+			});
+		}
 	}
 	return map;
 }
@@ -1660,32 +1934,21 @@ interface AdminSlotIdentity {
 	discord_id: string | null;
 }
 
-async function loadMatchesWithRound(
-	env: TournamentEnv,
-	tournamentId: string,
-): Promise<MatchWithRound[]> {
-	const res = await env.SHARE_DB.prepare(
-		`SELECT
-		   m.match_id, m.round_id, m.slot_a_id, m.slot_b_id, m.map_pool_id, m.map_script,
-		   m.pick_order_winner_slot_id, m.status, m.winner_slot_id, m.game_id,
-		   m.reported_by_user_id, m.reported_at, m.notes,
-		   m.slot_a_player_index, m.slot_b_player_index, m.match_index,
-		   m.slot_a_username, m.slot_a_user_id, m.slot_b_username, m.slot_b_user_id,
-		   m.parts,
-		   m.parts_rev,
-		   m.match_number,
-		   m.created_at,
+// The match + round column list every match-with-round read selects, and the
+// row → { match, round } split that goes with it. One definition, because the
+// per-tournament read below and the per-user read (handleUserTournaments) differ
+// only in their WHERE/ORDER BY — a second copy of 30 column names is how the two
+// drift when a column is added to MatchRow.
+const MATCH_WITH_ROUND_COLUMNS = `${MATCH_COLUMNS_M},
 		   r.tournament_id, r.phase, r.division, r.round_number,
 		   r.status AS round_status,
-		   r.generated_at, r.started_at, r.completed_at
-		 FROM tournament_matches m
-		 JOIN tournament_rounds r ON r.round_id = m.round_id
-		 WHERE r.tournament_id = ?
-		 ORDER BY r.phase, r.division, r.round_number, m.match_index, m.created_at`,
-	)
-		.bind(tournamentId)
-		.all<MatchRow & RoundRow & { round_status: RoundRow["status"] }>();
-	return (res.results ?? []).map((row) => ({
+		   r.generated_at, r.started_at, r.completed_at`;
+
+type MatchWithRoundRow = MatchRow &
+	RoundRow & { round_status: RoundRow["status"] };
+
+function splitMatchWithRound(row: MatchWithRoundRow): MatchWithRound {
+	return {
 		match: {
 			match_id: row.match_id,
 			round_id: row.round_id,
@@ -1723,7 +1986,23 @@ async function loadMatchesWithRound(
 			started_at: row.started_at,
 			completed_at: row.completed_at,
 		},
-	}));
+	};
+}
+
+async function loadMatchesWithRound(
+	env: TournamentEnv,
+	tournamentId: string,
+): Promise<MatchWithRound[]> {
+	const res = await env.SHARE_DB.prepare(
+		`SELECT ${MATCH_WITH_ROUND_COLUMNS}
+		 FROM tournament_matches m
+		 JOIN tournament_rounds r ON r.round_id = m.round_id
+		 WHERE r.tournament_id = ?
+		 ORDER BY r.phase, r.division, r.round_number, m.match_index, m.created_at`,
+	)
+		.bind(tournamentId)
+		.all<MatchWithRoundRow>();
+	return (res.results ?? []).map(splitMatchWithRound);
 }
 
 function clampInt(

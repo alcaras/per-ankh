@@ -1,4 +1,5 @@
 import type {
+	MapPoolEntry,
 	TournamentMatch,
 	TournamentMatchPart,
 	TournamentMatchPartCaster,
@@ -52,6 +53,25 @@ export function matchSortInstant(m: TournamentMatch): string | null {
 		if (latest === null || p.scheduled_at > latest) latest = p.scheduled_at;
 	}
 	return latest;
+}
+
+// ─── Tournament context ──────────────────────────────────────────────
+//
+// Everything the table (MatchTable + CastControls) reads off the tournament a
+// row belongs to: the two division names (matchBracketLabel), the map pool (the
+// map label under the matchup), and the id the inline cast controls post to.
+//
+// Declared here rather than beside the wire types because it's the table's prop
+// contract, not any endpoint's response: satisfied structurally, so the
+// per-tournament surfaces keep passing their whole `TournamentDetail` while a
+// surface spanning tournaments (the player profile's Tournaments tab) hands each
+// group its own compact context. Adding a field here is a change to what the
+// table needs — it must not double as an edit to a documented response shape.
+export interface MatchTableTournament {
+	tournament_id: string;
+	division_a_name: string;
+	division_b_name: string;
+	map_pool: MapPoolEntry[];
 }
 
 // ─── Rows ────────────────────────────────────────────────────────────
@@ -152,6 +172,34 @@ export function rowInstant(row: MatchRow): string | null {
 export interface MatchSortContext {
 	slotLabels: Record<string, string>;
 }
+
+// ─── Table chrome ────────────────────────────────────────────────────
+//
+// The framed-box table treatment MatchTable renders with: a raised header bar
+// (surface-raised-hover, deliberately *lighter* than both zebra tones so it
+// reads as chrome and never blends into a stripe — the page itself is the
+// ramp's darkest tone), a contiguous zebra body with no per-cell rounding, and
+// transparent cells so the row's stripe shows through.
+//
+// Named here, next to the column registry that decides what goes in them, so
+// the table's structure and its chrome are edited in one place. MatchTable is
+// the only consumer and layers its sticky/sortable modifiers on top.
+export const MATCH_TABLE_TH_CLASS =
+	"select-none whitespace-nowrap border-b border-black bg-surface-raised-hover px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-100 shadow-lg";
+
+// align-top so the multi-line Match/Time/Casters cells don't vertically center
+// the shorter cells beside them.
+export const MATCH_TABLE_TD_CLASS =
+	"whitespace-nowrap px-3 py-2 text-left align-top text-tan";
+
+// The <tr> carries the stripe + hover background (the cells stay transparent).
+export const MATCH_TABLE_ROW_CLASS =
+	"transition-colors odd:bg-surface even:bg-surface-raised hover:bg-surface-hover";
+
+// The framed box the table sits in — rounded border on the wrapper, scroll
+// contained so a wide table never widens the page.
+export const MATCH_TABLE_FRAME_CLASS =
+	"overflow-x-auto rounded-lg border border-black";
 
 // Column identity + sort value only; the bespoke cell markup (crests, avatars,
 // caster chips, stream links, action buttons) lives in MatchTable.svelte, keyed

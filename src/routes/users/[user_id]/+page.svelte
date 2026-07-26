@@ -12,6 +12,7 @@
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import Breadcrumb, { type Crumb } from "$lib/Breadcrumb.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import UserTournamentsTab from "$lib/tournament/UserTournamentsTab.svelte";
 	import GamesTable from "$lib/users/GamesTable.svelte";
 	import OverviewTab from "$lib/users/OverviewTab.svelte";
 	import ScopeRow from "$lib/users/ScopeRow.svelte";
@@ -182,14 +183,19 @@
 							<Tabs.Trigger value="games" class={triggerClass}
 								>Games</Tabs.Trigger
 							>
-							<Tabs.Trigger value="stats" class={triggerClass}
-								>Stats</Tabs.Trigger
-							>
+							{#if data.isTournamentParticipant}
+								<Tabs.Trigger value="tournaments" class={triggerClass}
+									>Tournaments</Tabs.Trigger
+								>
+							{/if}
 							{#if data.hasChannels}
 								<Tabs.Trigger value="videos" class={triggerClass}
 									>Videos</Tabs.Trigger
 								>
 							{/if}
+							<Tabs.Trigger value="stats" class={triggerClass}
+								>Stats</Tabs.Trigger
+							>
 						</Tabs.List>
 
 						<Tabs.Content value="overview">
@@ -213,15 +219,25 @@
 							{/if}
 						</Tabs.Content>
 
-						<Tabs.Content value="stats">
-							<StatsView {bundle} />
-						</Tabs.Content>
+						{#if data.isTournamentParticipant}
+							<Tabs.Content value="tournaments">
+								<!-- Payload loads lazily with the tab (mirrors Videos), so it's
+								     null until then. -->
+								{#if data.tournamentRecord}
+									<UserTournamentsTab record={data.tournamentRecord} />
+								{/if}
+							</Tabs.Content>
+						{/if}
 
 						{#if data.hasChannels}
 							<Tabs.Content value="videos">
 								<VideosTab videos={data.videos} />
 							</Tabs.Content>
 						{/if}
+
+						<Tabs.Content value="stats">
+							<StatsView {bundle} />
+						</Tabs.Content>
 					</div>
 				</Tabs.Root>
 			</div>

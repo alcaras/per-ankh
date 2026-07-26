@@ -1,16 +1,24 @@
 <script lang="ts">
-	// Tournament stats page. Three tabs — Players (standings), Nations (nation
-	// win rate), Casters (caster leaderboard) — spanning both stats subsystems:
-	// Plane A tournament-native (standings + casters) and Plane B1 (the
-	// ChartBundle pointed at the tournament's games). Renders the charts directly
-	// (no chart registry) through the shared ChartContainer, reusing the chart
-	// theme/grid; the tab bar mirrors the user-stats chip tabs.
+	// Tournament stats page. Six tabs — Players (standings + nation picks),
+	// Nations (nation win rate), Leaders (starting archetype and traits),
+	// Wonders (build timing and builder win rate), Yields (per-turn curves) and
+	// Casters (caster leaderboard) — spanning both stats
+	// subsystems: Plane A tournament-native (standings + casters) and Plane B1
+	// (the ChartBundle pointed at the tournament's games). Renders the charts
+	// directly (no chart registry) through the shared ChartContainer, reusing the
+	// chart theme/grid; the tab bar mirrors the user-stats chip tabs.
 	import { Tabs } from "bits-ui";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
+	import {
+		LEADER_EMPTY_MESSAGE,
+		startingArchetypeWinLossOption,
+		startingTraitWinLossOption,
+		visibleTraitRowCount,
+	} from "$lib/stats/charts/leaders";
 	import { nationWinLossStackedOption } from "$lib/stats/charts/nations";
 	import {
 		WONDER_EMPTY_MESSAGE,
@@ -41,6 +49,8 @@
 	const casters = $derived(data.competition.caster_leaderboard);
 	const playerPicks = $derived(data.competition.player_picks);
 	const nationWinRate = $derived(data.games.nationWinRate);
+	const startingArchetypes = $derived(data.games.startingArchetypeWinRate);
+	const startingTraits = $derived(data.games.startingTraitWinRate);
 	const wonders = $derived(data.games.wonderStats);
 
 	// Circular avatar images for the players/casters axis labels, rasterized
@@ -80,7 +90,14 @@
 	// The active tab lives in ?category (controlled: value derived from the
 	// URL, change → goto), mirroring the user-stats subtabs (StatsView) so a
 	// tab is deep-linkable and survives refresh.
-	const TABS = ["players", "nations", "wonders", "yields", "casters"] as const;
+	const TABS = [
+		"players",
+		"nations",
+		"leaders",
+		"wonders",
+		"yields",
+		"casters",
+	] as const;
 	type StatsTab = (typeof TABS)[number];
 	const tab = $derived.by<StatsTab>(() => {
 		const fromUrl = page.url.searchParams.get("category");
@@ -111,6 +128,7 @@
 		>
 			<Tabs.Trigger value="players" class={triggerClass}>Players</Tabs.Trigger>
 			<Tabs.Trigger value="nations" class={triggerClass}>Nations</Tabs.Trigger>
+			<Tabs.Trigger value="leaders" class={triggerClass}>Leaders</Tabs.Trigger>
 			<Tabs.Trigger value="wonders" class={triggerClass}>Wonders</Tabs.Trigger>
 			<Tabs.Trigger value="yields" class={triggerClass}>Yields</Tabs.Trigger>
 			<Tabs.Trigger value="casters" class={triggerClass}>Casters</Tabs.Trigger>
@@ -162,6 +180,43 @@
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
 						No completed games yet.
+					</p>
+				{/if}
+			</section>
+		</Tabs.Content>
+
+		<!-- Leaders — the starting leader each player was dealt (Plane B1):
+		     archetype and the traits they began with, each as games played
+		     split by outcome. -->
+		<Tabs.Content value="leaders">
+			<section class="mb-8">
+				<h2 class="mb-3 text-base font-bold text-tan">Starting archetype</h2>
+				{#if startingArchetypes.length > 0}
+					<ChartContainer
+						option={startingArchetypeWinLossOption(data.games)}
+						height={barChartHeight(startingArchetypes.length)}
+						title="Starting archetype"
+					/>
+				{:else}
+					<p class="p-8 text-center italic text-tan opacity-60">
+						{LEADER_EMPTY_MESSAGE}
+					</p>
+				{/if}
+			</section>
+
+			<section class="mb-8">
+				<h2 class="mb-3 text-base font-bold text-tan">
+					Starting leader traits
+				</h2>
+				{#if startingTraits.length > 0}
+					<ChartContainer
+						option={startingTraitWinLossOption(data.games)}
+						height={barChartHeight(visibleTraitRowCount(data.games))}
+						title="Starting leader traits"
+					/>
+				{:else}
+					<p class="p-8 text-center italic text-tan opacity-60">
+						{LEADER_EMPTY_MESSAGE}
 					</p>
 				{/if}
 			</section>

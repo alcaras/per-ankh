@@ -175,7 +175,13 @@ export function derivePlayerSummary(
 		const traits = blob.character_traits as CharacterTraitRow[];
 		const startTraits: string[] = [];
 		for (const t of traits) {
-			if (t.character_xml_id === startingRuler.xml_id && t.acquired_turn <= 0) {
+			// The game stamps a starting leader's traits — their archetype plus
+			// the personality trait(s) they begin with — on turn 1, not turn 0:
+			// characters are born pre-game (birth_turn is negative) but no trait
+			// row exists before the first played turn. The original `<= 0` bound
+			// therefore matched nothing, leaving this column empty for every row.
+			// Traits acquired later (events, aging) have higher turns and stay out.
+			if (t.character_xml_id === startingRuler.xml_id && t.acquired_turn <= 1) {
 				startTraits.push(t.trait_name);
 			}
 		}

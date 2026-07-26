@@ -9,7 +9,6 @@
 	//
 	// Columns are keyed off the shared registry (matches-table.ts).
 	import type {
-		TournamentDetail,
 		TournamentMatch,
 		TournamentMatchPartStream,
 		UserMe,
@@ -22,6 +21,7 @@
 		matchSlotAvatarUrl,
 		matchSlotDisplayName,
 		matchSlotNation,
+		matchSlotOutcome,
 	} from "$lib/tournament/match-occupant";
 	import {
 		atlasMapUrl,
@@ -37,8 +37,13 @@
 		rowCasters,
 		rowStreams,
 		rowIsPendingSitting,
+		MATCH_TABLE_FRAME_CLASS,
+		MATCH_TABLE_ROW_CLASS,
+		MATCH_TABLE_TD_CLASS,
+		MATCH_TABLE_TH_CLASS,
 		type MatchColumn,
 		type MatchRow,
+		type MatchTableTournament,
 	} from "$lib/tournament/matches-table";
 	import type { ScheduleZone } from "$lib/tournament/schedule";
 	import {
@@ -66,7 +71,10 @@
 		columns: MatchColumn[];
 		rows: MatchRow[];
 		zone: ScheduleZone;
-		tournament: TournamentDetail;
+		// Only the four fields the cells (and the cast controls) actually read —
+		// not a whole TournamentDetail, so a cross-tournament surface can group
+		// rows and hand each group its own compact context.
+		tournament: MatchTableTournament;
 		// The signed-in viewer (null when anonymous), for the inline cast controls
 		// in the Casters & Streams cell. Reads only; anonymous viewers still see the
 		// "needs a caster" flag but no action buttons.
@@ -105,28 +113,24 @@
 			: row.match.match_id;
 	}
 
-	// The table sits in a framed box (rounded border on the wrapper below); rows
-	// are a contiguous zebra — no per-cell rounding or gaps. The header is a
-	// raised bar (surface-raised-hover), deliberately *lighter* than both zebra
-	// tones (surface / surface-raised) so it reads as chrome and never blends into
-	// a stripe: the page itself is the ramp's darkest tone (blue-gray), so a dark
-	// recessed header would hug it. The row <tr> carries the stripe + hover
-	// background; the cells stay transparent so it shows through.
+	// The shared framed-box treatment (documented in matches-table.ts) plus this
+	// component's two modifiers: a sticky header for the full-page mount, and the
+	// clickable affordance on a sortable column.
 	function thClass(sortable: boolean): string {
 		const sticky = stickyHeader ? "sticky -top-4 z-10 " : "";
 		const s = sortable
 			? "cursor-pointer transition-colors hover:text-orange "
 			: "";
-		return `${sticky}${s}select-none whitespace-nowrap border-b border-black bg-surface-raised-hover px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-100 shadow-lg`;
+		return `${sticky}${s}${MATCH_TABLE_TH_CLASS}`;
 	}
-
-	// align-top so the multi-line Match/Time/Casters cells don't vertically center
-	// the shorter cells beside them.
-	const tdClass = "whitespace-nowrap px-3 py-2 text-left align-top text-tan";
 </script>
 
 <!-- One player's cell: crest + avatar + name. Side B collapses to "Bye" when
-     there's no opponent slot; an unresolved side-A feeder reads "TBD". -->
+     there's no opponent slot; an unresolved side-A feeder reads "TBD".
+     A decided match emphasizes its winner (bold orange, as the Swiss and
+     championship bracket cards already do) and dims the loser — the outcome
+     lives here rather than in a `result` column, which would be
+     perspective-dependent ("W" for whom?) where every other column is not. -->
 {#snippet playerCell(m: TournamentMatch, side: "a" | "b")}
 	{@const slotId = side === "a" ? m.slot_a_id : m.slot_b_id}
 	{#if slotId === null}
@@ -134,7 +138,11 @@
 	{:else}
 		{@const nation = matchSlotNation(m, side)}
 		{@const name = matchSlotDisplayName(m, side, slotLabels) ?? "—"}
-		<span class="inline-flex min-w-0 items-center gap-1">
+		{@const outcome = matchSlotOutcome(m, side)}
+		<span
+			class="inline-flex min-w-0 items-center gap-1"
+			class:opacity-60={outcome === "lost"}
+		>
 			{#if nation}
 				<SpriteIcon
 					category="crests"
@@ -147,7 +155,11 @@
 				avatarUrl={matchSlotAvatarUrl(m, side, slotAvatars)}
 				size={16}
 			/>
-			<span class="truncate text-bright">{name}</span>
+			<span
+				class="truncate {outcome === 'won'
+					? 'font-bold text-orange'
+					: 'text-bright'}">{name}</span
+			>
 		</span>
 	{/if}
 {/snippet}
@@ -187,7 +199,7 @@
 	<!-- eslint-enable svelte/no-navigation-without-resolve -->
 {/snippet}
 
-<div class="overflow-x-auto rounded-lg border border-black">
+<div class={MATCH_TABLE_FRAME_CLASS}>
 	<table class="w-full border-collapse text-sm">
 		<thead>
 			<tr>
@@ -213,13 +225,11 @@
 			{#each rows as row (rowKey(row))}
 				{@const m = row.match}
 				<tr
-					class="{onRowClick
-						? 'cursor-pointer '
-						: ''}transition-colors odd:bg-surface even:bg-surface-raised hover:bg-surface-hover"
+					class="{onRowClick ? 'cursor-pointer ' : ''}{MATCH_TABLE_ROW_CLASS}"
 					onclick={onRowClick ? (e) => onRowClick(m, e) : undefined}
 				>
 					{#each columns as column (column.key)}
-						<td class={tdClass}>
+						<td class={MATCH_TABLE_TD_CLASS}>
 							{#if column.key === "matchup"}
 								{@const bracketLabel = matchBracketLabel(tournament, m)}
 								{@const entry = poolEntryById(

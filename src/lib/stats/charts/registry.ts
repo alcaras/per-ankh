@@ -6,11 +6,13 @@
 
 import type { ChartSpec, StatsCategory } from "../types";
 import { barChartHeight } from "./helpers";
+import { LEADER_EMPTY_MESSAGE, visibleTraitRowCount } from "./leaders";
 import { WONDER_EMPTY_MESSAGE } from "./wonders";
 
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
 	{ id: "yields", label: "Yields" },
 	{ id: "nations", label: "Nations" },
+	{ id: "leaders", label: "Leaders" },
 	{ id: "wonders", label: "Wonders" },
 	{ id: "families", label: "Families" },
 	{ id: "laws", label: "Laws" },
@@ -33,6 +35,25 @@ export const CHART_SPECS: ChartSpec[] = [
 		title: "Average final points",
 		hasData: (b) => b.nationAvgPoints.length > 0,
 		height: (b) => barChartHeight(b.nationAvgPoints.length),
+	},
+	// Leaders — the starting leader's roll: their archetype, and the traits
+	// they began the game with. Both bars carry games (length) and wins
+	// (split), so each answers distribution and outcome at once.
+	{
+		id: "starting-archetype-winloss",
+		category: "leaders",
+		title: "Starting archetype",
+		hasData: (b) => b.startingArchetypeWinRate.length > 0,
+		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		height: (b) => barChartHeight(b.startingArchetypeWinRate.length),
+	},
+	{
+		id: "starting-trait-winloss",
+		category: "leaders",
+		title: "Starting leader traits",
+		hasData: (b) => b.startingTraitWinRate.length > 0,
+		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		height: (b) => barChartHeight(visibleTraitRowCount(b)),
 	},
 	// Wonders — one row per wonder on a turn axis: when it lands, how its
 	// builders' games ended, and how often the players who could build it did.

@@ -295,9 +295,9 @@ Public profile + all-time summary.
 
 - **Auth:** Public (owner extras) — the owner's summary includes private games; others/anon see public-only.
 - **Path:** `user_id` (21-char).
-- **Response 200:** `{ user_id, display_name, avatar_url, summary: { total_games, win_rate: number|null, favorite_nation: string|null, favorite_day_of_week: number|null }, channels: { platform, channel_url }[] }`.
+- **Response 200:** `{ user_id, display_name, avatar_url, summary: { total_games, win_rate: number|null, favorite_nation: string|null, favorite_day_of_week: number|null }, channels: { platform, channel_url }[], tournament_participant: boolean }`.
 - **Errors:** `404 NOT_FOUND`.
-- **Notes:** Summary is all-time over all saves (ignores any scope selector). `channels` are the user's linked video/stream channels (public) — drives whether the profile shows the "Videos" tab.
+- **Notes:** Summary is all-time over all saves (ignores any scope selector). `channels` are the user's linked video/stream channels (public) — drives whether the profile shows the "Videos" tab. `tournament_participant` plays the same role for the "Tournaments" tab: true when the user has a match attributable to them (same rule `GET /v1/users/:user_id/tournaments` uses — report-time snapshot for a decided match, live slot per side otherwise, byes excluded) **or** has cast a match sitting, so a dedicated caster who never plays still gets the tab. Holding a slot is deliberately not the test: a seat before round one renders nothing, and a substituted-out player holds no slot yet keeps every match they played. Both are flags only; the tabs' payloads load lazily from their own endpoints.
 
 ### `GET /v1/users/:user_id/stats`
 User-corpus aggregate stats bundle.
@@ -305,7 +305,7 @@ User-corpus aggregate stats bundle.
 - **Auth:** Public (owner extras) — owner (`self`) corpus includes private games; visitor/anon forced to public.
 - **Path:** `user_id` (21-char).
 - **Query:** `scope` (default `all`; `public`|`vs_ai`|`mp`|`tournament`|`<collection_id>`; collection and `public` narrowing are owner-only).
-- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, wonder build/timing stats, yield curves, law/tech timing…) plus user-only `win_rate` and `games_with_outcome`.
+- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, wonder build/timing stats, yield curves, law/tech timing…) plus user-only `win_rate` and `games_with_outcome`.
 - **Errors:** `400 INVALID_USER_ID`, `404 NOT_FOUND`.
 - **Notes:** KV-cached, keyed on `{ user_id, viewerScope, scope, parser_version }`.
 
@@ -316,6 +316,15 @@ Recent videos merged across the user's linked channels (newest first) — feeds 
 - **Path:** `user_id` (21-char).
 - **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform }[] }` (empty when the user has no linked channels).
 - **Notes:** Per-channel KV cache, stale-while-revalidate (serves cached instantly, refreshes in the background past a 1h soft TTL). YouTube videos come from the unauthenticated channel RSS feed.
+
+### `GET /v1/users/:user_id/tournaments`
+One player's whole tournament record — played + upcoming matches, and cast appearances — for the profile "Tournaments" tab.
+
+- **Auth:** Public — tournament reads already are, tournament-linked saves are forced public, and casters are already credited publicly on the tournament stats page.
+- **Path:** `user_id` (21-char).
+- **Response 200:** `{ user_id, tournaments: [{ tournament_id, slug, name, status, signups_open, division_a_name, division_b_name, map_pool }], matches: TournamentMatch[], casts: (TournamentMatch & { part_id })[], slot_labels, slot_avatars }`.
+- **Errors:** `429 RATE_LIMIT_TOURNAMENT_VIEW` (shares the per-IP tournament-view budget).
+- **Notes:** Match attribution prefers the report-time occupant snapshot for decided matches, so a substitution never reassigns a played match to the substitute; it falls through to the live slot per side when the match is still pending **or** when that side's snapshot is null (the occupant hadn't claimed their slot at report time), matching the render layer's rule. `tournaments` is the index both sections group under, carrying only the per-tournament context the shared match table renders from — a tournament the player holds a seat in but has no match or cast for does not appear, so a setup-phase tournament (which has no rounds) never does. The setup gate still applies, same as every per-tournament read. `status` + `signups_open` are the pair every tournament surface renders its status chip from. Byes are excluded. The four admin-only `slot_a/b_discord_*` fields are **absent** from every match here, not null. `slot_labels`/`slot_avatars` carry live per-slot identity, which the pending (upcoming) rows render from.
 
 ### `GET /v1/creator-videos`
 Cross-creator home feed — the newest uploads across all users' linked channels, merged newest-first for the home page's "Latest from creators" strip.
@@ -645,12 +654,6 @@ Tournaments you have a slot in.
 Tournaments you administer.
 
 - **Response 200:** `{ tournaments: [{ tournament_id, slug, name, status }] }`.
-- **Errors:** `401 UNAUTHORIZED`.
-
-### `GET /v1/users/me/matches`
-Your matches across all tournaments.
-
-- **Response 200:** `{ matches: [...] }` (up to 200; each row carries match, slot, round, and tournament identity fields).
 - **Errors:** `401 UNAUTHORIZED`.
 
 ### `POST /v1/users/me/tournaments/:id/dismiss-banner`

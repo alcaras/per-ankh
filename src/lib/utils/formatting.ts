@@ -454,3 +454,39 @@ export function formatRelativeToNow(iso: string | null | undefined): string {
 		return rtf.format(Math.round(diffMs / (30 * DAY)), "month");
 	return rtf.format(Math.round(diffMs / (365 * DAY)), "year");
 }
+
+// ─── Character archetypes ────────────────────────────────────────────
+//
+// Old World models a character's archetype as a trait flagged bArchetype,
+// stored under the trait's own id with an _ARCHETYPE suffix
+// (TRAIT_SCHEMER_ARCHETYPE). Three things follow from that shape, and all
+// three had grown their own copy of the suffix rule: the display name drops
+// the suffix, the sprite ships under the bare trait id, and a character's
+// trait list has to exclude the archetype so it isn't shown twice.
+//
+// Lives here rather than beside its callers because both the game-detail view
+// (which the frozen web/ viewer symlinks) and the stats charts need it, and
+// this module is already on both sides of that boundary.
+//
+// The Worker keeps its own copy of the suffix rule (cloud/src/stats/
+// aggregate.ts) — cloud/ is a separate package with no shared module.
+
+const ARCHETYPE_SUFFIX = /_ARCHETYPE$/;
+
+/** True for the archetype trait itself, e.g. TRAIT_SCHEMER_ARCHETYPE. */
+export function isArchetypeTrait(traitName: string): boolean {
+	return ARCHETYPE_SUFFIX.test(traitName);
+}
+
+/** Display name for an archetype: TRAIT_SCHEMER_ARCHETYPE → "Schemer". */
+export function formatArchetype(archetype: string): string {
+	return formatEnum(archetype.replace(ARCHETYPE_SUFFIX, ""), "TRAIT_");
+}
+
+/**
+ * Sprite name for an archetype's glyph: TRAIT_SCHEMER_ARCHETYPE →
+ * TRAIT_SCHEMER, which is how the art ships in the `traits` category.
+ */
+export function archetypeSpriteKey(archetype: string): string {
+	return archetype.replace(ARCHETYPE_SUFFIX, "");
+}

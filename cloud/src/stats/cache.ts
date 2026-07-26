@@ -29,8 +29,9 @@ import type { UserScope, UserStatsScope } from "./types";
 // predates the field and blow up on it (the bundle types declare every
 // field required, so consumers dereference them directly).
 //
-// 6: per-wonder build rate, builder win rate, and build-turn distribution.
-export const BUNDLE_SCHEMA_VERSION = 6;
+// 6: starting-leader archetype + trait win rates.
+// 7: per-wonder build rate, builder win rate, and build-turn distribution.
+export const BUNDLE_SCHEMA_VERSION = 7;
 
 export interface StatsCacheEnv extends SessionEnv {
 	// SESSIONS_KV is the existing KV binding; this module reuses it
