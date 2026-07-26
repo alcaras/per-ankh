@@ -6,7 +6,11 @@
 
 import type { ChartSpec, StatsCategory } from "../types";
 import { barChartHeight } from "./helpers";
-import { LEADER_EMPTY_MESSAGE, visibleTraitRowCount } from "./leaders";
+import {
+	ARCHETYPE_EMPTY_MESSAGE,
+	TRAIT_EMPTY_MESSAGE,
+	visibleTraitRowCount,
+} from "./leaders";
 import { WONDER_EMPTY_MESSAGE } from "./wonders";
 
 export const CATEGORIES: Array<{ id: StatsCategory; label: string }> = [
@@ -44,7 +48,7 @@ export const CHART_SPECS: ChartSpec[] = [
 		category: "leaders",
 		title: "Starting archetype",
 		hasData: (b) => b.startingArchetypeWinRate.length > 0,
-		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		emptyMessage: () => ARCHETYPE_EMPTY_MESSAGE,
 		height: (b) => barChartHeight(b.startingArchetypeWinRate.length),
 	},
 	{
@@ -52,7 +56,7 @@ export const CHART_SPECS: ChartSpec[] = [
 		category: "leaders",
 		title: "Starting leader traits",
 		hasData: (b) => b.startingTraitWinRate.length > 0,
-		emptyMessage: () => LEADER_EMPTY_MESSAGE,
+		emptyMessage: () => TRAIT_EMPTY_MESSAGE,
 		height: (b) => barChartHeight(visibleTraitRowCount(b)),
 	},
 	// Wonders — one row per wonder on a turn axis: when it lands, how its

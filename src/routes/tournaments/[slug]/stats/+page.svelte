@@ -14,7 +14,8 @@
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
 	import {
-		LEADER_EMPTY_MESSAGE,
+		ARCHETYPE_EMPTY_MESSAGE,
+		TRAIT_EMPTY_MESSAGE,
 		startingArchetypeWinLossOption,
 		startingTraitWinLossOption,
 		visibleTraitRowCount,
@@ -199,7 +200,7 @@
 					/>
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
-						{LEADER_EMPTY_MESSAGE}
+						{ARCHETYPE_EMPTY_MESSAGE}
 					</p>
 				{/if}
 			</section>
@@ -216,7 +217,7 @@
 					/>
 				{:else}
 					<p class="p-8 text-center italic text-tan opacity-60">
-						{LEADER_EMPTY_MESSAGE}
+						{TRAIT_EMPTY_MESSAGE}
 					</p>
 				{/if}
 			</section>
