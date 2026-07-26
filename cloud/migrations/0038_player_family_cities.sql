@@ -17,6 +17,11 @@
 --
 -- Backfilled for existing games by the admin reindex sweep, which rebuilds the
 -- derived tables from the stored blob.
+--
+-- No secondary index: the only reader (loadFamilyCities in
+-- stats/aggregate.ts) selects by game_id, which the primary key's leading
+-- column already serves. One on family_class would cost every upload and
+-- reindex a write for a lookup nothing performs.
 CREATE TABLE player_family_cities (
     game_id TEXT NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
     player_index INTEGER NOT NULL,
@@ -25,5 +30,3 @@ CREATE TABLE player_family_cities (
     first_founded_turn INTEGER,
     PRIMARY KEY (game_id, player_index, family_class)
 );
-
-CREATE INDEX idx_family_cities_class ON player_family_cities(family_class);

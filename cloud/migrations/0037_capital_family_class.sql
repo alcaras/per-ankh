@@ -12,7 +12,8 @@
 -- a pre-2.6.0 blob whose cities carry no family class). Backfilled for
 -- existing rows by the admin reindex sweep, which rebuilds player_summaries
 -- from the stored blob.
+--
+-- Deliberately unindexed: the stats layer selects player_summaries by game_id
+-- and buckets by this column in JS (loadBaseRows / buildChartBundle), so an
+-- index on it would be write cost on every upload and reindex for no read.
 ALTER TABLE player_summaries ADD COLUMN capital_family_class TEXT;
-
-CREATE INDEX idx_summaries_capital_family
-    ON player_summaries(capital_family_class);
