@@ -48,6 +48,7 @@ import {
 	derivePlayerSummary,
 } from "./derive-player-summary";
 import { invalidateStatsCache } from "./stats/cache";
+import { getBlobCached, invalidateBlob, readBlob } from "./blob-cache";
 
 export interface GamesEnv extends SessionEnv {
 	SHARE_BUCKET: R2Bucket;
@@ -1733,6 +1734,23 @@ export async function handleGameUpload(
 		return errorResponse("Storage write failed", 500, cors, "R2_FAILED");
 	}
 
+	// Evict the blob-cache entry under the version this re-import supersedes.
+	// The successful case doesn't need it — the games row below takes the new
+	// parser_version, which drifts the cache key so every POP misses. This is
+	// for the failure path documented in the D1 batch's catch: if that batch
+	// rolls back, the old row (and so the old key) stays live while R2 already
+	// holds the new bytes, and the entry would otherwise shadow them.
+	//
+	// Outside the R2 try above and non-fatal — the bytes are already written,
+	// so an eviction hiccup mustn't fail an upload that succeeded.
+	if (isReimport && existingParserVersion !== undefined) {
+		try {
+			await invalidateBlob(blobKey, existingParserVersion);
+		} catch (e) {
+			logError("blob_cache_invalidate_failed", e, { game_id: gameId });
+		}
+	}
+
 	// D1 inserts as a single transactional batch. On re-import the games
 	// row uses INSERT OR REPLACE — REPLACE fires ON DELETE CASCADE on the
 	// child tables (player_summaries, game_player_turn, tech_events,
@@ -2299,6 +2317,9 @@ export async function handleGameDetail(
 	gameId: string,
 	request: Request,
 	env: GamesEnv,
+	// Carries the blob-cache fill on waitUntil so it stays off the response
+	// path — same reason the video cache takes it.
+	ctx: ExecutionContext,
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 
@@ -2310,6 +2331,7 @@ export async function handleGameDetail(
 	// players-array fallback now that this query supplies a usable value.
 	const row = await env.SHARE_DB.prepare(
 		`SELECT g.user_id, g.is_public, g.display_name, g.user_won,
+		        g.parser_version,
 		        g.user_nation AS uploader_nation,
 		        COALESCE(g.user_nation, (
 		            SELECT ps.nation FROM player_summaries ps
@@ -2326,6 +2348,8 @@ export async function handleGameDetail(
 			user_id: string;
 			is_public: number;
 			display_name: string | null;
+			// Part of the blob cache key — see cacheKey in blob-cache.ts.
+			parser_version: string;
 			user_nation: string | null;
 			// Raw uploader choice (un-COALESCE'd) for the reparse round-trip;
 			// null = observer upload. Distinct from user_nation above, which
@@ -2387,14 +2411,21 @@ export async function handleGameDetail(
 		}
 	}
 
-	const obj = await env.SHARE_BUCKET.get(`games/${gameId}.json.gz`);
-	if (!obj) {
+	// Non-owner reads go through the per-POP blob cache (see blob-cache.ts):
+	// they're the repeat traffic, and they're the ones paying a full ENAM
+	// round trip on every view. Owners read R2 directly — their response is
+	// `private, no-store` so a reload right after a reparse must show the new
+	// bytes, which a cache entry filled in another POP would break.
+	const blobKey = `games/${gameId}.json.gz`;
+	const compressed = isOwner
+		? await readBlob(env.SHARE_BUCKET, blobKey)
+		: await getBlobCached(env.SHARE_BUCKET, blobKey, row.parser_version, ctx);
+	if (!compressed) {
 		return errorResponse("Blob missing", 404, cors, "BLOB_MISSING");
 	}
 
 	// Decompress in Worker — Cloudflare strips Content-Encoding from Worker
 	// responses, so we can't pass the compressed body through directly.
-	const compressed = await obj.arrayBuffer();
 	const decompressed = await decompressWithLimit(
 		compressed,
 		MAX_BLOB_DECOMPRESSED,
@@ -2800,6 +2831,11 @@ export async function handleGameDownload(
 		);
 	}
 
+	// Deliberately NOT routed through the blob cache (unlike the parsed blob in
+	// handleGameDetail). Caching means buffering or teeing the body, which
+	// costs the streaming guarantee below at the 50MB ceiling — and downloads
+	// are an explicit, rate-limited user action, not the repeat traffic the
+	// cache exists for. See cloud/src/blob-cache.ts.
 	const obj = await env.SHARE_BUCKET.get(`saves/${gameId}.zip`);
 	if (!obj) return errorResponse("Save missing", 404, cors, "BLOB_MISSING");
 

@@ -264,7 +264,8 @@ const ROUTES: RouteSpec[] = [
 		method: "GET",
 		match: { kind: "regex", regex: /^\/v1\/games\/([A-Za-z0-9_-]{21})$/ },
 		route: "GET /v1/games/:id",
-		handler: (r, e, m) => handleGameDetail(m![1], r, e),
+		// Passes ctx so the per-POP blob cache can fill in the background.
+		handler: (r, e, m, c) => handleGameDetail(m![1], r, e, c),
 	},
 	{
 		method: "GET",
