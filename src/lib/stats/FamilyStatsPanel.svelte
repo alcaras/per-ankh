@@ -8,11 +8,11 @@
 	import type { ChartBundleCore } from "./types";
 	import {
 		capitalFamilyWinLossOption,
+		familyClassRowCount,
 		familyNations,
 		familyNationPicksOption,
 	} from "./charts/families";
-	import { barChartHeight } from "./charts/helpers";
-	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
+	import { ALL_NATIONS, barChartHeight, nationLabel } from "./charts/helpers";
 
 	let { bundle }: { bundle: ChartBundleCore } = $props();
 
@@ -27,12 +27,19 @@
 	);
 </script>
 
+<!-- The two charts read from different columns (player_summaries
+     .capital_family_class, .family_classes) and go empty independently, so each
+     carries its own empty state rather than sharing one guard. -->
 {#if bundle.capitalFamilyWinRate.length > 0}
 	<ChartContainer
 		option={capitalFamilyWinLossOption(bundle)}
 		height={barChartHeight(bundle.capitalFamilyWinRate.length)}
 		title="Capital family"
 	/>
+{:else}
+	<p class="p-8 text-center italic text-brown">
+		No capital family data available.
+	</p>
 {/if}
 
 {#if nations.length === 0}
@@ -42,7 +49,7 @@
 
 	<ChartContainer
 		option={familyNationPicksOption(bundle, nation)}
-		height="400px"
+		height={barChartHeight(familyClassRowCount(bundle, nation))}
 		title={nationLabel(nation)}
 	/>
 {/if}

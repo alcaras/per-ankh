@@ -1,8 +1,9 @@
 <script lang="ts">
-	// Tournament stats page. Six tabs — Players (standings + nation picks),
+	// Tournament stats page. Seven tabs — Players (standings + nation picks),
 	// Nations (nation win rate), Leaders (starting archetype and traits),
-	// Wonders (build timing and builder win rate), Yields (per-turn curves) and
-	// Casters (caster leaderboard) — spanning both stats
+	// Wonders (build timing and builder win rate), Families (capital family +
+	// per-nation picks), Yields (per-turn curves) and Casters (caster
+	// leaderboard) — spanning both stats
 	// subsystems: Plane A tournament-native (standings + casters) and Plane B1
 	// (the ChartBundle pointed at the tournament's games). Renders the charts
 	// directly (no chart registry) through the shared ChartContainer, reusing the
@@ -54,7 +55,6 @@
 	const startingArchetypes = $derived(data.games.startingArchetypeWinRate);
 	const startingTraits = $derived(data.games.startingTraitWinRate);
 	const wonders = $derived(data.games.wonderStats);
-	const capitalFamilies = $derived(data.games.capitalFamilyWinRate);
 
 	// Circular avatar images for the players/casters axis labels, rasterized
 	// client-side from the Discord CDN (ECharts rich-text labels can't round
@@ -253,13 +253,7 @@
 		     panel the player page uses, pointed at the tournament's games
 		     (Plane B1). -->
 		<Tabs.Content value="families">
-			{#if capitalFamilies.length > 0 || data.games.familyByNation.length > 0}
-				<FamilyStatsPanel bundle={data.games} />
-			{:else}
-				<p class="p-8 text-center italic text-tan opacity-60">
-					No completed games yet.
-				</p>
-			{/if}
+			<FamilyStatsPanel bundle={data.games} />
 		</Tabs.Content>
 
 		<!-- Yields — per-turn yield curves across the tournament's games
