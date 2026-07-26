@@ -18,6 +18,7 @@ import type {
 	SlotRow,
 	TournamentRow,
 } from "../../src/tournament/data";
+import { SITE_ADMIN_DISCORD_ID } from "./admin-identity";
 import { expectOk } from "./assertions";
 import { request } from "./requests";
 
@@ -39,6 +40,9 @@ let discordIdCounter = 1_000_000_000_000_000_000n;
 
 export async function makeUser(opts?: {
 	discordUsername?: string;
+	// users.discord_id. Defaults to the generated counter; set it only to
+	// claim an identity the Worker treats specially — see makeSiteAdmin.
+	discordId?: string;
 	// users.display_name. Defaults to a value derived from — but distinct
 	// from — the handle, so an assertion (or handler) reading the wrong
 	// field fails loudly. Tournament labels are display names site-wide;
@@ -51,7 +55,7 @@ export async function makeUser(opts?: {
 }): Promise<TestUser> {
 	const userId = nanoid(21);
 	// Snowflake-looking but deterministic-enough for test debugging.
-	const discordId = String(discordIdCounter++);
+	const discordId = opts?.discordId ?? String(discordIdCounter++);
 	const discordUsername =
 		opts?.discordUsername ?? `user-${nanoid(8).toLowerCase()}`;
 	const displayName = opts?.displayName ?? `Display ${discordUsername}`;
@@ -80,6 +84,18 @@ export async function makeUser(opts?: {
 		await seedBetaUser(user);
 	}
 	return user;
+}
+
+// A user the Worker recognizes as the site admin, for the /v1/admin/*
+// endpoints (which 404 for everyone else). One per test file at most — a
+// second call collides on users.discord_id.
+export async function makeSiteAdmin(opts?: {
+	discordUsername?: string;
+}): Promise<TestUser> {
+	return makeUser({
+		discordUsername: opts?.discordUsername ?? "site-admin",
+		discordId: SITE_ADMIN_DISCORD_ID,
+	});
 }
 
 // Insert a tournament_beta_users row for the user. The allowlist now gates

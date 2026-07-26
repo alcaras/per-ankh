@@ -6,7 +6,7 @@
 //
 // StatsCorpus is the set of in-scope game ids the aggregator runs over.
 
-import { buildUserScopeWhere } from "../games-scope";
+import { buildUserScopeWhere, TOURNAMENT_GAME_IDS_SQL } from "../games-scope";
 import type { UserScope, UserStatsScope } from "./types";
 
 export interface ResolveEnv {
@@ -57,25 +57,20 @@ export async function resolveUserCorpus(
 	};
 }
 
-// Resolve a tournament's corpus: the saves linked to its completed matches.
-// The join through tournament_rounds is required — tournament_matches has no
-// tournament_id column. status='complete' is deliberate: a retro-edit can leave
-// a linked game on a forfeit match, and such a save is an aborted/adjudicated
-// game whose content would pollute the distributions (byes never carry a
-// game_id; the 0013 trigger nulls game_id on game deletion, so nothing dangles).
-// Unlike resolveUserCorpus there's no viewerScope/scope (tournaments are public)
-// and no existence probe — the handler has already loaded the tournament for the
-// setup gate.
+// Resolve a tournament's corpus: the saves linked to its completed matches,
+// via the shared TOURNAMENT_GAME_IDS_SQL (the admin sweep filters on the same
+// set). status='complete' is deliberate: a retro-edit can leave a linked game
+// on a forfeit match, and such a save is an aborted/adjudicated game whose
+// content would pollute the distributions (byes never carry a game_id; the 0013
+// trigger nulls game_id on game deletion, so nothing dangles). Unlike
+// resolveUserCorpus there's no viewerScope/scope (tournaments are public) and no
+// existence probe — the handler has already loaded the tournament for the setup
+// gate.
 export async function resolveTournamentCorpus(
 	env: ResolveEnv,
 	tournamentId: string,
 ): Promise<StatsCorpus> {
-	const rows = await env.SHARE_DB.prepare(
-		`SELECT DISTINCT m.game_id FROM tournament_matches m
-		 JOIN tournament_rounds r ON r.round_id = m.round_id
-		 WHERE r.tournament_id = ? AND m.game_id IS NOT NULL
-		   AND m.status = 'complete'`,
-	)
+	const rows = await env.SHARE_DB.prepare(TOURNAMENT_GAME_IDS_SQL)
 		.bind(tournamentId)
 		.all<{ game_id: string }>();
 

@@ -29,7 +29,12 @@ import {
 } from "./util";
 import { WONDER_CULTURE_PREREQ } from "./generated/wonders";
 import { sessionFromRequest } from "./session";
-import { buildUserScopeWhere, parseScopeParam } from "./games-scope";
+import {
+	buildAdminGameFilterWhere,
+	buildUserScopeWhere,
+	parseAdminGameFilter,
+	parseScopeParam,
+} from "./games-scope";
 import type { SessionData, SessionEnv } from "./session";
 import { isSiteAdmin } from "./admin";
 import { buildAvatarUrl } from "./auth";
@@ -2808,7 +2813,8 @@ export async function handleGamesOutOfDate(
 // Gated by isSiteAdmin (Discord-ID match against ADMIN_DISCORD_ID secret).
 // Failure returns 404 (not 403) so endpoint existence doesn't leak to
 // non-admins. Used by /admin/reparse to drive a bulk re-parse over every
-// out-of-date game across all users.
+// out-of-date game across all users, optionally narrowed to one owner,
+// tournament, or upload-date range (parseAdminGameFilter).
 
 export async function handleAdminListOutOfDate(
 	request: Request,
@@ -2829,6 +2835,11 @@ export async function handleAdminListOutOfDate(
 			"INVALID_QUERY",
 		);
 	}
+	const parsed = parseAdminGameFilter(url);
+	if (!parsed.ok) {
+		return errorResponse(parsed.message, 400, cors, "INVALID_QUERY");
+	}
+	const filter = buildAdminGameFilterWhere(parsed.filter);
 	const rows = await env.SHARE_DB.prepare(
 		`SELECT g.game_id, g.user_id, g.game_name, g.display_name, g.save_date,
 		        g.total_turns, g.user_nation, g.user_won, g.winner_nation,
@@ -2837,10 +2848,10 @@ export async function handleAdminListOutOfDate(
 		        ${displayNameSql("u")} AS owner_display_name
 		 FROM games g
 		 JOIN users u ON g.user_id = u.user_id
-		 WHERE g.parser_version != ?
+		 WHERE g.parser_version != ?${filter.clause}
 		 ORDER BY g.created_at DESC`,
 	)
-		.bind(version)
+		.bind(version, ...filter.binds)
 		.all<{
 			game_id: string;
 			user_id: string;
@@ -2939,9 +2950,11 @@ export async function handleAdminReparseUpload(
 	});
 }
 
-// List every game's id + display label, for the admin reindex sweep. Unlike
-// the reparse list (which filters by stale parser_version), reindex applies
-// to all games — re-running the D1 pivot from each blob is idempotent.
+// List game ids + display labels for the admin reindex sweep. Unlike the
+// reparse list (which filters by stale parser_version), reindex applies to
+// every game — re-running the D1 pivot from each blob is idempotent. The
+// optional owner / tournament / created_at filters (shared with the reparse
+// list) narrow that to one section of the corpus per sweep.
 export async function handleAdminListAllGames(
 	request: Request,
 	env: GamesEnv,
@@ -2951,15 +2964,24 @@ export async function handleAdminListAllGames(
 	if (!(await isSiteAdmin(env, session))) {
 		return errorResponse("Not found", 404, cors, "NOT_FOUND");
 	}
+	const url = new URL(request.url);
+	const parsed = parseAdminGameFilter(url);
+	if (!parsed.ok) {
+		return errorResponse(parsed.message, 400, cors, "INVALID_QUERY");
+	}
+	const filter = buildAdminGameFilterWhere(parsed.filter);
 	const rows = await env.SHARE_DB.prepare(
-		`SELECT game_id, game_name, display_name
-		 FROM games
-		 ORDER BY created_at DESC`,
-	).all<{
-		game_id: string;
-		game_name: string | null;
-		display_name: string | null;
-	}>();
+		`SELECT g.game_id, g.game_name, g.display_name
+		 FROM games g
+		 ${filter.where}
+		 ORDER BY g.created_at DESC`,
+	)
+		.bind(...filter.binds)
+		.all<{
+			game_id: string;
+			game_name: string | null;
+			display_name: string | null;
+		}>();
 	const games = (rows.results ?? []).map((r) => ({
 		game_id: r.game_id,
 		game_name: r.display_name ?? r.game_name,

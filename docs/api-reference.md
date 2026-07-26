@@ -686,15 +686,27 @@ All **Site admin** (`ADMIN_DISCORD_ID`). Non-admins receive `404 NOT_FOUND` (exi
 ### `GET /v1/admin/games/out-of-date`
 Games across all users whose `parser_version` differs from a target.
 
-- **Query:** `version` (required).
+- **Query:** `version` (required); optional section filters — see below.
 - **Response 200:** `AdminGameListResponse` — `{ games: AdminGameListItem[] }` (GameListItem + `user_id`, `owner_display_name`).
 - **Errors:** `404 NOT_FOUND`, `400 INVALID_QUERY`.
 
 ### `GET /v1/admin/games/all`
 All game ids/names (drives the reindex sweep).
 
+- **Query:** optional section filters — see below.
 - **Response 200:** `AdminGameIdListResponse` — `{ games: [{ game_id, game_name }] }`.
-- **Errors:** `404 NOT_FOUND`.
+- **Errors:** `404 NOT_FOUND`, `400 INVALID_QUERY`.
+
+**Section filters** (both list endpoints, all optional, AND-composed) let the admin page run a sweep over one slice of the corpus at a time:
+
+| Param | Value | Selects |
+| --- | --- | --- |
+| `user_id` | 21-char id | games owned by that user |
+| `tournament_id` | 21-char id | games linked to that tournament's `status='complete'` matches (the same set `/v1/tournaments/:id/stats` aggregates) |
+| `from` | `YYYY-MM-DD` | games uploaded on or after that day |
+| `to` | `YYYY-MM-DD` | games uploaded on or before that day |
+
+`from`/`to` bound `games.created_at`, which is UTC and is preserved across re-import. Empty values are treated as absent; a malformed value is `400 INVALID_QUERY` rather than a silently unfiltered sweep.
 
 ### `POST /v1/admin/games/:id/reindex`
 Rebuild a game's D1 pivot tables from its stored blob.

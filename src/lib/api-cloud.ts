@@ -203,6 +203,24 @@ export interface AdminGameIdListResponse {
 	games: AdminGameIdListItem[];
 }
 
+// Section filter shared by both admin list endpoints, so the reparse and
+// reindex sweeps can be run over one slice of the corpus at a time. All
+// optional; the server ANDs whatever is present. `from`/`to` are inclusive
+// 'YYYY-MM-DD' bounds on the upload date (games.created_at, UTC).
+export interface AdminGameFilterParams {
+	user_id?: string;
+	tournament_id?: string;
+	from?: string;
+	to?: string;
+}
+
+export interface AdminGameListOpts extends CallOpts {
+	// Kept as one nested object (rather than flattened like ListGamesOpts)
+	// because the admin page threads the whole section around: URL → load →
+	// both list calls.
+	filter?: AdminGameFilterParams;
+}
+
 // Wire shape for GET /v1/games/public-recent — the marketing home's
 // discovery feed. Includes the uploader's display name + a sparkline-ready
 // per-turn victory-points series (`vp_series`) for each player.
@@ -389,6 +407,18 @@ async function postJson<T>(
 export interface CallbackResponse extends UserMe {
 	// Server-validated post-login destination. Always a same-origin path.
 	next: string;
+}
+
+// Serialize the admin sweep filter. Absent keys are omitted rather than sent
+// empty, so an unfiltered call is byte-identical to the pre-filter one.
+function adminFilterParams(filter?: AdminGameFilterParams): URLSearchParams {
+	const qs = new URLSearchParams();
+	if (!filter) return qs;
+	if (filter.user_id) qs.set("user_id", filter.user_id);
+	if (filter.tournament_id) qs.set("tournament_id", filter.tournament_id);
+	if (filter.from) qs.set("from", filter.from);
+	if (filter.to) qs.set("to", filter.to);
+	return qs;
 }
 
 export const cloudApi = {
@@ -716,12 +746,15 @@ export const cloudApi = {
 
 	adminListOutOfDate: async (
 		currentVersion: string,
-		opts?: CallOpts,
+		opts?: AdminGameListOpts,
 	): Promise<AdminGameListResponse> => {
-		const res = await request(
-			`/admin/games/out-of-date?version=${encodeURIComponent(currentVersion)}`,
-			opts,
-		);
+		const qs = adminFilterParams(opts?.filter);
+		qs.set("version", currentVersion);
+		const res = await request(`/admin/games/out-of-date?${qs}`, {
+			fetch: opts?.fetch,
+			cookie: opts?.cookie,
+			signal: opts?.signal,
+		});
 		return res.json() as Promise<AdminGameListResponse>;
 	},
 
@@ -760,11 +793,18 @@ export const cloudApi = {
 		return res.json() as Promise<UploadGameResponse>;
 	},
 
-	// Every game's id + display label, for the admin reindex sweep.
+	// Every game's id + display label, for the admin reindex sweep — narrowed
+	// to the section when `filter` is set.
 	adminListAllGames: async (
-		opts?: CallOpts,
+		opts?: AdminGameListOpts,
 	): Promise<AdminGameIdListResponse> => {
-		const res = await request("/admin/games/all", opts);
+		const qs = adminFilterParams(opts?.filter).toString();
+		const path = qs ? `/admin/games/all?${qs}` : "/admin/games/all";
+		const res = await request(path, {
+			fetch: opts?.fetch,
+			cookie: opts?.cookie,
+			signal: opts?.signal,
+		});
 		return res.json() as Promise<AdminGameIdListResponse>;
 	},
 

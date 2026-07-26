@@ -4,6 +4,7 @@ import {
 	readD1Migrations,
 } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import { SITE_ADMIN_DISCORD_ID } from "./test/helpers/admin-identity";
 
 const MIGRATIONS_PATH = path.resolve(import.meta.dirname, "./migrations");
 const SECURITY_MIGRATIONS_PATH = path.resolve(
@@ -50,6 +51,11 @@ export default defineConfig({
 								// http:// origin satisfies. See cloud/src/auth.ts
 								// handleDevLogin.
 								DEV_LOGIN: "1",
+								// Gives the isolate a site admin (isSiteAdmin matches
+								// users.discord_id against it), so the /v1/admin/*
+								// endpoints are reachable via makeSiteAdmin(). No
+								// makeUser-generated id can collide with it.
+								ADMIN_DISCORD_ID: SITE_ADMIN_DISCORD_ID,
 							},
 						},
 					})),
