@@ -149,7 +149,7 @@ export function familyNationPicksOption(
 				if (!r) return "";
 				const lines = [
 					`${fmtClass(r.class)}`,
-					`Picked in ${r.count} games (${pct(r.pickRate)} of this nation's)`,
+					`Picked in ${r.count} of ${games} games (${pct(r.pickRate)})`,
 					`Wins: ${r.wins} / ${r.count} (${pct(r.count > 0 ? r.wins / r.count : 0)})`,
 				];
 				if (r.avgShare != null) {
