@@ -31,7 +31,9 @@ import type { UserScope, UserStatsScope } from "./types";
 //
 // 6: starting-leader archetype + trait win rates.
 // 7: per-wonder build rate, builder win rate, and build-turn distribution.
-// 8: capital family class win rate.
+// 8: capital family class win rate, plus avg_share / share_samples /
+//    slot_counts on familyByNation (per-class city footprint and founding
+//    order).
 export const BUNDLE_SCHEMA_VERSION = 8;
 
 export interface StatsCacheEnv extends SessionEnv {

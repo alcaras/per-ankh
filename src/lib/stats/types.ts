@@ -127,9 +127,12 @@ export interface ChartBundleCore {
 		class: string;
 		count: number;
 		wins: number;
-		// Mean share of the player's end-of-game cities this class held. Null
-		// when no in-scope player has city data for it — older blobs carry no
-		// family on their cities.
+		// Mean share of the player's end-of-game cities this class held. The
+		// denominator counts only cities that carry a family — a city with no
+		// family_class is skipped on both sides of the ratio — so it is a
+		// narrower base than player_summaries.cities_total, which counts every
+		// city matching the player's owner_nation. Null when no in-scope player
+		// has city data for it: older blobs carry no family on their cities.
 		avg_share: Nullable<number>;
 		// Picks behind avg_share (those with city data) — the mean's own sample,
 		// which the frontend weights by when recombining across nations.
