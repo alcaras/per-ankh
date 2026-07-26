@@ -82,6 +82,7 @@ import {
 	CANONICAL_SCRIPT_OPTIONS,
 } from "./canonical-map-options";
 import type { Division, MapPoolEntry, MatchRef, Phase, SlotRef } from "./types";
+import type { EventsEnv } from "../d1";
 
 // ---------- Map-pool helpers ----------
 
@@ -229,7 +230,8 @@ function appendOnlyViolation(
 	return null;
 }
 
-export interface TournamentAdminEnv extends TournamentEnv, SessionEnv {
+export interface TournamentAdminEnv
+	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 }
 
@@ -275,7 +277,7 @@ async function authedTournament(
 	// stolen admin session (4 admins acting deliberately stay well below
 	// the limit).
 	const adminEventCount = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"tournament_admin",
 		"user_id",
 		session.data.user_id,
@@ -326,7 +328,7 @@ async function logTournamentAdminAction(
 		tournament_id: tournamentId,
 		...(extra ?? {}),
 	});
-	await env.SHARE_DB.prepare(
+	await env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, user_id, metadata)
 		 VALUES ('tournament_admin', ?, ?)`,
 	)
@@ -475,7 +477,7 @@ export async function handleCreateTournament(
 	// account; account creation itself is gated by Discord OAuth so
 	// horizontal abuse costs real accounts.
 	const createCount = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"tournament_create",
 		"user_id",
 		session.data.user_id,
@@ -593,6 +595,13 @@ export async function handleCreateTournament(
 			env.SHARE_DB.prepare(
 				`INSERT INTO tournament_admins (tournament_id, user_id) VALUES (?, ?)`,
 			).bind(tournamentId, session.data.user_id),
+			// The one events write still on SHARE_DB rather than EVENTS_DB
+			// (see d1.ts): it's a member of this transactional batch, and the
+			// slug-UNIQUE 409 below depends on the batch failing as a unit.
+			// Splitting it out would let the audit row land for a tournament
+			// that was never created. Safe because POST /v1/tournaments is a
+			// write route and so never `staleTolerant` — SHARE_DB here is
+			// always the raw primary binding.
 			env.SHARE_DB.prepare(
 				`INSERT INTO events (event_type, user_id, metadata)
 				 VALUES ('tournament_create', ?, ?)`,
@@ -1356,7 +1365,7 @@ export async function handlePatchSlot(
 	if (occupantChanged) {
 		// Audit substitution
 		try {
-			await env.SHARE_DB.prepare(
+			await env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, user_id, metadata)
 				 VALUES ('tournament_slot_substituted', ?, ?)`,
 			)
@@ -2083,7 +2092,7 @@ async function authedMatchScheduler(
 
 	// Per-user schedule budget (admins and participants alike).
 	const scheduleEventCount = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"tournament_schedule",
 		"user_id",
 		session.data.user_id,
@@ -2237,7 +2246,7 @@ export async function handlePatchMatchSchedule(
 	// and signing up to cast draw from one 60/hr budget, exactly as limits.ts
 	// describes. Best-effort: the edit already committed, so a ledger failure
 	// must not fail the request. 24h retention bucket; the budget reads a 1h window.
-	await env.SHARE_DB.prepare(
+	await env.EVENTS_DB.prepare(
 		"INSERT INTO events (event_type, user_id) VALUES ('tournament_schedule', ?)",
 	)
 		.bind(a.userId)
@@ -2982,7 +2991,7 @@ function buildChampionshipRoundStatements(
 // Awaited for durability for the same reason as logTournamentAdminAction
 // (issue #75); the .catch keeps a failed audit from breaking auto-advance.
 async function logSystemTournamentAction(
-	env: TournamentEnv,
+	env: TournamentEnv & EventsEnv,
 	tournamentId: string,
 	action: string,
 	extra?: Record<string, unknown>,
@@ -2992,7 +3001,7 @@ async function logSystemTournamentAction(
 		tournament_id: tournamentId,
 		...(extra ?? {}),
 	});
-	await env.SHARE_DB.prepare(
+	await env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, user_id, metadata)
 		 VALUES ('tournament_system', NULL, ?)`,
 	)
@@ -3028,7 +3037,7 @@ async function logSystemTournamentAction(
 // the whole batch back (no orphan matches) into the try/catch. Idempotency is
 // pinned by test/integration/tournament/concurrent-advance.test.ts.
 export async function maybeAdvanceAfterMatchReport(
-	env: TournamentEnv,
+	env: TournamentEnv & EventsEnv,
 	matchId: string,
 ): Promise<void> {
 	try {

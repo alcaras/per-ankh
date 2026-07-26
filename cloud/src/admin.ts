@@ -3,9 +3,10 @@
 // and return 404 (not 403) on failure to avoid leaking endpoint existence.
 
 import type { SessionData } from "./session";
+import type { QueryableD1 } from "./d1";
 
 export interface AdminAuthEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	ADMIN_DISCORD_ID?: string;
 }
 

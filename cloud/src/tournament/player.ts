@@ -37,6 +37,7 @@ import {
 	type TournamentEnv,
 } from "./data";
 import { TOURNAMENT_SCHEDULE_ACTIONS_PER_HOUR } from "./limits";
+import type { EventsEnv } from "../d1";
 
 // Wraps the session lookup for the authenticated player endpoints. Returns
 // the caller's user_id, or an errorResponse-ready 401 when anonymous.
@@ -60,7 +61,8 @@ async function authedSession(
 	return { ok: true, userId: session.data.user_id };
 }
 
-export interface TournamentPlayerEnv extends TournamentEnv, SessionEnv {
+export interface TournamentPlayerEnv
+	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 }
 
@@ -265,7 +267,7 @@ export async function handleTournamentSignup(
 	// Durable audit — awaited so the write can't be canceled by response
 	// teardown (issue #75). The .catch keeps a failed audit from breaking the
 	// signup, which has already committed.
-	await env.SHARE_DB.prepare(
+	await env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, user_id, metadata)
 		 VALUES ('tournament_self_signup', ?, ?)`,
 	)
@@ -368,7 +370,7 @@ export async function handleTournamentWithdraw(
 	// from an admin delete; losing it means we can't tell which path removed the
 	// player. The .catch keeps a failed audit from breaking the withdraw, which
 	// has already committed.
-	await env.SHARE_DB.prepare(
+	await env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, user_id, metadata)
 		 VALUES ('tournament_self_withdraw', ?, ?)`,
 	)
@@ -445,7 +447,7 @@ async function mutateMyCasterEntry(
 	const userId = auth.userId;
 
 	const count = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"tournament_schedule",
 		"user_id",
 		userId,
@@ -507,7 +509,7 @@ async function mutateMyCasterEntry(
 		await syncMatchCasters(env, matchId);
 		await bumpTournamentUpdatedAt(env, tournamentId);
 		// Rate-limit ledger (24h retention bucket; the budget reads a 1h window).
-		await env.SHARE_DB.prepare(
+		await env.EVENTS_DB.prepare(
 			"INSERT INTO events (event_type, user_id) VALUES ('tournament_schedule', ?)",
 		)
 			.bind(userId)

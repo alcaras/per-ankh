@@ -39,9 +39,10 @@ import type { SessionEnv } from "./session";
 import { isSiteAdmin } from "./admin";
 import { displayNameSql } from "./identity";
 import { logError, setSecurityReason } from "./log";
+import type { QueryableD1, EventsEnv } from "./d1";
 
-export interface AuthEnv extends SessionEnv {
-	SHARE_DB: D1Database;
+export interface AuthEnv extends SessionEnv, EventsEnv {
+	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 	DISCORD_CLIENT_ID: string;
 	DISCORD_CLIENT_SECRET: string;
@@ -152,7 +153,7 @@ export function buildAvatarUrl(
 // is degraded state (the user can still discover the tournament via My
 // Tournaments), so it never blocks the caller.
 async function claimTournamentSlots(
-	db: D1Database,
+	db: QueryableD1,
 	userId: string,
 	discordId: string,
 	discordUsername: string,
@@ -545,7 +546,7 @@ export async function handleDiscordCallback(
 	// otherwise successful login. First-vs-returning is derivable
 	// offline from users.created_at vs last_login_at.
 	try {
-		await env.SHARE_DB.prepare(
+		await env.EVENTS_DB.prepare(
 			`INSERT INTO events (event_type, user_id, ip_address)
 			 VALUES ('login', ?, ?)`,
 		)
@@ -879,7 +880,7 @@ export async function handleLogout(
 		// hits to /v1/auth/logout still 204 (idempotent), but there's no
 		// "logout" to record.
 		try {
-			await env.SHARE_DB.prepare(
+			await env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, user_id, ip_address)
 				 VALUES ('logout', ?, ?)`,
 			)

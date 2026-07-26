@@ -67,8 +67,10 @@ import {
 	parseYouTubePlaylistUrl,
 } from "../video/youtube";
 import type { PlaylistVideo } from "../video/types";
+import type { EventsEnv } from "../d1";
 
-export interface TournamentPublicEnv extends TournamentEnv, SessionEnv {
+export interface TournamentPublicEnv
+	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 	// Optional YouTube Data API key. When set, the Videos tab enumerates the
 	// whole playlist (so its search can reach every video); when unset, it falls
@@ -94,7 +96,7 @@ async function enforceTournamentViewRateLimit(
 	if (isScraperUA(ua)) return null;
 	const ip = getClientIp(request) ?? "untrusted";
 	const count = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"tournament_view",
 		"ip_address",
 		ip,
@@ -107,7 +109,7 @@ async function enforceTournamentViewRateLimit(
 			"RATE_LIMIT_TOURNAMENT_VIEW",
 		);
 	}
-	env.SHARE_DB.prepare(
+	env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, ip_address)
 		 VALUES ('tournament_view', ?)`,
 	)

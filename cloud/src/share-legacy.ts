@@ -18,10 +18,11 @@ import {
 	timingSafeEqual,
 } from "./util";
 import { logError, logWarn } from "./log";
+import type { QueryableD1 } from "./d1";
 
 export interface ShareLegacyEnv {
 	SHARE_BUCKET: R2Bucket;
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	MAX_COMPRESSED_SIZE: string;
 	MAX_DECOMPRESSED_SIZE: string;
 	ALLOWED_ORIGIN: string;
@@ -67,7 +68,7 @@ function errorResponse(
 // === Audit events ===
 
 async function logEvent(
-	db: D1Database,
+	db: QueryableD1,
 	eventType: "upload" | "delete",
 	shareId: string,
 	appKey: string | null,
@@ -97,7 +98,7 @@ async function logEvent(
 
 // Per-app-key upload rate limit (D1)
 async function checkKeyRateLimit(
-	db: D1Database,
+	db: QueryableD1,
 	appKey: string,
 	maxPerHour: number,
 ): Promise<boolean> {
@@ -113,7 +114,7 @@ async function checkKeyRateLimit(
 
 // Per-IP upload rate limit — catches app-key rotation attacks (D1)
 async function checkIpRateLimit(
-	db: D1Database,
+	db: QueryableD1,
 	ip: string,
 	maxPerHour: number,
 ): Promise<boolean> {
@@ -129,7 +130,7 @@ async function checkIpRateLimit(
 
 // Global upload circuit breaker — emergency brake for distributed attacks (D1)
 async function checkGlobalUploadLimit(
-	db: D1Database,
+	db: QueryableD1,
 	maxPerHour: number,
 ): Promise<boolean> {
 	const result = await db
@@ -163,7 +164,7 @@ async function checkDownloadRateLimit(
 // === Blocklist ===
 
 async function checkBlocklists(
-	db: D1Database,
+	db: QueryableD1,
 	appKey: string,
 	ip: string | null,
 ): Promise<boolean> {

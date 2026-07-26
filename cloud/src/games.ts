@@ -49,10 +49,11 @@ import {
 } from "./derive-player-summary";
 import { invalidateStatsCache } from "./stats/cache";
 import { getBlobCached, invalidateBlob, readBlob } from "./blob-cache";
+import type { QueryableD1, EventsEnv } from "./d1";
 
-export interface GamesEnv extends SessionEnv {
+export interface GamesEnv extends SessionEnv, EventsEnv {
 	SHARE_BUCKET: R2Bucket;
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 	// Upload-bucket rate limits (apply to uploads + reimports together).
 	// Strings because wrangler.toml `[vars]` are always strings at runtime;
@@ -142,6 +143,9 @@ export type RateLimitedEventType =
 // hit the same R2 puts + D1 batch, so they cost the same.
 const UPLOAD_EVENT_TYPES = ["upload", "reimport"] as const;
 
+// `db` is deliberately a real `D1Database`, not `QueryableD1`: EVENTS_DB is
+// the only handle that satisfies it, so passing a replica-eligible SHARE_DB
+// session here fails to compile instead of silently under-counting. See d1.ts.
 export async function countEventsSince(
 	db: D1Database,
 	eventType: RateLimitedEventType | readonly RateLimitedEventType[],
@@ -451,7 +455,7 @@ interface SummaryRowInputs {
 // well under D1's 100-param cap. All statements bundle into the same
 // db.batch() call as the rest of the upload writes (single transaction).
 function buildSummaryStatements(
-	db: D1Database,
+	db: QueryableD1,
 	inp: SummaryRowInputs,
 ): D1PreparedStatement[] {
 	const { gameId, blob, uploaderIndex, winnerIndex } = inp;
@@ -523,7 +527,7 @@ function buildSummaryStatements(
 // Yield name mapping: XML `YIELD_FOOD` → `food` → columns `food_per_turn`
 // and `food_cumulative`.
 function buildGamePlayerTurnStatements(
-	db: D1Database,
+	db: QueryableD1,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
@@ -659,7 +663,7 @@ function buildGamePlayerTurnStatements(
 // conquest therefore has no founding turn, which is the honest answer for a
 // stat about founding order.
 function buildFamilyCityStatements(
-	db: D1Database,
+	db: QueryableD1,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
@@ -739,7 +743,7 @@ function buildFamilyCityStatements(
 }
 
 function buildTechEventStatements(
-	db: D1Database,
+	db: QueryableD1,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
@@ -774,7 +778,7 @@ function buildTechEventStatements(
 // eligibility rather than a wrong one. A list that is present but empty is a
 // different answer: nothing was disabled, so every wonder was on the board.
 function buildWonderPoolStatements(
-	db: D1Database,
+	db: QueryableD1,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
@@ -814,7 +818,7 @@ function buildWonderPoolStatements(
 // sample, always landing on index 0, so the bias is systematic rather than
 // noise.
 function buildWonderEventStatements(
-	db: D1Database,
+	db: QueryableD1,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
@@ -844,7 +848,7 @@ function buildWonderEventStatements(
 }
 
 function buildLawEventStatements(
-	db: D1Database,
+	db: QueryableD1,
 	gameId: string,
 	blob: FullGameData,
 ): D1PreparedStatement[] {
@@ -1071,7 +1075,7 @@ export async function handleGameUpload(
 	if (!adminOverride) {
 		if (
 			(await countEventsSince(
-				env.SHARE_DB,
+				env.EVENTS_DB,
 				UPLOAD_EVENT_TYPES,
 				"user_id",
 				userId,
@@ -1087,7 +1091,7 @@ export async function handleGameUpload(
 		if (
 			ip &&
 			(await countEventsSince(
-				env.SHARE_DB,
+				env.EVENTS_DB,
 				UPLOAD_EVENT_TYPES,
 				"ip_address",
 				ip,
@@ -1101,7 +1105,7 @@ export async function handleGameUpload(
 			);
 		}
 		if (
-			(await countEventsSince(env.SHARE_DB, UPLOAD_EVENT_TYPES, null, null)) >=
+			(await countEventsSince(env.EVENTS_DB, UPLOAD_EVENT_TYPES, null, null)) >=
 			parseInt(env.GLOBAL_UPLOADS_PER_HOUR)
 		) {
 			return errorResponse(
@@ -1597,7 +1601,7 @@ export async function handleGameUpload(
 					tournamentContext,
 				);
 				try {
-					await env.SHARE_DB.prepare(
+					await env.EVENTS_DB.prepare(
 						`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 						 VALUES (?, ?, ?, ?, ?)`,
 					)
@@ -1868,7 +1872,7 @@ export async function handleGameUpload(
 			? "reimport"
 			: "upload";
 	try {
-		await env.SHARE_DB.prepare(
+		await env.EVENTS_DB.prepare(
 			`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 			 VALUES (?, ?, ?, ?, ?)`,
 		)
@@ -2099,7 +2103,7 @@ export async function handlePublicRecentGames(
 	const ua = request.headers.get("User-Agent");
 	if (!isScraperUA(ua)) {
 		const count = await countEventsSince(
-			env.SHARE_DB,
+			env.EVENTS_DB,
 			"anon_read",
 			"ip_address",
 			ip,
@@ -2113,7 +2117,7 @@ export async function handlePublicRecentGames(
 			);
 		}
 		// Fire-and-forget — a logging hiccup mustn't 500 a public list.
-		env.SHARE_DB.prepare(
+		env.EVENTS_DB.prepare(
 			`INSERT INTO events (event_type, ip_address) VALUES ('anon_read', ?)`,
 		)
 			.bind(ip)
@@ -2381,7 +2385,7 @@ export async function handleGameDetail(
 		const ua = request.headers.get("User-Agent");
 		if (!isScraperUA(ua)) {
 			const count = await countEventsSince(
-				env.SHARE_DB,
+				env.EVENTS_DB,
 				"anon_read",
 				"ip_address",
 				ip,
@@ -2396,7 +2400,7 @@ export async function handleGameDetail(
 			}
 			// Audit-log fire-and-forget — same pattern as the download path.
 			// A logging hiccup mustn't 500 a public-game view.
-			env.SHARE_DB.prepare(
+			env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, game_id, ip_address)
 				 VALUES ('anon_read', ?, ?)`,
 			)
@@ -2545,7 +2549,7 @@ export async function handleGamePatch(
 	if (is_public !== undefined) {
 		if (
 			(await countEventsSince(
-				env.SHARE_DB,
+				env.EVENTS_DB,
 				"visibility_change",
 				"user_id",
 				userId,
@@ -2606,7 +2610,7 @@ export async function handleGamePatch(
 			.bind(is_public ? 1 : 0, gameId)
 			.run();
 		try {
-			await env.SHARE_DB.prepare(
+			await env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 				 VALUES ('visibility_change', ?, ?, ?, ?)`,
 			)
@@ -2627,7 +2631,7 @@ export async function handleGamePatch(
 			.bind(collection_id, gameId)
 			.run();
 		try {
-			await env.SHARE_DB.prepare(
+			await env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 				 VALUES ('collection_change', ?, ?, ?, ?)`,
 			)
@@ -2648,7 +2652,7 @@ export async function handleGamePatch(
 			.bind(display_name, gameId)
 			.run();
 		try {
-			await env.SHARE_DB.prepare(
+			await env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 				 VALUES ('name_change', ?, ?, ?, ?)`,
 			)
@@ -2742,7 +2746,7 @@ export async function handleGameDelete(
 
 	const ip = request.headers.get("CF-Connecting-IP");
 	try {
-		await env.SHARE_DB.prepare(
+		await env.EVENTS_DB.prepare(
 			`INSERT INTO events (event_type, game_id, user_id, ip_address)
 			 VALUES ('delete', ?, ?, ?)`,
 		)
@@ -2807,7 +2811,7 @@ export async function handleGameDownload(
 
 	// Per-user limit (meaningful — auth-bound) + per-IP backstop.
 	if (
-		(await countEventsSince(env.SHARE_DB, "download", "user_id", userId)) >=
+		(await countEventsSince(env.EVENTS_DB, "download", "user_id", userId)) >=
 		PER_USER_DOWNLOADS_PER_HOUR
 	) {
 		return errorResponse(
@@ -2820,7 +2824,7 @@ export async function handleGameDownload(
 	const ip = getClientIp(request);
 	if (
 		ip &&
-		(await countEventsSince(env.SHARE_DB, "download", "ip_address", ip)) >=
+		(await countEventsSince(env.EVENTS_DB, "download", "ip_address", ip)) >=
 			PER_IP_DOWNLOADS_PER_HOUR
 	) {
 		return errorResponse(
@@ -2846,7 +2850,7 @@ export async function handleGameDownload(
 
 	// Audit event — fire-and-forget so a logging hiccup doesn't 500 the
 	// download. Caught + logged in case of error.
-	env.SHARE_DB.prepare(
+	env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 		 VALUES ('download', ?, ?, ?, ?)`,
 	)
@@ -3240,7 +3244,7 @@ export async function handleAdminReindex(
 
 	const ip = getClientIp(request);
 	try {
-		await env.SHARE_DB.prepare(
+		await env.EVENTS_DB.prepare(
 			`INSERT INTO events (event_type, game_id, user_id, ip_address, metadata)
 			 VALUES (?, ?, ?, ?, ?)`,
 		)

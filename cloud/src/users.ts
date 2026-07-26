@@ -23,6 +23,7 @@ import { UserSearchQuerySchema } from "./schemas/tournament";
 import { sessionFromRequest, type SessionEnv } from "./session";
 import { USER_MATCHES_WHERE, type TournamentEnv } from "./tournament/data";
 import { cloudCorsHeaders, errorResponse, jsonResponse } from "./util";
+import type { QueryableD1, EventsEnv } from "./d1";
 
 // Generous ceiling — typing 5 chars to find someone, picking from the
 // dropdown, costs ~4 requests per slot. An admin adding a 16-player
@@ -33,7 +34,7 @@ export const USER_SEARCH_PER_USER_PER_HOUR = 60;
 
 const DEFAULT_LIMIT = 10;
 
-export interface UserSearchEnv extends SessionEnv, TournamentEnv {
+export interface UserSearchEnv extends SessionEnv, TournamentEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 }
 
@@ -50,7 +51,7 @@ export async function handleUserSearch(
 	// Rate limit per user. Check BEFORE doing any DB work or audit-row
 	// insert so a hammered account fails cheaply.
 	const count = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"user_search",
 		"user_id",
 		session.data.user_id,
@@ -92,7 +93,7 @@ export async function handleUserSearch(
 
 	// Audit row also serves as the rate-limit counter source. async fire-
 	// and-forget — failure to audit shouldn't block the lookup.
-	env.SHARE_DB.prepare(
+	env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, user_id, metadata)
 		 VALUES ('user_search', ?, ?)`,
 	)
@@ -146,7 +147,7 @@ export async function handleUserSearch(
 // render its chrome (display name + avatar). No auth, no beta gate;
 // 404 if the user doesn't exist.
 export interface UserProfileEnv extends SessionEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 }
 

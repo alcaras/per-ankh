@@ -13,9 +13,10 @@ import { buildChartBundle } from "./aggregate";
 import { getCached, putCached } from "./cache";
 import { resolveUserCorpus } from "./resolve";
 import type { ChartBundle, UserStatsScope } from "./types";
+import type { QueryableD1 } from "../d1";
 
 export interface UserStatsEnv extends SessionEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	SESSIONS_KV: KVNamespace;
 	ALLOWED_ORIGINS: string;
 }

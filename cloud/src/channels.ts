@@ -29,9 +29,10 @@ import {
 	type Video,
 	type VideoEnv,
 } from "./video/types";
+import type { QueryableD1 } from "./d1";
 
 export interface ChannelsEnv extends SessionEnv, VideoEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 }
 

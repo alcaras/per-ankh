@@ -17,6 +17,7 @@ import type {
 	SlotRef,
 	TournamentConfig,
 } from "./types";
+import type { QueryableD1 } from "../d1";
 
 export interface TournamentRow {
 	tournament_id: string;
@@ -188,7 +189,7 @@ export interface MatchPart {
 }
 
 export interface TournamentEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 }
 
 export async function loadTournamentBySlug(
