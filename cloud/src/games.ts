@@ -101,14 +101,18 @@ export function isScraperUA(ua: string | null): boolean {
 // D1 caps bound parameters at 100 per query (much tighter than standalone
 // SQLite's 999). Multi-row INSERTs chunked so N_rows × N_cols ≤ 99 to
 // leave headroom, all bundled into one db.batch() call so an upload/reindex
-// remains a single transaction. GPT_COLS MUST equal the length of the
-// `columns` array in buildGamePlayerTurnStatements — if they drift, chunks
-// overshoot the param cap and every insert fails with "too many SQL
-// variables".
+// remains a single transaction. Each *_COLS below MUST equal the length of the
+// `columns` array its builder binds — if they drift, chunks overshoot the param
+// cap and every insert fails with "too many SQL variables", which fails the
+// whole batch and so the whole upload.
 const D1_MAX_PARAMS = 99;
 const GPT_COLS = 34; // 3 keys + 14 yields × 2 + military_power + legitimacy + points
 const GPT_ROWS_PER_INSERT = Math.floor(D1_MAX_PARAMS / GPT_COLS); // 2
 const TECH_LAW_ROWS_PER_INSERT = Math.floor(D1_MAX_PARAMS / 4); // 24
+const FAMILY_CITY_COLS = 5; // game_id, player_index, family_class, cities, first_founded_turn
+const FAMILY_CITY_ROWS_PER_INSERT = Math.floor(
+	D1_MAX_PARAMS / FAMILY_CITY_COLS,
+); // 19
 
 // ---------- Rate limit checks (D1 events table) ----------
 
@@ -456,6 +460,7 @@ function buildSummaryStatements(
 	const stmt = db.prepare(
 		`INSERT INTO player_summaries (
 			game_id, player_index, player_name, nation, family_classes,
+			capital_family_class,
 			is_human, is_uploader,
 			starting_ruler_archetype, starting_ruler_traits,
 			starting_ruler_reign_turns, succession_count,
@@ -464,7 +469,7 @@ function buildSummaryStatements(
 			techs_completed, laws_count,
 			fifth_city_turn, tenth_city_turn, fourth_law_turn, seventh_law_turn,
 			is_winner, vp_margin
-		) VALUES (?,?,?,?,?, ?,?, ?,?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?, ?,?)`,
+		) VALUES (?,?,?,?,?, ?, ?,?, ?,?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?, ?,?)`,
 	);
 
 	return roster.map((p) => {
@@ -475,6 +480,7 @@ function buildSummaryStatements(
 			p.player_name,
 			p.nation,
 			s.family_classes,
+			s.capital_family_class,
 			p.is_human ? 1 : 0,
 			uploaderIndex !== null && p.player_index === uploaderIndex ? 1 : 0,
 			s.starting_ruler_archetype,
@@ -629,6 +635,105 @@ function buildGamePlayerTurnStatements(
 		statements.push(db.prepare(sql).bind(...bindings));
 	}
 
+	return statements;
+}
+
+// Per-(player, family class) city footprint: how many of the player's
+// end-of-game cities that class holds, and when the player founded their first
+// one. Cities are keyed on owner_player_xml_id so a mirror match doesn't credit
+// one side with the other's; a city with no family (unassigned or pre-2.6.0
+// blob) simply doesn't contribute.
+//
+// Human seats only. The stats layer reads these rows through a
+// `ps.is_human = 1` join (loadFamilyCities in stats/aggregate.ts), so an AI's
+// families are rows nothing can ever read — and with up to three per seat, the
+// AI seats of an ordinary vs-AI save are also what would carry the insert past
+// D1's parameter cap.
+//
+// `first_founded_turn` deliberately counts only cities this player founded
+// (first_owner_player_xml_id). A captured city keeps the turn its *original*
+// owner founded it, so counting captures would date a family to a turn the
+// player had nothing to do with — measured at 0.8% of rows, and enough to flip
+// the founding order for 1.4% of players. A family that only ever arrived by
+// conquest therefore has no founding turn, which is the honest answer for a
+// stat about founding order.
+function buildFamilyCityStatements(
+	db: D1Database,
+	gameId: string,
+	blob: FullGameData,
+): D1PreparedStatement[] {
+	const cityStats = blob.city_statistics as {
+		cities?: Array<{
+			owner_player_xml_id: number | null;
+			first_owner_player_xml_id: number | null;
+			family_class: string | null;
+			founded_turn: number | null;
+		}>;
+	};
+	const cities = cityStats?.cities;
+	if (!Array.isArray(cities) || cities.length === 0) return [];
+
+	const humanIndexes = new Set(
+		(blob.player_roster as PlayerRosterEntry[])
+			.filter((p) => p.is_human)
+			.map((p) => p.player_index),
+	);
+
+	// key = `${player_index}|${family_class}`
+	const tally = new Map<
+		string,
+		{
+			player: number;
+			familyClass: string;
+			cities: number;
+			firstTurn: number | null;
+		}
+	>();
+	for (const c of cities) {
+		if (c.owner_player_xml_id == null || !c.family_class) continue;
+		if (!humanIndexes.has(c.owner_player_xml_id)) continue;
+		const key = `${c.owner_player_xml_id}|${c.family_class}`;
+		const e = tally.get(key) ?? {
+			player: c.owner_player_xml_id,
+			familyClass: c.family_class,
+			cities: 0,
+			firstTurn: null,
+		};
+		e.cities += 1;
+		if (
+			c.first_owner_player_xml_id === c.owner_player_xml_id &&
+			c.founded_turn != null &&
+			(e.firstTurn === null || c.founded_turn < e.firstTurn)
+		) {
+			e.firstTurn = c.founded_turn;
+		}
+		tally.set(key, e);
+	}
+	if (tally.size === 0) return [];
+
+	const columns = [
+		"game_id",
+		"player_index",
+		"family_class",
+		"cities",
+		"first_founded_turn",
+	];
+	const statements: D1PreparedStatement[] = [];
+	for (const chunk of chunked(
+		[...tally.values()],
+		FAMILY_CITY_ROWS_PER_INSERT,
+	)) {
+		const sql = buildMultiRowInsert(
+			"player_family_cities",
+			columns,
+			chunk.length,
+		);
+		const bindings: unknown[] = [];
+		for (const e of chunk) {
+			bindings.push(gameId, e.player, e.familyClass, e.cities, e.firstTurn);
+		}
+		statements.push(db.prepare(sql).bind(...bindings));
+	}
 	return statements;
 }
 
@@ -1655,6 +1760,7 @@ export async function handleGameUpload(
 		winnerIndex,
 	});
 	const gptStmts = buildGamePlayerTurnStatements(env.SHARE_DB, gameId, blob);
+	const familyCityStmts = buildFamilyCityStatements(env.SHARE_DB, gameId, blob);
 	const techStmts = buildTechEventStatements(env.SHARE_DB, gameId, blob);
 	const lawStmts = buildLawEventStatements(env.SHARE_DB, gameId, blob);
 	const wonderStmts = [
@@ -1666,6 +1772,7 @@ export async function handleGameUpload(
 		env.SHARE_DB.prepare(gameRow.sql).bind(...gameRow.bindings),
 		...summaryStmts,
 		...gptStmts,
+		...familyCityStmts,
 		...techStmts,
 		...lawStmts,
 		...wonderStmts,
@@ -3065,6 +3172,9 @@ export async function handleAdminReindex(
 		env.SHARE_DB.prepare("DELETE FROM game_wonder_pool WHERE game_id = ?").bind(
 			gameId,
 		),
+		env.SHARE_DB.prepare(
+			"DELETE FROM player_family_cities WHERE game_id = ?",
+		).bind(gameId),
 		...buildSummaryStatements(env.SHARE_DB, {
 			gameId,
 			blob,
@@ -3072,6 +3182,7 @@ export async function handleAdminReindex(
 			winnerIndex,
 		}),
 		...buildGamePlayerTurnStatements(env.SHARE_DB, gameId, blob),
+		...buildFamilyCityStatements(env.SHARE_DB, gameId, blob),
 		...buildTechEventStatements(env.SHARE_DB, gameId, blob),
 		...buildLawEventStatements(env.SHARE_DB, gameId, blob),
 		...buildWonderEventStatements(env.SHARE_DB, gameId, blob),

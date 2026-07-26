@@ -1,8 +1,9 @@
 <script lang="ts">
-	// Tournament stats page. Six tabs — Players (standings + nation picks),
+	// Tournament stats page. Seven tabs — Players (standings + nation picks),
 	// Nations (nation win rate), Leaders (starting archetype and traits),
-	// Wonders (build timing and builder win rate), Yields (per-turn curves) and
-	// Casters (caster leaderboard) — spanning both stats
+	// Wonders (build timing and builder win rate), Families (capital family +
+	// per-nation picks), Yields (per-turn curves) and Casters (caster
+	// leaderboard) — spanning both stats
 	// subsystems: Plane A tournament-native (standings + casters) and Plane B1
 	// (the ChartBundle pointed at the tournament's games). Renders the charts
 	// directly (no chart registry) through the shared ChartContainer, reusing the
@@ -11,6 +12,7 @@
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
 	import ChartContainer from "$lib/ChartContainer.svelte";
+	import FamilyStatsPanel from "$lib/stats/FamilyStatsPanel.svelte";
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
 	import {
@@ -96,6 +98,7 @@
 		"nations",
 		"leaders",
 		"wonders",
+		"families",
 		"yields",
 		"casters",
 	] as const;
@@ -131,6 +134,8 @@
 			<Tabs.Trigger value="nations" class={triggerClass}>Nations</Tabs.Trigger>
 			<Tabs.Trigger value="leaders" class={triggerClass}>Leaders</Tabs.Trigger>
 			<Tabs.Trigger value="wonders" class={triggerClass}>Wonders</Tabs.Trigger>
+			<Tabs.Trigger value="families" class={triggerClass}>Families</Tabs.Trigger
+			>
 			<Tabs.Trigger value="yields" class={triggerClass}>Yields</Tabs.Trigger>
 			<Tabs.Trigger value="casters" class={triggerClass}>Casters</Tabs.Trigger>
 		</Tabs.List>
@@ -241,6 +246,14 @@
 					</p>
 				{/if}
 			</section>
+		</Tabs.Content>
+
+		<!-- Families — which class ran the capital, then which classes each
+		     nation's players run and the city footprint behind each. The same
+		     panel the player page uses, pointed at the tournament's games
+		     (Plane B1). -->
+		<Tabs.Content value="families">
+			<FamilyStatsPanel bundle={data.games} />
 		</Tabs.Content>
 
 		<!-- Yields — per-turn yield curves across the tournament's games

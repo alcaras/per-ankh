@@ -26,7 +26,10 @@ function blobWith(over: {
 	} as unknown as FullGameData;
 }
 
-const PLAYER = { player_index: 0 } as unknown as PlayerRosterEntry;
+const PLAYER = {
+	player_index: 0,
+	nation: "NATION_ROME",
+} as unknown as PlayerRosterEntry;
 
 function derive(blob: FullGameData) {
 	return derivePlayerSummary(blob, PLAYER, buildSummaryGameContext(blob));
@@ -139,7 +142,13 @@ describe("derivePlayerSummary — starting leader", () => {
 
 // A city at the given culture level, owned by player 0 unless stated. `held`
 // defaults to the sole owner — pass it to describe a city that changed hands.
-function city(culture: string | null, owner = 0, held = [owner]) {
+// `family` is the class running it; `capital()` wraps the capital case.
+function city(
+	culture: string | null,
+	owner = 0,
+	held = [owner],
+	family: string | null = "FAMILYCLASS_TRADERS",
+) {
 	return {
 		city_id: 1,
 		owner_nation: "NATION_ROME",
@@ -148,7 +157,15 @@ function city(culture: string | null, owner = 0, held = [owner]) {
 		player_families: held.map((player_xml_id) => ({ player_xml_id })),
 		founded_turn: 3,
 		culture_level: culture,
+		is_capital: false,
+		family_class: family,
 	};
+}
+
+// The capital — the one city the capital-family derivation keys on. Culture is
+// irrelevant to those assertions, so it rides at null.
+function capital(owner = 0, family: string | null = "FAMILYCLASS_TRADERS") {
+	return { ...city(null, owner, [owner], family), is_capital: true };
 }
 
 // best_culture_level is what makes a wonder's eligibility answerable: a wonder
@@ -221,5 +238,38 @@ describe("derivePlayerSummary — best culture level", () => {
 			derive(blobWith({ city_statistics: { cities: [legacy] } }))
 				.best_culture_level,
 		).toBe("CULTURE_STRONG");
+	});
+});
+
+describe("derivePlayerSummary — capital family class", () => {
+	it("reads the family class off the player's capital", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: {
+					cities: [
+						city(null, 0, [0], "FAMILYCLASS_SAGES"),
+						capital(0, "FAMILYCLASS_LANDOWNERS"),
+					],
+				},
+			}),
+		);
+		expect(summary.capital_family_class).toBe("FAMILYCLASS_LANDOWNERS");
+	});
+
+	it("ignores another player's capital", () => {
+		const summary = derive(
+			blobWith({
+				city_statistics: { cities: [capital(1, "FAMILYCLASS_CLERICS")] },
+			}),
+		);
+		expect(summary.capital_family_class).toBeNull();
+	});
+
+	it("is null when the player has no capital, or it carries no family", () => {
+		expect(derive(blobWith({})).capital_family_class).toBeNull();
+		expect(
+			derive(blobWith({ city_statistics: { cities: [capital(0, null)] } }))
+				.capital_family_class,
+		).toBeNull();
 	});
 });

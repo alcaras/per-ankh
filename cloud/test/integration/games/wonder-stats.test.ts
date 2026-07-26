@@ -66,7 +66,7 @@ describe("wonder stats — eligibility", () => {
 			winnerIndex: 0,
 			parserVersion: "2.12.0",
 			disabledImprovements: DISABLE_ALL_BUT_TEST_WONDERS,
-			cities: [{ owner_player_xml_id: 0, culture_level: "CULTURE_WEAK" }],
+			cities: [{ owner: 0, cultureLevel: "CULTURE_WEAK" }],
 			wonders: [{ player_id: 0, wonder: WEAK_WONDER, completed_turn: 30 }],
 		});
 
@@ -93,7 +93,7 @@ describe("wonder stats — eligibility", () => {
 			winnerIndex: 0,
 			parserVersion: "2.12.0",
 			disabledImprovements: DISABLE_ALL_BUT_TEST_WONDERS,
-			cities: [{ owner_player_xml_id: 0, culture_level: "CULTURE_WEAK" }],
+			cities: [{ owner: 0, cultureLevel: "CULTURE_WEAK" }],
 		});
 
 		expect(
@@ -114,7 +114,7 @@ describe("wonder stats — eligibility", () => {
 		// nothing to any denominator.
 		await upload(user, {
 			winnerIndex: 0,
-			cities: [{ owner_player_xml_id: 0, culture_level: "CULTURE_WEAK" }],
+			cities: [{ owner: 0, cultureLevel: "CULTURE_WEAK" }],
 			wonders: [{ player_id: 0, wonder: WEAK_WONDER, completed_turn: 30 }],
 		});
 
@@ -135,7 +135,7 @@ describe("wonder stats — eligibility", () => {
 			disabledImprovements: DISABLE_ALL_BUT_TEST_WONDERS,
 			// Legendary culture, so both test wonders are within reach and the
 			// only thing separating them is who took them.
-			cities: [{ owner_player_xml_id: 0, culture_level: "CULTURE_LEGENDARY" }],
+			cities: [{ owner: 0, cultureLevel: "CULTURE_LEGENDARY" }],
 			aiPlayer: true,
 			// The AI finishes it on turn 12; it's off the board from then on.
 			wonders: [{ player_id: 2, wonder: WEAK_WONDER, completed_turn: 12 }],
@@ -160,7 +160,7 @@ describe("wonder stats — eligibility", () => {
 			winnerIndex: 0,
 			parserVersion: "2.12.0",
 			disabledImprovements: DISABLE_ALL_BUT_TEST_WONDERS,
-			cities: [{ owner_player_xml_id: 0, culture_level: "CULTURE_WEAK" }],
+			cities: [{ owner: 0, cultureLevel: "CULTURE_WEAK" }],
 			// A null nation is the parser's marker for "couldn't find the tile
 			// owner"; it falls back to player_id 0, so indexing it would credit
 			// whoever holds index 0 with someone else's wonder.

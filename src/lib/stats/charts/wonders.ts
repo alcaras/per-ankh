@@ -157,7 +157,7 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 						? "No record of which games offered it"
 						: row.eligible === 0
 							? "No eligible players recorded"
-							: `Built in ${row.built} of ${row.eligible} matches (${pct(row.rate ?? 0)}%)`,
+							: `Built in ${row.built} of ${row.eligible} games (${pct(row.rate ?? 0)}%)`,
 				);
 				if (row.built > 0) {
 					facts.push(

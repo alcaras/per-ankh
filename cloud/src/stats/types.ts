@@ -169,6 +169,18 @@ export interface ChartBundleCore {
 	}>;
 
 	// --- Families ----------------------------------------------------
+	// The family class holding each focal player's capital, with how those
+	// games ended. Distinct from familyByNation: that asks whether a class was
+	// among the player's three, this asks which one ran the city the early
+	// bonuses compound through. Over an all-humans corpus the overall rate is
+	// ~50% by construction, so the signal is a class's deviation from it.
+	capitalFamilyWinRate: Array<{
+		family_class: string;
+		games: number;
+		wins: number;
+		rate: number;
+	}>;
+
 	// Per (nation, class): games where the player picked that class for
 	// that nation, and how many they won. The frontend derives pick rate
 	// (count ÷ nation games) and win rate (wins ÷ count) per nation.
@@ -177,6 +189,20 @@ export interface ChartBundleCore {
 		class: string;
 		count: number;
 		wins: number;
+		// Mean share of the player's end-of-game cities this class held. The
+		// denominator counts only cities that carry a family — a city with no
+		// family_class is skipped on both sides of the ratio — so it is a
+		// narrower base than player_summaries.cities_total, which counts every
+		// city matching the player's owner_nation. Null when no in-scope player
+		// has city data for it: older blobs carry no family on their cities.
+		avg_share: Nullable<number>;
+		// Picks behind avg_share (those with city data) — the mean's own sample,
+		// which the frontend weights by when recombining across nations.
+		share_samples: number;
+		// Picks where this class was the player's 1st / 2nd / 3rd family, ranked
+		// by when its first city was founded. Sums to at most `count` — a pick
+		// with no founding data contributes to none of them.
+		slot_counts: [number, number, number];
 	}>;
 
 	// --- Yields ------------------------------------------------------
