@@ -7,7 +7,8 @@
 //   GET    /v1/share/{id}  — Download a shared game blob
 //   DELETE /v1/share/{id}  — Delete a shared game blob
 //
-// Storage: R2 for blobs, D1 for the share index + audit events.
+// Storage: R2 for blobs, D1 for the share index (SHARE_DB) + the audit and
+// rate-limit rows in `events` (EVENTS_DB — always the primary, see d1.ts).
 
 import { nanoid } from "nanoid";
 import { validateSharePayload, extractMetadata } from "./validation";
@@ -18,10 +19,11 @@ import {
 	timingSafeEqual,
 } from "./util";
 import { logError, logWarn } from "./log";
+import type { QueryableD1, EventsEnv } from "./d1";
 
-export interface ShareLegacyEnv {
+export interface ShareLegacyEnv extends EventsEnv {
 	SHARE_BUCKET: R2Bucket;
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	MAX_COMPRESSED_SIZE: string;
 	MAX_DECOMPRESSED_SIZE: string;
 	ALLOWED_ORIGIN: string;
@@ -66,8 +68,12 @@ function errorResponse(
 
 // === Audit events ===
 
+// Takes the whole env rather than a handle so the write reads as
+// `env.EVENTS_DB.prepare(...)` at the point of use — the form the guard in
+// stale-tolerant-routes.test.ts recognises, and the form every other events
+// writer in the Worker uses.
 async function logEvent(
-	db: D1Database,
+	env: ShareLegacyEnv,
 	eventType: "upload" | "delete",
 	shareId: string,
 	appKey: string | null,
@@ -75,10 +81,9 @@ async function logEvent(
 	metadata?: Record<string, unknown>,
 ): Promise<void> {
 	try {
-		await db
-			.prepare(
-				"INSERT INTO events (event_type, share_id, app_key, ip_address, metadata) VALUES (?, ?, ?, ?, ?)",
-			)
+		await env.EVENTS_DB.prepare(
+			"INSERT INTO events (event_type, share_id, app_key, ip_address, metadata) VALUES (?, ?, ?, ?, ?)",
+		)
 			.bind(
 				eventType,
 				shareId,
@@ -94,6 +99,12 @@ async function logEvent(
 }
 
 // === Rate Limiting ===
+//
+// All three read `events`, so all three take a real `D1Database` (bound to
+// EVENTS_DB at the call site) rather than `QueryableD1`: a replica read would
+// miss rows a concurrent request just committed, and an under-counted limit
+// fails open. The parameter type is what makes handing them a session handle
+// a compile error — see d1.ts.
 
 // Per-app-key upload rate limit (D1)
 async function checkKeyRateLimit(
@@ -163,7 +174,7 @@ async function checkDownloadRateLimit(
 // === Blocklist ===
 
 async function checkBlocklists(
-	db: D1Database,
+	db: QueryableD1,
 	appKey: string,
 	ip: string | null,
 ): Promise<boolean> {
@@ -213,7 +224,7 @@ export async function handleUpload(
 	// 5. Rate limits: per-key, per-IP, global (before body buffering)
 	const maxPerHour = parseInt(env.RATE_LIMIT_PER_HOUR);
 	const withinKeyLimit = await checkKeyRateLimit(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		appKey,
 		maxPerHour,
 	);
@@ -224,7 +235,7 @@ export async function handleUpload(
 	if (ip) {
 		const ipMaxPerHour = parseInt(env.IP_RATE_LIMIT_PER_HOUR);
 		const withinIpLimit = await checkIpRateLimit(
-			env.SHARE_DB,
+			env.EVENTS_DB,
 			ip,
 			ipMaxPerHour,
 		);
@@ -235,7 +246,7 @@ export async function handleUpload(
 
 	const globalMax = parseInt(env.GLOBAL_UPLOAD_LIMIT_PER_HOUR);
 	const withinGlobalLimit = await checkGlobalUploadLimit(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		globalMax,
 	);
 	if (!withinGlobalLimit) {
@@ -362,7 +373,7 @@ export async function handleUpload(
 	}
 
 	// 16. Log upload event
-	await logEvent(env.SHARE_DB, "upload", shareId, appKey, ip, {
+	await logEvent(env, "upload", shareId, appKey, ip, {
 		blob_size: body.byteLength,
 		decompressed_size: decompressed.byteLength,
 	});
@@ -466,7 +477,7 @@ export async function handleDelete(
 
 	// 5. Log delete event
 	const ip = request.headers.get("CF-Connecting-IP");
-	await logEvent(env.SHARE_DB, "delete", shareId, share.app_key, ip);
+	await logEvent(env, "delete", shareId, share.app_key, ip);
 
 	return new Response(null, {
 		status: 204,

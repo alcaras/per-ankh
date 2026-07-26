@@ -1,5 +1,6 @@
 // Ambient Node surfaces used only by unit tests that run on Vitest's Node pool
-// (currently routes-doc.test.ts, which reads docs/api-reference.md from disk).
+// (routes-doc.test.ts, which reads docs/api-reference.md from disk, and
+// stale-tolerant-routes.test.ts, which walks cloud/src/ for events writes).
 // The worker tsconfig ships @cloudflare/workers-types only — no @types/node —
 // deliberately, so Node globals don't leak into worker source. These narrow
 // declarations keep `tsc --noEmit` happy without that. This file has no
@@ -8,6 +9,10 @@
 
 declare module "node:fs" {
 	export function readFileSync(path: string | URL, encoding: "utf8"): string;
+	export function readdirSync(
+		path: string | URL,
+		options: { withFileTypes: true },
+	): { name: string; isDirectory(): boolean }[];
 }
 
 interface ImportMeta {

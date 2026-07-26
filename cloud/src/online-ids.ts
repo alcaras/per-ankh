@@ -11,9 +11,10 @@ import {
 import { sessionFromRequest } from "./session";
 import type { SessionEnv } from "./session";
 import { logError } from "./log";
+import type { QueryableD1, EventsEnv } from "./d1";
 
-export interface OnlineIdsEnv extends SessionEnv {
-	SHARE_DB: D1Database;
+export interface OnlineIdsEnv extends SessionEnv, EventsEnv {
+	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 }
 
@@ -92,7 +93,7 @@ export async function handleRemoveOnlineId(
 	const changes = result.meta?.changes ?? 0;
 	if (changes > 0) {
 		try {
-			await env.SHARE_DB.prepare(
+			await env.EVENTS_DB.prepare(
 				`INSERT INTO events (event_type, user_id, ip_address, metadata)
 				 VALUES ('online_id_remove', ?, ?, ?)`,
 			)

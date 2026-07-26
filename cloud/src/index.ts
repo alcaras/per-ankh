@@ -17,6 +17,8 @@
 // events-retention sweep (cron in wrangler.toml, policy in retention.ts).
 
 import { cloudCorsHeaders, legacyCorsHeaders } from "./util";
+import { staleTolerantSession } from "./d1";
+import type { QueryableD1 } from "./d1";
 import {
 	emitAccessLog,
 	getRequestId,
@@ -118,6 +120,9 @@ import {
 } from "./tournament/admin";
 import type { TournamentAdminEnv } from "./tournament/admin";
 
+// The per-request env handlers receive. `SHARE_DB` is a `QueryableD1` because
+// `routeEnv` may substitute a Sessions API handle for the raw binding, and
+// `EVENTS_DB` is derived rather than bound. See d1.ts for the scheme.
 interface Env
 	extends
 		AuthEnv,
@@ -131,7 +136,8 @@ interface Env
 		ChannelsEnv,
 		SecurityEventsEnv {
 	SHARE_BUCKET: R2Bucket;
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
+	EVENTS_DB: D1Database;
 	SESSIONS_KV: KVNamespace;
 	ALLOWED_ORIGIN: string;
 	ALLOWED_ORIGINS: string;
@@ -139,6 +145,14 @@ interface Env
 	DISCORD_CLIENT_SECRET: string;
 	SESSION_COOKIE_NAME: string;
 }
+
+// What wrangler.toml actually binds, as handed to `fetch` and `scheduled`:
+// one real `D1Database`, no `EVENTS_DB`. `routeEnv` bridges this to `Env` and
+// is the only place allowed to — deriving the two handles anywhere else would
+// put a second, unreviewed replication policy in the codebase.
+type RawBindings = Omit<Env, "SHARE_DB" | "EVENTS_DB"> & {
+	SHARE_DB: D1Database;
+};
 
 // === Router ===
 //
@@ -163,6 +177,29 @@ interface RouteSpec {
 	match: { kind: "path"; path: string } | { kind: "regex"; regex: RegExp };
 	route: string;
 	handler: RouteHandler;
+	// Opt this route's `SHARE_DB` into D1 read replication. The session
+	// anchors `first-primary` (see d1.ts), so its reads are as fresh as the
+	// database was when the request arrived — the route serves replicas, not
+	// stale data. Omitted — the default — keeps the route on the primary
+	// exactly as before.
+	//
+	// Two things disqualify a route, and its handler's whole transitive call
+	// graph has to clear both:
+	//
+	//   - It writes to D1. A write anchors the bookmark forward, so every
+	//     later read in the request waits for a replica to catch up to it —
+	//     the latency cost with none of the benefit.
+	//   - It decides something on a *concurrent* request's write (a counter,
+	//     a uniqueness probe, a CAS guard). Anchoring at request arrival
+	//     can't see what landed mid-flight.
+	//
+	// The flag is route-level, so it cannot express "read-only for some
+	// callers": if either branch disqualifies, the route doesn't qualify.
+	// `events` queries are exempt from the audit — they run on EVENTS_DB, off
+	// the session, which is what settles the counter case for every route.
+	//
+	// Adding one here also needs an entry in stale-tolerant-routes.test.ts.
+	staleTolerant?: true;
 }
 
 const ROUTES: RouteSpec[] = [
@@ -717,6 +754,15 @@ const ROUTES: RouteSpec[] = [
 		},
 		route: "GET /v1/users/:user_id/stats",
 		handler: (r, e, m) => handleUserStats(m![1], r, e),
+		// The one route with no D1 write anywhere in its call graph:
+		// stats/resolve.ts and stats/aggregate.ts are SELECT-only and the
+		// bundle cache lives in KV (stats/cache.ts), not D1. Its 11 query
+		// sites all ride the one session: two sequential in resolveUserCorpus,
+		// then eight loaders in a single Promise.all (loadYieldCurves is
+		// itself two). The KV cache is a reason for care rather than
+		// comfort: a bundle is stored for 24h, so whatever this route reads is
+		// served for a day, which is why the session anchors first-primary.
+		staleTolerant: true,
 	},
 	// Public recent videos merged across the user's linked channels — feeds
 	// the profile "Videos" tab. Passes ctx so the cache can refresh in the
@@ -802,6 +848,14 @@ const ROUTES: RouteSpec[] = [
 // matching heading in docs/api-reference.md and vice-versa.
 export const ROUTE_KEYS: readonly string[] = ROUTES.map((r) => r.route);
 
+// The routes opted into replica reads, exported for the drift guard in
+// cloud/src/stale-tolerant-routes.test.ts. Flagging a route is a decision
+// about correctness, not a perf tweak, so it takes two edits: the flag here
+// and the reviewed list there.
+export const STALE_TOLERANT_ROUTE_KEYS: readonly string[] = ROUTES.filter(
+	(r) => r.staleTolerant,
+).map((r) => r.route);
+
 // Cloud paths use credentialed (echo-Origin) CORS so cookies traverse
 // per-ankh.app ↔ api.per-ankh.app. Legacy /v1/share uses single-origin.
 // /v1/csp-report rides cloud-CORS too — browsers don't preflight CSP
@@ -820,9 +874,23 @@ function isCloudPath(pathname: string): boolean {
 	);
 }
 
+// Derive the per-request env from the raw bindings: split the events handle
+// off, and give `staleTolerant` routes a Sessions API handle for everything
+// else. One session per request — sharing one across requests would let
+// bookmarks accumulate globally and defeat the point.
+function routeEnv(env: RawBindings, spec: RouteSpec): Env {
+	return {
+		...env,
+		EVENTS_DB: env.SHARE_DB,
+		SHARE_DB: spec.staleTolerant
+			? staleTolerantSession(env.SHARE_DB)
+			: env.SHARE_DB,
+	};
+}
+
 function dispatch(
 	request: Request,
-	env: Env,
+	env: RawBindings,
 	ctx: ExecutionContext,
 ): Promise<Response> {
 	const url = new URL(request.url);
@@ -831,12 +899,12 @@ function dispatch(
 		if (r.match.kind === "path") {
 			if (r.match.path !== url.pathname) continue;
 			setRoute(r.route);
-			return r.handler(request, env, null, ctx);
+			return r.handler(request, routeEnv(env, r), null, ctx);
 		}
 		const m = url.pathname.match(r.match.regex);
 		if (!m) continue;
 		setRoute(r.route);
-		return r.handler(request, env, m, ctx);
+		return r.handler(request, routeEnv(env, r), m, ctx);
 	}
 	// 404 — pick CORS based on path so error responses still allow the
 	// origin that asked. The cloud helper echoes the request Origin; the
@@ -855,7 +923,7 @@ function dispatch(
 export default {
 	async fetch(
 		request: Request,
-		env: Env,
+		env: RawBindings,
 		ctx: ExecutionContext,
 	): Promise<Response> {
 		return runWithLogContext(request, async () => {
@@ -907,9 +975,11 @@ export default {
 		});
 	},
 
+	// Not a dispatch path, so it never goes through `routeEnv` — the retention
+	// sweep is a DELETE and stays on the primary binding by construction.
 	async scheduled(
 		controller: ScheduledController,
-		env: Env,
+		env: RawBindings,
 		_ctx: ExecutionContext,
 	): Promise<void> {
 		// No runWithLogContext: log.ts is safe without a request context
@@ -932,4 +1002,4 @@ export default {
 			throw err;
 		}
 	},
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<RawBindings>;

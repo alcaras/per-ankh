@@ -23,9 +23,10 @@ import type {
 	Nullable,
 	YieldCohort,
 } from "./types";
+import type { QueryableD1 } from "../d1";
 
 export interface AggregateEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 }
 
 // Which roster rows count as the corpus's "focal" players — the set every

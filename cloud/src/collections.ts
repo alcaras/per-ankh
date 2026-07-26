@@ -12,9 +12,10 @@ import { CreateCollectionSchema } from "./schemas/collection";
 import { cloudCorsHeaders, errorResponse, jsonResponse } from "./util";
 import { sessionFromRequest } from "./session";
 import type { SessionEnv } from "./session";
+import type { QueryableD1 } from "./d1";
 
 export interface CollectionsEnv extends SessionEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 }
 

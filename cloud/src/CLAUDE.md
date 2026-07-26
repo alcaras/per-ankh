@@ -38,10 +38,11 @@ The stats bundle's cache-flush lever (`cloud/src/stats/cache.ts`). **Don't edit 
 
 ## Events retention
 
-A nightly cron (03:47 UTC, `[triggers]` in `cloud/wrangler.toml`) prunes the `events` table per the policy in `cloud/src/retention.ts`: 24h for rate-limit counters, 90d for general audit, never for tournament audit. Two rules when touching events:
+A nightly cron (03:47 UTC, `[triggers]` in `cloud/wrangler.toml`) prunes the `events` table per the policy in `cloud/src/retention.ts`: 24h for rate-limit counters, 90d for general audit, never for tournament audit. Three rules when touching events:
 
 - **Adding a new `event_type`:** give it a home in `retention.ts` (a bucket or `KEEP_FOREVER`). Unlisted types are never deleted and are logged nightly as `unknown_types` until a policy decision is made.
 - **Adding a reader of `events`:** its query window must fit inside the type's retention bucket — the floors are pinned in `cloud/src/retention.test.ts` (rate-limit reads 1h, admin stats 30d); raise them there if a longer window is needed.
+- **Query `events` through `env.EVENTS_DB`, never `env.SHARE_DB`.** `EVENTS_DB` is always the primary binding; `SHARE_DB` may be a D1 read-replication session on routes flagged `staleTolerant`. A replica read only sees what the session's bookmark covers, so a rate-limit `COUNT(*)` misses whatever a concurrent request just committed — an under-count, so limits fail **open** — and an audit INSERT on the session would anchor its bookmark forward and drag the rest of the handler's reads back to the primary. Helpers that count events take a real `D1Database` so a session handle won't compile; keep it that way. The rationale is in `cloud/src/d1.ts`, and the one documented exception is pinned by the guard, `cloud/src/stale-tolerant-routes.test.ts`.
 
 ## Game / user identity & PII
 

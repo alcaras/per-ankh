@@ -23,6 +23,16 @@ beforeAll(async () => {
 	await applyD1Migrations(env.SHARE_DB, env.TEST_MIGRATIONS);
 });
 
+// `cloudflare:test`'s env is the wrangler.toml bindings, so it has no
+// EVENTS_DB — that handle is derived per-request by `routeEnv` in index.ts,
+// which these direct handler calls bypass. Mirror the derivation rather than
+// calling with an env shape production never sees: `logSystemTournamentAction`
+// would throw on `undefined.prepare` and land in auto-advance's catch, turning
+// a missing binding into a swallowed `tournament_auto_advance_failed`. Nothing
+// typechecks test/ (tsconfig includes src/**/*.ts only), so the compiler
+// won't catch it either.
+const handlerEnv = { ...env, EVENTS_DB: env.SHARE_DB };
+
 async function reportMatch(
 	tournamentId: string,
 	matchId: string,
@@ -72,7 +82,7 @@ describe("idempotent auto-advance (parallel last-match reports)", () => {
 		// Re-run advance for the same final match — simulates a second racing
 		// report's advance call landing after round 1 is already closed and
 		// round 2 already exists. Must be a no-op.
-		await maybeAdvanceAfterMatchReport(env, lastMatch.match_id);
+		await maybeAdvanceAfterMatchReport(handlerEnv, lastMatch.match_id);
 
 		const aRoundsFinal = (await t.rounds()).filter(
 			(r) => r.phase === "swiss" && r.division === "A",
@@ -137,7 +147,7 @@ describe("idempotent auto-advance (parallel last-match reports)", () => {
 		const roundCountBefore = (await t.rounds()).length;
 
 		// Re-run advance for the final — must not add a round or change status.
-		await maybeAdvanceAfterMatchReport(env, final.match_id);
+		await maybeAdvanceAfterMatchReport(handlerEnv, final.match_id);
 		expect((await t.refresh()).status).toBe("complete");
 		expect((await t.rounds()).length).toBe(roundCountBefore);
 	});

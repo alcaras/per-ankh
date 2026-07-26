@@ -8,9 +8,10 @@
 
 import { buildUserScopeWhere, TOURNAMENT_GAME_IDS_SQL } from "../games-scope";
 import type { UserScope, UserStatsScope } from "./types";
+import type { QueryableD1 } from "../d1";
 
 export interface ResolveEnv {
-	SHARE_DB: D1Database;
+	SHARE_DB: QueryableD1;
 }
 
 export interface StatsCorpus {

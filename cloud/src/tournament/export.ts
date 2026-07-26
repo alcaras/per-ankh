@@ -30,8 +30,10 @@ import {
 	loadUserIdentitiesForMatches,
 	type UserIdentity,
 } from "./public";
+import type { EventsEnv } from "../d1";
 
-export interface TournamentExportEnv extends TournamentEnv, SessionEnv {
+export interface TournamentExportEnv
+	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 }
 
@@ -223,7 +225,7 @@ export async function handleTournamentExport(
 	}
 
 	const exportCount = await countEventsSince(
-		env.SHARE_DB,
+		env.EVENTS_DB,
 		"tournament_export",
 		"user_id",
 		session.data.user_id,
@@ -287,7 +289,7 @@ export async function handleTournamentExport(
 	});
 
 	// Fire-and-forget audit + rate-limit event (mirrors admin.ts).
-	env.SHARE_DB.prepare(
+	env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, user_id, metadata)
 		 VALUES ('tournament_export', ?, ?)`,
 	)
