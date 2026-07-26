@@ -77,9 +77,7 @@ Underlying principles: **optimize for the app, not developer time** (evaluate op
 
 ## Reviewing contributor PRs
 
-Checks to run against a contributor PR. Write each one so it's verifiable against the diff; vague guidance produces no review signal.
-
-- **Domain vocabulary.** Every domain noun the diff introduces must be the word Old World uses; `Reference/XML` is the authority. Grep the whole repo for the new term *and* its XML counterpart — a term appearing nowhere else is the finding. Known violation: `building` for `improvement` ([#143](https://github.com/becked/per-ankh/issues/143)).
+Review correctness as normal, then check **fit** — contributions here work and have tests, and still diverge from established patterns or miss sibling call sites. Fit defects pass a correctness review by construction, so they need explicit checks: those, and how to run them against a diff, live in the **`pr-review` skill**; the section above is the policy they test against.
 
 ## Coding Standards
 
@@ -140,6 +138,6 @@ Authoritative references in `docs/` (it also holds historical analyses — trust
 - `docs/owreference-data-extraction.md` + `docs/reference-popup-data-approaches.md` — Reference/XML extraction.
 - `docs/reference/color-scheme.md` — chart/UI color reference.
 
-**Skills** (`.claude/skills/`, loaded on demand): `deploy` (prod/staging runbook), `admin-cli` (`./per-ankh admin` operator surface), `bake` (asset bake pipeline), `tournament-rules` (answering rules questions), `doc-audit` (docs staleness pass).
+**Skills** (`.claude/skills/`, loaded on demand): `deploy` (prod/staging runbook), `admin-cli` (`./per-ankh admin` operator surface), `bake` (asset bake pipeline), `tournament-rules` (answering rules questions), `pr-review` (contributor-PR fit checks), `doc-audit` (docs staleness pass).
 
 **Nested `CLAUDE.md`** (loaded when you work there): `cloud/src/` (Worker), `src/lib/tournament/` (tournament UI), `src/lib/game-detail/` (game detail view + legacy `web/` share viewer).
