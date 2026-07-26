@@ -20,6 +20,7 @@ beforeAll(async () => {
 
 const SAGES = "FAMILYCLASS_SAGES";
 const TRADERS = "FAMILYCLASS_TRADERS";
+const CHAMPIONS = "FAMILYCLASS_CHAMPIONS";
 
 type FamilyRow = {
 	nation: string;
@@ -34,13 +35,29 @@ type FamilyRow = {
 async function upload(
 	user: TestUser,
 	opts: Parameters<typeof buildUploadFormData>[0],
-): Promise<void> {
+): Promise<string> {
 	const res = await postMultipart({
 		path: "/v1/games",
 		form: await buildUploadFormData(opts),
 		as: user,
 	});
+	// A failing insert takes the whole upload batch down, so the status code is
+	// the assertion that matters for the param-cap cases below.
 	expect(res.status).toBe(201);
+	return (await expectOk<{ game_id: string }>(res)).game_id;
+}
+
+// The (player, family class) rows the upload actually wrote.
+async function footprint(
+	gameId: string,
+): Promise<Array<{ player_index: number; family_class: string }>> {
+	const res = await env.SHARE_DB.prepare(
+		`SELECT player_index, family_class FROM player_family_cities
+		 WHERE game_id = ? ORDER BY player_index, family_class`,
+	)
+		.bind(gameId)
+		.all<{ player_index: number; family_class: string }>();
+	return res.results ?? [];
 }
 
 async function families(user: TestUser): Promise<Map<string, FamilyRow>> {
@@ -130,6 +147,73 @@ describe("family stats", () => {
 		}>(await request.get({ path: `/v1/users/${user.userId}/stats`, as: user }));
 		expect(bundle.capitalFamilyWinRate).toEqual([
 			{ family_class: TRADERS, games: 1, wins: 1, rate: 1 },
+		]);
+	});
+
+	// A pre-2.6.0 blob's cities carry no family_class at all. The whole backfill
+	// story rests on those games degrading to "no data" instead of failing, so
+	// the empty bundle field is the assertion.
+	it("yields no capital family rows when no city carries a family", async () => {
+		const user = await makeUser();
+		await upload(user, {
+			winnerIndex: 0,
+			cities: [{ owner: 0, isCapital: true }, { owner: 0 }],
+		});
+
+		const bundle = await expectOk<{
+			capitalFamilyWinRate: unknown[];
+			familyByNation: unknown[];
+		}>(await request.get({ path: `/v1/users/${user.userId}/stats`, as: user }));
+		expect(bundle.capitalFamilyWinRate).toEqual([]);
+		expect(bundle.familyByNation).toEqual([]);
+	});
+
+	// player_family_cities takes 5 bindings per row against D1's 99-parameter
+	// ceiling, so the insert has to chunk at 19 rows. A full multiplayer lobby
+	// clears that in one game — eight seats running three families each is 24
+	// rows — and because every derived write shares one atomic batch(), an
+	// over-wide chunk doesn't lose the footprint, it 500s the upload.
+	it("writes every human seat's families past the insert parameter cap", async () => {
+		const user = await makeUser();
+		const HUMANS = 8;
+		const CLASSES = [SAGES, TRADERS, CHAMPIONS];
+		const gameId = await upload(user, {
+			winnerIndex: 0,
+			humans: HUMANS,
+			cities: Array.from({ length: HUMANS }, (_, owner) =>
+				CLASSES.map((familyClass, i) => ({
+					owner,
+					familyClass,
+					foundedTurn: 4 + i * 8,
+					isCapital: i === 0,
+				})),
+			).flat(),
+		});
+
+		const rows = await footprint(gameId);
+		expect(rows.length).toBe(HUMANS * CLASSES.length);
+		expect(rows.filter((r) => r.player_index === HUMANS - 1).length).toBe(
+			CLASSES.length,
+		);
+	});
+
+	// Nothing reads an AI's footprint — loadFamilyCities joins on
+	// ps.is_human = 1 — so writing one is dead storage, and in a vs-AI save the
+	// AI seats are most of the rows.
+	it("leaves AI seats out of the footprint table", async () => {
+		const user = await makeUser();
+		const gameId = await upload(user, {
+			winnerIndex: 0,
+			aiPlayer: true,
+			cities: [
+				{ owner: 0, familyClass: SAGES, isCapital: true },
+				// The AI at index 2 runs a family of its own.
+				{ owner: 2, familyClass: TRADERS, isCapital: true },
+			],
+		});
+
+		expect(await footprint(gameId)).toEqual([
+			{ player_index: 0, family_class: SAGES },
 		]);
 	});
 });

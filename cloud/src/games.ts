@@ -101,14 +101,18 @@ export function isScraperUA(ua: string | null): boolean {
 // D1 caps bound parameters at 100 per query (much tighter than standalone
 // SQLite's 999). Multi-row INSERTs chunked so N_rows × N_cols ≤ 99 to
 // leave headroom, all bundled into one db.batch() call so an upload/reindex
-// remains a single transaction. GPT_COLS MUST equal the length of the
-// `columns` array in buildGamePlayerTurnStatements — if they drift, chunks
-// overshoot the param cap and every insert fails with "too many SQL
-// variables".
+// remains a single transaction. Each *_COLS below MUST equal the length of the
+// `columns` array its builder binds — if they drift, chunks overshoot the param
+// cap and every insert fails with "too many SQL variables", which fails the
+// whole batch and so the whole upload.
 const D1_MAX_PARAMS = 99;
 const GPT_COLS = 34; // 3 keys + 14 yields × 2 + military_power + legitimacy + points
 const GPT_ROWS_PER_INSERT = Math.floor(D1_MAX_PARAMS / GPT_COLS); // 2
 const TECH_LAW_ROWS_PER_INSERT = Math.floor(D1_MAX_PARAMS / 4); // 24
+const FAMILY_CITY_COLS = 5; // game_id, player_index, family_class, cities, first_founded_turn
+const FAMILY_CITY_ROWS_PER_INSERT = Math.floor(
+	D1_MAX_PARAMS / FAMILY_CITY_COLS,
+); // 19
 
 // ---------- Rate limit checks (D1 events table) ----------
 
@@ -640,6 +644,12 @@ function buildGamePlayerTurnStatements(
 // one side with the other's; a city with no family (unassigned or pre-2.6.0
 // blob) simply doesn't contribute.
 //
+// Human seats only. The stats layer reads these rows through a
+// `ps.is_human = 1` join (loadFamilyCities in stats/aggregate.ts), so an AI's
+// families are rows nothing can ever read — and with up to three per seat, the
+// AI seats of an ordinary vs-AI save are also what would carry the insert past
+// D1's parameter cap.
+//
 // `first_founded_turn` deliberately counts only cities this player founded
 // (first_owner_player_xml_id). A captured city keeps the turn its *original*
 // owner founded it, so counting captures would date a family to a turn the
@@ -663,6 +673,12 @@ function buildFamilyCityStatements(
 	const cities = cityStats?.cities;
 	if (!Array.isArray(cities) || cities.length === 0) return [];
 
+	const humanIndexes = new Set(
+		(blob.player_roster as PlayerRosterEntry[])
+			.filter((p) => p.is_human)
+			.map((p) => p.player_index),
+	);
+
 	// key = `${player_index}|${family_class}`
 	const tally = new Map<
 		string,
@@ -675,6 +691,7 @@ function buildFamilyCityStatements(
 	>();
 	for (const c of cities) {
 		if (c.owner_player_xml_id == null || !c.family_class) continue;
+		if (!humanIndexes.has(c.owner_player_xml_id)) continue;
 		const key = `${c.owner_player_xml_id}|${c.family_class}`;
 		const e = tally.get(key) ?? {
 			player: c.owner_player_xml_id,
@@ -702,7 +719,10 @@ function buildFamilyCityStatements(
 		"first_founded_turn",
 	];
 	const statements: D1PreparedStatement[] = [];
-	for (const chunk of chunked([...tally.values()], TECH_LAW_ROWS_PER_INSERT)) {
+	for (const chunk of chunked(
+		[...tally.values()],
+		FAMILY_CITY_ROWS_PER_INSERT,
+	)) {
 		const sql = buildMultiRowInsert(
 			"player_family_cities",
 			columns,

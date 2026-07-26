@@ -15,9 +15,32 @@ import { nanoid } from "nanoid";
 
 const PARSER_VERSION = "2.4.0";
 
+// Nation per roster index. Every seat gets a distinct nation so that anything
+// keyed on nation rather than player index — derivePlayerSummary's
+// `cities_total`, the per-nation stats rows — attributes to the seat that owns
+// it. The first three are load-bearing: tests that predate the wider roster
+// assume player 0 is Egypt, player 1 Rome, and the `aiPlayer` seat Greece.
+// A roster larger than this list is a fixture-authoring error.
+const NATIONS = [
+	"NATION_EGYPT",
+	"NATION_ROME",
+	"NATION_GREECE",
+	"NATION_PERSIA",
+	"NATION_ASSYRIA",
+	"NATION_BABYLONIA",
+	"NATION_CARTHAGE",
+	"NATION_KUSH",
+	"NATION_AKSUM",
+	"NATION_HITTITE",
+	"NATION_MAURYA",
+	"NATION_TAMIL",
+	"NATION_YUEZHI",
+] as const;
+
 export interface UploadFixtureOpts {
-	// player_index of the winning human (must be 0 or 1 — fixture
-	// always builds exactly two humans at indexes 0 and 1).
+	// player_index of the winning human. Restricted to the first two seats,
+	// which is every seat in the default two-human shape; a wider or narrower
+	// roster is `humans` below.
 	readonly winnerIndex: 0 | 1;
 	// Salt mixed into the ZIP placeholder so two fixtures produce
 	// distinct file_hash values; defaults to a fresh nanoid.
@@ -30,12 +53,14 @@ export interface UploadFixtureOpts {
 	// — bump those when adding a new value. Used by reimport tests that
 	// need to produce a newer version than an earlier upload.
 	readonly parserVersion?: string;
-	// Number of humans in the roster. Defaults to 2 (the standard
-	// tournament-match shape). Pass 1 to build a single-human save — used
-	// by the bye-upload test, which checks the worker rejects a one-human
-	// save against a bye match with WRONG_HUMAN_COUNT. With humans=1 the
-	// only valid winnerIndex is 0.
-	readonly humans?: 1 | 2;
+	// Number of humans in the roster, seated at indexes 0..humans-1. Defaults
+	// to 2 (the standard tournament-match shape). Pass 1 to build a single-human
+	// save — used by the bye-upload test, which checks the worker rejects a
+	// one-human save against a bye match with WRONG_HUMAN_COUNT; with humans=1
+	// the only valid winnerIndex is 0. Larger values model a multiplayer save,
+	// where the per-seat derived rows multiply (see the family-stats param-cap
+	// test). Capped at NATIONS.length.
+	readonly humans?: number;
 	// Wonder-stats inputs (see cloud/test/integration/games/wonder-stats.test.ts).
 	// `wonders` seeds player_wonders — a null nation marks a build whose builder
 	// the parser couldn't resolve. `disabledImprovements` seeds the game-level
@@ -54,16 +79,17 @@ export interface UploadFixtureOpts {
 	// another player (which keeps its original founding turn).
 	readonly cities?: ReadonlyArray<{
 		owner: number;
-		culture_level?: string;
+		cultureLevel?: string;
 		familyClass?: string | null;
 		foundedTurn?: number;
 		isCapital?: boolean;
 		capturedFrom?: number;
 	}>;
 	readonly disabledImprovements?: readonly string[];
-	// Append a non-human player at index 2. The wonder stats count only human
-	// builders, so an AI build has to be visible to the eligibility gate — a
-	// wonder it finished is off the board for the humans in that game.
+	// Append a non-human player after the humans (index 2 in the default
+	// two-human shape). The wonder stats count only human builders, so an AI
+	// build has to be visible to the eligibility gate — a wonder it finished is
+	// off the board for the humans in that game.
 	readonly aiPlayer?: boolean;
 }
 
@@ -109,72 +135,32 @@ export async function buildUploadFormData(
 function buildMinimalGameBlob(
 	winnerIndex: 0 | 1,
 	parserVersion: string | undefined,
-	humans: 1 | 2,
+	humans: number,
 	opts: UploadFixtureOpts,
 ): Record<string, unknown> {
-	// Player 1 (NATION_ROME) only exists in the two-human shape; a single-human
-	// save (a bye) has just Player 0.
-	const players = [
-		{
-			player_name: "Player 0",
-			nation: "NATION_EGYPT",
-			is_human: true,
-			legitimacy: 50,
-			state_religion: null,
-		},
-		{
-			player_name: "Player 1",
-			nation: "NATION_ROME",
-			is_human: true,
-			legitimacy: 50,
-			state_religion: null,
-		},
-	]
-		.slice(0, humans)
-		.concat(
-			opts.aiPlayer
-				? [
-						{
-							player_name: "Player 2",
-							nation: "NATION_GREECE",
-							is_human: false,
-							legitimacy: 50,
-							state_religion: null,
-						},
-					]
-				: [],
-		);
-	const playerRoster: Array<{
-		player_index: number;
-		player_name: string;
-		nation: string;
-		is_human: boolean;
-		online_id: string | null;
-	}> = [
-		{
-			player_index: 0,
-			player_name: "Player 0",
-			nation: "NATION_EGYPT",
-			is_human: true,
-			online_id: "steam:000000000000001",
-		},
-		{
-			player_index: 1,
-			player_name: "Player 1",
-			nation: "NATION_ROME",
-			is_human: true,
-			online_id: "steam:000000000000002",
-		},
-	].slice(0, humans);
-	if (opts.aiPlayer) {
-		playerRoster.push({
-			player_index: 2,
-			player_name: "Player 2",
-			nation: "NATION_GREECE",
-			is_human: false,
-			online_id: null,
-		});
-	}
+	// One seat per human at indexes 0..humans-1, then the optional AI seat
+	// immediately after them. A single-human save (a bye) has just Player 0.
+	const seats = Array.from({ length: humans }, (_, i) => ({
+		index: i,
+		isHuman: true,
+	})).concat(opts.aiPlayer ? [{ index: humans, isHuman: false }] : []);
+	const players = seats.map((s) => ({
+		player_name: `Player ${s.index}`,
+		nation: NATIONS[s.index],
+		is_human: s.isHuman,
+		legitimacy: 50,
+		state_religion: null,
+	}));
+	const playerRoster = seats.map((s) => ({
+		player_index: s.index,
+		player_name: `Player ${s.index}`,
+		nation: NATIONS[s.index],
+		is_human: s.isHuman,
+		// Only humans carry an OnlineID; the worker links the uploader's.
+		online_id: s.isHuman
+			? `steam:${String(s.index + 1).padStart(15, "0")}`
+			: null,
+	}));
 	return {
 		version: 2,
 		parser_version: parserVersion ?? PARSER_VERSION,
@@ -235,11 +221,13 @@ function buildMinimalGameBlob(
 			cities: (opts.cities ?? []).map((c, i) => ({
 				city_id: i + 1,
 				city_name: `CITYNAME_TEST_${i}`,
-				owner_nation: "NATION_EGYPT",
+				// The current owner's nation, not a fixed one — a real save can't
+				// have a city flying a nation nobody at that index plays.
+				owner_nation: NATIONS[c.owner],
 				owner_player_xml_id: c.owner,
 				first_owner_player_xml_id: c.capturedFrom ?? c.owner,
 				founded_turn: c.foundedTurn ?? 5,
-				culture_level: c.culture_level,
+				culture_level: c.cultureLevel ?? null,
 				is_capital: c.isCapital ?? false,
 				family_class: c.familyClass ?? null,
 			})),
