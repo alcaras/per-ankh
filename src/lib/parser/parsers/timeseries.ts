@@ -235,56 +235,6 @@ export function yieldPriceHistoryToRow(
 	};
 }
 
-export function militaryPowerHistoryToRow(
-	h: MilitaryPowerHistory,
-): Record<string, unknown> {
-	return {
-		player_xml_id: h.playerXmlId,
-		turn: h.turn,
-		military_power: h.militaryPower,
-	};
-}
-
-export function pointsHistoryToRow(h: PointsHistory): Record<string, unknown> {
-	return {
-		player_xml_id: h.playerXmlId,
-		turn: h.turn,
-		points: h.points,
-	};
-}
-
-export function legitimacyHistoryToRow(
-	h: LegitimacyHistory,
-): Record<string, unknown> {
-	return {
-		player_xml_id: h.playerXmlId,
-		turn: h.turn,
-		legitimacy: h.legitimacy,
-	};
-}
-
-export function yieldRateHistoryToRow(
-	h: YieldRateHistory,
-): Record<string, unknown> {
-	return {
-		player_xml_id: h.playerXmlId,
-		turn: h.turn,
-		yield_type: h.yieldType,
-		amount: h.amount,
-	};
-}
-
-export function yieldTotalHistoryToRow(
-	h: YieldTotalHistory,
-): Record<string, unknown> {
-	return {
-		player_xml_id: h.playerXmlId,
-		turn: h.turn,
-		yield_type: h.yieldType,
-		amount: h.amount,
-	};
-}
-
 export function familyOpinionHistoryToRow(
 	h: FamilyOpinionHistory,
 ): Record<string, unknown> {

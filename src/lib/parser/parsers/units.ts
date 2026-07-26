@@ -306,39 +306,3 @@ export function unitPromotionToRow(p: UnitPromotion): Record<string, unknown> {
 		is_acquired: p.isAcquired,
 	};
 }
-
-export function unitEffectToRow(e: UnitEffect): Record<string, unknown> {
-	return {
-		unit_xml_id: e.unitXmlId,
-		effect: e.effect,
-		stacks: e.stacks,
-	};
-}
-
-export function unitFamilyToRow(f: UnitFamily): Record<string, unknown> {
-	return {
-		unit_xml_id: f.unitXmlId,
-		player_xml_id: f.playerXmlId,
-		family_name: f.familyName,
-	};
-}
-
-export function playerUnitProductionToRow(
-	p: PlayerUnitProduction,
-): Record<string, unknown> {
-	return {
-		player_xml_id: p.playerXmlId,
-		unit_type: p.unitType,
-		count: p.count,
-	};
-}
-
-export function cityUnitProductionToRow(
-	c: CityUnitProduction,
-): Record<string, unknown> {
-	return {
-		city_xml_id: c.cityXmlId,
-		unit_type: c.unitType,
-		count: c.count,
-	};
-}

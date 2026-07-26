@@ -334,55 +334,6 @@ export function playerResourceToRow(
 	};
 }
 
-export function technologyProgressToRow(
-	t: TechnologyProgress,
-): Record<string, unknown> {
-	return {
-		player_xml_id: t.playerXmlId,
-		tech: t.tech,
-		progress: t.progress,
-	};
-}
-
-export function technologyCompletedToRow(
-	t: TechnologyCompleted,
-): Record<string, unknown> {
-	return {
-		player_xml_id: t.playerXmlId,
-		tech: t.tech,
-		completed_turn: t.completedTurn,
-	};
-}
-
-export function technologyStateToRow(
-	t: TechnologyState,
-): Record<string, unknown> {
-	return {
-		player_xml_id: t.playerXmlId,
-		tech: t.tech,
-		state: t.state,
-	};
-}
-
-export function playerCouncilToRow(c: PlayerCouncil): Record<string, unknown> {
-	return {
-		player_xml_id: c.playerXmlId,
-		position: c.position,
-		character_xml_id: c.characterXmlId,
-		appointed_turn: c.appointedTurn,
-	};
-}
-
-export function lawToRow(l: Law): Record<string, unknown> {
-	return {
-		player_xml_id: l.playerXmlId,
-		law_category: l.lawCategory,
-		law: l.law,
-		adopted_turn: l.adoptedTurn,
-		change_count: l.changeCount,
-	};
-}
-
 export function playerGoalToRow(g: PlayerGoal): Record<string, unknown> {
 	return {
 		player_xml_id: g.playerXmlId,
