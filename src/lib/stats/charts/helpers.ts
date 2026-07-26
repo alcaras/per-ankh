@@ -124,10 +124,15 @@ export interface WinLossRow {
 // Horizontal stacked wins/losses bar: bar length = games played, the split
 // shows the rate. Sorted by games ascending so the busiest category sits at
 // the top (ECharts stacks a category axis bottom-up). One builder behind every
-// outcome bar in the catalog — nations, leader archetypes, starting traits —
-// so they stay identical by construction rather than by copy.
-export function winLossStackedOption(opts: {
-	rows: WinLossRow[];
+// outcome bar in the catalog — nations, leader archetypes, starting traits,
+// family classes — so they stay identical by construction rather than by copy.
+//
+// Generic over the row so a caller can hang its own fields off `WinLossRow`
+// (pick rate, city share, founding-order slots) and read them back in
+// `tooltipFormatter` / `barLabel`. Those callbacks receive the *sorted* row
+// rather than an index, so a caller can't mis-index against the pre-sort order.
+export function winLossStackedOption<R extends WinLossRow>(opts: {
+	rows: R[];
 	// Display name for a row key (fmtNation, fmtTrait, …).
 	label: (value: string) => string;
 	// Sprite for a row key, when the category has icon art (nation crests,
@@ -135,12 +140,30 @@ export function winLossStackedOption(opts: {
 	iconUrl?: (value: string) => string | undefined;
 	// Room reserved for the axis labels; widen for long names.
 	labelWidth?: number;
+	// In-chart ECharts title, for the panels that stack several of these with
+	// no HTML heading of their own (Families). The registry-driven charts leave
+	// it off — StatsView titles those from the spec.
+	title?: string;
+	// Replaces the default name / wins / rate tooltip body, for a category with
+	// more to say than the outcome split.
+	tooltipFormatter?: (row: R) => string;
+	// Per-row annotation hung off the end of the bar.
+	barLabel?: (row: R) => string;
 }): ChartOption {
-	const { rows, label, iconUrl, labelWidth = 140 } = opts;
+	const {
+		rows,
+		label,
+		iconUrl,
+		labelWidth = 140,
+		title,
+		tooltipFormatter,
+		barLabel,
+	} = opts;
 	const sorted = [...rows].sort((a, b) => a.games - b.games);
 	const keys = sorted.map((r) => r.key);
 	return {
 		...CHART_THEME,
+		...(title ? { title: { ...CHART_THEME.title, text: title } } : {}),
 		tooltip: {
 			...CHART_THEME.tooltip,
 			axisPointer: { type: "shadow" },
@@ -148,10 +171,18 @@ export function winLossStackedOption(opts: {
 				const p = (params as { dataIndex: number }[])[0];
 				const row = sorted[p.dataIndex];
 				if (!row) return "";
+				if (tooltipFormatter) return tooltipFormatter(row);
 				return `${label(row.key)}<br/>Wins: ${row.wins} / ${row.games}<br/>Rate: ${Math.round(row.rate * 100)}%`;
 			},
 		},
-		grid: { ...COMMON_GRID, left: labelWidth },
+		grid: {
+			...COMMON_GRID,
+			left: labelWidth,
+			// A title needs headroom (the same 64 the titled charts elsewhere
+			// use), a bar label needs room past the end of the longest bar.
+			...(title ? { top: 64 } : {}),
+			...(barLabel ? { right: 120 } : {}),
+		},
 		xAxis: { type: "value" },
 		yAxis: {
 			type: "category",
@@ -183,6 +214,22 @@ export function winLossStackedOption(opts: {
 				stack: "outcome",
 				data: sorted.map((r) => r.games - r.wins),
 				itemStyle: { color: LOSS_COLOR },
+				// Hung off the loss segment so it lands past the end of the whole
+				// bar, whatever the split.
+				...(barLabel
+					? {
+							label: {
+								show: true,
+								position: "right" as const,
+								color: CHART_THEME.textStyle.color,
+								fontSize: 11,
+								formatter: (p: { dataIndex: number }) => {
+									const row = sorted[p.dataIndex];
+									return row ? barLabel(row) : "";
+								},
+							},
+						}
+					: {}),
 			},
 		],
 	};
