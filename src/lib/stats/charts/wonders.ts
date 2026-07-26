@@ -104,6 +104,12 @@ const OUTCOME_BUCKETS = [
 	},
 ] as const;
 
+// Turn-axis tick spacing. Set explicitly rather than left to splitNumber: the
+// axis max is rounded to it, and ECharts' own choice of interval doesn't have
+// to divide that max — 0–120 by its default lands on 25s, which would put a
+// tick at 100 and the boundary at 120 right back on top of each other.
+const TICK_INTERVAL = 20;
+
 function bucketIndex(winRate: number): number {
 	return OUTCOME_BUCKETS.findIndex((b) => winRate >= b.min);
 }
@@ -112,9 +118,13 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 	const rows = orderRows(bundle.wonderStats);
 	const wonders = rows.map((r) => r.wonder);
 	const built = rows.filter((r) => r.built > 0);
-	// Axis extent runs to the latest P75; the trailing labels sit outside the
-	// grid (grid.right) rather than needing headroom inside it.
+	// Axis extent runs past the latest P75 to the next tick; the trailing labels
+	// sit outside the grid (grid.right) rather than needing headroom inside it.
+	// Rounded to TICK_INTERVAL because ECharts always draws a boundary tick at an
+	// explicit max: any other value plants a stray gridline and label a few turns
+	// after the last regular one.
 	const maxTurn = Math.max(...built.map((r) => r.p75_turn ?? 0), 10);
+	const axisMax = Math.ceil(maxTurn / TICK_INTERVAL) * TICK_INTERVAL;
 
 	return {
 		...CHART_THEME,
@@ -174,7 +184,8 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 			name: "Turn built",
 			...AXIS_NAME_X,
 			min: 0,
-			max: Math.ceil(maxTurn * 1.02),
+			max: axisMax,
+			interval: TICK_INTERVAL,
 		},
 		yAxis: {
 			type: "category",
