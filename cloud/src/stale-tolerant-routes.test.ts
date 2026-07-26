@@ -41,11 +41,17 @@ const EXEMPT_EVENTS_WRITES: Record<string, number> = {
 
 const SRC_DIR = new URL(".", import.meta.url);
 
-// Any receiver, not just `env.SHARE_DB` — share-legacy.ts writes through a
-// `db.prepare` parameter, and a guard that only knew the direct form would miss
-// exactly the indirection a new caller is most likely to reach for. The `\s*`
-// spans Prettier's line break in `await db\n  .prepare(`.
-const EVENTS_WRITE_RE = /([\w.]+)\s*\.prepare\(\s*[`"]INSERT INTO events/g;
+// Any receiver, not just `env.SHARE_DB` — a helper that takes the handle as a
+// `db` parameter is exactly the indirection a new caller reaches for, and a
+// guard that only knew the direct form would miss it. The `\s*` spans
+// Prettier's line break in `await db\n  .prepare(`, and the OR clause covers
+// `INSERT OR IGNORE/REPLACE INTO`.
+//
+// This catches the inline-literal form only. SQL held in a const, or assembled
+// at runtime, is out of a regex's reach — write events through EVENTS_DB
+// because the invariant says so, not because this test can see you.
+const EVENTS_WRITE_RE =
+	/([\w.]+)\s*\.prepare\(\s*[`"]\s*INSERT(?:\s+OR\s+\w+)?\s+INTO\s+events\b/gi;
 const EVENTS_HANDLE = "env.EVENTS_DB";
 
 function sourceFiles(dir: URL, prefix = ""): string[] {
