@@ -36,13 +36,16 @@ export function fmtLaw(value: string): string {
 export const WIN_COLOR = "#C87941";
 export const LOSS_COLOR = "#5a4d3f";
 
-// The third tone for a chart that buckets an outcome rather than splitting it
-// two ways: warm enough to sit between the two above, desaturated enough not to
-// read as either. MARKER_OUTLINE is the light rule that keeps a LOSS_COLOR fill
-// legible against a dark span — the same tooltip-text shade the game-detail
-// rails use, kept here so the chart palette stays in one file.
-export const MIXED_COLOR = "#9b8f7d";
-export const MARKER_OUTLINE = "#cfc9bd";
+// Fills for a chart that buckets an outcome three ways rather than splitting it
+// two (the wonders bars) — the same warm range the tournament standings bars
+// draw from. Kept here so the chart palette stays in one file.
+export const OUTCOME_WON = "#965636";
+export const OUTCOME_MIXED = "#c2884c";
+export const OUTCOME_LOST = "#c46f33";
+
+// The app's body-text tan (--color-tan, what `text-tan` renders), spelled as a
+// literal because ECharts options can't read a CSS variable.
+export const TEXT_TAN = "#D2B48C";
 
 // Sentinel selector value for the cross-nation aggregate ("All nations")
 // option shared by the nation-selector panels (Families, Opening laws). Not a

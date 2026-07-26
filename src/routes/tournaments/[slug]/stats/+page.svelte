@@ -167,9 +167,9 @@
 			</section>
 		</Tabs.Content>
 
-		<!-- Wonders — when each wonder lands (P25–P75 turn span, median colored
-		     by the builders' outcome) and how often the players who could build
-		     it did (Plane B1). -->
+		<!-- Wonders — when each wonder lands (a P25–P75 bar colored by the
+		     builders' outcome) and how often the players who could build it did
+		     (Plane B1). -->
 		<Tabs.Content value="wonders">
 			<section class="mb-8">
 				<h2 class="mb-3 text-base font-bold text-tan">Wonder built win rate</h2>
