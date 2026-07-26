@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Inline autocomplete over Per-Ankh users. Used wherever a flow needs to
 	// pick (or free-text) a user: adding a tournament slot, substituting a
-	// slot occupant, granting a tournament admin, and setting a match caster.
+	// slot occupant, granting a tournament admin, setting a match caster, and
+	// scoping the admin reparse/reindex sweeps to one owner.
 	//
 	// Scratch-built rather than wired through bits-ui's Combobox primitive:
 	// the project hasn't used Combobox yet, the host forms are plain <input>s,

@@ -66,7 +66,7 @@
 	// in place (the popover owns the parts array as $state, so field writes
 	// propagate through the reactive proxy).
 	import type { UserSearchResult } from "$lib/api-cloud";
-	import UserAutocomplete from "./UserAutocomplete.svelte";
+	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 	import {
 		formatRelativeToNow,
 		formatScheduledUtc,

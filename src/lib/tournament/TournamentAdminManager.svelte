@@ -14,7 +14,7 @@
 		type UserSearchResult,
 	} from "$lib/api-cloud";
 	import { toast } from "$lib/ui/toast";
-	import UserAutocomplete from "./UserAutocomplete.svelte";
+	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 
 	interface Props {
 		tournament: TournamentDetail;

@@ -18,7 +18,7 @@
 	import PickPreferenceNote from "$lib/tournament/PickPreferenceNote.svelte";
 	import MatchPopover from "$lib/tournament/MatchPopover.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
-	import UserAutocomplete from "$lib/tournament/UserAutocomplete.svelte";
+	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 	import SlotUsernameCell from "$lib/tournament/SlotUsernameCell.svelte";
 	import SwissFlowBracket from "$lib/tournament/SwissFlowBracket.svelte";
 	import SwissStandings from "$lib/tournament/SwissStandings.svelte";

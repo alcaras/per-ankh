@@ -20,7 +20,7 @@
 	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import { matchBracketLabel } from "$lib/tournament/bracket-label";
 	import CopyButton from "$lib/tournament/CopyButton.svelte";
-	import UserAutocomplete from "$lib/tournament/UserAutocomplete.svelte";
+	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 	import SchedulePopover from "$lib/tournament/SchedulePopover.svelte";
 	import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 	import {

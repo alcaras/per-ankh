@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { UserSearchResult } from "$lib/api-cloud";
-	import UserAutocomplete from "./UserAutocomplete.svelte";
+	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 
 	interface Props {
 		slotId: string;
