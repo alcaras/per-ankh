@@ -12,7 +12,7 @@
 	import type { ImprovementData } from "$lib/types/ImprovementData";
 	import type { FamilyOpinionEntry, UnitInfo } from "$lib/parser/types";
 	import { FAMILY_OPINION_BANDS } from "$lib/generated/family-opinion";
-	import { CHART_THEME } from "$lib/config";
+	import { CHART_THEME, getChartColor } from "$lib/config";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
 	import {
@@ -58,39 +58,17 @@
 	}
 
 	// ─── Opinion over time ────────────────────────────────────────────
-	// Colour carries the nation, so the families inside one need a second
-	// channel or all three read as one line. Dash pattern by the family's
-	// position in that player's list.
-	const FAMILY_DASH = ["solid", "dashed", "dotted"] as const;
-
-	const opinionChartOption = $derived.by<ChartOption | null>(() => {
-		if (opinions.length === 0) return null;
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
-		const seenPerPlayer = new Map<number, number>();
-		const series = opinions
-			.map((s) => {
-				const player = orderedPlayers.find((p) => p.playerId === s.playerId);
-				if (!player) return null;
-				const index = seenPerPlayer.get(s.playerId) ?? 0;
-				seenPerPlayer.set(s.playerId, index + 1);
-				return {
-					name: `${player.label} · ${formatEnum(s.family, "FAMILY_")}`,
-					type: "line" as const,
-					data: s.points,
-					showSymbol: false,
-					lineStyle: {
-						color: player.color,
-						width: 2,
-						type: FAMILY_DASH[index % FAMILY_DASH.length],
-					},
-					itemStyle: { color: player.color },
-				};
-			})
-			.filter((s): s is NonNullable<typeof s> => s != null);
-		if (series.length === 0) return null;
+	// One chart per nation rather than one with everybody on it: six lines in
+	// two colours is unreadable, and the comparison that matters is between a
+	// nation's own families, not across nations. Within a chart the families
+	// get distinct colours from the shared series palette; the nation is named
+	// in the title, so its colour doesn't have to carry that.
+	function opinionChartFor(player: DetailPlayer): ChartOption | null {
+		const mine = opinions.filter((s) => s.playerId === player.playerId);
+		if (mine.length === 0) return null;
 		return {
 			...CHART_THEME,
-			title: { ...CHART_THEME.title, text: "Family opinion" },
+			title: { ...CHART_THEME.title, text: `${player.label} — family opinion` },
 			legend: {
 				show: true,
 				bottom: 0,
@@ -119,9 +97,25 @@
 				nameLocation: "middle",
 				nameGap: 38,
 			},
-			series,
+			series: mine.map((s, i) => ({
+				name: formatEnum(s.family, "FAMILY_"),
+				type: "line" as const,
+				data: s.points,
+				showSymbol: false,
+				lineStyle: { color: getChartColor(i), width: 2 },
+				itemStyle: { color: getChartColor(i) },
+			})),
 		} as ChartOption;
-	});
+	}
+
+	const opinionCharts = $derived(
+		orderedPlayers
+			.map((player) => ({ player, option: opinionChartFor(player) }))
+			.filter(
+				(c): c is { player: DetailPlayer; option: ChartOption } =>
+					c.option != null,
+			),
+	);
 
 	// ─── Turns by band ────────────────────────────────────────────────
 	// Semantic scale, so these are literal colours rather than series colours:
@@ -318,19 +312,23 @@
 		`${Math.max(rows, 1) * 26 + 110}px`;
 </script>
 
-{#if opinionChartOption == null && familyWorkRows.length === 0}
+{#if opinionCharts.length === 0 && familyWorkRows.length === 0}
 	<p class="p-8 text-center italic text-tan">No family data in this save</p>
 {:else}
-	{#if opinionChartOption}
-		<div
-			class="mb-4 rounded-lg p-4"
-			style="background-color: rgb(var(--color-surface));"
-		>
-			<ChartContainer
-				option={opinionChartOption}
-				height="340px"
-				title="Family opinion"
-			/>
+	{#if opinionCharts.length > 0}
+		<div class="mb-4 grid items-start gap-4 lg:grid-cols-2">
+			{#each opinionCharts as chart (chart.player.playerId)}
+				<div
+					class="rounded-lg p-4"
+					style="background-color: rgb(var(--color-surface));"
+				>
+					<ChartContainer
+						option={chart.option}
+						height="320px"
+						title="{chart.player.label} — family opinion"
+					/>
+				</div>
+			{/each}
 		</div>
 	{/if}
 
