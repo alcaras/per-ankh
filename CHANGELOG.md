@@ -1,5 +1,101 @@
 # Changelog
 
+## [2026-07-26-9a6722b] - 2026-07-26
+
+### Features
+
+- (stats) starting-leader archetype and trait win rates — [03c123d](https://github.com/becked/per-ankh/commit/03c123d256a6aaaa8b136329f1cc43f10cec1530)
+- (stats) wonders — when they land, how builders fare, how often they're taken — [adb08e3](https://github.com/becked/per-ankh/commit/adb08e3c36f62ced64356e453bdf419f3b878984)
+- (tournament) emphasize the winner in the shared match table — [4b7966d](https://github.com/becked/per-ankh/commit/4b7966d2cc89cc68574dc54873d6b312d13c5e21)
+- (tournament) add GET /v1/users/:user_id/tournaments — [bf14692](https://github.com/becked/per-ankh/commit/bf14692ed7417b881ba9fb7ca38f686dc73a249c)
+- (users) add the Tournaments tab to the player profile — [230a487](https://github.com/becked/per-ankh/commit/230a4877e507a089d5e45d5f3d7fc43225da9e64)
+- (admin) sweep reparse and reindex by user, tournament, or upload date — [3013fdf](https://github.com/becked/per-ankh/commit/3013fdf5e12bf143b6fb5560a76b162c796483e0)
+- (stats) capital family class win rate — [13a1058](https://github.com/becked/per-ankh/commit/13a10580492b47fd99635a09b1a6f5edb23e14a6)
+- (stats) family city footprint, and families on the tournament page — [0be8c60](https://github.com/becked/per-ankh/commit/0be8c60e66eaa8a0d78f65cd7adb7f9e11e43cc3)
+- (admin) add `cache list` / `cache clear` for the KV caches — [26254d5](https://github.com/becked/per-ankh/commit/26254d55fb8708aca2e35912410db8c17f045c95)
+
+### Fixes
+
+- (stats) don't credit index 0 with wonders whose builder is unknown — [4abf681](https://github.com/becked/per-ankh/commit/4abf681877bec0101a17088178f7c199bfd10658)
+- (admin) clear cast appearances before deleting a user — [5983d75](https://github.com/becked/per-ankh/commit/5983d75bfec99b5ed19426dbcad8eae7946154f6)
+- (tournament) index and widen per-user match attribution — [0737a94](https://github.com/becked/per-ankh/commit/0737a94efa4c8317aa8b66dde70e880253d3b62c)
+- (tournament) gate the profile tab on matches, not on holding a seat — [5f3256c](https://github.com/becked/per-ankh/commit/5f3256c249b4052cb0e49509a3b15589fb3e9950)
+- (tournament) keep the admin slot handle fields required — [edffc8a](https://github.com/becked/per-ankh/commit/edffc8aa7ebc0c0042e5295613b1580fe254546f)
+- (parser) credit a wonder to who held its tile when it completed — [1189243](https://github.com/becked/per-ankh/commit/1189243f29e5eb32eb57108a3cda4ec3805207ac)
+- (stats) keep conquered players in the wonder-eligibility denominator — [3f2c1de](https://github.com/becked/per-ankh/commit/3f2c1dea1345f23f05ef9ade1d4ebca51a6ace89)
+- (stats) tell an unknown wonder pool apart from an empty one — [39f0c9b](https://github.com/becked/per-ankh/commit/39f0c9b587febfb2439cdef6d90392d5519b5c4f)
+- (schemas) raise the disabled-improvements cap — [f4f95a4](https://github.com/becked/per-ankh/commit/f4f95a476b777d394ffd910693d5213290b16b52)
+- (parser) read the disabled-improvement list off <Game> — [b8c8434](https://github.com/becked/per-ankh/commit/b8c8434acce484d7b4ac5d894239cfbc35b4ff06)
+- (stats) say what data is missing in the chart empty states — [d863ada](https://github.com/becked/per-ankh/commit/d863ada13d048901f633c89814adbba68ba935dd)
+- (stats) rewrite the wonder chart's title and tooltip copy — [4720123](https://github.com/becked/per-ankh/commit/4720123f12f36cb61eddae89deca33f2620bf0e8)
+- (admin) disambiguate the reindex table list — [a90e479](https://github.com/becked/per-ankh/commit/a90e4799982c8716a668045f785387c1181d18a5)
+- (stats) keep the wonder turn axis on its tick interval — [4e42b59](https://github.com/becked/per-ankh/commit/4e42b59bfa363ebc51b6b38927e35b644a1600f4)
+- (stats) name the missing domain in the leader empty states — [924523f](https://github.com/becked/per-ankh/commit/924523fdfc4dc2b7e8a95930cfcc882c43c6fa41)
+- (deps) bump sharp to 0.35.3 for the libvips advisory — [3ab7037](https://github.com/becked/per-ankh/commit/3ab7037083186e7d9921940de85962ba1f6d9f43)
+- (deps) clear the sharp advisory in cloud's wrangler toolchain — [f09d55a](https://github.com/becked/per-ankh/commit/f09d55aae4306c55097ee39130818646b96e1c3c)
+- (stats) rank family founding order by the player's own foundings — [19f0f88](https://github.com/becked/per-ankh/commit/19f0f88570e0fc15940fcabaefa2ff4222cceb51)
+- (stats) name the denominator in the family pick tooltip — [61157d0](https://github.com/becked/per-ankh/commit/61157d0e921522569b631438e5d234bc2ae56954)
+- (stats) say games, not matches, in the wonder tooltip — [7e0f84b](https://github.com/becked/per-ankh/commit/7e0f84b8f8eb9d28503c6615c26ea41a26e17be6)
+- (games) chunk the family-city insert at its own column count — [ff046d9](https://github.com/becked/per-ankh/commit/ff046d9ae83d1ebb8ff5e1e123070270cd36717c)
+- (games) make capital family attribution independent of city order — [25b2258](https://github.com/becked/per-ankh/commit/25b22585826bea85954ebf6c94dbf3d33a06e1c8)
+- (stats) give the capital family chart its own empty state — [1121bc3](https://github.com/becked/per-ankh/commit/1121bc3c49c0ad764ebbb0980dad694dad0d7a1d)
+- (deps) bump eslint to 10 to clear the brace-expansion advisory — [9ee2860](https://github.com/becked/per-ankh/commit/9ee2860b0eda0e969edd7a74b4bfdf8d002a80f0)
+- (stats) separate the wonders outcome buckets by hue — [a2fc3e9](https://github.com/becked/per-ankh/commit/a2fc3e9cac10ab99642a1be7ae6f2ce66654d79a)
+
+### Performance
+
+- (charts) tree-shake ECharts and type options against the registered set — [c1676f8](https://github.com/becked/per-ankh/commit/c1676f8f2aac004d6a9b3830ac0c3545d4b5f43b)
+- (tournament) chunk the per-match user identity batch — [0bd7b8c](https://github.com/becked/per-ankh/commit/0bd7b8c571ea94825e0fb220f9e0943b8aa613a3)
+- (stats) drop the two family indexes nothing reads — [2510827](https://github.com/becked/per-ankh/commit/2510827f39dc5ca3110649b9f62bebb3b9e99fef)
+- (cloud) cache parsed-game blobs per-POP in front of R2 — [4fbcdc5](https://github.com/becked/per-ankh/commit/4fbcdc50883b7c8ccb03657c6c33975ebf9d16b8)
+- (cloud) give the events table its own primary D1 handle — [73bdbdb](https://github.com/becked/per-ankh/commit/73bdbdba7e34b65ab62287332ae6b99cfd6da501)
+- (cloud) serve user stats from a D1 read replica — [1b8b2d4](https://github.com/becked/per-ankh/commit/1b8b2d49c392c86b46b81f5e6e51efd04ba3e99d)
+- (cloud) anchor stale-tolerant sessions at first-primary — [a6f6b33](https://github.com/becked/per-ankh/commit/a6f6b33be9d93a4791cdc72e7d647debba5fd903)
+
+### Other
+
+- (lint) restrict the bare "echarts" import — [b30fc31](https://github.com/becked/per-ankh/commit/b30fc31f137127444d539e03bdc40910d9042bf6)
+- (stats) address review — share the archetype rule, pass rate through — [39cb772](https://github.com/becked/per-ankh/commit/39cb7726020888701735c23574396495d166d23a)
+- (stats) say the trait chart is capped at 15 rows — [95f77ba](https://github.com/becked/per-ankh/commit/95f77ba654966ab94eee2b824a92f3c7aa785dd8)
+- (stats) apply the #155 review findings to the wonder chart — [14aaca5](https://github.com/becked/per-ankh/commit/14aaca5f5f003666c538411b0f52763ec692fe22)
+- (tournament) extract matchSlotOutcome — [489667a](https://github.com/becked/per-ankh/commit/489667a4b6bf1b4da330ef6689d50c6dea4eeb30)
+- (tournament) narrow MatchTable's tournament prop — [908662a](https://github.com/becked/per-ankh/commit/908662a81330e79d94a1bf5b1003cf764cc7ea3a)
+- (tournament) make the admin-only slot Discord fields optional — [11f7e77](https://github.com/becked/per-ankh/commit/11f7e77bec8d8bb66a6f1952b4533c83c5b65627)
+- (tournament) share the match table's chrome classes — [ed54fa5](https://github.com/becked/per-ankh/commit/ed54fa50e29d55ee8921fd0c235b8209e1af8889)
+- (tournament) cover the public per-user read and its cast section — [66761fb](https://github.com/becked/per-ankh/commit/66761fbe70dfedefd80fd754c9e06c3a35028d0b)
+- (api) document the profile tab flags and the attribution rule — [c10196a](https://github.com/becked/per-ankh/commit/c10196a9ea2656932a188e7674568faa7990eb8b)
+- (tournament) drop the profile tab's enrollment section — [e44baad](https://github.com/becked/per-ankh/commit/e44baad73f775eff9a37948fcbd3b996dca97e21)
+- (users) move the Stats tab to the end of the profile tab bar — [e1c8547](https://github.com/becked/per-ankh/commit/e1c8547152e9c5330fe99e0f2387f5a4fef5fbfa)
+- (tournament) declare MatchTableTournament in the table module — [88ebdb1](https://github.com/becked/per-ankh/commit/88ebdb16b3bd55993cd8eac794ab51cfea042304)
+- (tournament) move the profile Tournaments tab into the tournament lib — [1ca9890](https://github.com/becked/per-ankh/commit/1ca98905231018e757c73698e8f69321c0b73dff)
+- correct the participation-query and header-status comments — [f4bc179](https://github.com/becked/per-ankh/commit/f4bc17933fe10b4587d5d5dda6f72394e279406a)
+- (stats) drop the trait icon resolver, it can never resolve — [a2fb498](https://github.com/becked/per-ankh/commit/a2fb498b7b1a5a2a0496ca35dce015726e443bbd)
+- (stats) drop the leader chart subtitles — [acda2ac](https://github.com/becked/per-ankh/commit/acda2ac9cbb137d8a09747a3d0da45ba5d0a9b27)
+- (tournament) the stats page has five tabs, not three — [faa16ed](https://github.com/becked/per-ankh/commit/faa16ed4178ae49d022162f9235c275a648e48a2)
+- (stats) keep fmtWonder local to the wonders chart — [0301673](https://github.com/becked/per-ankh/commit/030167365d1c4a19e0da7393d509a72dd2726702)
+- (stats) draw each wonder as one outcome-colored bar — [0f3276a](https://github.com/becked/per-ankh/commit/0f3276af165ecd1d9d6bd3f5e4506617d53f6ff3)
+- (deps) apply in-range security lockfile bumps — [41b58ed](https://github.com/becked/per-ankh/commit/41b58eddcc63a929df46946ebb90f14eede6549b)
+- (ui) move UserAutocomplete into the shared ui lib — [e3902d9](https://github.com/becked/per-ankh/commit/e3902d9f2b6009c5966980e940588794a998c969)
+- (stats) one outcome-series builder for the two family charts — [6a85a68](https://github.com/becked/per-ankh/commit/6a85a6893f847996e8d36ba3c9fe94c8718601b5)
+- (stats) one win/loss builder behind both family charts — [c0a0806](https://github.com/becked/per-ankh/commit/c0a080673f794c9f3d223e0bd5dff8eca2f3982c)
+- (stats) name the avg_share denominator and what v8 added — [32b2baa](https://github.com/becked/per-ankh/commit/32b2baaf2a85210b063aed7af8f462dab287e141)
+- (stats) derive the bundle schema version from its changelog — [b81440a](https://github.com/becked/per-ankh/commit/b81440acd11b31272985888624d833316039ea48)
+- "Claude PR Assistant workflow" — [2ae838d](https://github.com/becked/per-ankh/commit/2ae838d8d52839db33dcf26edc19fa81d0aaddec)
+- "Claude Code Review workflow" — [fc174d3](https://github.com/becked/per-ankh/commit/fc174d39e0883b065b4ab2e404e09c8f02cdd282)
+- (release) deploy 2026-07-26-9ee2860 — [db80a2c](https://github.com/becked/per-ankh/commit/db80a2caf9a23cc54f198734c6c6b12ffdb96baa)
+- (ci) gate the @claude workflow to collaborators — [32fe3ef](https://github.com/becked/per-ankh/commit/32fe3eff15cb05ad3a7c7144dba6daea6be06d98)
+- (ci) drop the auto PR review workflow — [437db88](https://github.com/becked/per-ankh/commit/437db881060e7f2df34baabab3fbcd1a156e3144)
+- (skills) add pr-review skill for contributor-PR fit checks — [1b8c145](https://github.com/becked/per-ankh/commit/1b8c1455917d3a7fcdd7f1954fbe4de880fe20a6)
+- (admin) note that the blob cache is out of the cache CLI's reach — [e8c4ff8](https://github.com/becked/per-ankh/commit/e8c4ff87c50f1228d71e7b731a0edcf881ea38a4)
+- (cloud) read the reindex blob through readBlob — [a6c326a](https://github.com/becked/per-ankh/commit/a6c326acdb35654dbd8601b3b869580cb83a89bd)
+- (cloud) move legacy share events queries to EVENTS_DB — [d5df19e](https://github.com/becked/per-ankh/commit/d5df19e46e5ac49a6715aa46c7764f59face2b0b)
+- (cloud) mirror routeEnv in direct handler calls, widen the events guard — [76b167a](https://github.com/becked/per-ankh/commit/76b167a05b6c65f85aaa046867d8e38582d2b9af)
+- (cloud) record D1 read replication as a provisioning step — [9710aba](https://github.com/becked/per-ankh/commit/9710aba5e1d484bae9b29adea9e99a6010dd245f)
+- remove orphaned *ToRow serializers left by parity-harness removal — [c46d23f](https://github.com/becked/per-ankh/commit/c46d23f2d556f958fccefcf5ff89be38d1421ee3)
+- (parser) drop parity-harness fossils orphaned by #132 and #153 — [4c96973](https://github.com/becked/per-ankh/commit/4c96973d24996d29d84dca3c134a3d04d735cfc0)
+- (parser) drop unread Tile seed fields, re-anchor optI64Str's note — [583fff2](https://github.com/becked/per-ankh/commit/583fff240402b5d747c212dddc8b3c6b833ba5a3)
+- drop trailing blank line flagged by prettier in claude.yml — [9a6722b](https://github.com/becked/per-ankh/commit/9a6722b185d41a657ba86e2ff0a66a7bd407e36a)
+
 ## [2026-07-26-9ee2860] - 2026-07-26
 
 ### Features
