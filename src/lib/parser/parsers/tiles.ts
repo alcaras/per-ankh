@@ -6,7 +6,6 @@ import {
 	asArray,
 	getElementChildren,
 	isElement,
-	optI64Str,
 	optInt,
 	optStr,
 	parsePrefixedKeyedIntMap,
@@ -38,10 +37,6 @@ export interface Tile {
 	cityTerritoryXmlId: number | null;
 	tribeSite: string | null;
 	religion: string | null;
-	// i64 in Rust — kept as JSON string at the dump boundary to dodge
-	// JS Number precision loss. Null when absent.
-	initSeed: string | null;
-	turnSeed: string | null;
 }
 
 export interface TileVisibility {
@@ -178,8 +173,6 @@ export function parseTiles(root: Record<string, unknown>): Tile[] {
 			cityTerritoryXmlId: optInt(node.CityTerritory),
 			tribeSite: optStr(node.TribeSite),
 			religion: optStr(node.Religion),
-			initSeed: optI64Str(node.InitSeed),
-			turnSeed: optI64Str(node.TurnSeed),
 		});
 	}
 
