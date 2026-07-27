@@ -675,44 +675,6 @@
 
 <section class="mb-6">
 	<h2 class="mb-1 text-lg font-bold text-bright">Built</h2>
-	{#if !matchup}
-		<p
-			class="rounded-lg p-4 text-sm italic text-tan"
-			style="background-color: rgb(var(--color-surface));"
-		>
-			Side-by-side comparison needs exactly two nations. Every improvement is
-			listed below.
-		</p>
-	{/if}
-	{#if matchup}
-		<div class="mb-4">
-			<div
-				class="rounded-lg p-4"
-				style="background-color: rgb(var(--color-surface));"
-			>
-				<h3 class="mb-3 text-base font-bold text-tan">Improvements</h3>
-				<div class="flex flex-col gap-3">
-					{#each improvementPanels as panel (panel.label)}
-						<BuildComparison
-							title={PANEL_LABELS[panel.label]}
-							a={panel.items[0]}
-							b={panel.items[1]}
-							ca={matchup[0].color}
-							cb={matchup[1].color}
-							keys={panel.keys}
-							iconCategory="improvements"
-							labelOf={improvementDisplayName}
-							showDiff
-						/>
-					{/each}
-				</div>
-			</div>
-		</div>
-	{/if}
-</section>
-
-<section class="mb-6">
-	<h2 class="mb-1 text-lg font-bold text-bright">Workforce</h2>
 	<!-- Per-player ledger headline: what the workforce cost and what it bought. -->
 	<div class="mb-4 grid gap-3 sm:grid-cols-2">
 		{#each economies as eco (eco.player.playerId)}
@@ -760,15 +722,45 @@
 		{/each}
 	</div>
 
-	<div class="mb-4 grid items-start gap-4 lg:grid-cols-2">
-		{#if matchup}
+	{#if !matchup}
+		<p
+			class="rounded-lg p-4 text-sm italic text-tan"
+			style="background-color: rgb(var(--color-surface));"
+		>
+			Side-by-side comparison needs exactly two nations. Every improvement is
+			listed below.
+		</p>
+	{/if}
+	{#if matchup}
+		<!-- Counts beside cost: two columns read better than one full-width panel,
+		     and the same rows sit at the same height in both. -->
+		<div class="grid items-start gap-4 lg:grid-cols-2">
 			<div
 				class="rounded-lg p-4"
 				style="background-color: rgb(var(--color-surface));"
 			>
-				<h3 class="mb-3 text-base font-bold text-tan">
-					Worker-turns by improvement
-				</h3>
+				<h3 class="mb-3 text-base font-bold text-tan">Improvements built</h3>
+				<div class="flex flex-col gap-3">
+					{#each improvementPanels as panel (panel.label)}
+						<BuildComparison
+							title={PANEL_LABELS[panel.label]}
+							a={panel.items[0]}
+							b={panel.items[1]}
+							ca={matchup[0].color}
+							cb={matchup[1].color}
+							keys={panel.keys}
+							iconCategory="improvements"
+							labelOf={improvementDisplayName}
+							showDiff
+						/>
+					{/each}
+				</div>
+			</div>
+			<div
+				class="rounded-lg p-4"
+				style="background-color: rgb(var(--color-surface));"
+			>
+				<h3 class="mb-3 text-base font-bold text-tan">Worker-turns spent</h3>
 				<div class="flex flex-col gap-3">
 					{#each workerTurnPanels as panel (panel.label)}
 						<BuildComparison
@@ -785,8 +777,8 @@
 					{/each}
 				</div>
 			</div>
-		{/if}
-	</div>
+		</div>
+	{/if}
 </section>
 
 <section class="mb-6">
