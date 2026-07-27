@@ -65,7 +65,7 @@
 	};
 	// One row per unit type, listed alphabetically by display name. A side that
 	// never built a type carries a 0 and renders a blank bar/count on its half.
-	// Rows come from the caller's shared `unitTypes` order when given (so panels
+	// Rows come from the caller's shared `keys` order when given (so panels
 	// line up); otherwise from this panel's own union of both rosters.
 	const rows = $derived<Row[]>(
 		(
