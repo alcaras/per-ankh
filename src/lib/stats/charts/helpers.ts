@@ -35,11 +35,21 @@ export const WIN_COLOR = "#C87941";
 export const LOSS_COLOR = "#5a4d3f";
 
 // Fills for a chart that buckets an outcome three ways rather than splitting it
-// two (the wonders bars) — the same warm range the tournament standings bars
-// draw from. Kept here so the chart palette stays in one file.
-export const OUTCOME_WON = "#965636";
-export const OUTCOME_MIXED = "#c2884c";
-export const OUTCOME_LOST = "#c46f33";
+// two (the wonders bars). Blue, copper, rose: three hues far enough apart that
+// the buckets don't need shade to tell them apart, which the two-copper-plus-a-
+// pink arrangements this replaced never managed — copper and rose sit close on
+// the hue wheel, so a third fill between them halved an already-short arc. All
+// three hold the chroma and lightness of the app's warm chart palette and differ
+// from it only in hue, which is what lets them read as belonging while still
+// standing apart; the blue is a near-twin of RESOURCE_FISH in config/terrain.ts.
+// The rose is pulled as far toward the app's wine end as it can go — copper
+// against rose is the tightest pair, and at this hue it sits at ΔE 13.5
+// deuteranopic, 15.0 under normal vision, right on the floor of 15. Warming it
+// further collides with the copper. Kept here so the chart palette stays in one
+// file.
+export const OUTCOME_WON = "#4489c2";
+export const OUTCOME_MIXED = "#bd7d4c";
+export const OUTCOME_LOST = "#a44a60";
 
 // The app's body-text tan (--color-tan, what `text-tan` renders), spelled as a
 // literal because ECharts options can't read a CSS variable.
