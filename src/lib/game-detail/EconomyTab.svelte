@@ -548,7 +548,7 @@
 
 	const improvementPanels = $derived(
 		panels(
-			["rural", "urban", "wonder"],
+			["rural", "urban"],
 			(imp) => IMPROVEMENT_BUILDS[imp.improvement]?.kind ?? null,
 			(imp) => (IMPROVEMENT_BUILDS[imp.improvement] ? imp.improvement : null),
 			(key) => IMPROVEMENT_UNLOCK_COST[key] ?? 0,
@@ -561,7 +561,7 @@
 	// cost, since that's the question this panel answers.
 	const workerTurnPanels = $derived(
 		panels(
-			["rural", "urban", "wonder"],
+			["rural", "urban"],
 			(imp) => IMPROVEMENT_BUILDS[imp.improvement]?.kind ?? null,
 			(imp) => (IMPROVEMENT_BUILDS[imp.improvement] ? imp.improvement : null),
 			null,
@@ -664,10 +664,10 @@
 		})),
 	);
 
+	// Wonders have their own tab; the Built panels carry only worker economy.
 	const PANEL_LABELS: Record<string, string> = {
 		rural: "Rural",
 		urban: "Urban",
-		wonder: "Wonders",
 	};
 </script>
 

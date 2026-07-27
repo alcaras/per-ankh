@@ -1,0 +1,143 @@
+<script lang="ts">
+	// Wonders tab — the whole catalogue, one row per culture tier, with this
+	// game's reality painted on: wonders the save disabled are faded, wonders
+	// still open are plain, and a built wonder carries its builder's colour,
+	// nation and completion turn. One glance answers "what was in the pool,
+	// and who got what".
+	import type { PlayerWonder } from "$lib/types/PlayerWonder";
+	import {
+		CULTURE_LEVELS,
+		WONDER_CULTURE_PREREQ,
+	} from "$lib/generated/wonders";
+	import { formatEnum } from "$lib/utils/formatting";
+	import SpriteIcon from "./SpriteIcon.svelte";
+	import {
+		type DetailPlayer,
+		findByPlayer,
+		improvementDisplayName,
+	} from "./helpers";
+
+	let {
+		players,
+		playerWonders,
+		disabledImprovements = null,
+	}: {
+		players: DetailPlayer[];
+		playerWonders: PlayerWonder[];
+		// Wonders the save switched off. Null on pre-2.12.0 blobs, where the
+		// pool is unknown — which is not the same claim as "nothing disabled",
+		// so nothing fades and a note says why.
+		disabledImprovements?: string[] | null;
+	} = $props();
+
+	const disabled = $derived(new Set(disabledImprovements ?? []));
+
+	type WonderCard = {
+		wonder: string;
+		state: "disabled" | "available" | "built";
+		// Set when built.
+		turn?: number;
+		builderLabel?: string;
+		builderColor?: string;
+	};
+
+	// One row per culture tier, in game order, each tier's wonders A→Z by
+	// display name. `built` wins over `disabled`: a wonder that demonstrably
+	// completed was in the pool whatever the end-state list says.
+	const rows = $derived.by<{ level: string; cards: WonderCard[] }[]>(() => {
+		const builtBy = new Map(playerWonders.map((w) => [w.wonder, w]));
+		return CULTURE_LEVELS.map((level) => ({
+			level,
+			cards: Object.keys(WONDER_CULTURE_PREREQ)
+				.filter((wonder) => WONDER_CULTURE_PREREQ[wonder] === level)
+				.sort((a, b) =>
+					improvementDisplayName(a).localeCompare(improvementDisplayName(b)),
+				)
+				.map((wonder): WonderCard => {
+					const built = builtBy.get(wonder);
+					if (built) {
+						// Resolve the builder to the mirror-match-safe player list
+						// (id match, nation fallback); the wonder row's own
+						// name/nation cover blobs where neither resolves.
+						const player = findByPlayer(
+							players,
+							{ playerId: built.player_id, nation: built.nation },
+							(p) => p.playerId,
+							(p) => p.nation,
+						);
+						return {
+							wonder,
+							state: "built",
+							turn: built.completed_turn,
+							builderLabel:
+								player?.label ??
+								(built.nation
+									? formatEnum(built.nation, "NATION_")
+									: built.player_name),
+							builderColor: player?.color,
+						};
+					}
+					return {
+						wonder,
+						state: disabled.has(wonder) ? "disabled" : "available",
+					};
+				}),
+		})).filter((row) => row.cards.length > 0);
+	});
+</script>
+
+{#if disabledImprovements == null}
+	<p class="mb-3 text-xs italic text-tan">
+		This save predates the wonder-pool data, so which wonders were disabled is
+		unknown — nothing is faded.
+	</p>
+{/if}
+
+{#each rows as row (row.level)}
+	<section class="mb-5">
+		<h2 class="mb-2 text-base font-bold text-bright">
+			<span class="inline-flex items-center gap-1.5">
+				<SpriteIcon
+					category="icons"
+					value={row.level}
+					size={16}
+					alt={formatEnum(row.level, "CULTURE_")}
+				/>
+				{formatEnum(row.level, "CULTURE_")}
+			</span>
+		</h2>
+		<div class="flex flex-wrap gap-3">
+			{#each row.cards as card (card.wonder)}
+				<div
+					class="w-36 rounded-lg border-2 p-3 text-center {card.state ===
+					'disabled'
+						? 'opacity-35 grayscale'
+						: ''}"
+					style="background-color: rgb(var(--color-surface)); border-color: {card.builderColor ??
+						'transparent'};"
+				>
+					<SpriteIcon
+						category="improvements"
+						value={card.wonder}
+						size={56}
+						alt={improvementDisplayName(card.wonder)}
+					/>
+					<div class="mt-1.5 text-xs font-semibold text-white">
+						{improvementDisplayName(card.wonder)}
+					</div>
+					{#if card.state === "built"}
+						<div
+							class="mt-1 text-[11px] font-bold"
+							style="color: {card.builderColor ?? 'rgb(var(--color-tan))'};"
+						>
+							{card.builderLabel}
+						</div>
+						<div class="text-[10px] text-tan">Turn {card.turn}</div>
+					{:else if card.state === "disabled"}
+						<div class="mt-1 text-[10px] italic text-tan">Not in this game</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	</section>
+{/each}
