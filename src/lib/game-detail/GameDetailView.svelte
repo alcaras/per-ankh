@@ -24,6 +24,9 @@
 		UnitInfo,
 		FamilyInfo,
 		MemoryInfo,
+		TileOwnershipEntry,
+		YieldPriceEntry,
+		PlayerResourceInfo,
 	} from "$lib/parser/types";
 	import { Tabs } from "bits-ui";
 	import {
@@ -52,7 +55,7 @@
 	import YieldsTab from "./YieldsTab.svelte";
 	import MilitaryTab from "./MilitaryTab.svelte";
 	import CitiesTab from "./CitiesTab.svelte";
-	import ImprovementsTab from "./ImprovementsTab.svelte";
+	import EconomyTab from "./EconomyTab.svelte";
 	import SpecialistsTab from "./SpecialistsTab.svelte";
 	import MapTab from "./MapTab.svelte";
 	import SettingsTab from "./SettingsTab.svelte";
@@ -80,6 +83,9 @@
 		families = [],
 		memoryData = [],
 		storyEvents = [],
+		tileOwnershipHistory = [],
+		yieldPrices = [],
+		playerResources = [],
 		mapTiles,
 		onMapTurnChange,
 		selectedMapTurn = null,
@@ -128,6 +134,17 @@
 		families?: FamilyInfo[];
 		memoryData?: MemoryInfo[];
 		storyEvents?: StoryEvent[];
+		// Sparse per-tile ownership transitions — the Economy tab's territory
+		// curve. Defaults to [] for legacy callers (frozen web/ viewer), which
+		// hides that one view.
+		tileOwnershipHistory?: TileOwnershipEntry[];
+		// Game-level market prices per turn — the Economy tab's GDP basket.
+		// Defaults to [] for legacy callers (frozen web/ viewer), which drops
+		// that one view.
+		yieldPrices?: YieldPriceEntry[];
+		// End-of-game stockpiles — the Economy tab's national-wealth panel.
+		// Defaults to [] for legacy callers (frozen web/ viewer).
+		playerResources?: PlayerResourceInfo[];
 		mapTiles: MapTile[] | null;
 		// eslint-disable-next-line no-unused-vars -- Callback type signature
 		onMapTurnChange?: ((turn: number) => Promise<void>) | null;
@@ -193,9 +210,14 @@
 	// hash isn't sent to the server, so SSR renders Overview and the client
 	// switches on mount (one frame); a clean, non-history-polluting replaceState
 	// keeps the URL in sync as the user changes tabs.
+	// Tabs that have been renamed, so links shared before the rename still land
+	// somewhere. A hash with no matching trigger renders an empty tab pane, and
+	// #improvements has been a shareable link for as long as the tab existed.
+	const RENAMED_TABS: Record<string, string> = { improvements: "economy" };
+
 	$effect(() => {
 		const fromHash = window.location.hash.replace(/^#/, "");
-		if (fromHash) activeTab = fromHash;
+		if (fromHash) activeTab = RENAMED_TABS[fromHash] ?? fromHash;
 	});
 	$effect(() => {
 		const target = activeTab === "overview" ? "" : `#${activeTab}`;
@@ -474,9 +496,7 @@
 
 		<Tabs.Trigger value="cities" class={triggerClass}>Cities</Tabs.Trigger>
 
-		<Tabs.Trigger value="improvements" class={triggerClass}>
-			Improvements
-		</Tabs.Trigger>
+		<Tabs.Trigger value="economy" class={triggerClass}>Economy</Tabs.Trigger>
 
 		<Tabs.Trigger value="specialists" class={triggerClass}>
 			Specialists
@@ -618,13 +638,22 @@
 		/>
 	</Tabs.Content>
 
-	<!-- Tab Content: Improvements -->
-	<Tabs.Content value="improvements" class="tab-pane min-h-[400px]">
-		<ImprovementsTab
+	<!-- Tab Content: Economy -->
+	<Tabs.Content value="economy" class="tab-pane min-h-[400px]">
+		<EconomyTab
 			players={resolvedPlayers}
 			{improvementData}
+			{allYields}
+			{yieldPrices}
+			{eventLogs}
+			{playerResources}
+			{cityStatistics}
+			{playerWonders}
+			{unitsProduced}
 			{units}
+			{tileOwnershipHistory}
 			totalTurns={gameDetails.total_turns}
+			{userNation}
 			bind:tableState={tables.improvements}
 		/>
 	</Tabs.Content>
