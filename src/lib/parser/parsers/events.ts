@@ -262,28 +262,6 @@ function parseSingleMemory(
 
 // ---------- ToRow mappers (snake_case wire format) ----------
 
-export function eventStoryToRow(s: EventStory): Record<string, unknown> {
-	return {
-		event_type: s.eventType,
-		player_xml_id: s.playerXmlId,
-		occurred_turn: s.occurredTurn,
-		primary_character_xml_id: s.primaryCharacterXmlId,
-		city_xml_id: s.cityXmlId,
-	};
-}
-
-export function eventLogToRow(l: EventLog): Record<string, unknown> {
-	return {
-		player_xml_id: l.playerXmlId,
-		log_type: l.logType,
-		turn: l.turn,
-		description: l.description,
-		data1: l.data1,
-		data2: l.data2,
-		data3: l.data3,
-	};
-}
-
 export function memoryDataToRow(m: MemoryData): Record<string, unknown> {
 	return {
 		player_xml_id: m.playerXmlId,

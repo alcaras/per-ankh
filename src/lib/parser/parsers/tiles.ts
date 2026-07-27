@@ -6,7 +6,6 @@ import {
 	asArray,
 	getElementChildren,
 	isElement,
-	optI64Str,
 	optInt,
 	optStr,
 	parsePrefixedKeyedIntMap,
@@ -38,10 +37,6 @@ export interface Tile {
 	cityTerritoryXmlId: number | null;
 	tribeSite: string | null;
 	religion: string | null;
-	// i64 in Rust — kept as JSON string at the dump boundary to dodge
-	// JS Number precision loss. Null when absent.
-	initSeed: string | null;
-	turnSeed: string | null;
 }
 
 export interface TileVisibility {
@@ -178,8 +173,6 @@ export function parseTiles(root: Record<string, unknown>): Tile[] {
 			cityTerritoryXmlId: optInt(node.CityTerritory),
 			tribeSite: optStr(node.TribeSite),
 			religion: optStr(node.Religion),
-			initSeed: optI64Str(node.InitSeed),
-			turnSeed: optI64Str(node.TurnSeed),
 		});
 	}
 
@@ -289,34 +282,6 @@ export function parseTileChanges(root: Record<string, unknown>): TileChange[] {
 
 // ---------- ToRow mappers (snake_case wire format) ----------
 
-export function tileToRow(t: Tile): Record<string, unknown> {
-	return {
-		xml_id: t.xmlId,
-		x: t.x,
-		y: t.y,
-		terrain: t.terrain,
-		height: t.height,
-		vegetation: t.vegetation,
-		river_w: t.riverW,
-		river_sw: t.riverSw,
-		river_se: t.riverSe,
-		resource: t.resource,
-		improvement: t.improvement,
-		improvement_pillaged: t.improvementPillaged,
-		improvement_disabled: t.improvementDisabled,
-		improvement_turns_left: t.improvementTurnsLeft,
-		specialist: t.specialist,
-		has_road: t.hasRoad,
-		owner_player_xml_id: t.ownerPlayerXmlId,
-		city_territory_xml_id: t.cityTerritoryXmlId,
-		tribe_site: t.tribeSite,
-		religion: t.religion,
-		// i64 fields: pre-stringified by the parser via optI64Str.
-		init_seed: t.initSeed,
-		turn_seed: t.turnSeed,
-	};
-}
-
 export function tileVisibilityToRow(
 	v: TileVisibility,
 ): Record<string, unknown> {
@@ -325,15 +290,6 @@ export function tileVisibilityToRow(
 		team_id: v.teamId,
 		revealed_turn: v.revealedTurn,
 		visible_owner_player_xml_id: v.visibleOwnerPlayerXmlId,
-	};
-}
-
-export function tileChangeToRow(c: TileChange): Record<string, unknown> {
-	return {
-		tile_xml_id: c.tileXmlId,
-		turn: c.turn,
-		change_type: c.changeType,
-		new_value: c.newValue,
 	};
 }
 

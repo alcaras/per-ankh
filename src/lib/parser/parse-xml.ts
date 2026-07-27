@@ -153,16 +153,16 @@ const I64_MAX = (1n << 63n) - 1n;
  * non-integer or out-of-range strings normalize to null, matching Rust's
  * `opt_child_text(...).and_then(|s| s.parse::<i64>().ok())`.
  *
- * The range check is load-bearing for tile seeds: OW writes u64-shaped
- * values (e.g. ~1.4e19) into `<InitSeed>` and `<TurnSeed>`, half of which
- * exceed i64 max. Rust's parse::<i64>() rejects those (None); without the
- * range guard, this helper would emit them as strings while Rust emits
- * null, producing a parity diff on every overflowing seed.
+ * Out-of-range is not theoretical. OW seeds are u64-shaped: a large
+ * share of the unit `Seed` attributes in the test-data corpus exceed
+ * i64 max, topping out near 1.8e19. Without the range guard this helper
+ * would hand those back as strings — syntactically valid, but not values
+ * any consumer can treat as an i64.
  *
- * The parity harness emits i64 fields as JSON strings on the Rust side
- * too (see dump_parsed.rs `I64_STRING_FIELDS`), so passing the string
- * through unchanged gives matching dump output without ever going through
- * Number.
+ * `unitToRow` writes `seed` straight into the share blob, so the "valid
+ * i64, or null" contract this helper owes its callers is what keeps an
+ * unrepresentable seed from landing there as a bare string. The format
+ * regex alone won't do it — every overflowing seed matches `^-?\d+$`.
  */
 export function optI64Str(val: unknown): string | null {
 	if (typeof val !== "string" || val === "") return null;

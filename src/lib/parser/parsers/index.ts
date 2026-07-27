@@ -112,7 +112,7 @@ export function extractAllGameData(
 	root: Record<string, unknown>,
 	activePlayerIndex: number | null,
 ): FullGameData {
-	// 1. Parse all entities. Order matches the parity dump's PARSERS map.
+	// 1. Parse all entities.
 	const players = parsePlayers(root, activePlayerIndex);
 	const characters = parseCharacters(root);
 	const characterTraits = parseCharacterTraits(root);

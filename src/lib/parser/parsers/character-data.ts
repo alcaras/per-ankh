@@ -197,14 +197,6 @@ export function parseCharacterMarriages(
 
 // ---------- ToRow mappers (snake_case wire format) ----------
 
-export function characterStatToRow(s: CharacterStat): Record<string, unknown> {
-	return {
-		character_xml_id: s.characterXmlId,
-		stat_name: s.statName,
-		stat_value: s.statValue,
-	};
-}
-
 export function characterTraitToRow(
 	t: CharacterTrait,
 ): Record<string, unknown> {
