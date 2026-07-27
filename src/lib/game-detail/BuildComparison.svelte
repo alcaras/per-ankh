@@ -2,10 +2,10 @@
 	// Head-to-head-by-type module, ported from owglick's H2H card. Every type is
 	// a center-split diverging-bar row (player A grows left, B grows right),
 	// with the absent side left blank when only one player has a type. Used on
-	// the Military tab for the Ending Army / Military Built comparisons and on
-	// the Economy tab for improvements and specialists — hence the icon
-	// category and label being the caller's to choose. A 1v1 framing; the
-	// caller gates it to two players.
+	// the Military tab for the Ending Army / Military Built comparisons, on the
+	// Economy tab for improvements and worker-turns, and on the Specialists tab
+	// for rural / urban specialists — hence the icon category and label being
+	// the caller's to choose. A 1v1 framing; the caller gates it to two players.
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
 	import type { BuildItem, SpriteCategory } from "./helpers";

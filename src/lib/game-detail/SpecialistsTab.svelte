@@ -2,7 +2,7 @@
 	import type { ImprovementData } from "$lib/types/ImprovementData";
 	import type { ChartOption } from "$lib/echarts";
 	import { formatEnum } from "$lib/utils/formatting";
-	import { CHART_THEME, getNationChartColor } from "$lib/config";
+	import { CHART_THEME } from "$lib/config";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { ToggleGroup } from "bits-ui";
 	import ChartContainer from "$lib/ChartContainer.svelte";
@@ -12,10 +12,13 @@
 	import {
 		type TableState,
 		type DetailPlayer,
+		type BuildItem,
 		TABLE_FRAME_CLASS,
 		TABLE_CLASS,
 		TABLE_HEADER_TH_CLASS,
 		TABLE_CELL_TD_CLASS,
+		comparisonRowKeys,
+		orderPlayersUploaderFirst,
 		ownedByPlayer,
 		toggleSort,
 	} from "./helpers";
@@ -23,14 +26,18 @@
 		type KindFilter,
 		specialistInfo,
 		classLabel,
+		slotCoverage,
 		specialistName,
 		summarizeForPlayer,
 		levelBreakdownForPlayer,
 	} from "./specialists";
+	import BuildComparison from "./BuildComparison.svelte";
+	import { specialistSortKey } from "./science-techs";
 
 	let {
 		players,
 		improvementData,
+		userNation = null,
 		tableState = $bindable<TableState>({
 			search: "",
 			sortColumn: "specialist",
@@ -40,6 +47,7 @@
 	}: {
 		players: DetailPlayer[];
 		improvementData: ImprovementData;
+		userNation?: string | null;
 		tableState?: TableState;
 	} = $props();
 
@@ -213,51 +221,121 @@
 		};
 	});
 
-	// Coverage: staffed share of specialist-eligible improvements built, per
-	// player, colored by nation.
-	const coverageOption: ChartOption = $derived.by(() => {
-		const data = displayedPlayers.map((p, i) => ({
-			value:
-				summaries[i].coverage != null
-					? Math.round(summaries[i].coverage * 1000) / 10
-					: 0,
-			itemStyle: { color: getNationChartColor(p.nation, i) },
-		}));
-		return {
-			...CHART_THEME,
-			title: { ...CHART_THEME.title, text: "Coverage" },
-			tooltip: {
-				...CHART_THEME.tooltip,
-				axisPointer: { type: "shadow" },
-				formatter: (params: unknown) => {
-					const p = (params as { dataIndex: number }[])[0];
-					const player = displayedPlayers[p.dataIndex];
-					const s = summaries[p.dataIndex];
-					if (!player || !s) return "";
-					return `${player.label}<br/>Coverage: ${coveragePct(s.coverage)}<br/>${s.total} specialists`;
-				},
+	// Coverage, split by the kind of slot: rural tiles and urban buildings are
+	// staffed by different economies, and the combined number hid which one a
+	// player had actually kept up with.
+	// Colours come from SEGMENTS above rather than repeated literals, looked up
+	// by key so reordering the ramp can't silently repaint them. This chart has
+	// one bar for urban against the ramp's three, and it draws that bar in the
+	// middle tier's copper — the midpoint reads as "urban" where either end
+	// would read as a particular tier.
+	const SEGMENT_COLOR: Record<string, string> = Object.fromEntries(
+		SEGMENTS.map((s) => [s.key, s.color]),
+	);
+	const COVERAGE_SERIES = [
+		{ key: "rural", name: "Rural", color: SEGMENT_COLOR.rural },
+		{ key: "urban", name: "Urban", color: SEGMENT_COLOR.urban2 },
+	] as const;
+
+	const coverageOption: ChartOption = $derived.by(() => ({
+		...CHART_THEME,
+		title: { ...CHART_THEME.title, text: "Slots filled" },
+		legend: { show: true, bottom: 0, textStyle: { color: "#FFFFFF" } },
+		tooltip: {
+			...CHART_THEME.tooltip,
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = (params as { dataIndex: number }[])[0];
+				const player = displayedPlayers[p.dataIndex];
+				const s = summaries[p.dataIndex];
+				if (!player || !s) return "";
+				const line = (kind: "rural" | "urban", label: string) =>
+					`${label}: <b>${s.slots[kind].staffed} / ${s.slots[kind].built}</b> (${coveragePct(slotCoverage(s.slots[kind]))})`;
+				return `${player.label}<br/>${line("rural", "Rural")}<br/>${line("urban", "Urban")}`;
 			},
-			grid: { left: 16, right: 16, top: 56, bottom: 24, containLabel: true },
-			xAxis: {
-				type: "category",
-				data: displayedPlayers.map((p) => p.label),
-				// Bars are colored by nation, so the per-bar labels are redundant.
-				axisLabel: { show: false },
-			},
-			yAxis: {
-				type: "value",
-				max: 100,
-				axisLabel: { formatter: "{value}%" },
-			},
-			series: [{ type: "bar", data, barMaxWidth: 56 }],
-		};
+		},
+		grid: { left: 16, right: 16, top: 56, bottom: 48, containLabel: true },
+		xAxis: { type: "category", data: displayedPlayers.map((p) => p.label) },
+		yAxis: { type: "value", max: 100, axisLabel: { formatter: "{value}%" } },
+		series: COVERAGE_SERIES.map((sc) => ({
+			name: sc.name,
+			type: "bar" as const,
+			data: summaries.map((s) => {
+				const c = slotCoverage(s.slots[sc.key]);
+				return c == null ? 0 : Math.round(c * 1000) / 10;
+			}),
+			itemStyle: { color: sc.color },
+			barMaxWidth: 40,
+		})),
+	}));
+
+	// ─── Side-by-side comparison ──────────────────────────────────────
+	// The Military tab's diverging-bar module, split rural / urban and sorted
+	// the way the Techs tab sorts specialists — unlock cost, class contiguous,
+	// then tier. 1v1 framing, so it renders only for a two-sided game.
+	// Built from displayedPlayers, not the raw roster, so the tab's nation
+	// filter governs every surface on it: filtering down to one nation leaves
+	// no matchup and hides the comparison rather than showing two sides the
+	// cards above no longer list.
+	const orderedPlayers = $derived(
+		orderPlayersUploaderFirst(displayedPlayers, userNation),
+	);
+	const matchup = $derived(orderedPlayers.length === 2 ? orderedPlayers : null);
+
+	const KIND_LABELS: Record<string, string> = {
+		rural: "Rural",
+		urban: "Urban",
+	};
+
+	const comparisonPanels = $derived.by(() => {
+		const sides = orderedPlayers.map((player) => {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+			const counts = new Map<string, Map<string, number>>();
+			for (const imp of ownedByPlayer(
+				improvementData.improvements,
+				player,
+				(i) => i.owner_player_xml_id,
+				(i) => i.nation,
+			)) {
+				const info = specialistInfo(imp.specialist);
+				if (info == null || imp.specialist == null) continue;
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+				const rows = counts.get(info.kind) ?? new Map<string, number>();
+				rows.set(imp.specialist, (rows.get(imp.specialist) ?? 0) + 1);
+				counts.set(info.kind, rows);
+			}
+			return counts;
+		});
+		return (["rural", "urban"] as const)
+			.map((kind) => {
+				// Raw per-side rows: BuildComparison re-aggregates these and
+				// gap-fills against the shared `keys`, so a side that lacks a key
+				// just omits it.
+				const items = sides.map((s) =>
+					[...(s.get(kind)?.entries() ?? [])].map(
+						([key, count]): BuildItem => ({ key, count }),
+					),
+				);
+				// Ties break on the displayed name — the order the Economy tab's
+				// panels already use — so specialists the table doesn't know, which
+				// all share a sort key, don't fall back on whichever side happened
+				// to mention them first.
+				const keys = comparisonRowKeys(
+					items,
+					(a, b) =>
+						specialistSortKey(a) - specialistSortKey(b) ||
+						specialistName(a).localeCompare(specialistName(b)),
+				);
+				return { label: kind, keys, items };
+			})
+			.filter((p) => p.keys.length > 0);
 	});
 </script>
 
 {#if placedCount === 0}
 	<p class="p-8 text-center italic text-tan">No specialists found</p>
 {:else}
-	<!-- Per-player headline metrics: breadth (total), coverage %, depth (avg urban level). -->
+	<!-- Per-player headline metrics: breadth, slots filled per kind, depth. -->
 	{#if displayedPlayers.length > 0}
 		<div class="mb-4 flex flex-wrap gap-3">
 			{#each displayedPlayers as player, i (player.playerId)}
@@ -281,8 +359,24 @@
 							<dd class="font-bold">{summaries[i].total}</dd>
 						</div>
 						<div class="flex justify-between">
-							<dt class="opacity-70">Coverage</dt>
-							<dd class="font-bold">{coveragePct(summaries[i].coverage)}</dd>
+							<dt class="opacity-70">Rural filled</dt>
+							<dd class="font-bold">
+								{summaries[i].slots.rural.staffed}/{summaries[i].slots.rural
+									.built}
+								<span class="opacity-70"
+									>{coveragePct(slotCoverage(summaries[i].slots.rural))}</span
+								>
+							</dd>
+						</div>
+						<div class="flex justify-between">
+							<dt class="opacity-70">Urban filled</dt>
+							<dd class="font-bold">
+								{summaries[i].slots.urban.staffed}/{summaries[i].slots.urban
+									.built}
+								<span class="opacity-70"
+									>{coveragePct(slotCoverage(summaries[i].slots.urban))}</span
+								>
+							</dd>
 						</div>
 						<div class="flex justify-between">
 							<dt class="opacity-70">Avg urban level</dt>
@@ -303,7 +397,38 @@
 				height="320px"
 				title="Specialists by level"
 			/>
-			<ChartContainer option={coverageOption} height="320px" title="Coverage" />
+			<ChartContainer
+				option={coverageOption}
+				height="320px"
+				title="Slots filled"
+			/>
+		</div>
+	{/if}
+
+	{#if !matchup}
+		<p class="mb-6 rounded-lg bg-surface p-4 text-sm italic text-tan">
+			Side-by-side comparison needs exactly two nations. The table below covers
+			every player.
+		</p>
+	{/if}
+	{#if matchup && comparisonPanels.length > 0}
+		<div class="mb-6 rounded-lg bg-surface p-4">
+			<h3 class="mb-3 text-base font-bold text-tan">Side by side</h3>
+			<div class="grid gap-3 lg:grid-cols-2">
+				{#each comparisonPanels as panel (panel.label)}
+					<BuildComparison
+						title={KIND_LABELS[panel.label]}
+						a={panel.items[0]}
+						b={panel.items[1]}
+						ca={matchup[0].color}
+						cb={matchup[1].color}
+						keys={panel.keys}
+						iconCategory="specialists"
+						labelOf={specialistName}
+						showDiff
+					/>
+				{/each}
+			</div>
 		</div>
 	{/if}
 

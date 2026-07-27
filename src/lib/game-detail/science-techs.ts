@@ -491,6 +491,22 @@ const SPECIALIST_CLASS_ORDINAL: Readonly<Record<string, number>> =
 			.map((cls, i) => [cls, i]),
 	);
 
+/**
+ * Sort key for a specialist row: unlock cost first, then the class as a
+ * contiguous block, then the tier — so two classes sharing a cost (Officers
+ * and Poets, both 160) don't intermingle and each line reads Apprentice →
+ * Master → Elder. Shared with the Economy tab so specialists sort the same way
+ * wherever they're listed.
+ */
+export function specialistSortKey(zType: string): number {
+	const info = SPECIALISTS[zType];
+	return (
+		(SPECIALIST_UNLOCK_COST[zType] ?? 0) * 10_000 +
+		(SPECIALIST_CLASS_ORDINAL[info?.class ?? ""] ?? 99) * 10 +
+		(info?.level ?? 0)
+	);
+}
+
 // Culture levels in game order — index+1 is the level multiplier
 // aiYieldRateCulture uses (City.cs:11916 adds getCultureStep() on top for
 // post-Legendary growth, which the blob doesn't record, so Centralization
@@ -666,9 +682,7 @@ export function scienceBreakdown(
 				staff,
 				0,
 				{ category: "specialists", value: i.specialist },
-				(SPECIALIST_UNLOCK_COST[i.specialist] ?? 0) * 10_000 +
-					(SPECIALIST_CLASS_ORDINAL[info?.class ?? ""] ?? 99) * 10 +
-					(info?.level ?? 0),
+				specialistSortKey(i.specialist),
 			);
 		}
 		if (i.city_name != null) {

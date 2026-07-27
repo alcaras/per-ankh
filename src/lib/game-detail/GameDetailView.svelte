@@ -685,6 +685,7 @@
 		<SpecialistsTab
 			players={resolvedPlayers}
 			{improvementData}
+			{userNation}
 			bind:tableState={tables.specialists}
 		/>
 	</Tabs.Content>
