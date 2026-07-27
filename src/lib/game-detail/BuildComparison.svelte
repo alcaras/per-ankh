@@ -1,14 +1,20 @@
+<script lang="ts" module>
+	import type { SpriteCategory } from "./helpers";
+
+	/** One row's subject and how many of it a side has. */
+	export type BuildItem = { key: string; count: number };
+</script>
+
 <script lang="ts">
-	// Head-to-head-by-type module, ported from owglick's H2H card. Every unit
-	// type is a center-split diverging-bar row (player A grows left, B grows
-	// right), listed alphabetically by unit type — with the absent side left
-	// blank when only one player built a type. Used on the Military tab for the
-	// Ending Army / Military Built comparisons. A 1v1 framing; the caller gates
-	// it to two players.
+	// Head-to-head-by-type module, ported from owglick's H2H card. Every type is
+	// a center-split diverging-bar row (player A grows left, B grows right),
+	// with the absent side left blank when only one player has a type. Used on
+	// the Military tab for the Ending Army / Military Built comparisons and on
+	// the Economy tab for improvements and specialists — hence the icon
+	// category and label being the caller's to choose. A 1v1 framing; the
+	// caller gates it to two players.
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
-
-	export type BuildItem = { unitType: string; count: number };
 
 	let {
 		title,
@@ -18,7 +24,10 @@
 		b,
 		ca,
 		cb,
-		unitTypes,
+		keys,
+		iconCategory = "units",
+		labelOf = (key: string) => formatEnum(key, "UNIT_"),
+		showDiff = false,
 	}: {
 		title: string;
 		statA?: string;
@@ -29,24 +38,28 @@
 		cb: string;
 		// Optional fixed row order. When the caller renders several panels that
 		// should line up (Military Built vs Ending Army), it passes the shared
-		// union of unit types so every panel draws the same rows in the same
-		// order — a type absent from this panel's rosters renders as a blank
-		// placeholder row. Omitted, the panel derives its own union from a/b.
-		unitTypes?: string[];
+		// union of keys so every panel draws the same rows in the same order — a
+		// type absent from this panel renders as a blank placeholder row.
+		// Omitted, the panel derives its own union from a/b.
+		keys?: string[];
+		iconCategory?: SpriteCategory;
+		// eslint-disable-next-line no-unused-vars -- callback type signature
+		labelOf?: (key: string) => string;
+		// Trailing ±N column: how far ahead the leading side is on that row.
+		showDiff?: boolean;
 	} = $props();
 
 	function byType(items: BuildItem[]): Map<string, number> {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
 		const m = new Map<string, number>();
-		for (const it of items)
-			m.set(it.unitType, (m.get(it.unitType) ?? 0) + it.count);
+		for (const it of items) m.set(it.key, (m.get(it.key) ?? 0) + it.count);
 		return m;
 	}
 	const aM = $derived(byType(a));
 	const bM = $derived(byType(b));
 
 	type Row = {
-		unitType: string;
+		key: string;
 		ca: number;
 		cb: number;
 	};
@@ -56,12 +69,12 @@
 	// line up); otherwise from this panel's own union of both rosters.
 	const rows = $derived<Row[]>(
 		(
-			unitTypes ??
+			keys ??
 			[...new Set([...aM.keys(), ...bM.keys()])].sort((p, q) =>
-				formatEnum(p, "UNIT_").localeCompare(formatEnum(q, "UNIT_")),
+				labelOf(p).localeCompare(labelOf(q)),
 			)
 		).map((t) => ({
-			unitType: t,
+			key: t,
 			ca: aM.get(t) ?? 0,
 			cb: bM.get(t) ?? 0,
 		})),
@@ -92,17 +105,17 @@
 
 	{#if rows.length > 0}
 		<div>
-			{#each rows as r (r.unitType)}
+			{#each rows as r (r.key)}
 				<div
 					class="grid items-center gap-2 px-2.5 py-0.5"
 					style="grid-template-columns: 110px 1fr;"
 				>
 					<div class="flex min-w-0 items-center gap-1.5">
 						<span class="flex w-3.5 flex-none">
-							<SpriteIcon category="units" value={r.unitType} size={14} />
+							<SpriteIcon category={iconCategory} value={r.key} size={14} />
 						</span>
 						<span class="truncate text-[11px] text-bright"
-							>{formatEnum(r.unitType, "UNIT_")}</span
+							>{labelOf(r.key)}</span
 						>
 					</div>
 					<div class="flex items-center">
@@ -131,6 +144,19 @@
 							class="w-5 flex-none text-center font-mono text-[11px] text-white"
 							>{r.cb || ""}</span
 						>
+						{#if showDiff}
+							<span
+								class="w-8 flex-none text-right font-mono text-[10px]"
+								style="color:{r.ca === r.cb
+									? 'inherit'
+									: r.ca > r.cb
+										? ca
+										: cb}"
+								class:text-muted={r.ca === r.cb}
+							>
+								{r.ca === r.cb ? "" : `+${Math.abs(r.ca - r.cb)}`}
+							</span>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -152,6 +178,19 @@
 						class="w-5 flex-none text-center font-mono text-[10px]"
 						style="color:{cb}">{totalB}</span
 					>
+					{#if showDiff}
+						<span
+							class="w-8 flex-none text-right font-mono text-[10px] font-bold"
+							style="color:{totalA === totalB
+								? 'inherit'
+								: totalA > totalB
+									? ca
+									: cb}"
+							class:text-muted={totalA === totalB}
+						>
+							{totalA === totalB ? "" : `+${Math.abs(totalA - totalB)}`}
+						</span>
+					{/if}
 				</div>
 			</div>
 		</div>
