@@ -108,6 +108,35 @@ export function parsePlayerResources(
 	return out;
 }
 
+// ---------- Projects produced (Player.ProjectsProduced) ----------
+//
+// Name-keyed int map on the Player node — every project the player ever
+// completed, with counts, city projects and player projects alike. The
+// per-City <ProjectCount> carries the same data split by city; this is the
+// authoritative whole-game total (a city lost to conquest keeps its projects
+// here but not there). No Rust counterpart: first parsed at 2.13.0.
+
+export interface PlayerProjectProduced {
+	playerXmlId: number;
+	project: string;
+	count: number;
+}
+
+export function parseProjectsProduced(
+	root: Record<string, unknown>,
+): PlayerProjectProduced[] {
+	const out: PlayerProjectProduced[] = [];
+	for (const [playerXmlId, node] of eachPlayer(root)) {
+		for (const { name, value } of collectStrictNamedInts(
+			node.ProjectsProduced,
+			"ProjectsProduced",
+		)) {
+			out.push({ playerXmlId, project: name, count: value });
+		}
+	}
+	return out;
+}
+
 // ---------- Technology progress (player_data.rs:119–150) ----------
 
 export function parseTechnologyProgress(
@@ -331,6 +360,16 @@ export function playerResourceToRow(
 		player_xml_id: r.playerXmlId,
 		yield_type: r.yieldType,
 		amount: r.amount,
+	};
+}
+
+export function projectProducedToRow(
+	r: PlayerProjectProduced,
+): Record<string, unknown> {
+	return {
+		player_xml_id: r.playerXmlId,
+		project: r.project,
+		count: r.count,
 	};
 }
 

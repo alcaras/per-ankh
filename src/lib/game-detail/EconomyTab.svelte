@@ -17,6 +17,7 @@
 	import type { PlayerWonder } from "$lib/types/PlayerWonder";
 	import type {
 		PlayerResourceInfo,
+		ProjectProducedInfo,
 		TileOwnershipEntry,
 		UnitInfo,
 		YieldPriceEntry,
@@ -71,6 +72,7 @@
 		yieldPrices = [],
 		eventLogs,
 		playerResources = [],
+		projectsProduced = [],
 		cityStatistics,
 		playerWonders,
 		unitsProduced,
@@ -96,6 +98,10 @@
 		// End-of-game stockpiles — the National wealth panel. Defaults to [] for
 		// legacy callers (frozen web/ viewer), which hides that panel.
 		playerResources?: PlayerResourceInfo[];
+		// Every project each player completed, whole-game counts. Present on
+		// 2.13.0+ blobs only; the panel hides on older games rather than
+		// implying nobody built projects.
+		projectsProduced?: ProjectProducedInfo[];
 		cityStatistics: CityStatistics;
 		playerWonders: PlayerWonder[];
 		unitsProduced: PlayerUnitProduced[];
@@ -563,6 +569,45 @@
 		),
 	);
 
+	// Projects are the third thing a city builds besides units and (via
+	// workers) improvements, and the save's ProjectsProduced map is the
+	// whole-game record. Single flat panel, biggest total first — projects
+	// have no rural/urban axis. Rows are keyed by PROJECT_* zType; there is
+	// no baked 2D art for projects, so rows render label-only.
+	// formatEnum strips trailing digits ("Garrison 1" → "Garrison"), which is
+	// right where tiers aggregate — but project tiers are distinct rows here
+	// (Council 1/2/3 are separate accomplishments), so put the tier back.
+	const projectLabel = (key: string): string => {
+		const label = formatEnum(key, "PROJECT_");
+		const tier = /_(\d+)$/.exec(key)?.[1];
+		return tier != null ? `${label} ${tier}` : label;
+	};
+
+	const projectPanel = $derived.by(() => {
+		if (projectsProduced.length === 0) return null;
+		const sides = orderedPlayers.map((player) => {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+			const counts = new Map<string, number>();
+			for (const row of projectsProduced) {
+				if (row.player_xml_id !== player.playerId) continue;
+				counts.set(row.project, (counts.get(row.project) ?? 0) + row.count);
+			}
+			return counts;
+		});
+		const total = (key: string) =>
+			sides.reduce((sum, m) => sum + (m.get(key) ?? 0), 0);
+		const keys = [...new Set(sides.flatMap((m) => [...m.keys()]))].sort(
+			(a, b) => total(b) - total(a) || a.localeCompare(b),
+		);
+		if (keys.length === 0) return null;
+		return {
+			keys,
+			items: sides.map((m) =>
+				keys.map((key) => ({ key, count: m.get(key) ?? 0 })),
+			),
+		};
+	});
+
 	const PANEL_LABELS: Record<string, string> = {
 		rural: "Rural",
 		urban: "Urban",
@@ -793,6 +838,25 @@
 					{/each}
 				</div>
 			</div>
+			{#if projectPanel}
+				<div
+					class="rounded-lg p-4"
+					style="background-color: rgb(var(--color-surface));"
+				>
+					<h3 class="mb-3 text-base font-bold text-tan">Projects completed</h3>
+					<BuildComparison
+						title="All projects"
+						a={projectPanel.items[0]}
+						b={projectPanel.items[1]}
+						ca={matchup[0].color}
+						cb={matchup[1].color}
+						keys={projectPanel.keys}
+						iconCategory="improvements"
+						labelOf={projectLabel}
+						showDiff
+					/>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </section>

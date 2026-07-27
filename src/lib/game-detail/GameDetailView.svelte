@@ -28,6 +28,7 @@
 		YieldPriceEntry,
 		PlayerResourceInfo,
 		FamilyOpinionEntry,
+		ProjectProducedInfo,
 	} from "$lib/parser/types";
 	import { Tabs } from "bits-ui";
 	import {
@@ -89,6 +90,7 @@
 		yieldPrices = [],
 		playerResources = [],
 		familyOpinionHistory = [],
+		projectsProduced = [],
 		mapTiles,
 		onMapTurnChange,
 		selectedMapTurn = null,
@@ -151,6 +153,9 @@
 		// Per-turn family opinion — the Economy tab's upkeep companion chart.
 		// Defaults to [] for legacy callers (frozen web/ viewer).
 		familyOpinionHistory?: FamilyOpinionEntry[];
+		// Whole-game project counts per player (2.13.0+ blobs). Defaults to []
+		// for legacy callers and older blobs, which hide the Economy panel.
+		projectsProduced?: ProjectProducedInfo[];
 		mapTiles: MapTile[] | null;
 		// eslint-disable-next-line no-unused-vars -- Callback type signature
 		onMapTurnChange?: ((turn: number) => Promise<void>) | null;
@@ -655,6 +660,7 @@
 			{yieldPrices}
 			{eventLogs}
 			{playerResources}
+			{projectsProduced}
 			{cityStatistics}
 			{playerWonders}
 			{unitsProduced}

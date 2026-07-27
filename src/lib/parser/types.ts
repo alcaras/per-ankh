@@ -224,6 +224,16 @@ export interface UnitPromotionInfo {
 	is_acquired: boolean;
 }
 
+/**
+ * One project a player completed, with its whole-game count — the Player
+ * node's ProjectsProduced map. PARSER_VERSION 2.13.0+; absent on older blobs.
+ */
+export interface ProjectProducedInfo {
+	player_xml_id: number;
+	project: string;
+	count: number;
+}
+
 export interface PlayerResourceInfo {
 	player_xml_id: number;
 	yield_type: string;
@@ -368,6 +378,7 @@ export interface FullGameData {
 	units: UnitInfo[];
 	unit_promotions: UnitPromotionInfo[];
 	player_resources: PlayerResourceInfo[];
+	projects_produced: ProjectProducedInfo[];
 	player_goals: PlayerGoalInfo[];
 	story_events: StoryEvent[];
 	memory_data: MemoryInfo[];
@@ -380,4 +391,4 @@ export interface FullGameData {
  * fixes, MINOR for additive fields, MAJOR for breaking schema changes.
  * Initial value `2.0.0` mirrors `FullGameData.version: 2`.
  */
-export const PARSER_VERSION = "2.12.0";
+export const PARSER_VERSION = "2.13.0";
