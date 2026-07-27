@@ -27,6 +27,7 @@
 		TileOwnershipEntry,
 		YieldPriceEntry,
 		PlayerResourceInfo,
+		FamilyOpinionEntry,
 	} from "$lib/parser/types";
 	import { Tabs } from "bits-ui";
 	import {
@@ -56,6 +57,7 @@
 	import MilitaryTab from "./MilitaryTab.svelte";
 	import CitiesTab from "./CitiesTab.svelte";
 	import EconomyTab from "./EconomyTab.svelte";
+	import FamiliesTab from "./FamiliesTab.svelte";
 	import SpecialistsTab from "./SpecialistsTab.svelte";
 	import MapTab from "./MapTab.svelte";
 	import SettingsTab from "./SettingsTab.svelte";
@@ -86,6 +88,7 @@
 		tileOwnershipHistory = [],
 		yieldPrices = [],
 		playerResources = [],
+		familyOpinionHistory = [],
 		mapTiles,
 		onMapTurnChange,
 		selectedMapTurn = null,
@@ -145,6 +148,9 @@
 		// End-of-game stockpiles — the Economy tab's national-wealth panel.
 		// Defaults to [] for legacy callers (frozen web/ viewer).
 		playerResources?: PlayerResourceInfo[];
+		// Per-turn family opinion — the Economy tab's upkeep companion chart.
+		// Defaults to [] for legacy callers (frozen web/ viewer).
+		familyOpinionHistory?: FamilyOpinionEntry[];
 		mapTiles: MapTile[] | null;
 		// eslint-disable-next-line no-unused-vars -- Callback type signature
 		onMapTurnChange?: ((turn: number) => Promise<void>) | null;
@@ -498,6 +504,8 @@
 
 		<Tabs.Trigger value="economy" class={triggerClass}>Economy</Tabs.Trigger>
 
+		<Tabs.Trigger value="families" class={triggerClass}>Families</Tabs.Trigger>
+
 		<Tabs.Trigger value="specialists" class={triggerClass}>
 			Specialists
 		</Tabs.Trigger>
@@ -655,6 +663,19 @@
 			totalTurns={gameDetails.total_turns}
 			{userNation}
 			bind:tableState={tables.improvements}
+		/>
+	</Tabs.Content>
+
+	<!-- Tab Content: Families -->
+	<Tabs.Content value="families" class="tab-pane min-h-[400px]">
+		<FamiliesTab
+			players={resolvedPlayers}
+			{improvementData}
+			{cityStatistics}
+			{familyOpinionHistory}
+			{units}
+			totalTurns={gameDetails.total_turns}
+			{userNation}
 		/>
 	</Tabs.Content>
 
