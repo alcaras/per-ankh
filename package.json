@@ -41,6 +41,7 @@
 		"bake:wonders": "tsx scripts/bake-wonders.ts",
 		"bake:orders-sources": "tsx scripts/bake-orders-sources.ts",
 		"bake:power-tiers": "tsx scripts/bake-power-tiers.ts",
+		"bake:momentum": "tsx scripts/bake-momentum.ts",
 		"bake:finalize": "tsx scripts/build-manifests.ts",
 		"bake:favicon": "node scripts/bake-favicon.mjs .",
 		"bake:og": "node scripts/make-og-default.mjs .",
