@@ -54,6 +54,7 @@
 	import { IMPROVEMENT_UNLOCK_COST } from "$lib/generated/science-yields";
 	import {
 		type BuildItem,
+		comparisonRowKeys,
 		type DetailPlayer,
 		ownedByPlayer,
 		type TableState,
@@ -511,20 +512,28 @@
 		});
 		return order
 			.map((group) => {
+				// Raw per-side rows: BuildComparison re-aggregates these and gap-fills
+				// against the shared `keys`, so a side that lacks a key just omits it.
+				const items = sides.map((s) =>
+					[...(s.get(group)?.entries() ?? [])].map(([key, count]) => ({
+						key,
+						count,
+					})),
+				);
 				const total = (key: string) =>
 					sides.reduce((sum, s) => sum + (s.get(group)?.get(key) ?? 0), 0);
-				const keys = [
-					...new Set(sides.flatMap((s) => [...(s.get(group)?.keys() ?? [])])),
-				].sort((a, b) =>
-					sortKey == null ? total(b) - total(a) : sortKey(a) - sortKey(b),
+				// Ties break on the displayed name — the order every other comparison
+				// panel already uses (MilitaryTab's shared union, and BuildComparison's
+				// own default) — so equal rows don't fall back on whichever side
+				// happened to mention them first.
+				const byName = (a: string, b: string) =>
+					improvementDisplayName(a).localeCompare(improvementDisplayName(b));
+				const keys = comparisonRowKeys(items, (a, b) =>
+					sortKey == null
+						? total(b) - total(a) || byName(a, b)
+						: sortKey(a) - sortKey(b) || byName(a, b),
 				);
-				return {
-					label: group,
-					keys,
-					items: sides.map((s) =>
-						keys.map((key) => ({ key, count: s.get(group)?.get(key) ?? 0 })),
-					),
-				};
+				return { label: group, keys, items };
 			})
 			.filter((p) => p.keys.length > 0);
 	}
