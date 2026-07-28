@@ -902,6 +902,43 @@ export function findByPlayer<T>(
 	});
 }
 
+// ─── Build Comparison Panels ─────────────────────────────────────────
+
+/** One row's subject and how many of it a side has. */
+export type BuildItem = { key: string; count: number };
+
+/**
+ * Shared row order for a set of <BuildComparison> panels: the union of every
+ * key on any side. Passing one order into several panels lines them up, so a
+ * subject absent from one draws a blank placeholder row there rather than
+ * shifting the rows below it.
+ *
+ * Default order is combined total descending, then key — right when the panel
+ * measures effort rather than listing a catalogue. Pass `compare` for a fixed
+ * order (unlock cost, display name). Callers hand over their raw per-side
+ * rows; BuildComparison zero-fills the gaps itself, so there's no need to pad
+ * each side to the full key set first.
+ */
+export function comparisonRowKeys(
+	sides: BuildItem[][],
+	compare?: (a: string, b: string) => number,
+): string[] {
+	const totals = new Map<string, number>();
+	for (const side of sides) {
+		for (const it of side) {
+			totals.set(it.key, (totals.get(it.key) ?? 0) + it.count);
+		}
+	}
+	// The total-descending default breaks ties by key, so equal rows keep a
+	// stable order instead of falling back on whichever side happened to
+	// mention them first.
+	return [...totals.keys()].sort(
+		compare ??
+			((a, b) =>
+				(totals.get(b) ?? 0) - (totals.get(a) ?? 0) || a.localeCompare(b)),
+	);
+}
+
 // ─── Pure Functions ──────────────────────────────────────────────────
 
 export function toggleSort(table: TableState, columnKey: string): void {

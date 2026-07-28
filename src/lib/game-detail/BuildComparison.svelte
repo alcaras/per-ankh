@@ -1,10 +1,3 @@
-<script lang="ts" module>
-	import type { SpriteCategory } from "./helpers";
-
-	/** One row's subject and how many of it a side has. */
-	export type BuildItem = { key: string; count: number };
-</script>
-
 <script lang="ts">
 	// Head-to-head-by-type module, ported from owglick's H2H card. Every type is
 	// a center-split diverging-bar row (player A grows left, B grows right),
@@ -15,6 +8,7 @@
 	// caller gates it to two players.
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
+	import type { BuildItem, SpriteCategory } from "./helpers";
 
 	let {
 		title,
@@ -60,10 +54,10 @@
 		ca: number;
 		cb: number;
 	};
-	// One row per unit type, listed alphabetically by display name. A side that
-	// never built a type carries a 0 and renders a blank bar/count on its half.
-	// Rows come from the caller's shared `keys` order when given (so panels
-	// line up); otherwise from this panel's own union of both rosters.
+	// One row per key. A side that has none of a key carries a 0 and renders a
+	// blank bar/count on its half. Rows come from the caller's shared `keys`
+	// order when given (so panels line up); otherwise from this panel's own
+	// union of both sides, alphabetically by display name.
 	const rows = $derived<Row[]>(
 		(
 			keys ??
@@ -78,7 +72,7 @@
 	);
 	// Bar scale: longest single-side count across all rows.
 	const max = $derived(Math.max(1, ...rows.map((r) => Math.max(r.ca, r.cb))));
-	// Per-side unit totals, shown in a footer row aligned under the count columns.
+	// Per-side totals, shown in a footer row aligned under the count columns.
 	const totalA = $derived([...aM.values()].reduce((t, n) => t + n, 0));
 	const totalB = $derived([...bM.values()].reduce((t, n) => t + n, 0));
 </script>

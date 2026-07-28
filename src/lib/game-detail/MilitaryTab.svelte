@@ -22,10 +22,11 @@
 		type RailGroup,
 		type RailMarker,
 	} from "./EventRail.svelte";
-	import BuildComparison, { type BuildItem } from "./BuildComparison.svelte";
+	import BuildComparison from "./BuildComparison.svelte";
 	import TableFilterColumn from "./TableFilterColumn.svelte";
 	import NationFilterSelect from "./NationFilterSelect.svelte";
 	import {
+		type BuildItem,
 		type TableState,
 		type UnitClass,
 		type DetailPlayer,
@@ -33,6 +34,7 @@
 		TABLE_CLASS,
 		TABLE_HEADER_TH_CLASS,
 		TABLE_CELL_TD_CLASS,
+		comparisonRowKeys,
 		ownedByPlayer,
 		orderPlayersUploaderFirst,
 		toggleSort,
@@ -201,15 +203,9 @@
 	// up so a given unit sits on the same row in both — a type absent from one
 	// panel shows there as a blank placeholder row.
 	const sharedBuildUnitTypes = $derived<string[]>(
-		[
-			...new Set(
-				buildBlocks.flatMap((bl) => [
-					...bl.a.map((it) => it.key),
-					...bl.b.map((it) => it.key),
-				]),
-			),
-		].sort((p, q) =>
-			formatEnum(p, "UNIT_").localeCompare(formatEnum(q, "UNIT_")),
+		comparisonRowKeys(
+			buildBlocks.flatMap((bl) => [bl.a, bl.b]),
+			(p, q) => formatEnum(p, "UNIT_").localeCompare(formatEnum(q, "UNIT_")),
 		),
 	);
 
