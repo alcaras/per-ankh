@@ -27,7 +27,6 @@
 		keys,
 		iconCategory = "units",
 		labelOf = (key: string) => formatEnum(key, "UNIT_"),
-		showDiff = false,
 	}: {
 		title: string;
 		statA?: string;
@@ -45,8 +44,6 @@
 		iconCategory?: SpriteCategory;
 		// eslint-disable-next-line no-unused-vars -- callback type signature
 		labelOf?: (key: string) => string;
-		// Trailing ±N column: how far ahead the leading side is on that row.
-		showDiff?: boolean;
 	} = $props();
 
 	function byType(items: BuildItem[]): Map<string, number> {
@@ -144,19 +141,6 @@
 							class="w-5 flex-none text-center font-mono text-[11px] text-white"
 							>{r.cb || ""}</span
 						>
-						{#if showDiff}
-							<span
-								class="w-8 flex-none text-right font-mono text-[10px]"
-								style="color:{r.ca === r.cb
-									? 'inherit'
-									: r.ca > r.cb
-										? ca
-										: cb}"
-								class:text-muted={r.ca === r.cb}
-							>
-								{r.ca === r.cb ? "" : `+${Math.abs(r.ca - r.cb)}`}
-							</span>
-						{/if}
 					</div>
 				</div>
 			{/each}
@@ -178,19 +162,6 @@
 						class="w-5 flex-none text-center font-mono text-[10px]"
 						style="color:{cb}">{totalB}</span
 					>
-					{#if showDiff}
-						<span
-							class="w-8 flex-none text-right font-mono text-[10px] font-bold"
-							style="color:{totalA === totalB
-								? 'inherit'
-								: totalA > totalB
-									? ca
-									: cb}"
-							class:text-muted={totalA === totalB}
-						>
-							{totalA === totalB ? "" : `+${Math.abs(totalA - totalB)}`}
-						</span>
-					{/if}
 				</div>
 			</div>
 		</div>
