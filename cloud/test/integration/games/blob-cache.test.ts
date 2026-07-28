@@ -13,65 +13,14 @@
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { nanoid } from "nanoid";
 import { expectErrorCode, expectOk } from "../../helpers/assertions";
-import { makeUser, type TestUser } from "../../helpers/builders";
+import { makeUser } from "../../helpers/builders";
+import { makeBlob, putBlob, seedGame } from "../../helpers/games";
 import { request } from "../../helpers/requests";
 
 beforeAll(async () => {
 	await applyD1Migrations(env.SHARE_DB, env.TEST_MIGRATIONS);
 });
-
-// Minimal FullGameData-shaped blob. handleGameDetail only JSON-parses it and
-// spreads D1 metadata over the top, so the parser-level shape doesn't matter
-// here — player_roster carries an online_id so the PII strip is exercised.
-function makeBlob(gameName: string): Record<string, unknown> {
-	return {
-		match_metadata: { game_name: gameName, winner: null },
-		player_roster: [{ player_index: 0, online_id: "STEAM_SECRET" }],
-	};
-}
-
-async function putBlob(
-	gameId: string,
-	blob: Record<string, unknown>,
-): Promise<void> {
-	const gz = new Response(
-		new Response(JSON.stringify(blob)).body!.pipeThrough(
-			new CompressionStream("gzip"),
-		),
-	);
-	await env.SHARE_BUCKET.put(
-		`games/${gameId}.json.gz`,
-		await gz.arrayBuffer(),
-		{ httpMetadata: { contentType: "application/json" } },
-	);
-}
-
-async function seedGame(
-	user: TestUser,
-	opts: { isPublic: boolean; gameName?: string },
-): Promise<string> {
-	const gameId = nanoid(21);
-	await env.SHARE_DB.prepare(
-		`INSERT INTO games (
-			game_id, user_id, xml_game_id, total_turns, file_hash,
-			game_name, is_public, blob_version, blob_size_bytes, parser_version
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 2, 1024, '1.0.0')`,
-	)
-		.bind(
-			gameId,
-			user.userId,
-			nanoid(36),
-			50,
-			nanoid(64),
-			opts.gameName ?? "Test Game",
-			opts.isPublic ? 1 : 0,
-		)
-		.run();
-	await putBlob(gameId, makeBlob(opts.gameName ?? "Test Game"));
-	return gameId;
-}
 
 interface DetailBody {
 	match_metadata: { game_name: string };

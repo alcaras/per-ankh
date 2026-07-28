@@ -88,6 +88,17 @@ function mapApiErrorToPage(err: unknown): never {
 // (or signed-in non-owner of a private game gets 403, handled separately
 // — anonymous+private is the only 401 case the load needs to redirect on).
 export const load: PageLoad = async ({ params, fetch, url }) => {
+	// Start the tournament-link read before awaiting the game. It takes only
+	// params.id and reads nothing from the game payload, so the sequence these
+	// two used to run in was a false dependency — it charged the page the link
+	// handler's D1 round trips *after* the game read's instead of alongside
+	// them. The .catch() is attached here rather than at the await below so a
+	// getGame throw can't leave this promise rejecting unhandled.
+	const linkPromise = cloudApi
+		.getGameTournamentLink(params.id, { fetch })
+		.then((res) => res.link)
+		.catch(() => null);
+
 	let game;
 	try {
 		game = await cloudApi.getGame(params.id, { fetch });
@@ -119,14 +130,8 @@ export const load: PageLoad = async ({ params, fetch, url }) => {
 	// Tournament link: cheap public read that returns the linked
 	// tournament/match (or null) for any game. Used by the preTabs banner
 	// on GameDetailView. Failure here just hides the banner — don't block
-	// the page render.
-	let tournamentLink = null;
-	try {
-		const linkRes = await cloudApi.getGameTournamentLink(params.id, { fetch });
-		tournamentLink = linkRes.link;
-	} catch {
-		// fall through
-	}
+	// the page render. Issued above, concurrently with the game read.
+	const tournamentLink = await linkPromise;
 
 	return {
 		game,

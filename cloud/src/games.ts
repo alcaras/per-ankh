@@ -69,7 +69,9 @@ const MAX_BLOB_DECOMPRESSED = 50 * 1024 * 1024; // 50 MB
 const MAX_ZIP_BYTES = 50 * 1024 * 1024; // 50 MB
 
 // Anonymous public-game read limit (per-IP, global via D1 `events` table).
-const ANON_READS_PER_HOUR = 200;
+// Exported so the integration test pins the gate against the real cap rather
+// than a copy of the number — same reason tournament/limits.ts exports its own.
+export const ANON_READS_PER_HOUR = 200;
 
 // Per-user PATCH limit on visibility toggles. Generous — one toggle per
 // minute for an hour straight is well past human use.
@@ -2329,6 +2331,28 @@ export async function handleGameDetail(
 
 	const session = await sessionFromRequest(env, request);
 
+	// Anonymous public reads pay a per-IP rate-limit count (the gate below).
+	// A sessionless request cannot be the owner, so for those the count is
+	// issued here, alongside the games-row read, instead of after it: the two
+	// are independent, and running them in sequence charged the anonymous
+	// read two blocking cross-region round trips where one wave suffices.
+	// This is exact rather than speculative — non-ownership is already certain
+	// before either query. Signed-in requests keep the sequential path: they
+	// may be the owner, and owners aren't counted at all, so issuing the
+	// query for them would be waste. Scrapers are exempt from the gate, so
+	// they're exempt from the read too.
+	const ip = getClientIp(request) ?? "untrusted";
+	const ua = request.headers.get("User-Agent");
+	const anonReadCount =
+		session === null && !isScraperUA(ua)
+			? countEventsSince(env.EVENTS_DB, "anon_read", "ip_address", ip)
+			: null;
+	// The 404/401/403 returns below discard this result, so attach a handler
+	// now to keep a D1 failure on those paths from surfacing as an unhandled
+	// rejection. The awaits at the gate still see the original promise and
+	// still throw — a failed count must 500 rather than fail the limiter open.
+	anonReadCount?.catch(() => {});
+
 	// COALESCE(g.user_nation, …): see listGames for the rationale — same
 	// fallback so the H1 title and sidebar agree on a save's nation when the
 	// uploader didn't pick one. The header also drops its client-side
@@ -2380,39 +2404,36 @@ export async function handleGameDetail(
 	// (Discord/Slack/Twitter/etc.). Untrusted IP (CF-RAY missing) → shared
 	// "untrusted" bucket so per-IP enforcement doesn't silently degrade in
 	// a misconfigured topology.
-	if (!isOwner) {
-		const ip = getClientIp(request) ?? "untrusted";
-		const ua = request.headers.get("User-Agent");
-		if (!isScraperUA(ua)) {
-			const count = await countEventsSince(
-				env.EVENTS_DB,
-				"anon_read",
-				"ip_address",
-				ip,
+	//
+	// Gate order is unchanged — 404, then 401/403, then 429, then the audit
+	// insert — so hoisting the count above the row read shifts no decision.
+	if (!isOwner && !isScraperUA(ua)) {
+		// Sessionless requests reuse the count already in flight; signed-in
+		// non-owners issue it here, now that ownership is known.
+		const count = await (anonReadCount ??
+			countEventsSince(env.EVENTS_DB, "anon_read", "ip_address", ip));
+		if (count >= ANON_READS_PER_HOUR) {
+			return errorResponse(
+				"Rate limit exceeded. Try again later.",
+				429,
+				cors,
+				"RATE_LIMIT",
 			);
-			if (count >= ANON_READS_PER_HOUR) {
-				return errorResponse(
-					"Rate limit exceeded. Try again later.",
-					429,
-					cors,
-					"RATE_LIMIT",
-				);
-			}
-			// Audit-log fire-and-forget — same pattern as the download path.
-			// A logging hiccup mustn't 500 a public-game view.
-			env.EVENTS_DB.prepare(
-				`INSERT INTO events (event_type, game_id, ip_address)
-				 VALUES ('anon_read', ?, ?)`,
-			)
-				.bind(gameId, ip)
-				.run()
-				.catch((e: unknown) => {
-					logError("audit_event_log_failed", e, {
-						event_type: "anon_read",
-						game_id: gameId,
-					});
-				});
 		}
+		// Audit-log fire-and-forget — same pattern as the download path.
+		// A logging hiccup mustn't 500 a public-game view.
+		env.EVENTS_DB.prepare(
+			`INSERT INTO events (event_type, game_id, ip_address)
+			 VALUES ('anon_read', ?, ?)`,
+		)
+			.bind(gameId, ip)
+			.run()
+			.catch((e: unknown) => {
+				logError("audit_event_log_failed", e, {
+					event_type: "anon_read",
+					game_id: gameId,
+				});
+			});
 	}
 
 	// Non-owner reads go through the per-POP blob cache (see blob-cache.ts):

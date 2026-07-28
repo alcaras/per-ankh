@@ -36,7 +36,6 @@ import {
 	sessionFromRequest,
 } from "./session";
 import type { SessionEnv } from "./session";
-import { isSiteAdmin } from "./admin";
 import { displayNameSql } from "./identity";
 import { logError, setSecurityReason } from "./log";
 import type { QueryableD1, EventsEnv } from "./d1";
@@ -754,25 +753,45 @@ export async function handleMe(
 	// their last login. The OAuth-callback claim only fires on re-auth; running
 	// it here too means an already-logged-in player is linked on their next app
 	// load. Fire-and-forget inside the helper; cheap indexed UPDATEs.
-	await claimTournamentSlots(
-		env.SHARE_DB,
-		row.user_id,
-		row.discord_id,
-		session.data.discord_username,
-	);
-
+	//
 	// is_beta gates the create-tournament button on the frontend (allowlisted
 	// users only). Not load-bearing for authz — the worker re-checks create
 	// on the server.
-	const beta = await env.SHARE_DB.prepare(
-		"SELECT 1 AS ok FROM tournament_beta_users WHERE user_id = ? LIMIT 1",
-	)
-		.bind(row.user_id)
-		.first<{ ok: number }>();
+	//
+	// The two run concurrently: both need only the users row above, and
+	// neither reads the other's output, so the sequence they used to run in
+	// cost this handler an extra cross-region round trip for nothing.
+	// Promise.all rather than db.batch() deliberately — batch() is
+	// transactional, so a claim failure would take the beta read down with
+	// it, and claimTournamentSlots swallows its own errors precisely so a
+	// claim hiccup can't break /v1/auth/me. Deferring the claim to waitUntil
+	// is also not an option: +layout.ts calls getMyTournaments right after
+	// this, and that handler reads exactly what the claim writes.
+	const [, beta] = await Promise.all([
+		claimTournamentSlots(
+			env.SHARE_DB,
+			row.user_id,
+			row.discord_id,
+			session.data.discord_username,
+		),
+		env.SHARE_DB.prepare(
+			"SELECT 1 AS ok FROM tournament_beta_users WHERE user_id = ? LIMIT 1",
+		)
+			.bind(row.user_id)
+			.first<{ ok: number }>(),
+	]);
 
 	// is_admin gates the /admin/* SvelteKit routes. Not load-bearing for
 	// authz either — every admin endpoint re-checks via isSiteAdmin.
-	const admin = await isSiteAdmin(env, session);
+	//
+	// Compared inline rather than through isSiteAdmin(): that helper selects
+	// discord_id for a user_id, and this handler already holds that exact
+	// value on `row` from the query above — calling it here was a second
+	// round trip for a column in hand. ADMIN_DISCORD_ID reaches us on
+	// SessionEnv, which AuthEnv extends. Boolean() mirrors the helper's own
+	// guard, so an unset secret still makes nobody an admin.
+	const admin =
+		Boolean(env.ADMIN_DISCORD_ID) && row.discord_id === env.ADMIN_DISCORD_ID;
 
 	return jsonResponse(
 		{
