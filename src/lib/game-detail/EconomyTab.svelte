@@ -34,7 +34,7 @@
 		type RailGroup,
 		type RailMarker,
 	} from "./EventRail.svelte";
-	import BuildComparison, { type BuildItem } from "./BuildComparison.svelte";
+	import BuildComparison from "./BuildComparison.svelte";
 	import ImprovementPivotTable from "./ImprovementPivotTable.svelte";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import {
@@ -53,6 +53,7 @@
 	} from "./economy";
 	import { IMPROVEMENT_UNLOCK_COST } from "$lib/generated/science-yields";
 	import {
+		type BuildItem,
 		type DetailPlayer,
 		ownedByPlayer,
 		type TableState,
