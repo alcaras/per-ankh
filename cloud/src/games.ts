@@ -69,7 +69,9 @@ const MAX_BLOB_DECOMPRESSED = 50 * 1024 * 1024; // 50 MB
 const MAX_ZIP_BYTES = 50 * 1024 * 1024; // 50 MB
 
 // Anonymous public-game read limit (per-IP, global via D1 `events` table).
-const ANON_READS_PER_HOUR = 200;
+// Exported so the integration test pins the gate against the real cap rather
+// than a copy of the number — same reason tournament/limits.ts exports its own.
+export const ANON_READS_PER_HOUR = 200;
 
 // Per-user PATCH limit on visibility toggles. Generous — one toggle per
 // minute for an hour straight is well past human use.
