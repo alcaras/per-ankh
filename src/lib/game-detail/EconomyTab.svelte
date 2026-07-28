@@ -124,7 +124,7 @@
 	);
 
 	// ─── Headline chart ───────────────────────────────────────────────
-	// Four views of the same question — how big is this economy — each carrying
+	// Five views of the same question — how big is this economy — each carrying
 	// a different blind spot, so the subtitle says which one is on. GDP leads:
 	// it's the only one that puts the whole economy on a single axis.
 	type EmpireMode = "gdp" | "maintenance" | "territory" | "cities" | "workers";
@@ -372,9 +372,9 @@
 		nationalWealth(playerResources, yieldPrices, orderedPlayers, totalTurns),
 	);
 
-	// Three rows per nation: cities founded, wonders completed, calamities. Both are
-	// worker-turn events with a real turn attached — the two economy milestones
-	// the save actually dates.
+	// Three rows per nation: cities founded, wonders completed, calamities — the
+	// economy milestones the save actually timestamps. There is no per-turn
+	// improvement history in the blob, so these are what can annotate the curve.
 	const railGroups = $derived.by<RailGroup[]>(() =>
 		orderedPlayers
 			.map((player) => {
@@ -573,8 +573,8 @@
 		class="mb-4 rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface));"
 	>
-		<!-- Empire view switch: three growth curves the blob can answer, each
-		     with its own blind spot (named in the note below the control). -->
+		<!-- Empire view switch: the economy curves the blob can answer, each with
+		     its own blind spot (named in the note below the control). -->
 		<div
 			class="relative mb-1 grid w-fit overflow-hidden rounded-lg border-2 border-surface-sunken"
 			style="background-color: rgb(var(--color-surface)); grid-template-columns: repeat({availableModes.length}, minmax(0, 1fr));"
