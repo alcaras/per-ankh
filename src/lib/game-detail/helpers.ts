@@ -902,6 +902,31 @@ export function findByPlayer<T>(
 	});
 }
 
+// ─── Build Comparison Panels ─────────────────────────────────────────
+
+/** One row's subject and how many of it a side has. */
+export type BuildItem = { key: string; count: number };
+
+/**
+ * Shared row order for a set of <BuildComparison> panels: the union of every
+ * key on any side, in `compare` order. Passing one order into several panels
+ * lines them up, so a subject absent from one draws a blank placeholder row
+ * there rather than shifting the rows below it.
+ *
+ * Callers hand over their raw per-side rows; BuildComparison zero-fills the
+ * gaps itself, so there's no need to pad each side to the full key set first.
+ */
+export function comparisonRowKeys(
+	sides: BuildItem[][],
+	compare: (a: string, b: string) => number,
+): string[] {
+	const keys = new Set<string>();
+	for (const side of sides) {
+		for (const it of side) keys.add(it.key);
+	}
+	return [...keys].sort(compare);
+}
+
 // ─── Pure Functions ──────────────────────────────────────────────────
 
 export function toggleSort(table: TableState, columnKey: string): void {

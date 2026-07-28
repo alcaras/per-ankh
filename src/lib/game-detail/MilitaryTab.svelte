@@ -22,10 +22,11 @@
 		type RailGroup,
 		type RailMarker,
 	} from "./EventRail.svelte";
-	import BuildComparison, { type BuildItem } from "./BuildComparison.svelte";
+	import BuildComparison from "./BuildComparison.svelte";
 	import TableFilterColumn from "./TableFilterColumn.svelte";
 	import NationFilterSelect from "./NationFilterSelect.svelte";
 	import {
+		type BuildItem,
 		type TableState,
 		type UnitClass,
 		type DetailPlayer,
@@ -33,6 +34,7 @@
 		TABLE_CLASS,
 		TABLE_HEADER_TH_CLASS,
 		TABLE_CELL_TD_CLASS,
+		comparisonRowKeys,
 		ownedByPlayer,
 		orderPlayersUploaderFirst,
 		toggleSort,
@@ -105,7 +107,7 @@
 			if (classifyUnit(u.unit_type) == null) continue;
 			m.set(u.unit_type, (m.get(u.unit_type) ?? 0) + u.count);
 		}
-		return [...m].map(([unitType, count]) => ({ unitType, count }));
+		return [...m].map(([key, count]) => ({ key, count }));
 	}
 
 	// Combat units alive at game end, from the ending unit roster (`units`),
@@ -121,7 +123,7 @@
 			total++;
 		}
 		return {
-			items: [...m].map(([unitType, count]) => ({ unitType, count })),
+			items: [...m].map(([key, count]) => ({ key, count })),
 			total,
 		};
 	}
@@ -142,7 +144,7 @@
 	// unit's military power is its displayed strength × 10 (the XML iStrength).
 	const milpowerBuilt = (items: BuildItem[]): number =>
 		items.reduce((t, it) => {
-			const s = UNIT_STATS[it.unitType];
+			const s = UNIT_STATS[it.key];
 			return s ? t + it.count * s.strength * 10 : t;
 		}, 0);
 
@@ -201,15 +203,9 @@
 	// up so a given unit sits on the same row in both — a type absent from one
 	// panel shows there as a blank placeholder row.
 	const sharedBuildUnitTypes = $derived<string[]>(
-		[
-			...new Set(
-				buildBlocks.flatMap((bl) => [
-					...bl.a.map((it) => it.unitType),
-					...bl.b.map((it) => it.unitType),
-				]),
-			),
-		].sort((p, q) =>
-			formatEnum(p, "UNIT_").localeCompare(formatEnum(q, "UNIT_")),
+		comparisonRowKeys(
+			buildBlocks.flatMap((bl) => [bl.a, bl.b]),
+			(p, q) => formatEnum(p, "UNIT_").localeCompare(formatEnum(q, "UNIT_")),
 		),
 	);
 
@@ -625,7 +621,7 @@
 	): ChartOption | null {
 		const classCounts: Partial<Record<UnitClass, number>> = {};
 		for (const it of items) {
-			const cls = classifyUnit(it.unitType);
+			const cls = classifyUnit(it.key);
 			if (cls == null) continue;
 			classCounts[cls] = (classCounts[cls] ?? 0) + it.count;
 		}
@@ -688,7 +684,7 @@
 					p,
 					(u) => u.player_id,
 					(u) => u.nation,
-				).map((u) => ({ unitType: u.unit_type, count: u.count }));
+				).map((u) => ({ key: u.unit_type, count: u.count }));
 				const opt = makeDonut(p.label, p.color, items);
 				return opt ? { playerId: p.playerId, pieOption: opt } : null;
 			})
@@ -870,7 +866,7 @@
 						b={block.b}
 						ca={matchup[0].color}
 						cb={matchup[1].color}
-						unitTypes={sharedBuildUnitTypes}
+						keys={sharedBuildUnitTypes}
 					/>
 					{#if block.donutA || block.donutB}
 						<div class="grid grid-cols-2 gap-2">
