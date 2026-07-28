@@ -635,9 +635,9 @@
 	</div>
 {/if}
 
-<section class="mb-6">
-	<h2 class="mb-1 text-lg font-bold text-bright">National wealth</h2>
-	{#if wealth.some((w) => w.components.length > 0)}
+{#if wealth.some((w) => w.components.length > 0)}
+	<section class="mb-6">
+		<h2 class="mb-1 text-lg font-bold text-bright">National wealth</h2>
 		<!-- National wealth: the stockpiles at the final turn, priced. A snapshot,
 		     not a curve — the save records no stockpile history. -->
 		<div class="mb-4 grid gap-3 sm:grid-cols-2">
@@ -680,8 +680,8 @@
 				</div>
 			{/each}
 		</div>
-	{/if}
-</section>
+	</section>
+{/if}
 
 <section class="mb-6">
 	<h2 class="mb-1 text-lg font-bold text-bright">Built</h2>
