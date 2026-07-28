@@ -10,6 +10,7 @@
 export {
 	CHART_COLORS,
 	CHART_THEME,
+	CHART_REFERENCE_LINE_COLOR,
 	SERIES_COLORS,
 	getChartColor,
 	getSeriesColor,
