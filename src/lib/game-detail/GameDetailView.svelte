@@ -497,6 +497,7 @@
 			{gameDetails}
 			staticMapTiles={rawMapTiles}
 			{tileOwnershipHistory}
+			{eventLogs}
 			players={resolvedPlayers}
 			{playerHistory}
 			{allYields}
