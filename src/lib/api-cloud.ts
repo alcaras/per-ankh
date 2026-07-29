@@ -979,13 +979,17 @@ export const cloudApi = {
 	},
 
 	// Public site-wide leaderboard of games PLAYED per user, by category —
-	// anyone's upload credits every human seat in it. `since` (YYYY-MM-DD)
-	// narrows to games uploaded in a window — the Stats page's season view;
-	// omitted = all-time.
+	// anyone's upload credits every human seat in it. `since`/`until`
+	// (YYYY-MM-DD, until exclusive) narrow to games uploaded in a window —
+	// the Season page's season views, past ones included; omitted =
+	// all-time.
 	getPlayerLeaderboard: async (
-		opts?: CallOpts & { since?: string },
+		opts?: CallOpts & { since?: string; until?: string },
 	): Promise<PlayerLeaderboardResponse> => {
-		const qs = opts?.since ? `?since=${opts.since}` : "";
+		const params = new URLSearchParams();
+		if (opts?.since) params.set("since", opts.since);
+		if (opts?.until) params.set("until", opts.until);
+		const qs = params.size > 0 ? `?${params}` : "";
 		const res = await request(`/stats/players${qs}`, opts);
 		return res.json() as Promise<PlayerLeaderboardResponse>;
 	},

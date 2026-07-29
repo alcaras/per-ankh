@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from "$app/navigation";
+	import { page } from "$app/state";
 	import { resolve } from "$app/paths";
 	import type { PlayedGamesRow } from "$lib/api-cloud";
 	import { COGNOMEN_LADDER } from "$lib/generated/cognomens";
@@ -13,20 +15,22 @@
 	// Activity epithets from the game's cognomen ladder, one per legitimacy
 	// decade in the game's own ascending order (the New is the fresh-ruler
 	// epithet at the floor; Able 30 … Great 100). Thresholds are games
-	// played in the selected window, calibrated so a very active season
-	// (~30 games) reads Magnificent. Absolute thresholds — an epithet can't
-	// be lost to someone else's grinding, and any number of players can
-	// share one.
+	// played in the selected season, calibrated against the corpus: real
+	// hot quarters have hit ~120 games (Siontific) and ~100 (alcaras), the
+	// strong tier ~50–65, so the Great (100) is genuinely elite and the
+	// early rungs stay reachable in a first week. Absolute thresholds — an
+	// epithet can't be lost to someone else's grinding, and any number of
+	// players can share one.
 	const RUNGS: { games: number; type: string }[] = [
 		{ games: 1, type: "COGNOMEN_NEW" },
-		{ games: 4, type: "COGNOMEN_ABLE" },
-		{ games: 8, type: "COGNOMEN_JUST" },
-		{ games: 12, type: "COGNOMEN_GOOD" },
-		{ games: 16, type: "COGNOMEN_STRONG" },
-		{ games: 20, type: "COGNOMEN_NOBLE" },
-		{ games: 25, type: "COGNOMEN_GLORIOUS" },
-		{ games: 30, type: "COGNOMEN_MAGNIFICENT" },
-		{ games: 40, type: "COGNOMEN_GREAT" },
+		{ games: 5, type: "COGNOMEN_ABLE" },
+		{ games: 10, type: "COGNOMEN_JUST" },
+		{ games: 20, type: "COGNOMEN_GOOD" },
+		{ games: 30, type: "COGNOMEN_STRONG" },
+		{ games: 45, type: "COGNOMEN_NOBLE" },
+		{ games: 60, type: "COGNOMEN_GLORIOUS" },
+		{ games: 80, type: "COGNOMEN_MAGNIFICENT" },
+		{ games: 100, type: "COGNOMEN_GREAT" },
 	];
 	const cognomenName = (type: string): string =>
 		COGNOMEN_LADDER.find((c) => c.type === type)?.name ?? "";
@@ -47,20 +51,34 @@
 		withOther(view === "season" ? data.season : data.allTime),
 	);
 
-	// Kings of the season — most games played in each format this season,
-	// foursquare-mayor style. Ties share the crown. Computed on the season
-	// board regardless of the toggle (the crown belongs to the season).
-	const KING_FORMATS = [
+	// Season navigation: the picker walks the archive (every season since
+	// per-ankh's first), and the slug lives in the URL so a past board —
+	// its crowns included — is linkable forever.
+	const selectedIndex = $derived(
+		data.seasons.findIndex((s) => s.slug === data.selected.slug),
+	);
+	const isCurrentSeason = $derived(selectedIndex === data.seasons.length - 1);
+	function gotoSeason(slug: string): void {
+		const url = new URL(page.url);
+		url.searchParams.set("s", slug);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- search-param-only update on the current route; URL objects are SvelteKit's documented dynamic-nav API
+		void goto(url, { noScroll: true });
+	}
+
+	// Crowns of the season — most games played in each format, foursquare-
+	// mayor style. Ties share a crown. A past season's crowns are settled;
+	// the current season's are up for grabs.
+	const CROWN_FORMATS = [
 		{ key: "duels_network", label: "Network" },
 		{ key: "duels_cloud", label: "Cloud" },
 		{ key: "ffas", label: "FFAs" },
 	] as const;
-	type FormatKey = (typeof KING_FORMATS)[number]["key"];
+	type FormatKey = (typeof CROWN_FORMATS)[number]["key"];
 	const seasonRows = $derived(withOther(data.season));
-	const kings = $derived.by(() => {
+	const crowns = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived, not mutated after
 		const out = new Map<FormatKey, { names: string[]; count: number }>();
-		for (const f of KING_FORMATS) {
+		for (const f of CROWN_FORMATS) {
 			const max = Math.max(0, ...seasonRows.map((r) => r[f.key]));
 			if (max > 0) {
 				out.set(f.key, {
@@ -73,10 +91,10 @@
 		}
 		return out;
 	});
-	const isKing = (u: Row, key: FormatKey): boolean =>
+	const hasCrown = (u: Row, key: FormatKey): boolean =>
 		view === "season" &&
-		(kings.get(key)?.count ?? 0) > 0 &&
-		u[key] === kings.get(key)!.count;
+		(crowns.get(key)?.count ?? 0) > 0 &&
+		u[key] === crowns.get(key)!.count;
 
 	// The signed-in viewer's arc, ahead of anyone else's: their epithet, a
 	// progress bar to the next one, and the player immediately ahead — the
@@ -102,7 +120,6 @@
 	});
 	const rival = $derived(viewerIndex > 0 ? rows[viewerIndex - 1] : null);
 
-	const seasonName = $derived(data.seasonLabel.split(" ")[0]);
 	const num = (n: number) => (n === 0 ? "—" : n.toLocaleString());
 
 	const TOGGLE_BASE =
@@ -113,31 +130,58 @@
 </script>
 
 <svelte:head>
-	<title>Season — Per Ankh</title>
+	<title>{data.selected.label} — Per Ankh</title>
 </svelte:head>
 
 <main class="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-10 pt-6">
-	<div class="mb-1 flex items-baseline justify-between gap-3">
+	<div class="mb-1 flex flex-wrap items-baseline justify-between gap-3">
 		<h1 class="text-2xl font-bold text-gray-200">Season</h1>
-		<div class="flex rounded-lg bg-surface-sunken p-1">
-			<button
-				type="button"
-				class="{TOGGLE_BASE} {view === 'season'
-					? 'bg-surface text-orange'
-					: 'text-tan hover:text-orange'}"
-				onclick={() => (view = "season")}
-			>
-				{data.seasonLabel} · {data.seasonRange}
-			</button>
-			<button
-				type="button"
-				class="{TOGGLE_BASE} {view === 'all'
-					? 'bg-surface text-orange'
-					: 'text-tan hover:text-orange'}"
-				onclick={() => (view = "all")}
-			>
-				All time
-			</button>
+		<div class="flex items-center gap-2">
+			<!-- Season picker: chevrons walk the archive; the label names the
+			     selected season. Disabled ends rather than hidden, so the
+			     control keeps its footprint. -->
+			<div class="flex items-center rounded-lg bg-surface-sunken p-1">
+				<button
+					type="button"
+					class="{TOGGLE_BASE} {selectedIndex > 0
+						? 'text-tan hover:text-orange'
+						: 'cursor-default text-gray-600'}"
+					aria-label="Previous season"
+					disabled={selectedIndex <= 0}
+					onclick={() => gotoSeason(data.seasons[selectedIndex - 1].slug)}
+					>‹</button
+				>
+				<button
+					type="button"
+					class="{TOGGLE_BASE} {view === 'season'
+						? 'bg-surface text-orange'
+						: 'text-tan hover:text-orange'}"
+					onclick={() => (view = "season")}
+				>
+					{data.selected.label} · {data.selected.range}
+				</button>
+				<button
+					type="button"
+					class="{TOGGLE_BASE} {!isCurrentSeason
+						? 'text-tan hover:text-orange'
+						: 'cursor-default text-gray-600'}"
+					aria-label="Next season"
+					disabled={isCurrentSeason}
+					onclick={() => gotoSeason(data.seasons[selectedIndex + 1].slug)}
+					>›</button
+				>
+			</div>
+			<div class="flex rounded-lg bg-surface-sunken p-1">
+				<button
+					type="button"
+					class="{TOGGLE_BASE} {view === 'all'
+						? 'bg-surface text-orange'
+						: 'text-tan hover:text-orange'}"
+					onclick={() => (view = "all")}
+				>
+					All time
+				</button>
+			</div>
 		</div>
 	</div>
 	<p class="mb-5 text-sm text-tan">
@@ -145,16 +189,17 @@
 		any player's upload counts for everyone who played in it.
 	</p>
 
-	{#if kings.size > 0}
+	{#if crowns.size > 0 && view === "season"}
 		<!-- The season's format crowns: most games played in each format. -->
 		<div
 			class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-lg bg-surface p-3 text-sm"
 		>
 			<span class="text-[10px] font-bold uppercase tracking-wide text-tan"
-				>Kings of {seasonName}</span
+				>Crowns of {data.selected.name}
+				{isCurrentSeason ? "(so far)" : data.selected.year}</span
 			>
-			{#each KING_FORMATS as f (f.key)}
-				{@const k = kings.get(f.key)}
+			{#each CROWN_FORMATS as f (f.key)}
+				{@const k = crowns.get(f.key)}
 				{#if k}
 					<span class="text-tan">
 						👑 <span class="font-semibold text-gray-200"
@@ -177,7 +222,7 @@
 					<span class="font-semibold italic text-orange">{viewerEpithet}</span>
 					— {viewer.total}
 					{viewer.total === 1 ? "game" : "games"}
-					{view === "season" ? `this ${seasonName}` : "all time"}
+					{view === "season" ? `this ${data.selected.name}` : "all time"}
 				</span>
 				{#if rival}
 					<span class="text-tan"
@@ -209,8 +254,10 @@
 					</span>
 				</div>
 			{:else}
+				<!-- Topping the ladder ends nothing: the crowns stay in play
+				     every single game. -->
 				<div class="mt-1 text-xs text-tan">
-					No rung left above you — see you next season.
+					The ladder is yours — now the crowns: every game still counts.
 				</div>
 			{/if}
 		</div>
@@ -254,15 +301,15 @@
 							{/if}
 						</td>
 						<td class="{CELL} bg-surface"
-							>{num(u.duels_network)}{isKing(u, "duels_network")
+							>{num(u.duels_network)}{hasCrown(u, "duels_network")
 								? " 👑"
 								: ""}</td
 						>
 						<td class="{CELL} bg-surface"
-							>{num(u.duels_cloud)}{isKing(u, "duels_cloud") ? " 👑" : ""}</td
+							>{num(u.duels_cloud)}{hasCrown(u, "duels_cloud") ? " 👑" : ""}</td
 						>
 						<td class="{CELL} bg-surface"
-							>{num(u.ffas)}{isKing(u, "ffas") ? " 👑" : ""}</td
+							>{num(u.ffas)}{hasCrown(u, "ffas") ? " 👑" : ""}</td
 						>
 						<td class="{CELL} bg-surface">{num(u.other)}</td>
 						<td class="{CELL} rounded-r-lg bg-surface font-bold text-gray-200"

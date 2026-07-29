@@ -136,14 +136,18 @@ export async function handlePlayerLeaderboard(
 			.catch(() => {});
 	}
 
-	// Optional season window: `since` (YYYY-MM-DD) counts only games
-	// UPLOADED on/after that date — created_at is server-authoritative,
-	// unlike the save's own dates. Invalid values are rejected rather than
-	// silently ignored so a malformed season toggle can't masquerade as
-	// all-time.
-	const sinceRaw = new URL(request.url).searchParams.get("since");
-	if (sinceRaw != null && !/^\d{4}-\d{2}-\d{2}$/.test(sinceRaw)) {
-		return errorResponse("Invalid since date", 400, cors, "INVALID_QUERY");
+	// Optional season window: `since`/`until` (YYYY-MM-DD, until exclusive)
+	// count only games UPLOADED in the window — created_at is
+	// server-authoritative, unlike the save's own dates. Invalid values are
+	// rejected rather than silently ignored so a malformed season picker
+	// can't masquerade as all-time.
+	const url = new URL(request.url);
+	const sinceRaw = url.searchParams.get("since");
+	const untilRaw = url.searchParams.get("until");
+	for (const v of [sinceRaw, untilRaw]) {
+		if (v != null && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+			return errorResponse("Invalid window date", 400, cors, "INVALID_QUERY");
+		}
 	}
 
 	// `played` is (user, match) pairs — the uploader's claimed seat, plus
@@ -164,6 +168,7 @@ export async function handlePlayerLeaderboard(
 		   JOIN player_summaries ps
 		     ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
 		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		     AND (?2 IS NULL OR g.created_at < ?2)
 		   UNION
 		   SELECT uo.user_id, g.xml_game_id
 		   FROM games g
@@ -172,12 +177,14 @@ export async function handlePlayerLeaderboard(
 		        AND ps.online_id IS NOT NULL
 		   JOIN user_online_ids uo ON uo.online_id = ps.online_id
 		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		     AND (?2 IS NULL OR g.created_at < ?2)
 		 ),
 		 match_class AS (
 		   SELECT g.xml_game_id, MAX(h.n) AS n_humans, MAX(g.game_mode) AS game_mode
 		   FROM games g
 		   JOIN humans h ON h.game_id = g.game_id
 		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		     AND (?2 IS NULL OR g.created_at < ?2)
 		   GROUP BY g.xml_game_id
 		 )
 		 SELECT
@@ -193,15 +200,21 @@ export async function handlePlayerLeaderboard(
 		 GROUP BY u.user_id
 		 ORDER BY total DESC, display_name ASC`,
 	)
-		.bind(sinceRaw)
+		.bind(sinceRaw, untilRaw)
 		.all<PlayedGamesRow>();
 
-	// Same public cache shape as public-recent: 60s edge, 5min browser.
+	// A CLOSED window is immutable — created_at can't be backdated, so a
+	// finished season's board never changes — and caches for a day; open
+	// windows keep the public-recent shape (60s edge, 5min browser).
+	const closed =
+		untilRaw != null && untilRaw <= new Date().toISOString().slice(0, 10);
 	return new Response(JSON.stringify({ players: rows.results ?? [] }), {
 		status: 200,
 		headers: {
 			"Content-Type": "application/json",
-			"Cache-Control": "public, max-age=300, s-maxage=60",
+			"Cache-Control": closed
+				? "public, max-age=86400, s-maxage=86400"
+				: "public, max-age=300, s-maxage=60",
 			...cors,
 			Vary: "Origin",
 		},
