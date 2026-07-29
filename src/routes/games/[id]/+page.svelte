@@ -156,6 +156,7 @@
 					tileOwnershipHistory={game.tile_ownership_history}
 					yieldPrices={game.yield_price_history}
 					playerResources={game.player_resources}
+					familyOpinionHistory={game.family_opinion_history}
 					userNation={game.user_nation ?? null}
 					userDisplayName={game.user_display_name ?? null}
 					userWon={game.user_won ?? null}
