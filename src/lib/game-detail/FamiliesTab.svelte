@@ -10,7 +10,11 @@
 	import type { ChartOption } from "$lib/echarts";
 	import type { CityStatistics } from "$lib/types/CityStatistics";
 	import type { ImprovementData } from "$lib/types/ImprovementData";
-	import type { FamilyOpinionEntry, UnitInfo } from "$lib/parser/types";
+	import type {
+		FamilyInfo,
+		FamilyOpinionEntry,
+		UnitInfo,
+	} from "$lib/parser/types";
 	import { FAMILY_OPINION_BANDS } from "$lib/generated/family-opinion";
 	import { CHART_THEME, getChartColor } from "$lib/config";
 	import ChartContainer from "$lib/ChartContainer.svelte";
@@ -23,12 +27,17 @@
 	} from "./EventRail.svelte";
 	import { playerEconomies } from "./economy";
 	import { familyOpinionSeries, opinionBandTallies } from "./families";
-	import { type DetailPlayer, orderPlayersUploaderFirst } from "./helpers";
+	import {
+		type DetailPlayer,
+		getSpritePath,
+		orderPlayersUploaderFirst,
+	} from "./helpers";
 
 	let {
 		players,
 		improvementData,
 		cityStatistics,
+		families = [],
 		familyOpinionHistory = [],
 		units = [],
 		totalTurns,
@@ -37,6 +46,8 @@
 		players: DetailPlayer[];
 		improvementData: ImprovementData;
 		cityStatistics: CityStatistics;
+		// The family roster, which names every family's class.
+		families?: FamilyInfo[];
 		// Per-turn opinion. Defaults to [] for legacy callers (frozen web/
 		// viewer), which empties the tab rather than breaking it.
 		familyOpinionHistory?: FamilyOpinionEntry[];
@@ -57,18 +68,84 @@
 		return `${Math.round(value * 100)}%`;
 	}
 
+	// ─── Crests ───────────────────────────────────────────────────────
+	// Per-family crest art ships for only a handful of families, so a family
+	// falls back to its archetype crest — the same fallback the cities table's
+	// Family column uses. The roster is the source: it names every family in
+	// the game, including one holding no city at the final turn, which the
+	// cities alone would leave crestless. Cities still fill in for blobs that
+	// predate the roster (the legacy share viewer passes none).
+	const familyClasses = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+		const out = new Map<string, string>();
+		for (const city of cityStatistics.cities) {
+			if (city.family != null && city.family_class != null) {
+				out.set(city.family, city.family_class);
+			}
+		}
+		for (const family of families) {
+			out.set(family.family_name, family.family_class);
+		}
+		return out;
+	});
+
+	function nationCrest(nation: string | null): string | null {
+		return nation != null ? getSpritePath("crests", nation) : null;
+	}
+
+	function familyCrest(family: string): string | null {
+		const own = getSpritePath("crests", family);
+		if (own != null) return own;
+		return archetypeCrest(familyClasses.get(family) ?? null);
+	}
+
+	function archetypeCrest(familyClass: string | null): string | null {
+		return familyClass != null
+			? getSpritePath(
+					"crests",
+					familyClass.replace("FAMILYCLASS_", "ARCHETYPE_"),
+				)
+			: null;
+	}
+
+	// A rich style that draws one crest inline in a label. Keyed per row rather
+	// than per style, since every row carries a different image.
+	function crestStyle(url: string, size: number): object {
+		return { height: size, width: size, backgroundColor: { image: url } };
+	}
+
+	// Category-axis labels sit flush against the canvas edge, so the grid's
+	// left inset and the label's margin are the same number — this one. Wide
+	// enough for a crest plus a mirror-match label ("Assyria (name)").
+	const LABEL_GUTTER = 160;
+
+	// One box for every crest in an axis label, whichever kind it is.
+	const CREST_SIZE = 16;
+	const TITLE_CREST_SIZE = 22;
+
 	// ─── Opinion over time ────────────────────────────────────────────
 	// One chart per nation rather than one with everybody on it: six lines in
 	// two colours is unreadable, and the comparison that matters is between a
 	// nation's own families, not across nations. Within a chart the families
 	// get distinct colours from the shared series palette; the nation is named
-	// in the title, so its colour doesn't have to carry that.
+	// and crested in the title, so its colour doesn't have to carry that.
 	function opinionChartFor(player: DetailPlayer): ChartOption | null {
 		const mine = opinions.filter((s) => s.playerId === player.playerId);
 		if (mine.length === 0) return null;
+		const crest = nationCrest(player.nation);
 		return {
 			...CHART_THEME,
-			title: { ...CHART_THEME.title, text: `${player.label} — family opinion` },
+			title: {
+				...CHART_THEME.title,
+				text: `${crest != null ? "{crest|} " : ""}${player.label} — family opinion`,
+				textStyle: {
+					...CHART_THEME.title.textStyle,
+					// Sized to the title text rather than to the axis crests.
+					...(crest != null
+						? { rich: { crest: crestStyle(crest, TITLE_CREST_SIZE) } }
+						: {}),
+				},
+			},
 			legend: {
 				show: true,
 				bottom: 0,
@@ -101,7 +178,11 @@
 				name: formatEnum(s.family, "FAMILY_"),
 				type: "line" as const,
 				data: s.points,
-				showSymbol: false,
+				// No symbol at all rather than one that's merely hidden on the
+				// plot: the legend draws the series symbol too, and a marker
+				// punched through the middle of each swatch reads as noise when
+				// the colour of the line is the whole key.
+				symbol: "none" as const,
 				lineStyle: { color: getChartColor(i), width: 2 },
 				itemStyle: { color: getChartColor(i) },
 			})),
@@ -135,28 +216,45 @@
 
 	const bandTallies = $derived(opinionBandTallies(opinions, orderedPlayers));
 
+	// The rows the chart actually draws — the same list the panel is sized
+	// from, so the two can't disagree on the row count.
+	const bandRows = $derived(bandTallies.filter((t) => t.familyTurns > 0));
+
 	const bandChartOption = $derived.by<ChartOption | null>(() => {
-		const rows = bandTallies.filter((t) => t.familyTurns > 0);
-		if (rows.length === 0) return null;
+		if (bandRows.length === 0) return null;
 		// Reversed so the first nation sits at the top of a category axis, with
 		// its own families directly beneath it.
-		const ordered = [...rows].reverse();
+		const ordered = [...bandRows].reverse();
 		const upkeepLabel = (value: number) =>
 			`${value > 0 ? "+" : ""}${value.toFixed(1)}% upkeep`;
-		// One rich style per nation so every row — heading and families alike —
-		// carries its nation's colour, the same key the lines above use.
-		const rich: Record<string, object> = {};
+		// A row reads left to right: the indent that puts a family under its
+		// nation, its crest, then the name. A nation heading stays in the axis
+		// white; its families take its colour, which is what ties a run of rows
+		// to the heading above them once the list is several nations long.
+		const rich: Record<string, object> = {
+			// An empty fragment reserving its width, the same mechanism that
+			// draws the crests. The indent can't ride on the crest's own padding:
+			// ECharts paints a fragment's background across its padding, so
+			// padding there stretches the image instead of moving it.
+			indent: { width: 14 },
+			nation: { fontWeight: "bold", fontSize: 12 },
+		};
 		orderedPlayers.forEach((p, i) => {
-			rich[`n${i}`] = { color: p.color, fontWeight: "bold", fontSize: 12 };
-			rich[`f${i}`] = { color: p.color, fontSize: 11, padding: [0, 0, 0, 14] };
+			rich[`family${i}`] = { color: p.color, fontSize: 11 };
 		});
-		const styleOf = (t: (typeof ordered)[number]) => {
-			const i = orderedPlayers.findIndex(
+		ordered.forEach((t, i) => {
+			const url =
+				t.family == null ? nationCrest(t.player.nation) : familyCrest(t.family);
+			if (url != null) rich[`crest${i}`] = crestStyle(url, CREST_SIZE);
+		});
+		const styleOf = (t: (typeof ordered)[number], i: number) => {
+			const crest = rich[`crest${i}`] != null ? `{crest${i}|} ` : "";
+			if (t.family == null) return `${crest}{nation|${t.player.label}}`;
+			const owner = orderedPlayers.findIndex(
 				(p) => p.playerId === t.player.playerId,
 			);
-			return t.family == null
-				? `{n${i}|${t.player.label}}`
-				: `{f${i}|${formatEnum(t.family, "FAMILY_")}}`;
+			const name = formatEnum(t.family, "FAMILY_");
+			return `{indent|}${crest}{family${owner}|${name}}`;
 		};
 		return {
 			...CHART_THEME,
@@ -212,12 +310,17 @@
 				},
 			},
 			// The right gutter holds the upkeep label clear of the axis end line.
-			grid: { left: 130, right: 150, top: 48, bottom: 44 },
+			grid: { left: LABEL_GUTTER, right: 150, top: 48, bottom: 44 },
 			xAxis: { type: "value", name: "" },
 			yAxis: {
 				type: "category",
 				data: ordered.map(styleOf),
-				axisLabel: { rich },
+				axisLabel: {
+					rich,
+					interval: 0,
+					align: "left",
+					margin: LABEL_GUTTER,
+				},
 			},
 			series: FAMILY_OPINION_BANDS.map((band, i) => ({
 				name: bandLabel(band.type),
@@ -272,6 +375,7 @@
 		return [...totals.entries()]
 			.sort((a, b) => a[1] - b[1])
 			.map(([key]) => ({
+				key,
 				// Work outside any city's territory is a real bucket, not a gap.
 				label: key === "" ? "Outside cities" : formatEnum(key, "FAMILYCLASS_"),
 				values: economies.map(
@@ -281,35 +385,61 @@
 			}));
 	});
 
-	const familyWorkOption = $derived.by<ChartOption>(() => ({
-		...CHART_THEME,
-		title: { ...CHART_THEME.title, text: "Worker-turns by family" },
-		legend: {
-			show: orderedPlayers.length > 1,
-			top: 4,
-			// Clear of ChartContainer's fullscreen button in the corner.
-			right: 44,
-			textStyle: { color: "#FFFFFF" },
-		},
-		tooltip: { ...CHART_THEME.tooltip, axisPointer: { type: "shadow" } },
-		grid: { left: 130, right: 24, top: 56, bottom: 44 },
-		xAxis: {
-			type: "value",
-			name: "Worker-turns",
-			nameLocation: "middle",
-			nameGap: 28,
-		},
-		yAxis: { type: "category", data: familyWorkRows.map((r) => r.label) },
-		series: orderedPlayers.map((p, i) => ({
-			name: p.label,
-			type: "bar" as const,
-			data: familyWorkRows.map((r) => r.values[i] ?? 0),
-			itemStyle: { color: p.color },
-		})),
-	}));
+	const familyWorkOption = $derived.by<ChartOption>(() => {
+		// These rows are family classes rather than named families, so they take
+		// the archetype crest directly — the same art the per-family rows above
+		// fall back to.
+		const rich: Record<string, object> = { row: { fontSize: 12 } };
+		familyWorkRows.forEach((r, i) => {
+			const url = r.key === "" ? null : archetypeCrest(r.key);
+			if (url != null) rich[`crest${i}`] = crestStyle(url, CREST_SIZE);
+		});
+		return {
+			...CHART_THEME,
+			title: { ...CHART_THEME.title, text: "Worker-turns by family" },
+			legend: {
+				show: orderedPlayers.length > 1,
+				top: 4,
+				// Clear of ChartContainer's fullscreen button in the corner.
+				right: 44,
+				textStyle: { color: "#FFFFFF" },
+			},
+			tooltip: { ...CHART_THEME.tooltip, axisPointer: { type: "shadow" } },
+			grid: { left: LABEL_GUTTER, right: 24, top: 56, bottom: 44 },
+			xAxis: {
+				type: "value",
+				name: "Worker-turns",
+				nameLocation: "middle",
+				nameGap: 28,
+			},
+			yAxis: {
+				type: "category",
+				data: familyWorkRows.map((r, i) =>
+					rich[`crest${i}`] != null
+						? `{crest${i}|} {row|${r.label}}`
+						: `{row|${r.label}}`,
+				),
+				axisLabel: {
+					rich,
+					interval: 0,
+					align: "left",
+					margin: LABEL_GUTTER,
+				},
+			},
+			series: orderedPlayers.map((p, i) => ({
+				name: p.label,
+				type: "bar" as const,
+				data: familyWorkRows.map((r) => r.values[i] ?? 0),
+				itemStyle: { color: p.color },
+			})),
+		} as ChartOption;
+	});
 
-	const barHeight = (rows: number): string =>
-		`${Math.max(rows, 1) * 26 + 110}px`;
+	// One row pitch for both bar charts, so a row is the same height whichever
+	// panel it sits in. `chrome` is the fixed space a chart needs around its
+	// rows — title and axis, plus the band chart's bottom legend.
+	const barHeight = (rows: number, chrome = 110): string =>
+		`${Math.max(rows, 1) * 30 + chrome}px`;
 </script>
 
 {#if opinionCharts.length === 0 && familyWorkRows.length === 0}
@@ -339,7 +469,7 @@
 		>
 			<ChartContainer
 				option={bandChartOption}
-				height="{bandTallies.length * 30 + 130}px"
+				height={barHeight(bandRows.length, 130)}
 				title="Turns by family opinion"
 			/>
 		</div>

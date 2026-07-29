@@ -672,6 +672,7 @@
 			players={resolvedPlayers}
 			{improvementData}
 			{cityStatistics}
+			{families}
 			{familyOpinionHistory}
 			{units}
 			totalTurns={gameDetails.total_turns}
