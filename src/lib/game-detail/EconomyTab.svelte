@@ -154,13 +154,14 @@
 
 	let empireMode = $state<EmpireMode>("gdp");
 
-	// Territory needs the ownership history and GDP needs the price series;
-	// without either (legacy callers, older blobs) that view drops rather than
-	// drawing a flat line, and the $effect below moves off it.
+	// Territory needs the ownership history, GDP the price series and workers
+	// the ending roster; without those (legacy callers, older blobs) the view
+	// drops rather than drawing a flat line, and the $effect below moves off it.
 	const availableModes = $derived(
 		EMPIRE_MODES.filter((m) => {
 			if (m.key === "territory") return tileOwnershipHistory.length > 0;
 			if (m.key === "gdp") return yieldPrices.length > 0;
+			if (m.key === "workers") return units.length > 0;
 			return true;
 		}),
 	);
@@ -568,72 +569,76 @@
 	};
 </script>
 
-{#if empireChartOption}
+<div
+	class="mb-4 rounded-lg p-4"
+	style="background-color: rgb(var(--color-surface));"
+>
+	<!-- Empire view switch: the economy curves the blob can answer, each with
+	     its own blind spot (named in the note below the control). It sits
+	     outside the plot's guard so a view that turns out to hold nothing
+	     leaves the user a way back to one that doesn't. -->
 	<div
-		class="mb-4 rounded-lg p-4"
-		style="background-color: rgb(var(--color-surface));"
+		class="relative mb-1 grid w-fit overflow-hidden rounded-lg border-2 border-surface-sunken"
+		style="background-color: rgb(var(--color-surface)); grid-template-columns: repeat({availableModes.length}, minmax(0, 1fr));"
+		role="group"
+		aria-label="Empire chart view"
 	>
-		<!-- Empire view switch: the economy curves the blob can answer, each with
-		     its own blind spot (named in the note below the control). -->
 		<div
-			class="relative mb-1 grid w-fit overflow-hidden rounded-lg border-2 border-surface-sunken"
-			style="background-color: rgb(var(--color-surface)); grid-template-columns: repeat({availableModes.length}, minmax(0, 1fr));"
-			role="group"
-			aria-label="Empire chart view"
-		>
-			<div
-				class="pointer-events-none absolute inset-y-0 left-0 transition-transform duration-200 ease-out"
-				style:width="{100 / availableModes.length}%"
-				style:background-color="rgb(var(--color-surface-raised))"
-				style:transform="translateX({availableModes.findIndex(
-					(m) => m.key === empireMode,
-				) * 100}%)"
-			></div>
-			{#each availableModes as mode (mode.key)}
-				<button
-					type="button"
-					class={viewTriggerClass}
-					aria-pressed={empireMode === mode.key}
-					onclick={() => (empireMode = mode.key)}
-				>
-					{mode.label}
-				</button>
-			{/each}
-		</div>
-
-		{#if railGroups.length > 0}
-			<!-- Plot (Chart, not ChartContainer, so we hold the instance) with a DOM
-			     rail below — cities founded and wonders completed, each marker at its
-			     true turn-x via convertToPixel. -->
-			<div class="relative">
-				<Chart
-					option={empireChartOption}
-					height="360px"
-					onReady={(c) => (chart = c)}
-					onLayout={() => (layoutTick += 1)}
-				/>
-				{#if highlight && highlightLeft != null}
-					<div
-						class="pointer-events-none absolute inset-y-0 z-10"
-						style="left: {highlightLeft}px; width: 0; border-left: 1px dashed {highlight.color};"
-					></div>
-				{/if}
-			</div>
-			<EventRail
-				{chart}
-				{layoutTick}
-				groups={railGroups}
-				onHighlight={(h) => (highlight = h)}
-			/>
-		{:else}
-			<ChartContainer
-				option={empireChartOption}
-				height="400px"
-				title={activeMode.label}
-			/>
-		{/if}
+			class="pointer-events-none absolute inset-y-0 left-0 transition-transform duration-200 ease-out"
+			style:width="{100 / availableModes.length}%"
+			style:background-color="rgb(var(--color-surface-raised))"
+			style:transform="translateX({availableModes.findIndex(
+				(m) => m.key === empireMode,
+			) * 100}%)"
+		></div>
+		{#each availableModes as mode (mode.key)}
+			<button
+				type="button"
+				class={viewTriggerClass}
+				aria-pressed={empireMode === mode.key}
+				onclick={() => (empireMode = mode.key)}
+			>
+				{mode.label}
+			</button>
+		{/each}
 	</div>
-{/if}
+
+	{#if !empireChartOption}
+		<p class="p-8 text-center italic text-tan">
+			No data for {activeMode.label}
+		</p>
+	{:else if railGroups.length > 0}
+		<!-- Plot (Chart, not ChartContainer, so we hold the instance) with a DOM
+		     rail below — cities founded and wonders completed, each marker at its
+		     true turn-x via convertToPixel. -->
+		<div class="relative">
+			<Chart
+				option={empireChartOption}
+				height="360px"
+				onReady={(c) => (chart = c)}
+				onLayout={() => (layoutTick += 1)}
+			/>
+			{#if highlight && highlightLeft != null}
+				<div
+					class="pointer-events-none absolute inset-y-0 z-10"
+					style="left: {highlightLeft}px; width: 0; border-left: 1px dashed {highlight.color};"
+				></div>
+			{/if}
+		</div>
+		<EventRail
+			{chart}
+			{layoutTick}
+			groups={railGroups}
+			onHighlight={(h) => (highlight = h)}
+		/>
+	{:else}
+		<ChartContainer
+			option={empireChartOption}
+			height="400px"
+			title={activeMode.label}
+		/>
+	{/if}
+</div>
 
 {#if wealth.some((w) => w.components.length > 0)}
 	<section class="mb-6">
