@@ -2,12 +2,12 @@
 	// Economy tab — what the empire grew into, and what the workforce spent to
 	// get there.
 	//
-	// The headline plot is one economy curve — GDP by default, then territory,
-	// cities or workers — with a DOM event rail below it, the Military tab's
-	// pattern: the save carries no per-turn improvement history, so the things
-	// that *can* be dated (foundings, wonder completions) annotate the growth
-	// they caused. Under the plot the worker-turn ledger prices the standing
-	// improvements, and the pivot table lists the inventory that bought.
+	// The headline plot is one economy curve — GDP by default, then maintenance,
+	// territory, cities or workers — with a DOM event rail below it, the Military
+	// tab's pattern: the save carries no per-turn improvement history, so the
+	// things that *can* be dated (foundings, wonder completions) annotate the
+	// growth they caused. Under the plot the worker-turn ledger prices the
+	// standing improvements, and the pivot table lists the inventory that bought.
 	import type { ChartOption, ECharts } from "$lib/echarts";
 	import type { CityStatistics } from "$lib/types/CityStatistics";
 	import type { EventLog } from "$lib/types/EventLog";
@@ -125,8 +125,8 @@
 
 	// ─── Headline chart ───────────────────────────────────────────────
 	// Five views of the same question — how big is this economy — each carrying
-	// a different blind spot, so the subtitle says which one is on. GDP leads:
-	// it's the only one that puts the whole economy on a single axis.
+	// a different blind spot. GDP leads: it's the only one that puts the whole
+	// economy on a single axis.
 	type EmpireMode = "gdp" | "maintenance" | "territory" | "cities" | "workers";
 
 	const EMPIRE_MODES: { key: EmpireMode; label: string }[] = [
@@ -574,9 +574,9 @@
 	style="background-color: rgb(var(--color-surface));"
 >
 	<!-- Empire view switch: the economy curves the blob can answer, each with
-	     its own blind spot (named in the note below the control). It sits
-	     outside the plot's guard so a view that turns out to hold nothing
-	     leaves the user a way back to one that doesn't. -->
+	     its own blind spot. It sits outside the plot's guard so a view that
+	     turns out to hold nothing leaves the user a way back to one that
+	     doesn't. -->
 	<div
 		class="relative mb-1 grid w-fit overflow-hidden rounded-lg border-2 border-surface-sunken"
 		style="background-color: rgb(var(--color-surface)); grid-template-columns: repeat({availableModes.length}, minmax(0, 1fr));"
