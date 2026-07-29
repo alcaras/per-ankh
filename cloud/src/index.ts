@@ -91,7 +91,7 @@ import {
 } from "./tournament/player";
 import {
 	handleUserStats,
-	handleUploaderLeaderboard,
+	handlePlayerLeaderboard,
 } from "./stats/handlers";
 import {
 	handlePublicUserSearch,
@@ -297,9 +297,9 @@ const ROUTES: RouteSpec[] = [
 	},
 	{
 		method: "GET",
-		match: { kind: "path", path: "/v1/stats/uploaders" },
-		route: "GET /v1/stats/uploaders",
-		handler: (r, e) => handleUploaderLeaderboard(r, e),
+		match: { kind: "path", path: "/v1/stats/players" },
+		route: "GET /v1/stats/players",
+		handler: (r, e) => handlePlayerLeaderboard(r, e),
 	},
 	{
 		method: "GET",

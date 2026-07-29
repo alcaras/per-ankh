@@ -255,10 +255,10 @@ export interface AdminGameListOpts extends CallOpts {
 	filter?: AdminGameFilterParams;
 }
 
-// Wire shape for GET /v1/stats/uploaders — the public Stats page's
-// uploads leaderboard. `other` is derived client-side (total minus the
-// three counted categories: single-player, hotseat/LAN, observer archives).
-export interface UploaderLeaderboardRow {
+// Wire shape for GET /v1/stats/players — the public Stats page's
+// games-played leaderboard. `other` is derived client-side (total minus
+// the three counted categories: single-player, hotseat/LAN).
+export interface PlayedGamesRow {
 	user_id: string;
 	display_name: string;
 	duels_network: number;
@@ -266,8 +266,8 @@ export interface UploaderLeaderboardRow {
 	ffas: number;
 	total: number;
 }
-export interface UploaderLeaderboardResponse {
-	uploaders: UploaderLeaderboardRow[];
+export interface PlayerLeaderboardResponse {
+	players: PlayedGamesRow[];
 }
 
 // Wire shape for GET /v1/games/public-recent — the marketing home's
@@ -978,15 +978,16 @@ export const cloudApi = {
 		return res.json() as Promise<PublicRecentGamesResponse>;
 	},
 
-	// Public site-wide leaderboard of games uploaded per user, by category.
-	// `since` (YYYY-MM-DD) narrows to games uploaded in a window — the Stats
-	// page's season view; omitted = all-time.
-	getUploaderLeaderboard: async (
+	// Public site-wide leaderboard of games PLAYED per user, by category —
+	// anyone's upload credits every human seat in it. `since` (YYYY-MM-DD)
+	// narrows to games uploaded in a window — the Stats page's season view;
+	// omitted = all-time.
+	getPlayerLeaderboard: async (
 		opts?: CallOpts & { since?: string },
-	): Promise<UploaderLeaderboardResponse> => {
+	): Promise<PlayerLeaderboardResponse> => {
 		const qs = opts?.since ? `?since=${opts.since}` : "";
-		const res = await request(`/stats/uploaders${qs}`, opts);
-		return res.json() as Promise<UploaderLeaderboardResponse>;
+		const res = await request(`/stats/players${qs}`, opts);
+		return res.json() as Promise<PlayerLeaderboardResponse>;
 	},
 
 	// --- Collections ---

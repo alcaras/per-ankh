@@ -76,21 +76,25 @@ export async function handleUserStats(
 	return jsonResponse(bundle as unknown as Record<string, unknown>, 200, cors);
 }
 
-// ─── Uploader leaderboard ────────────────────────────────────────────
+// ─── Played-games leaderboard ────────────────────────────────────────
 //
-//   GET /v1/stats/uploaders — public site-wide leaderboard of games
-//   uploaded per user, split by category: network duels, cloud duels,
-//   FFAs (3+ humans, any mode), and other (single-player, hotseat/LAN,
-//   observer archives). Counts every upload — the point is who feeds the
-//   archive — but exposes only display names and counts.
+//   GET /v1/stats/players — public site-wide leaderboard of games PLAYED
+//   per user, split by category: network duels, cloud duels, FFAs (3+
+//   humans, any mode), and other (single-player, hotseat/LAN). Playing is
+//   what's counted, not uploading: anyone's upload credits every human
+//   seat in it — the uploader via their claimed seat, everyone else by
+//   matching the seat's online id against user_online_ids. The same match
+//   uploaded by both players (separate game rows, same save GameId)
+//   counts once per player, deduped on xml_game_id. Only display names
+//   and counts are exposed.
 
-export interface UploaderLeaderboardEnv {
+export interface PlayerLeaderboardEnv {
 	SHARE_DB: QueryableD1;
 	EVENTS_DB: D1Database;
 	ALLOWED_ORIGINS: string;
 }
 
-interface UploaderRow {
+interface PlayedGamesRow {
 	user_id: string;
 	display_name: string;
 	duels_network: number;
@@ -99,9 +103,9 @@ interface UploaderRow {
 	total: number;
 }
 
-export async function handleUploaderLeaderboard(
+export async function handlePlayerLeaderboard(
 	request: Request,
-	env: UploaderLeaderboardEnv,
+	env: PlayerLeaderboardEnv,
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 
@@ -142,34 +146,58 @@ export async function handleUploaderLeaderboard(
 		return errorResponse("Invalid since date", 400, cors, "INVALID_QUERY");
 	}
 
-	// Duel = exactly two humans; network/cloud from the save's game mode. A
-	// two-human hotseat/LAN game isn't either duel column and lands in
-	// `other` (derived client-side as total − the three columns), alongside
-	// single-player. The human count comes from player_summaries, which is
-	// written for every upload alongside the games row.
+	// `played` is (user, match) pairs — the uploader's claimed seat, plus
+	// every seat whose online id belongs to a registered user; UNION dedupes
+	// both the two credit paths and double-uploaded matches (same
+	// xml_game_id). `match_class` classifies each match from any in-window
+	// upload of it (all uploads of a match carry the same save, so humans
+	// and game_mode agree). Duel = exactly two humans, split by game mode;
+	// two-human hotseat/LAN lands in `other` (derived client-side).
 	const rows = await env.SHARE_DB.prepare(
-		`SELECT
+		`WITH humans AS (
+		   SELECT game_id, SUM(is_human) AS n
+		   FROM player_summaries GROUP BY game_id
+		 ),
+		 played AS (
+		   SELECT g.user_id, g.xml_game_id
+		   FROM games g
+		   JOIN player_summaries ps
+		     ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
+		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		   UNION
+		   SELECT uo.user_id, g.xml_game_id
+		   FROM games g
+		   JOIN player_summaries ps
+		     ON ps.game_id = g.game_id AND ps.is_human = 1
+		        AND ps.online_id IS NOT NULL
+		   JOIN user_online_ids uo ON uo.online_id = ps.online_id
+		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		 ),
+		 match_class AS (
+		   SELECT g.xml_game_id, MAX(h.n) AS n_humans, MAX(g.game_mode) AS game_mode
+		   FROM games g
+		   JOIN humans h ON h.game_id = g.game_id
+		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		   GROUP BY g.xml_game_id
+		 )
+		 SELECT
 		   u.user_id,
 		   COALESCE(u.alias, u.display_name) AS display_name,
-		   SUM(h.humans = 2 AND g.game_mode = 'NETWORK') AS duels_network,
-		   SUM(h.humans = 2 AND g.game_mode = 'PLAY_BY_CLOUD') AS duels_cloud,
-		   SUM(h.humans >= 3) AS ffas,
+		   SUM(mc.n_humans = 2 AND mc.game_mode = 'NETWORK') AS duels_network,
+		   SUM(mc.n_humans = 2 AND mc.game_mode = 'PLAY_BY_CLOUD') AS duels_cloud,
+		   SUM(mc.n_humans >= 3) AS ffas,
 		   COUNT(*) AS total
-		 FROM games g
-		 JOIN users u ON u.user_id = g.user_id
-		 JOIN (
-		   SELECT game_id, SUM(is_human) AS humans
-		   FROM player_summaries GROUP BY game_id
-		 ) h ON h.game_id = g.game_id
-		 WHERE (?1 IS NULL OR g.created_at >= ?1)
+		 FROM played p
+		 JOIN match_class mc ON mc.xml_game_id = p.xml_game_id
+		 JOIN users u ON u.user_id = p.user_id
 		 GROUP BY u.user_id
 		 ORDER BY total DESC, display_name ASC`,
 	)
 		.bind(sinceRaw)
-		.all<UploaderRow>();
+		.all<PlayedGamesRow>();
 
 	// Same public cache shape as public-recent: 60s edge, 5min browser.
-	return new Response(JSON.stringify({ uploaders: rows.results ?? [] }), {
+	return new Response(JSON.stringify({ players: rows.results ?? [] }), {
 		status: 200,
 		headers: {
 			"Content-Type": "application/json",
