@@ -255,6 +255,21 @@ export interface AdminGameListOpts extends CallOpts {
 	filter?: AdminGameFilterParams;
 }
 
+// Wire shape for GET /v1/stats/uploaders — the public Stats page's
+// uploads leaderboard. `other` is derived client-side (total minus the
+// three counted categories: single-player, hotseat/LAN, observer archives).
+export interface UploaderLeaderboardRow {
+	user_id: string;
+	display_name: string;
+	duels_network: number;
+	duels_cloud: number;
+	ffas: number;
+	total: number;
+}
+export interface UploaderLeaderboardResponse {
+	uploaders: UploaderLeaderboardRow[];
+}
+
 // Wire shape for GET /v1/games/public-recent — the marketing home's
 // discovery feed. Includes the uploader's display name + a sparkline-ready
 // per-turn victory-points series (`vp_series`) for each player.
@@ -961,6 +976,14 @@ export const cloudApi = {
 	): Promise<PublicRecentGamesResponse> => {
 		const res = await request("/games/public-recent", opts);
 		return res.json() as Promise<PublicRecentGamesResponse>;
+	},
+
+	// Public site-wide leaderboard of games uploaded per user, by category.
+	getUploaderLeaderboard: async (
+		opts?: CallOpts,
+	): Promise<UploaderLeaderboardResponse> => {
+		const res = await request("/stats/uploaders", opts);
+		return res.json() as Promise<UploaderLeaderboardResponse>;
 	},
 
 	// --- Collections ---

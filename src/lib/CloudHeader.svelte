@@ -138,6 +138,14 @@
 		far right. Upload shows only for signed-in users.
 	-->
 	<div class="flex flex-shrink-0 items-center gap-2">
+		<!-- Public stats (uploads leaderboard) — shown to everyone, styled to
+		     match the Upload shortcut beside it. -->
+		<a
+			href={resolve("/stats")}
+			class="inline-flex flex-shrink-0 items-center rounded border border-tan px-2 py-1 text-xs font-semibold text-tan transition-colors hover:border-orange hover:text-orange"
+		>
+			Stats
+		</a>
 		{#if user}
 			<!-- uploadHref is built from resolve("/upload") with a sanitized ?from=
 			     query that resolve()'s branded types can't express. -->

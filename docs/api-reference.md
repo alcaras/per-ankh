@@ -213,6 +213,14 @@ Most-recent public games across all users (home-page feed).
 - **Errors:** `429 RATE_LIMIT`.
 - **Notes:** `anon_read` bucket (200/hr per IP; scraper UAs exempt). Only `display_name`/`player_name` exposed — no `online_id`/email. Cached `public, max-age=300, s-maxage=60`.
 
+### `GET /v1/stats/uploaders`
+Public site-wide leaderboard of games uploaded per user, by category.
+
+- **Auth:** Public.
+- **Response 200:** `{ uploaders: [{ user_id, display_name, duels_network, duels_cloud, ffas, total }] }`, ordered by total desc. Duel = exactly two humans, split by the save's game mode (`NETWORK` / `PLAY_BY_CLOUD`); FFA = 3+ humans any mode; the remainder (single-player, hotseat/LAN, observer archives) is derived client-side as `total` minus the three columns.
+- **Errors:** `429 RATE_LIMIT`.
+- **Notes:** `anon_read` bucket (200/hr per IP; scraper UAs exempt). Counts every upload (public and private) but exposes only display names and counts. Cached `public, max-age=300, s-maxage=60`.
+
 ### `GET /v1/games/out-of-date`
 The caller's games whose `parser_version` differs from a target (drives bulk reparse).
 
