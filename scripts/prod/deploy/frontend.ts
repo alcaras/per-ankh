@@ -24,6 +24,13 @@ const CLIENT_BUNDLE_DIR = resolve(REPO_ROOT, ".svelte-kit/cloudflare/_app");
 // https://api-staging.per-ankh.app/v1. Global: collect every occurrence.
 const API_BASE_RE = /https:\/\/api[a-z-]*\.per-ankh\.app\/v1/g;
 
+// Wrangler deletes the previous deployment's assets the moment the new one
+// lands unless given an expiry, which 404s the content-hashed chunks that a
+// tab still running the old build asks for. A day is long enough for that
+// tab's version poll (svelte.config.js) to notice and route its next
+// navigation through the server onto the new build.
+const OLD_ASSET_TTL_SECONDS = 86_400;
+
 export async function buildFrontend(env: CloudEnv): Promise<void> {
 	// frontendBuildEnv carries the per-environment VITE_* vars (staging API
 	// origin etc.); empty for prod, where the code defaults already point at
@@ -76,7 +83,13 @@ function assertFrontendApiOrigin(env: CloudEnv): void {
 export async function deployFrontend(env: CloudEnv): Promise<void> {
 	const code = await runStreamed(
 		"npx",
-		["wrangler", "deploy", ...env.wranglerEnvFlag],
+		[
+			"wrangler",
+			"deploy",
+			...env.wranglerEnvFlag,
+			"--old-asset-ttl",
+			String(OLD_ASSET_TTL_SECONDS),
+		],
 		{
 			cwd: REPO_ROOT,
 			label: "frontend",

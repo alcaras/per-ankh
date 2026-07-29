@@ -1,7 +1,8 @@
 <script lang="ts">
 	import "../app.css";
 	import type { Snippet } from "svelte";
-	import { page } from "$app/state";
+	import { page, updated } from "$app/state";
+	import { beforeNavigate } from "$app/navigation";
 	import CloudHeader from "$lib/CloudHeader.svelte";
 	import Toaster from "$lib/ui/Toaster.svelte";
 	import ConfirmDialogHost from "$lib/ui/ConfirmDialogHost.svelte";
@@ -16,6 +17,27 @@
 	// visitors can navigate from the discovery feed back to their
 	// profile, /upload, etc.
 	const showCloudHeader = $derived(!page.url.pathname.startsWith("/auth/"));
+
+	// Carry a tab that was open across a deploy onto the new build. Client JS
+	// is content-hashed under /_app/immutable, and a deploy replaces the asset
+	// manifest — the previous build's chunks stop being served once the grace
+	// window in scripts/prod/deploy/frontend.ts expires, so client-side routing
+	// into a page this tab hasn't visited yet can ask for a file that is gone.
+	// `updated.current` goes true once version polling (svelte.config.js) sees
+	// a new /_app/version.json; from then on the next navigation goes through
+	// the server instead. It latches, so this costs one full load per deploy.
+	//
+	// Same-route navigations are exempt. Filter and tab state sync through
+	// `goto(next, { replaceState, keepFocus, noScroll })` on a dozen pages
+	// (StatsView, GamesTable, ScopeRow, the tournament and profile pages), and
+	// reloading the document on every filter change would discard focus and
+	// scroll — the thing those options exist to preserve. Staying on a route
+	// re-renders nodes that are already imported, so it cannot hit the gap.
+	beforeNavigate((nav) => {
+		if (!updated.current || nav.willUnload || !nav.to) return;
+		if (nav.to.route.id === nav.from?.route.id) return;
+		location.href = nav.to.url.href;
+	});
 
 	// Single source of truth for OG / Twitter metadata. Pages override by
 	// returning `{ meta: PageMeta }` from their +page.ts load; otherwise

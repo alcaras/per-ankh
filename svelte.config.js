@@ -1,5 +1,33 @@
 import adapter from "@sveltejs/adapter-cloudflare";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
+import { execSync } from "node:child_process";
+
+// `kit.version.name` is the string served at /_app/version.json and baked
+// into the client bundle; a running tab compares the two to decide whether
+// it is out of date. SvelteKit's default is a build timestamp, which its own
+// docs call out as non-deterministic — a rebuild of unchanged source looks
+// like a new version. A commit ref makes the comparison mean "which build".
+//
+// A dirty tree can't be identified by its commit alone, so those builds take
+// a timestamp instead: two staging deploys off one commit with different
+// working-tree state must not present the same version, or clients on the
+// first never learn about the second.
+function buildVersion() {
+	try {
+		const run = (cmd) =>
+			execSync(cmd, {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}).trim();
+		const sha = run("git rev-parse --short HEAD");
+		return run("git status --porcelain") ? `${sha}-dirty-${Date.now()}` : sha;
+	} catch {
+		// No git available (shallow checkout, source tarball) — fall back to
+		// SvelteKit's own default rather than shipping a constant, which would
+		// disable update detection entirely.
+		return Date.now().toString();
+	}
+}
 
 // `mode: "hash"` lets SvelteKit emit sha256 hashes for its inline
 // hydration script automatically — no `unsafe-inline` for scripts.
@@ -39,6 +67,15 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter: adapter({}),
+		// Poll /_app/version.json so a tab left open across a deploy learns it
+		// is stale before it trips over a missing chunk, rather than after.
+		// SvelteKit's built-in recovery only runs once a load has already
+		// failed, and one branch declines to reload on a 404 to avoid a loop.
+		// The root +layout.svelte acts on `updated.current`.
+		version: {
+			name: buildVersion(),
+			pollInterval: 300_000,
+		},
 		csp: {
 			mode: "hash",
 			directives: {
