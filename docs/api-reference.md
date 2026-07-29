@@ -217,6 +217,7 @@ Most-recent public games across all users (home-page feed).
 Public site-wide leaderboard of games uploaded per user, by category.
 
 - **Auth:** Public.
+- **Query:** `since` (optional, `YYYY-MM-DD`) — counts only games uploaded on/after that date (`created_at`, server-authoritative); the Stats page's season view. Invalid values are `400 INVALID_QUERY`.
 - **Response 200:** `{ uploaders: [{ user_id, display_name, duels_network, duels_cloud, ffas, total }] }`, ordered by total desc. Duel = exactly two humans, split by the save's game mode (`NETWORK` / `PLAY_BY_CLOUD`); FFA = 3+ humans any mode; the remainder (single-player, hotseat/LAN, observer archives) is derived client-side as `total` minus the three columns.
 - **Errors:** `429 RATE_LIMIT`.
 - **Notes:** `anon_read` bucket (200/hr per IP; scraper UAs exempt). Counts every upload (public and private) but exposes only display names and counts. Cached `public, max-age=300, s-maxage=60`.

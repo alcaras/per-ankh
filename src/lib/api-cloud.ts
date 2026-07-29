@@ -979,10 +979,13 @@ export const cloudApi = {
 	},
 
 	// Public site-wide leaderboard of games uploaded per user, by category.
+	// `since` (YYYY-MM-DD) narrows to games uploaded in a window — the Stats
+	// page's season view; omitted = all-time.
 	getUploaderLeaderboard: async (
-		opts?: CallOpts,
+		opts?: CallOpts & { since?: string },
 	): Promise<UploaderLeaderboardResponse> => {
-		const res = await request("/stats/uploaders", opts);
+		const qs = opts?.since ? `?since=${opts.since}` : "";
+		const res = await request(`/stats/uploaders${qs}`, opts);
 		return res.json() as Promise<UploaderLeaderboardResponse>;
 	},
 

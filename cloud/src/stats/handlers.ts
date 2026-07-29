@@ -132,6 +132,16 @@ export async function handleUploaderLeaderboard(
 			.catch(() => {});
 	}
 
+	// Optional season window: `since` (YYYY-MM-DD) counts only games
+	// UPLOADED on/after that date — created_at is server-authoritative,
+	// unlike the save's own dates. Invalid values are rejected rather than
+	// silently ignored so a malformed season toggle can't masquerade as
+	// all-time.
+	const sinceRaw = new URL(request.url).searchParams.get("since");
+	if (sinceRaw != null && !/^\d{4}-\d{2}-\d{2}$/.test(sinceRaw)) {
+		return errorResponse("Invalid since date", 400, cors, "INVALID_QUERY");
+	}
+
 	// Duel = exactly two humans; network/cloud from the save's game mode. A
 	// two-human hotseat/LAN game isn't either duel column and lands in
 	// `other` (derived client-side as total − the three columns), alongside
@@ -151,9 +161,12 @@ export async function handleUploaderLeaderboard(
 		   SELECT game_id, SUM(is_human) AS humans
 		   FROM player_summaries GROUP BY game_id
 		 ) h ON h.game_id = g.game_id
+		 WHERE (?1 IS NULL OR g.created_at >= ?1)
 		 GROUP BY u.user_id
 		 ORDER BY total DESC, display_name ASC`,
-	).all<UploaderRow>();
+	)
+		.bind(sinceRaw)
+		.all<UploaderRow>();
 
 	// Same public cache shape as public-recent: 60s edge, 5min browser.
 	return new Response(JSON.stringify({ uploaders: rows.results ?? [] }), {
