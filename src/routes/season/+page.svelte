@@ -15,22 +15,24 @@
 	// Activity epithets from the game's cognomen ladder, one per legitimacy
 	// decade in the game's own ascending order (the New is the fresh-ruler
 	// epithet at the floor; Able 30 … Great 100). Thresholds are games
-	// played in the selected season, calibrated against the corpus: real
-	// hot quarters have hit ~120 games (Siontific) and ~100 (alcaras), the
-	// strong tier ~50–65, so the Great (100) is genuinely elite and the
-	// early rungs stay reachable in a first week. Absolute thresholds — an
-	// epithet can't be lost to someone else's grinding, and any number of
-	// players can share one.
+	// played in the selected season, on the triangular numbers: each rung
+	// costs exactly one game more than the last, so the next epithet always
+	// feels one push away. Calibrated against the corpus: the Great (45,
+	// ~3–4 games/week) has been reached by ~5 real quarters (peaks ~120,
+	// ~100, a 50–65 tier), a weekly player lands the Strong, and the early
+	// rungs fall in a first week. Absolute thresholds — an epithet can't be
+	// lost to someone else's grinding, and any number of players can share
+	// one.
 	const RUNGS: { games: number; type: string }[] = [
 		{ games: 1, type: "COGNOMEN_NEW" },
-		{ games: 5, type: "COGNOMEN_ABLE" },
-		{ games: 10, type: "COGNOMEN_JUST" },
-		{ games: 20, type: "COGNOMEN_GOOD" },
-		{ games: 30, type: "COGNOMEN_STRONG" },
-		{ games: 45, type: "COGNOMEN_NOBLE" },
-		{ games: 60, type: "COGNOMEN_GLORIOUS" },
-		{ games: 80, type: "COGNOMEN_MAGNIFICENT" },
-		{ games: 100, type: "COGNOMEN_GREAT" },
+		{ games: 3, type: "COGNOMEN_ABLE" },
+		{ games: 6, type: "COGNOMEN_JUST" },
+		{ games: 10, type: "COGNOMEN_GOOD" },
+		{ games: 15, type: "COGNOMEN_STRONG" },
+		{ games: 21, type: "COGNOMEN_NOBLE" },
+		{ games: 28, type: "COGNOMEN_GLORIOUS" },
+		{ games: 36, type: "COGNOMEN_MAGNIFICENT" },
+		{ games: 45, type: "COGNOMEN_GREAT" },
 	];
 	const cognomenName = (type: string): string =>
 		COGNOMEN_LADDER.find((c) => c.type === type)?.name ?? "";
