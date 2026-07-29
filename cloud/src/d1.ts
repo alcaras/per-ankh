@@ -52,6 +52,9 @@
 // Keeping events on their own handle settles both: exact counts, and an
 // audit INSERT that never touches the session bookmark.
 
+import { beginD1Query } from "./log";
+import type { D1Handle } from "./log";
+
 // The D1 surface handlers actually use. `D1DatabaseSession` implements
 // `prepare` and `batch` with signatures identical to `D1Database` but has no
 // `exec`/`withSession`/`dump`, so it is not assignable to `D1Database` —
@@ -77,4 +80,107 @@ export interface EventsEnv {
 // a named function rather than an inline call.
 export function staleTolerantSession(db: D1Database): QueryableD1 {
 	return db.withSession("first-primary");
+}
+
+// === Per-request query instrumentation ===
+//
+// Both handles are wrapped in `routeEnv`, so every query the Worker issues is
+// timed and counted onto the access log (see the storage-timing block in
+// log.ts) without a single call site changing. `routeEnv` is the one place
+// both handles are derived, which is what makes that coverage structural
+// rather than a convention someone has to remember.
+//
+// The signature is generic and type-preserving on purpose. Typing this
+// `(db: QueryableD1) => D1Database` would also compile, and would be a
+// laundering device: it would hand back a real `D1Database` for a session
+// handle and so quietly delete the barrier the header above builds — the one
+// that stops `countEventsSince` from ever accepting a replica session.
+// Generic keeps SHARE_DB a `QueryableD1` and EVENTS_DB a `D1Database`, and
+// stale-tolerant-routes.test.ts pins the invariant.
+//
+// Two layers, because `prepare()` is synchronous: the round trip is awaited
+// on the statement, so the handle wrapper covers `prepare`/`batch` and the
+// statement wrapper re-wraps `bind()` and times the terminal calls.
+//
+// Proxies rather than object literals. D1's methods live on a host prototype,
+// so a spread would drop them, and a literal would silently narrow each handle
+// to the subset this file happens to know about — `getBookmark()`,
+// `withSession()`, `exec()` would all vanish. A proxy forwards what it doesn't
+// intercept.
+
+// The real statement behind a wrapped one. `batch()` hands its statements to
+// the binding, which unwraps them through the host type system and would
+// reject a proxy, so the wrapper strips its own layer on the way in.
+const RAW_STATEMENT = Symbol("rawD1Statement");
+
+// The terminal calls: each is one round trip, and each returns a promise.
+const TIMED_METHODS = new Set(["first", "all", "run", "raw"]);
+
+type HostMethod = (...args: never[]) => unknown;
+
+// Host objects reject a proxy as `this`, so methods we pass through are bound
+// to the real receiver.
+function forward(target: object, prop: string | symbol): unknown {
+	const value = Reflect.get(target, prop, target);
+	return typeof value === "function"
+		? (value as HostMethod).bind(target)
+		: value;
+}
+
+function unwrapStatement(stmt: D1PreparedStatement): D1PreparedStatement {
+	const raw = (stmt as { [RAW_STATEMENT]?: D1PreparedStatement })[
+		RAW_STATEMENT
+	];
+	return raw ?? stmt;
+}
+
+function instrumentStatement(
+	stmt: D1PreparedStatement,
+	handle: D1Handle,
+): D1PreparedStatement {
+	return new Proxy(stmt, {
+		get(target, prop) {
+			if (prop === RAW_STATEMENT) return target;
+			// bind() returns a fresh statement, so it has to be re-wrapped —
+			// otherwise the terminal call on every bound statement (which is
+			// nearly all of them) goes untimed.
+			if (prop === "bind") {
+				return (...values: unknown[]) =>
+					instrumentStatement(target.bind(...values), handle);
+			}
+			if (typeof prop === "string" && TIMED_METHODS.has(prop)) {
+				const method = forward(target, prop) as HostMethod;
+				return (...args: never[]) => {
+					const end = beginD1Query(handle);
+					// Time to settle, not to call: the crossing is the await.
+					return (method(...args) as Promise<unknown>).finally(end);
+				};
+			}
+			return forward(target, prop);
+		},
+	});
+}
+
+export function instrumentD1<T extends QueryableD1>(
+	db: T,
+	handle: D1Handle,
+): T {
+	return new Proxy(db, {
+		get(target, prop) {
+			// prepare() is local — nothing to time, just a statement to wrap.
+			if (prop === "prepare") {
+				return (query: string) =>
+					instrumentStatement(target.prepare(query), handle);
+			}
+			// One round trip whatever the statement count: D1 ships a batch as a
+			// single request and runs it as one transaction.
+			if (prop === "batch") {
+				return (statements: D1PreparedStatement[]) => {
+					const end = beginD1Query(handle);
+					return target.batch(statements.map(unwrapStatement)).finally(end);
+				};
+			}
+			return forward(target, prop);
+		},
+	});
 }

@@ -17,7 +17,7 @@
 // events-retention sweep (cron in wrangler.toml, policy in retention.ts).
 
 import { cloudCorsHeaders, legacyCorsHeaders } from "./util";
-import { staleTolerantSession } from "./d1";
+import { instrumentD1, staleTolerantSession } from "./d1";
 import type { QueryableD1 } from "./d1";
 import {
 	emitAccessLog,
@@ -878,13 +878,21 @@ function isCloudPath(pathname: string): boolean {
 // off, and give `staleTolerant` routes a Sessions API handle for everything
 // else. One session per request — sharing one across requests would let
 // bookmarks accumulate globally and defeat the point.
+//
+// Both handles are then wrapped for timing (instrumentD1, d1.ts), which is
+// what puts d1_ms / d1_queries / d1_wall_ms on the access log for every query
+// in the Worker. Wrapping each *final* handle rather than the raw binding
+// keeps `withSession()` a call on the binding itself, and keeps the events
+// subset attributable — the two handles are the same database, so the handle
+// is the only thing that distinguishes an events query from a share query.
 function routeEnv(env: RawBindings, spec: RouteSpec): Env {
 	return {
 		...env,
-		EVENTS_DB: env.SHARE_DB,
-		SHARE_DB: spec.staleTolerant
-			? staleTolerantSession(env.SHARE_DB)
-			: env.SHARE_DB,
+		EVENTS_DB: instrumentD1(env.SHARE_DB, "events"),
+		SHARE_DB: instrumentD1(
+			spec.staleTolerant ? staleTolerantSession(env.SHARE_DB) : env.SHARE_DB,
+			"share",
+		),
 	};
 }
 
