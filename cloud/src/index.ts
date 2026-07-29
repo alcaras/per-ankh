@@ -92,7 +92,7 @@ import {
 import {
 	handleGlobalStats,
 	handleUserStats,
-	handleUploaderLeaderboard,
+	handlePlayerLeaderboard,
 } from "./stats/handlers";
 import type { GlobalStatsEnv } from "./stats/handlers";
 import {
@@ -314,9 +314,9 @@ const ROUTES: RouteSpec[] = [
 	},
 	{
 		method: "GET",
-		match: { kind: "path", path: "/v1/stats/uploaders" },
-		route: "GET /v1/stats/uploaders",
-		handler: (r, e) => handleUploaderLeaderboard(r, e),
+		match: { kind: "path", path: "/v1/stats/players" },
+		route: "GET /v1/stats/players",
+		handler: (r, e) => handlePlayerLeaderboard(r, e),
 	},
 	{
 		method: "GET",
