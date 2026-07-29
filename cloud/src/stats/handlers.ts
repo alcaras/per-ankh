@@ -14,6 +14,7 @@ import {
 	jsonResponse,
 } from "../util";
 import { ANON_READS_PER_HOUR, countEventsSince, isScraperUA } from "../games";
+import { displayNameSql } from "../identity";
 import { parseScopeParam } from "../games-scope";
 import { buildChartBundle } from "./aggregate";
 import { getCached, putCached } from "./cache";
@@ -189,7 +190,7 @@ export async function handlePlayerLeaderboard(
 		 )
 		 SELECT
 		   u.user_id,
-		   COALESCE(u.alias, u.display_name) AS display_name,
+		   ${displayNameSql("u")} AS display_name,
 		   SUM(mc.n_humans = 2 AND mc.game_mode = 'NETWORK') AS duels_network,
 		   SUM(mc.n_humans = 2 AND mc.game_mode = 'PLAY_BY_CLOUD') AS duels_cloud,
 		   SUM(mc.n_humans >= 3) AS ffas,

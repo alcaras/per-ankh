@@ -255,7 +255,7 @@ export interface AdminGameListOpts extends CallOpts {
 	filter?: AdminGameFilterParams;
 }
 
-// Wire shape for GET /v1/stats/players — the public Stats page's
+// Wire shape for GET /v1/stats/players — the public Season page's
 // games-played leaderboard. `other` is derived client-side (total minus
 // the three counted categories: single-player, hotseat/LAN).
 export interface PlayedGamesRow {
@@ -989,7 +989,7 @@ export const cloudApi = {
 		const params = new URLSearchParams();
 		if (opts?.since) params.set("since", opts.since);
 		if (opts?.until) params.set("until", opts.until);
-		const qs = params.size > 0 ? `?${params}` : "";
+		const qs = params.toString() ? `?${params}` : "";
 		const res = await request(`/stats/players${qs}`, opts);
 		return res.json() as Promise<PlayerLeaderboardResponse>;
 	},

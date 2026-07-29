@@ -272,7 +272,7 @@
 					<th class={HEADER_CELL}>Duels (Network)</th>
 					<th class={HEADER_CELL}>Duels (Cloud)</th>
 					<th class={HEADER_CELL}>FFAs</th>
-					<th class={HEADER_CELL} title="Single-player, hotseat and LAN games"
+					<th class={HEADER_CELL} title="Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA"
 						>Other</th
 					>
 					<th class={HEADER_CELL}>Total</th>
