@@ -40,7 +40,7 @@ import { isSiteAdmin } from "./admin";
 import { buildAvatarUrl } from "./auth";
 import { displayNameSql } from "./identity";
 import { captureOnlineIds } from "./online-ids";
-import { logError, logWarn } from "./log";
+import { logError, logWarn, setLogField } from "./log";
 import { isTournamentAdmin } from "./tournament/authz";
 import { maybeAdvanceAfterMatchReport } from "./tournament/admin";
 import {
@@ -2442,6 +2442,11 @@ export async function handleGameDetail(
 	// `private, no-store` so a reload right after a reparse must show the new
 	// bytes, which a cache entry filled in another POP would break.
 	const blobKey = `games/${gameId}.json.gz`;
+	// getBlobCached tags hit/miss itself, but the owner branch never enters it,
+	// so tag the deliberate bypass here: without it an owner read carries no
+	// blob_cache field at all and reads on the access log like a route that
+	// never touched a blob.
+	if (isOwner) setLogField("blob_cache", "bypass");
 	const compressed = isOwner
 		? await readBlob(env.SHARE_BUCKET, blobKey)
 		: await getBlobCached(env.SHARE_BUCKET, blobKey, row.parser_version, ctx);

@@ -7,9 +7,9 @@
 //   - Access log (type=access). One per request, emitted by the fetch
 //     envelope after dispatch returns. Fields: ts, level, request_id,
 //     cf_ray, method, route, path, status, duration_ms, d1_ms, d1_queries,
-//     d1_wall_ms, d1_events_ms, d1_events_queries, user_id,
+//     d1_wall_ms, d1_events_ms, d1_events_queries, r2_ms, user_id,
 //     error_code, error_class + handler-attached fields via setLogField.
-//     The d1_* block is the storage-timing accumulator below.
+//     The d1_*/r2_* block is the storage-timing accumulator below.
 //
 //   - Event log (type=event). Emitted mid-handler by logError / logWarn /
 //     logEvent. Correlated to the access log via request_id.
@@ -53,7 +53,7 @@ export type LogLevel = "info" | "warn" | "error";
 // query, not per request. Every candidate fix left in issue #150 trades
 // accuracy or complexity for one of those hops, and the ranking so far
 // comes from reading code rather than measuring it — hence this: each
-// request accumulates its own D1 timing, and the access log turns it
+// request accumulates its own D1/R2 timing, and the access log turns it
 // into numbers a Logpush sink can aggregate per route.
 //
 // Only I/O is measurable this way. A Worker's clock advances on I/O, not on
@@ -89,6 +89,10 @@ export interface StorageTiming {
 	// contributes to the counts above and to none of the durations below:
 	// closing a window that hasn't closed would mean inventing an end.
 	d1Spans: D1Span[];
+	// Sum of R2 read durations, body transfer included (see blob-cache.ts).
+	// No intervals: nothing issues concurrent R2 reads, so there is no
+	// overlap to measure.
+	r2Ms: number;
 }
 
 export interface LogContext {
@@ -107,7 +111,7 @@ export interface LogContext {
 	started_at: number;
 	// Its own slot rather than a `fields` entry: `fields` is spread verbatim
 	// into the log line, so raw intervals would ship in it. emitAccessLog
-	// reduces this to the d1_* numbers.
+	// reduces this to the d1_*/r2_* numbers.
 	timing: StorageTiming;
 	fields: Record<string, unknown>;
 }
@@ -126,7 +130,7 @@ function newContext(request: Request): LogContext {
 		error_code: null,
 		security_reason: null,
 		started_at: performance.now(),
-		timing: { d1Queries: 0, d1EventsQueries: 0, d1Spans: [] },
+		timing: { d1Queries: 0, d1EventsQueries: 0, d1Spans: [], r2Ms: 0 },
 		fields: {},
 	};
 }
@@ -191,6 +195,16 @@ export function beginD1Query(handle: D1Handle): () => void {
 	const start = performance.now();
 	return () => {
 		ctx.timing.d1Spans.push({ start, end: performance.now(), events });
+	};
+}
+
+// Same shape for one R2 read. Only the sum is kept (see StorageTiming.r2Ms).
+export function beginR2Read(): () => void {
+	const ctx = als.getStore();
+	if (!ctx) return () => {};
+	const start = performance.now();
+	return () => {
+		ctx.timing.r2Ms += performance.now() - start;
 	};
 }
 
@@ -333,6 +347,7 @@ export function emitAccessLog(response: Response): void {
 		// the per-IP rate-limit count (plus its audit insert).
 		d1_events_ms: Math.round(d1EventsMs),
 		d1_events_queries: ctx.timing.d1EventsQueries,
+		r2_ms: Math.round(ctx.timing.r2Ms),
 		user_id: ctx.user_id,
 		error_code: ctx.error_code,
 		...(redacted ? { pii_redaction: true } : {}),

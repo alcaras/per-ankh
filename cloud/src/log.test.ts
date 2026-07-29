@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
 	beginD1Query,
+	beginR2Read,
 	emitAccessLog,
 	mergeBusyMs,
 	runWithLogContext,
+	setLogField,
 	type BusyInterval,
 } from "./log";
 
@@ -90,7 +92,7 @@ function query(handle: "share" | "events", ms: number): Promise<void> {
 }
 
 describe("access log storage timing", () => {
-	it("reports zeros for a request that issues no query", async () => {
+	it("reports zeros for a request that touches neither D1 nor R2", async () => {
 		const [line] = await captureAccessLog(async () => {});
 		expect(line).toMatchObject({
 			d1_ms: 0,
@@ -98,6 +100,7 @@ describe("access log storage timing", () => {
 			d1_wall_ms: 0,
 			d1_events_ms: 0,
 			d1_events_queries: 0,
+			r2_ms: 0,
 		});
 	});
 
@@ -151,13 +154,24 @@ describe("access log storage timing", () => {
 		expect(line.d1_events_ms).toBe(0);
 	});
 
+	it("accumulates R2 read time separately", async () => {
+		const [line] = await captureAccessLog(async () => {
+			const end = beginR2Read();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			end();
+		});
+		expect(line.r2_ms as number).toBeGreaterThan(0);
+		expect(line.d1_queries).toBe(0);
+	});
+
 	it("keeps raw intervals out of the log line", async () => {
 		// The accumulator is its own slot precisely because `fields` is spread
 		// verbatim into the line.
 		const [line] = await captureAccessLog(async () => {
 			await query("share", 5);
+			setLogField("blob_cache", "miss");
 		});
-		expect(line.d1_queries).toBe(1);
+		expect(line.blob_cache).toBe("miss");
 		expect(line.timing).toBeUndefined();
 		expect(line.d1Spans).toBeUndefined();
 	});
@@ -166,5 +180,6 @@ describe("access log storage timing", () => {
 		// The `scheduled` handler runs without runWithLogContext and queries
 		// events on the raw binding.
 		expect(() => beginD1Query("events")()).not.toThrow();
+		expect(() => beginR2Read()()).not.toThrow();
 	});
 });

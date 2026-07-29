@@ -30,6 +30,8 @@
 // Only `games/*` reads go through here today. `saves/*` (the raw ZIP download)
 // deliberately does not — see the note at the R2 read in handleGameDownload.
 
+import { beginR2Read, setLogField } from "./log";
+
 // Synthetic key origin — same idiom as the download rate-limit counter in
 // share-legacy.ts. R2 keys are `games/{id}.json.gz` where id is a nanoid(21)
 // over [A-Za-z0-9_-], so they're URL-path-safe as-is with no escaping.
@@ -63,12 +65,23 @@ function cacheKey(r2Key: string, parserVersion: string): Request {
 
 // Uncached read. Returns null when the object is absent, which callers map to
 // their own BLOB_MISSING response.
+//
+// r2_ms is accumulated here rather than by wrapping the binding, because
+// bucket.get() resolves as soon as the object's metadata is known — the bytes
+// move in arrayBuffer(), so timing the get alone would report a fraction of
+// the crossing. Wrapping the read is also what keeps the cache hit in
+// getBlobCached *out* of r2_ms, which is the whole point of the number.
 export async function readBlob(
 	bucket: R2Bucket,
 	r2Key: string,
 ): Promise<ArrayBuffer | null> {
-	const obj = await bucket.get(r2Key);
-	return obj ? await obj.arrayBuffer() : null;
+	const end = beginR2Read();
+	try {
+		const obj = await bucket.get(r2Key);
+		return obj ? await obj.arrayBuffer() : null;
+	} finally {
+		end();
+	}
 }
 
 // Read an R2 object through the per-POP cache, filling it on a miss.
@@ -86,8 +99,16 @@ export async function getBlobCached(
 	const cache = caches.default;
 	const key = cacheKey(r2Key, parserVersion);
 
+	// blob_cache rides the access log so the tier's hit rate is measurable per
+	// route (issue #150). The owner branch tags its direct read `bypass`
+	// instead, which is what keeps an absent field meaning "this route read no
+	// blob at all" — see handleGameDetail.
 	const hit = await cache.match(key);
-	if (hit) return await hit.arrayBuffer();
+	if (hit) {
+		setLogField("blob_cache", "hit");
+		return await hit.arrayBuffer();
+	}
+	setLogField("blob_cache", "miss");
 
 	const bytes = await readBlob(bucket, r2Key);
 	// A missing object isn't cached — negative caching would keep a game

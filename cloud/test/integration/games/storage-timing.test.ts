@@ -104,3 +104,44 @@ describe("access log storage timing on GET /v1/games/:id", () => {
 		expect(line.d1_events_queries).toBe(0);
 	});
 });
+
+describe("blob_cache on the access log", () => {
+	it("reports miss then hit across two anonymous reads", async () => {
+		const owner = await makeUser();
+		const gameId = await seedGame(owner, { isPublic: true });
+
+		const cold = await accessLog(() =>
+			request.get({ path: `/v1/games/${gameId}` }),
+		);
+		expect(cold.line.blob_cache).toBe("miss");
+
+		const warm = await accessLog(() =>
+			request.get({ path: `/v1/games/${gameId}` }),
+		);
+		expect(warm.line.blob_cache).toBe("hit");
+		// A hit reads bytes from the colo, not from the bucket, so it must land
+		// nowhere in r2_ms — the definition the field depends on. It pins the
+		// definition rather than a measured difference: Miniflare's R2 is local,
+		// so the cold read above also rounds to 0 here.
+		expect(warm.line.r2_ms).toBe(0);
+	});
+
+	it("reports bypass for the owner's read, which never enters the cache", async () => {
+		const owner = await makeUser();
+		const gameId = await seedGame(owner, { isPublic: true });
+
+		const { line } = await accessLog(() =>
+			request.get({ path: `/v1/games/${gameId}`, as: owner }),
+		);
+		expect(line.blob_cache).toBe("bypass");
+	});
+
+	it("emits no blob_cache field for a route that reads no blob", async () => {
+		// Absence has to stay meaningful, which is what the bypass tag protects.
+		const { line } = await accessLog(() =>
+			request.get({ path: "/v1/games/public-recent" }),
+		);
+		expect(line.blob_cache).toBeUndefined();
+		expect(line.r2_ms).toBe(0);
+	});
+});
