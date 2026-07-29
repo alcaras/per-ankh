@@ -1,5 +1,42 @@
 # Changelog
 
+## [2026-07-29-beab8b4] - 2026-07-29
+
+### Features
+
+- (game-detail) Economy tab — [d49f4c8](https://github.com/becked/per-ankh/commit/d49f4c8d155ea5a2443d2fec967c622784580664)
+- (game-detail) restore BuildComparison's ±N diff column — [1354b03](https://github.com/becked/per-ankh/commit/1354b03d225ec64018235709036d8f1ec6dcab9a)
+- (game-detail) Families tab — [d526041](https://github.com/becked/per-ankh/commit/d5260415b0e2e3ea940545c6a57f2d94220cb74b)
+
+### Fixes
+
+- (game-detail) hide National wealth's heading with its body — [b8d3fed](https://github.com/becked/per-ankh/commit/b8d3fed1f107f224ca012b123655f0151391fb1f)
+- (game-detail) keep the Economy view switch reachable when a view empties — [5eb18eb](https://github.com/becked/per-ankh/commit/5eb18eb78257833a9028261737837b1f125ee427)
+- (deploy) carry open tabs onto the new build — [beab8b4](https://github.com/becked/per-ankh/commit/beab8b4dc66a290746f2fa1b06cb2d1ba794fe7a)
+
+### Performance
+
+- (games) parallelize the game and tournament-link page loads — [86f0489](https://github.com/becked/per-ankh/commit/86f04899006798392fca0163e817b2911ab9e45a)
+- (auth) drop the redundant admin lookup and parallelize /v1/auth/me — [26772a6](https://github.com/becked/per-ankh/commit/26772a61c3ce89384ceb113a3a4d3f711904c627)
+- (games) overlap the anon read-limit count with the games-row read — [57cc813](https://github.com/becked/per-ankh/commit/57cc813faf16981825134f52356b92c79af0bee8)
+
+### Other
+
+- (game-detail) make BuildComparison generic over its subject — [99429f6](https://github.com/becked/per-ankh/commit/99429f632a6842c34617fb8c8f8536c0c76a76f3)
+- (game-detail) comment tracked the unitTypes→keys rename — [2e01d14](https://github.com/becked/per-ankh/commit/2e01d14e27321ebe76c61b795cece4f9562f1cf5)
+- (game-detail) drop showDiff until its first caller — [3b7c416](https://github.com/becked/per-ankh/commit/3b7c416d8d3e8b762e342d39b19fd668f395a99d)
+- (game-detail) share the panels' row order through helpers — [eb3aaa0](https://github.com/becked/per-ankh/commit/eb3aaa02c6f1b4e7d7de0003a891403a19c9a1bb)
+- (games) extract the game seeder into a shared test helper — [7c10081](https://github.com/becked/per-ankh/commit/7c10081c2aaf7658b1f142cde8ce767a6611698e)
+- (games) cover the anon-read gate order on GET /v1/games/:id — [9ebfb5c](https://github.com/becked/per-ankh/commit/9ebfb5c42d053244dbeaa8aa65392f607cb3847f)
+- (game-detail) require comparisonRowKeys' comparator — [005a3a3](https://github.com/becked/per-ankh/commit/005a3a31a9e67eb474a2c28fc771579d980ccfa3)
+- (game-detail) counts and worker-turns side by side — [291247d](https://github.com/becked/per-ankh/commit/291247d2123cc75dc989492e1dbd97a13c8264bb)
+- (game-detail) adopt comparisonRowKeys in the Economy panels — [faec997](https://github.com/becked/per-ankh/commit/faec99739a0409904f28488fd0001b3ddcb34e45)
+- (game-detail) correct the Economy tab's stale comments — [db243e8](https://github.com/becked/per-ankh/commit/db243e828912ef061dfe8564696e04ec5fbfdd19)
+- (game-detail) drop the Economy tab's pointers to a note that isn't there — [04cb808](https://github.com/becked/per-ankh/commit/04cb80829b0a7f451e77912cf0e663c3ac014a93)
+- (game-detail) one opinion chart per nation — [e5843eb](https://github.com/becked/per-ankh/commit/e5843eb3b44e9078a9fa978f71e146e4d1ffcc1c)
+- (game-detail) crest and align the Families tab's axis labels — [f3b072f](https://github.com/becked/per-ankh/commit/f3b072fa35081a0810d58845c7d53c6ae0ca07fc)
+- (scripts) apply prettier to bake-family-opinion — [8a3c2cf](https://github.com/becked/per-ankh/commit/8a3c2cfbf43755e1f42e67856730f0f3c29a8f23)
+
 ## [2026-07-26-9a6722b] - 2026-07-26
 
 ### Features
