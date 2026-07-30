@@ -1,8 +1,8 @@
 // CSP violation reports. Browsers POST violations to this endpoint when
 // the page's CSP `report-uri` or `report-to` directive points here. Each
 // violation becomes one structured log line (event=csp_violation) so we
-// can grep Logpush for actual production CSP issues — week-one violations
-// would otherwise be silently lost.
+// can query the log sinks for actual production CSP issues — week-one
+// violations would otherwise be silently lost.
 //
 // Two report formats coexist:
 //   - Legacy (Content-Type: application/csp-report) — single object,
@@ -19,8 +19,8 @@ import { logEvent } from "./log";
 
 const MAX_BODY_BYTES = 64 * 1024;
 
-// Normalized violation shape — flat keys so Logpush queries don't have
-// to know the source format.
+// Normalized violation shape — flat keys so log queries don't have to
+// know the source format.
 interface NormalizedViolation {
 	document_uri: string | null;
 	blocked_uri: string | null;

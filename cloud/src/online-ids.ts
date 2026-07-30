@@ -89,7 +89,7 @@ export async function handleRemoveOnlineId(
 	// Only audit when a row was actually removed. The endpoint is
 	// idempotent (no-op DELETEs return 204) so UI retries don't pollute
 	// the trail. The events table is internal D1 — `online_id` in
-	// metadata is NOT shipped to Logpush (PII deny-list).
+	// metadata is NOT shipped to the log sinks (PII deny-list).
 	const changes = result.meta?.changes ?? 0;
 	if (changes > 0) {
 		try {

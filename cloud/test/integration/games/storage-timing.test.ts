@@ -34,7 +34,7 @@ function getAs(path: string, ua: string): Promise<Response> {
 }
 
 // The one access-log line the given request emitted. emit() writes JSON to
-// console.log by design (Logpush ships stdout), so that's the seam — and the
+// console.log by design (the log sinks ship stdout), so that's the seam — and
 // Worker shares this isolate's console when driven through SELF.
 async function accessLog(
 	send: () => Promise<Response>,

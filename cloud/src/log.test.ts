@@ -59,7 +59,7 @@ describe("mergeBusyMs", () => {
 });
 
 // Parsed access-log lines emitted while `fn` ran. emit() goes through
-// console.log by design (Logpush ships stdout), so that's the seam.
+// console.log by design (the log sinks ship stdout), so that's the seam.
 async function captureAccessLog(
 	fn: () => Promise<void>,
 ): Promise<Record<string, unknown>[]> {

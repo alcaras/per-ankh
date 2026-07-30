@@ -159,7 +159,7 @@ type RawBindings = Omit<Env, "SHARE_DB" | "EVENTS_DB"> & {
 // Routes are declared as a typed table so the dispatch loop can:
 //   (a) match by exact path or regex,
 //   (b) set the route pattern (e.g. "GET /v1/games/:id") on the log
-//       context for stable per-route grouping in Logpush,
+//       context for stable per-route grouping in the log sinks,
 //   (c) keep route additions to a single self-describing edit.
 //
 // More-specific patterns (e.g. /v1/games/:id/download) MUST appear before
