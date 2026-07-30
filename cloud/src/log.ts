@@ -1,15 +1,18 @@
 // Structured JSON logging primitive for the API Worker.
 //
-// All output is emitted as one JSON object per console.log line so Logpush
-// can ship it to a sink unchanged once a destination is wired (see
-// docs/cloud-deploy-plan.md §6). Two log shapes:
+// All output is emitted as one JSON object per console.log line, which both
+// configured sinks consume unchanged: Cloudflare parses and indexes the
+// fields for a 7-day queryable window, and an OTLP export carries the same
+// lines to a longer-retention destination (see docs/cloud-deploy-plan.md
+// §6.1). Two log shapes:
 //
 //   - Access log (type=access). One per request, emitted by the fetch
 //     envelope after dispatch returns. Fields: ts, level, request_id,
-//     cf_ray, method, route, path, status, duration_ms, d1_ms, d1_queries,
-//     d1_wall_ms, d1_events_ms, d1_events_queries, r2_ms, user_id,
-//     error_code, error_class + handler-attached fields via setLogField.
-//     The d1_*/r2_* block is the storage-timing accumulator below.
+//     cf_ray, colo, method, route, path, status, duration_ms, d1_ms,
+//     d1_queries, d1_wall_ms, d1_events_ms, d1_events_queries, r2_ms,
+//     user_id, error_code, error_class + handler-attached fields via
+//     setLogField. The d1_*/r2_* block is the storage-timing accumulator
+//     below.
 //
 //   - Event log (type=event). Emitted mid-handler by logError / logWarn /
 //     logEvent. Correlated to the access log via request_id.
@@ -54,7 +57,7 @@ export type LogLevel = "info" | "warn" | "error";
 // accuracy or complexity for one of those hops, and the ranking so far
 // comes from reading code rather than measuring it — hence this: each
 // request accumulates its own D1/R2 timing, and the access log turns it
-// into numbers a Logpush sink can aggregate per route.
+// into numbers the sinks aggregate per route and per colo.
 //
 // Only I/O is measurable this way. A Worker's clock advances on I/O, not on
 // CPU work, so CPU time cannot be derived from these timestamps at all —
@@ -98,6 +101,11 @@ export interface StorageTiming {
 export interface LogContext {
 	request_id: string;
 	cf_ray: string | null;
+	// IATA code of the data center that served the request. Its own envelope
+	// slot rather than a setLogField entry, same as cf_ray. Neither sink
+	// supplies a colo in groupable form, and cf_ray can't stand in for it:
+	// it's unique per request, so grouping by it yields one group per request.
+	colo: string | null;
 	method: string;
 	path: string;
 	route: string | null;
@@ -120,9 +128,14 @@ const als = new AsyncLocalStorage<LogContext>();
 
 function newContext(request: Request): LogContext {
 	const url = new URL(request.url);
+	// `cf` is absent on a hand-built Request and its type is the union of the
+	// incoming and outgoing shapes, which widens `.colo` to unknown — narrow
+	// rather than cast, so an unpopulated edge just logs null.
+	const colo = request.cf?.colo;
 	return {
 		request_id: crypto.randomUUID(),
 		cf_ray: request.headers.get("CF-RAY"),
+		colo: typeof colo === "string" ? colo : null,
 		method: request.method,
 		path: url.pathname,
 		route: null,
@@ -327,6 +340,9 @@ export function emitAccessLog(response: Response): void {
 		type: "access",
 		request_id: ctx.request_id,
 		cf_ray: ctx.cf_ray,
+		// Access lines only. Event lines correlate by request_id, so nothing
+		// needs it there.
+		colo: ctx.colo,
 		method: ctx.method,
 		route: ctx.route,
 		path: ctx.path,
