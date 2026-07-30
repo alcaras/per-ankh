@@ -12,6 +12,28 @@ compatibility_flags = ["nodejs_als"]
 # Wrangler creates the DNS record automatically
 routes = [{ pattern = "api.per-ankh.app", custom_domain = true }]
 
+# Sinks for the structured JSON lines cloud/src/log.ts emits via console.log:
+# a 7-day queryable window in Cloudflare, plus an OTLP export for longer
+# retention. See docs/cloud-deploy-plan.md §6.1.
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+# Explicit though 1 is the default: at ~3k invocations/day there's no volume
+# reason to sample, and the per-(route × colo) cells issue #150 measures are
+# thin enough that dropping any of them costs a defensible p95.
+head_sampling_rate = 1
+# Keep the Cloudflare-side copy as well as exporting. Explicit because
+# Cloudflare's own OTLP example sets this false, and copying that example
+# would silently remove the queryable window.
+persist = true
+# A destination NAME, resolved against account-level destinations created in
+# the dashboard (Workers Observability) — not a URL. Nothing in this repo
+# creates it, and a name with no matching destination exports nothing and
+# reports nothing. Setup in docs/cloud-deploy-plan.md §6.1.2.
+destinations = ["per-ankh-logs"]
+
 # D1 migrations live in cloud/migrations/ (wrangler's default location),
 # applied via:
 #   npm run migrate:local    (local sqlite under .wrangler/)
@@ -154,6 +176,10 @@ SESSION_COOKIE_NAME = "session"
 #   - triggers IS inherited — the empty [env.staging.triggers] below opts
 #     staging out of the nightly retention cron. Staging D1 is recloned from
 #     prod; an independent sweep there would skew prod/staging diffs.
+#   - observability IS inherited, nested tables included — staging gets the
+#     same hot window and exports to the same OTLP destination with no
+#     duplicate keys here. Exported records carry the script name, so staging
+#     and prod stay distinguishable at the destination.
 #   - main / compatibility_date / compatibility_flags are inherited; not
 #     repeated here.
 #

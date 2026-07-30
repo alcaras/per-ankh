@@ -489,10 +489,7 @@ feature surfaces real query patterns.
 - **Error tracking.** Sentry or Baselime (Cloudflare-acquired). Free tier
   covers solo-launch volume. Wire it into the API Worker first; SSR
   Worker second. Skip until week one is uneventful if it slows the deploy.
-- **Logpush sink.** The structured JSON logging from commit 06e88b6 emits
-  via `console.log`. Logpush picks it up if a destination is configured.
-  Default if undecided: R2 bucket, query later with DuckDB. Cheap and
-  Cloudflare-native.
+- **Log sinks — decided.** Workers Logs for the hot window, OTLP export for the durable archive; both configured in `cloud/wrangler.toml`. See §6.1 for what each is for, the destination the export needs that this repo cannot create, and why Logpush → R2 was abandoned.
 - **Synthetic uptime check.** Cloudflare Health Checks on `/v1/stats`
   every 1–5 min. Catches DNS/cert/whole-site-down failures that
   handler-level alerts miss.
@@ -502,6 +499,71 @@ feature surfaces real query patterns.
 
 SLOs and dashboards explicitly deferred until usage patterns emerge with
 the next feature.
+
+### 6.1 Log sinks: Workers Logs + OpenTelemetry export (issue #150)
+
+`cloud/src/log.ts` emits one JSON object per `console.log`: one `type=access` line per request carrying `route`, `colo`, `status`, `duration_ms` and the `d1_*`/`r2_*` storage-timing block, plus `type=event` lines correlated by `request_id`. Both sinks below consume exactly those lines — there is no second emission path, so the `scrubPii` deny-list in `log.ts` remains the only PII gate the logs have.
+
+**Both are enabled, because they answer different questions.** Volume is free at this scale: OTLP export includes 10M events/month and Workers Logs 20M, against ~3k invocations/day (~90k/month).
+
+- **Workers Logs** — the hot window. `[observability.logs] enabled = true` with `head_sampling_rate = 1` (explicit; 1 is the default, but there is no volume reason to sample here) and `persist = true`. Cloudflare parses and indexes our custom fields automatically, and both the dashboard Query Builder and the public telemetry query API take `groupBys` on arbitrary custom keys with `p50/p90/p95/p99/median/sum/count` calculations — so "p95 `d1_wall_ms` by `route` and `colo`" is one query, not a pipeline. **Retention: 7 days** on the Paid plan. This is the surface for immediate feedback after a deploy and for fast iteration on what to measure next.
+- **OpenTelemetry export** — the durable archive. `[observability.logs] destinations = ["per-ankh-logs"]`, sending the same lines to an OTLP-compatible provider whose retention exceeds 7 days. This is load-bearing, not a nice-to-have: at ~3k/day the per-(`route` × `colo`) cells are thin, and the tail colos — which are the entire premise of issue #150 — need weeks, not days, to accumulate enough samples for a defensible p95. The 7-day window above expires before those cells fill.
+
+`persist = true` is set explicitly *because* Cloudflare's own OTLP example sets it to `false`. That value means "export only, keep nothing in Cloudflare" — copying the example would silently delete the hot window.
+
+**The export sends our lines to a third-party data processor.** `scrubPii` runs first and the deny-list is unchanged, but `user_id` is on every access line, so this is a deliberate widening of where app data goes — not an implementation detail. Weigh it when choosing the provider.
+
+#### 6.1.1 Why not Logpush → R2
+
+The original plan was a Logpush job on the `workers_trace_events` dataset writing to a dedicated R2 bucket: raw rows, unlimited retention, queried locally with DuckDB, no third party. **It is blocked on this account and the attempt is recorded here so nobody retries it from scratch.**
+
+Job creation is refused with `HTTP 403`, `"creating a new job (for workers_trace_events dataset) is not allowed: exceeded max jobs allowed"` — against an empty job list on both `/accounts/{id}/logpush/jobs` and `/accounts/{id}/logpush/datasets/workers_trace_events/jobs`. A quota of zero against zero jobs is an entitlement gate, not a counting error, and the dashboard agrees: the Logpush page renders the Enterprise "Contact sales" upsell even though its own subtitle reads "available on Enterprise plans and Workers Paid plans." Cloudflare's Workers Logpush docs also now say: *"For new integrations, consider using OpenTelemetry export instead."* Not a deprecation, but it points the same way.
+
+The blocker was the quota alone, not our configuration: `POST /accounts/{id}/logpush/ownership` returned `valid: true` and wrote its challenge file, which proves the bucket, the R2 key pair and the `r2://…?account-id=…&access-key-id=…&secret-access-key=…` form of `destination_conf` were all correct. Everything except job creation worked.
+
+**This was not escalated to support, and Logpush is not a pending option.** The decision was to take Cloudflare's own advice and use OTLP export instead. Everything provisioned for the attempt has been torn down and nothing in this repo references any of it:
+
+- the R2 log bucket, along with the `ownership-challenge-*.txt` the validation wrote into it,
+- the R2 API token (Object Read & Write) whose key pair existed only to sit inside a Logpush `destination_conf`,
+- the account API token with `Logs → Edit`, which existed only to talk to the Logpush API.
+
+Anyone reopening this starts from zero, and should re-read whether the quota still reads 0 before provisioning anything.
+
+The DuckDB-over-R2 query plan went with it. That also retires the note about DuckDB being a local analysis tool rather than an app runtime dependency — with no R2 archive, the root `CLAUDE.md`'s "no DuckDB" stands unqualified.
+
+Still rejected, recorded so they don't get reopened: **a Tail Worker** (would still have to `JSON.parse` our line back out of the tail event's `Logs` array — more code for the same answers, plus a second Worker and a beta dependency); **a dedicated D1 table** (a per-request D1 write to measure per-request D1 round trips, which would land in `d1_queries` itself — the `security_events` precedent doesn't transfer, since that tees only on interesting requests, not every request). **Analytics Engine** was rejected because R2 beat its 3-month retention outright; with R2 unavailable that argument is gone, and what remains against it is a second emission path bypassing `scrubPii` plus the positional `blob1..blob20` schema hazard. Reconsider it only if the OTLP route also falls through.
+
+#### 6.1.2 Out-of-band provisioning — the export destination
+
+`destinations = ["per-ankh-logs"]` is a **name**, not a URL. It resolves against account-level destinations created in the dashboard (Workers Observability), where the OTLP endpoint and its auth headers actually live. Nothing in this repo creates one, which makes it the same class of invisible dependency as D1 read replication (§3.10, and the `SHARE_DB` comment in `cloud/wrangler.toml`): a name with no matching destination exports nothing, forever, with no error anywhere.
+
+Create it with:
+
+- **Destination name** — must match the string in `wrangler.toml` exactly. A typo is silent.
+- **Destination type** — Logs. (Traces is a separate destination; see §6.1.3.)
+- **OTLP endpoint** and **custom headers** — from the provider. Supported providers include Honeycomb, Grafana Cloud, Axiom, Sentry, PostHog, Datadog, New Relic and Splunk. **Object storage is not a destination type** — this is why R2 is not reachable this way.
+
+`observability` is inherited into `[env.staging]`, nested tables included, so the staging Worker exports to the same destination with no duplicate keys. Exported records carry the script name, so staging and prod stay distinguishable — and any query that computes a prod percentile must filter on it, exactly as it must filter `type = "access"` below. A forgotten filter mixes staging in without failing.
+
+The wrangler config ships as part of the script's upload metadata, so **none of this takes effect until the Worker is next deployed.**
+
+#### 6.1.3 Query notes
+
+Both `type=access` and `type=event` lines flow to both sinks. Any aggregate over the storage-timing fields must filter `type = "access"` **per record** — a `logWarn` line has no `d1_wall_ms` at all, so it contaminates a percentile without failing.
+
+The double-encoding hazard of the Logpush path does **not** apply here. That was a property of the `workers_trace_events` row shape, where one row was one *invocation* and our line arrived escaped inside `Logs[].Message[0]`. OTLP carries log records, not invocation envelopes. **The exact body encoding of an exported record is unverified** — confirm it against real data before writing anything that depends on it, and record the answer here.
+
+`colo` is on our own access line rather than derived at query time because the platform does not supply it to either sink in a groupable form, and `cf_ray` cannot stand in: it is unique per request, so grouping by it yields one group per request.
+
+#### 6.1.4 Why traces are not enabled
+
+`[observability.traces]` would auto-instrument D1 and R2 binding calls — per-query spans with `cloudflare.d1.response.sql_duration_ms`, `rows_read`, `rows_written`, per-operation R2 spans, and `cloudflare.colo` on the root span. That overlaps much of the storage-timing accumulator in `cloud/src/log.ts`, and is finer: raw spans yield both the sum and the union that `mergeBusyMs` computes, plus per-statement attribution we discard.
+
+It is off anyway, for one structural reason: **there is no API to set attributes on the root/invocation span.** `span.setAttribute()` works only on spans you create, so a normalized `route` — `GET /v1/games/:id`, the grouping key issue #150 needs — cannot be attached to a trace without wrapping dispatch in a custom active span. Traces carry `url.path` instead, which is unbounded cardinality. Joining spans to access lines on `cloudflare.ray_id`/`cf_ray` would work, but splits one request across two stores with different retention, and only one of them is archived. The wide access line already has route and timings on a single row.
+
+Tracing is also in open beta, and its known-limitations page states that span and attribute names may change to align with OpenTelemetry conventions — a poor foundation for a multi-week measurement window.
+
+Worth revisiting once naming stabilises: if spans plus a route attribute ever cover it, the `d1_*`/`r2_ms` block in `log.ts` becomes a deletion candidate rather than something to maintain.
 
 ## 7. Explicitly NOT doing
 
