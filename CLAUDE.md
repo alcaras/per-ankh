@@ -14,38 +14,7 @@ Domain-specific detail lives in **nested `CLAUDE.md` files** (loaded automatical
 
 Per-Ankh is a web app at <https://per-ankh.app> for analyzing Old World save files. Saves are parsed in the browser, persisted to Cloudflare, and visualized through interactive charts and a hex-tile map. It also hosts **tournaments** — a Swiss-into-championship competition system — the largest, most active subsystem (see [Tournament subsystem](#tournament-subsystem)).
 
-## Technology Stack
-
-- **Frontend:** SvelteKit 2 + Svelte 5 (runes) + TypeScript, deployed via `@sveltejs/adapter-cloudflare`. Source under `src/`.
-- **API Worker:** Cloudflare Worker under `cloud/` (TypeScript, Valibot for validation, nanoid for IDs).
-- **Backing services:** D1 (relational metadata), R2 (raw save ZIPs + parsed game blobs), KV (sessions).
-- **Parser:** TypeScript, in a Web Worker on the upload page. Source under `src/lib/parser/`.
-- **Charts:** Apache ECharts.
 - **Legacy share viewer:** static SvelteKit app under `web/`, serving `per-ankh.app/share/[id]` for links from the (removed) desktop app. Frozen.
-
-## Repo layout
-
-```
-per-ankh/
-├── src/                      # SvelteKit app (cloud routes + shared components)
-│   ├── lib/                  # parser/, game-detail/, tournament/, stats/, users/,
-│   │                         #   ui/, config/, stores/, generated/, api-cloud client
-│   ├── routes/               # /, /auth/callback, /dashboard, /upload, /games/[id],
-│   │                         #   /account, /admin (+/reparse), /tournaments
-│   │                         #   (+/[slug], /guide), /users/[user_id] (+/stats)
-│   └── hooks.server.ts       # SSR security headers
-├── cloud/                    # Cloudflare Worker (API) — see cloud/src/CLAUDE.md
-│   ├── src/                  # Domain handlers (games, users, auth, admin, …) +
-│   │                         #   tournament/, stats/, routes/, schemas/, lib/
-│   ├── test/                 # Vitest: unit/ (Node) + integration/ (Miniflare)
-│   ├── migrations/           # D1 migrations for SHARE_DB (numbered, forward-only)
-│   ├── migrations-security/  # D1 migrations for SECURITY_DB (Skiff drain; see docs)
-│   └── wrangler.toml         # Worker config
-├── web/                      # Legacy share viewer (static SvelteKit, frozen)
-├── scripts/                  # Asset bake scripts + ./per-ankh CLI (admin/, prod/, backup)
-├── static/                   # Static assets, including baked atlases/sprites
-└── docs/                     # Specs, ADRs, deploy plan (see Key docs below)
-```
 
 ## Environment
 
@@ -83,7 +52,7 @@ Review correctness as normal, then check **fit** — contributions here work and
 
 **Documentation & Markdown.** Prose in Markdown (`*.md`, including `docs/`) is **soft-wrapped: one paragraph per line.** Never hard-wrap prose to a fixed column width — that's a code convention and wrong for prose. Lists/table rows still break per item; fenced code keeps its own formatting. (Prettier is disabled for `*.md`/`docs/`, so nothing reflows these — don't introduce the wrapping.)
 
-**TypeScript / Svelte.** TypeScript strict mode. ESLint + Prettier enforced (`npm run lint`, `npm run format`). camelCase functions/variables, PascalCase components. Prefer `const` over `let`. Display backend enums with `formatEnum()` from `$lib/utils/formatting`.
+**TypeScript / Svelte.** Display backend enums with `formatEnum()` from `$lib/utils/formatting`.
 
 **Svelte 5 (runes).** Runes throughout — don't mix Svelte 4 patterns (they compile but cause silent rendering failures).
 
@@ -114,7 +83,7 @@ For stores, convert to `$state` and subscribe **inside an effect** (returning th
 
 ## Tournament subsystem
 
-A Swiss-into-championship competition system layered on the save-analysis core — the largest, most active area. Lifecycle: `setup → swiss → championship → complete` (config locks after `setup`). Data model: `tournaments` (1) → `tournament_rounds` → `tournament_matches`; matches reference `tournament_slots` by id; `map_pool` is JSON on the tournament.
+A Swiss-into-championship competition system layered on the save-analysis core — the largest, most active area. Lifecycle: `setup → swiss → championship → complete` (config locks after `setup`).
 
 Code map: frontend `src/lib/tournament/` + routes `src/routes/tournaments/`; worker engine `cloud/src/tournament/`. Each of those dirs has its own `CLAUDE.md` with the how-to and reuse rules.
 
