@@ -12,9 +12,14 @@ compatibility_flags = ["nodejs_als"]
 # Wrangler creates the DNS record automatically
 routes = [{ pattern = "api.per-ankh.app", custom_domain = true }]
 
-# Sinks for the structured JSON lines cloud/src/log.ts emits via console.log:
-# a 7-day queryable window in Cloudflare, plus an OTLP export for longer
-# retention. See docs/cloud-deploy-plan.md §6.1.
+# Two independent telemetry paths, both with a 7-day queryable window in
+# Cloudflare plus an OTLP export for longer retention:
+#
+#   logs   — the structured JSON lines cloud/src/log.ts emits via console.log.
+#   traces — platform-generated spans. NOT emitted by log.ts, so the scrubPii
+#            deny-list that gates the log lines does not sit in front of them.
+#
+# See docs/cloud-deploy-plan.md §6.1.
 [observability]
 enabled = true
 
@@ -33,6 +38,35 @@ persist = true
 # creates it, and a name with no matching destination exports nothing and
 # reports nothing. Setup in docs/cloud-deploy-plan.md §6.1.2.
 destinations = ["per-ankh-logs"]
+
+# Automatic tracing: a span per invocation, plus one per D1 query and R2
+# operation, carrying cloudflare.d1.response.sql_duration_ms / rows_read /
+# rows_written and the R2 operation outcome. See docs/cloud-deploy-plan.md
+# §6.1.4 for what this answers that the access line doesn't.
+#
+# `enabled = true` is set explicitly rather than inherited from
+# `[observability] enabled`. The implication only holds under the
+# `enable_workers_observability_tracing` compatibility flag, which our
+# compatibility_date (2024-12-01) predates — but the explicit form works at
+# any compatibility date, so this needs no date bump. Neither does
+# ctx.tracing.enterSpan in src/index.ts (verified against workerd at this
+# date, not assumed — the changelog for startActiveSpan implies otherwise).
+[observability.traces]
+enabled = true
+# Same reasoning as the logs sink above, with more headroom to spend: tracing
+# multiplies one invocation into ~10 spans, so ~3k invocations/day lands near
+# 900k spans/month against Honeycomb's 20M free-tier events. Sampling would
+# thin exactly the tail-colo cells issue #150 exists to measure.
+head_sampling_rate = 1
+# Keep the Cloudflare-side copy as well as exporting — same trap as the logs
+# sink: Cloudflare's own OTLP example sets this false, which means "export
+# only, keep nothing queryable in Cloudflare".
+persist = true
+# A separate destination from per-ankh-logs, not a second use of it: a
+# destination pins one OTLP endpoint, and traces and logs are different paths
+# on the provider (…/v1/traces vs …/v1/logs). Same out-of-band dashboard
+# provisioning, same silent failure mode on a typo — §6.1.2.
+destinations = ["per-ankh-traces"]
 
 # D1 migrations live in cloud/migrations/ (wrangler's default location),
 # applied via:
@@ -177,9 +211,11 @@ SESSION_COOKIE_NAME = "session"
 #     staging out of the nightly retention cron. Staging D1 is recloned from
 #     prod; an independent sweep there would skew prod/staging diffs.
 #   - observability IS inherited, nested tables included — staging gets the
-#     same hot window and exports to the same OTLP destination with no
-#     duplicate keys here. Exported records carry the script name, so staging
-#     and prod stay distinguishable at the destination.
+#     same hot windows and exports to the same OTLP destinations (logs and
+#     traces alike) with no duplicate keys here. Exported records carry the
+#     script name, so staging and prod stay distinguishable at the
+#     destination; spans carry it as the cloudflare.script_name resource
+#     attribute, present on every span.
 #   - main / compatibility_date / compatibility_flags are inherited; not
 #     repeated here.
 #

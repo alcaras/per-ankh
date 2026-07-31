@@ -904,15 +904,31 @@ function dispatch(
 	const url = new URL(request.url);
 	for (const r of ROUTES) {
 		if (r.method !== request.method) continue;
+		// `null` for path routes is the handler's match argument, not a
+		// sentinel — path routes have no capture groups to pass.
+		let m: RegExpMatchArray | null = null;
 		if (r.match.kind === "path") {
 			if (r.match.path !== url.pathname) continue;
-			setRoute(r.route);
-			return r.handler(request, routeEnv(env, r), null, ctx);
+		} else {
+			m = url.pathname.match(r.match.regex);
+			if (!m) continue;
 		}
-		const m = url.pathname.match(r.match.regex);
-		if (!m) continue;
 		setRoute(r.route);
-		return r.handler(request, routeEnv(env, r), m, ctx);
+		// The same normalized route the access line carries, attached to a
+		// span. Tracing needs its own copy because nothing the platform emits
+		// can stand in: root spans carry url.path, whose cardinality is
+		// unbounded (one cell per game id), and there is no http.route
+		// attribute. setAttribute only works on spans we create, so wrapping
+		// the handler is the only place to put it.
+		//
+		// Every D1 and R2 span the handler produces nests under this one, and
+		// cloudflare.colo is a resource attribute present on all spans — so
+		// "p95 by route × colo", the issue #150 question, is a query over
+		// this span alone rather than a join back to the access line.
+		return ctx.tracing.enterSpan(r.route, (span) => {
+			span.setAttribute("route", r.route);
+			return r.handler(request, routeEnv(env, r), m, ctx);
+		});
 	}
 	// 404 — pick CORS based on path so error responses still allow the
 	// origin that asked. The cloud helper echoes the request Origin; the
