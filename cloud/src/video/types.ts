@@ -25,7 +25,10 @@ export interface Video {
 	url: string;
 	// Best available thumbnail, or null if the feed omitted one.
 	thumbnail_url: string | null;
-	// ISO 8601 publish instant.
+	// ISO 8601. When the video went up — except for live content, where it is
+	// when the broadcast aired rather than when its VOD was later published (see
+	// the broadcast-dates note in youtube.ts). Feeds report the latter, and it
+	// runs hours late, so the two are worth keeping straight.
 	published_at: string;
 	platform: VideoPlatform;
 }

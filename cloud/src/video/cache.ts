@@ -22,7 +22,10 @@ import type { Video, VideoEnv, VideoProvider } from "./types";
 // v4: playlist fetches now dedupe repeated video ids (a curator re-adding a
 //     video); orphan the v3 entries so a warmed playlist doesn't keep serving a
 //     duplicate-containing list that crashes the Videos tab's keyed {#each}.
-const CACHE_VERSION = 4;
+// v5: live content is dated by when the broadcast aired rather than when its
+//     VOD was published; orphan the v4 entries so a warmed feed doesn't keep
+//     serving dates that are hours-to-a-day too recent.
+const CACHE_VERSION = 5;
 // Serve a cached entry without refetching under this age.
 const SOFT_TTL_MS = 60 * 60 * 1000; // 1h
 // KV hard expiry — a safety net far past the soft TTL.
