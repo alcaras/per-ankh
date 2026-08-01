@@ -92,7 +92,20 @@ export interface StorageTiming {
 	// contributes to the counts above and to none of the durations below:
 	// closing a window that hasn't closed would mean inventing an end.
 	d1Spans: D1Span[];
-	// Sum of R2 read durations, body transfer included (see blob-cache.ts).
+	// Sum of the R2 reads that *complete inside the Worker* — today that is
+	// readBlob alone, get plus arrayBuffer, body transfer included (see
+	// blob-cache.ts).
+	//
+	// The save-download routes are not in it and cannot be: GET
+	// /v1/games/:id/download, its /v1/admin/ twin and the legacy share read
+	// hand `obj.body` straight to the client, so the bytes cross after the
+	// handler has returned and after emitAccessLog has already fired. There is
+	// no moment at which the Worker knows that transfer finished, so those
+	// routes log r2_ms 0 while moving the largest objects in the app. Their
+	// bucket.get() is still a real cross-region round trip; it shows up as an
+	// auto-instrumented R2 span (wrangler.toml [observability.traces]), which
+	// is where to look for it rather than here.
+	//
 	// No intervals: nothing issues concurrent R2 reads, so there is no
 	// overlap to measure.
 	r2Ms: number;
@@ -363,6 +376,8 @@ export function emitAccessLog(response: Response): void {
 		// the per-IP rate-limit count (plus its audit insert).
 		d1_events_ms: Math.round(d1EventsMs),
 		d1_events_queries: ctx.timing.d1EventsQueries,
+		// Reads that finish inside the Worker only — the streamed save
+		// downloads log 0 here. See StorageTiming.r2Ms.
 		r2_ms: Math.round(ctx.timing.r2Ms),
 		user_id: ctx.user_id,
 		error_code: ctx.error_code,
