@@ -63,8 +63,22 @@ function cacheKey(r2Key: string, parserVersion: string): Request {
 	});
 }
 
+// How a read that actually reached R2 reports itself as `blob_cache` on the
+// access log: the cache's own fill (`miss`), or a caller that deliberately
+// skipped the cache (`bypass`). The third value the field can take, `hit`, is
+// set by getBlobCached alone and can't arrive here — a hit reads bytes from
+// the colo, never from the bucket.
+type BlobCacheTag = "miss" | "bypass";
+
 // Uncached read. Returns null when the object is absent, which callers map to
 // their own BLOB_MISSING response.
+//
+// The tag is a required parameter, not something call sites remember to set
+// alongside the read. blob_cache is only meaningful if its *absence* means
+// "this route read no blob at all", and that invariant held by convention
+// until a third caller was added without it. Threading it through the one
+// function every R2 blob read goes through is what makes it uncompilable to
+// forget — the same move routeEnv makes for the D1 handles.
 //
 // r2_ms is accumulated here rather than by wrapping the binding, because
 // bucket.get() resolves as soon as the object's metadata is known — the bytes
@@ -74,7 +88,9 @@ function cacheKey(r2Key: string, parserVersion: string): Request {
 export async function readBlob(
 	bucket: R2Bucket,
 	r2Key: string,
+	tag: BlobCacheTag,
 ): Promise<ArrayBuffer | null> {
+	setLogField("blob_cache", tag);
 	const end = beginR2Read();
 	try {
 		const obj = await bucket.get(r2Key);
@@ -100,17 +116,15 @@ export async function getBlobCached(
 	const key = cacheKey(r2Key, parserVersion);
 
 	// blob_cache rides the access log so the tier's hit rate is measurable per
-	// route (issue #150). The owner branch tags its direct read `bypass`
-	// instead, which is what keeps an absent field meaning "this route read no
-	// blob at all" — see handleGameDetail.
+	// route (issue #150). `hit` is set here rather than in readBlob because it
+	// is the one outcome that never reaches the bucket.
 	const hit = await cache.match(key);
 	if (hit) {
 		setLogField("blob_cache", "hit");
 		return await hit.arrayBuffer();
 	}
-	setLogField("blob_cache", "miss");
 
-	const bytes = await readBlob(bucket, r2Key);
+	const bytes = await readBlob(bucket, r2Key, "miss");
 	// A missing object isn't cached — negative caching would keep a game
 	// unreadable for the whole TTL after an operator restores a blob.
 	if (!bytes) return null;
