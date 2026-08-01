@@ -41,19 +41,24 @@ export function specialistName(zType: string): string {
 	return SPECIALISTS[zType]?.name ?? formatEnum(zType, "SPECIALIST_");
 }
 
-function isEligibleImprovement(improvement: string): boolean {
-	return ELIGIBLE_IMPROVEMENTS[improvement] !== undefined;
+/** Specialist-eligible improvements of one kind, and how many are staffed. */
+export type SpecialistSlots = { built: number; staffed: number };
+
+/** Staffed share of a slot bucket; null when nothing eligible was built. */
+export function slotCoverage(slots: SpecialistSlots): number | null {
+	return slots.built > 0 ? slots.staffed / slots.built : null;
 }
 
-// Per-player headline metrics. `coverage` is the staffed share of the
-// specialist-eligible improvements the player has built (null when they've built
-// none); `avgUrbanLevel` is the mean tier across their urban specialists (null
-// when they have none).
+// Per-player headline metrics. `slots` is the coverage denominator split by the
+// ELIGIBLE improvement's kind rather than the placed specialist's — the question
+// is "of the farms I built that can take a specialist, how many are staffed",
+// which is a different one for rural tiles and urban buildings. `avgUrbanLevel`
+// is the mean tier across urban specialists (null when there are none).
 export type SpecialistSummary = {
 	total: number;
 	urban: number;
 	rural: number;
-	coverage: number | null;
+	slots: Record<SpecialistKind, SpecialistSlots>;
 	avgUrbanLevel: number | null;
 };
 
@@ -71,13 +76,17 @@ export function summarizeForPlayer(
 	let urban = 0;
 	let rural = 0;
 	let urbanLevelSum = 0;
-	let eligibleBuilt = 0;
-	let staffed = 0;
+	const slots: Record<SpecialistKind, SpecialistSlots> = {
+		rural: { built: 0, staffed: 0 },
+		urban: { built: 0, staffed: 0 },
+	};
 
 	for (const imp of owned) {
-		if (isEligibleImprovement(imp.improvement)) {
-			eligibleBuilt++;
-			if (imp.specialist) staffed++;
+		const eligible = ELIGIBLE_IMPROVEMENTS[imp.improvement];
+		if (eligible !== undefined) {
+			const bucket = slots[eligible.urban ? "urban" : "rural"];
+			bucket.built++;
+			if (imp.specialist) bucket.staffed++;
 		}
 		const info = specialistInfo(imp.specialist);
 		if (!info) continue;
@@ -93,7 +102,7 @@ export function summarizeForPlayer(
 		total: urban + rural,
 		urban,
 		rural,
-		coverage: eligibleBuilt > 0 ? staffed / eligibleBuilt : null,
+		slots,
 		avgUrbanLevel: urban > 0 ? urbanLevelSum / urban : null,
 	};
 }

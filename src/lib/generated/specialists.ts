@@ -295,6 +295,7 @@ export const ELIGIBLE_IMPROVEMENTS: Readonly<
 	IMPROVEMENT_COURTHOUSE_3: { urban: true },
 	IMPROVEMENT_FARM: { urban: false },
 	IMPROVEMENT_GROVE: { urban: false },
+	IMPROVEMENT_LAURION_MINE: { urban: false },
 	IMPROVEMENT_LIBRARY_1: { urban: true },
 	IMPROVEMENT_LIBRARY_2: { urban: true },
 	IMPROVEMENT_LIBRARY_3: { urban: true },

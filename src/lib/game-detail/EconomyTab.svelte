@@ -464,11 +464,12 @@
 
 	// ─── Side-by-side comparisons ─────────────────────────────────────
 	// The Military tab's diverging-bar module, pointed at what this tab counts.
-	// One panel per kind — rural / urban / wonders, and rural / urban for
-	// specialists — because that split is the strategic axis: a wide farm
-	// empire and a tall urban one show up as different blocks rather than one
-	// undifferentiated list. 1v1 like the Military panels, so it renders only
-	// for a two-sided game.
+	// One panel per kind — rural / urban / wonders — because that split is the
+	// strategic axis: a wide farm empire and a tall urban one show up as
+	// different blocks rather than one undifferentiated list. 1v1 like the
+	// Military panels, so it renders only for a two-sided game. (Specialists
+	// get the same treatment on the Specialists tab, next to the coverage
+	// numbers they explain.)
 	const matchup = $derived(orderedPlayers.length === 2 ? orderedPlayers : null);
 
 	type ComparisonPanel = {

@@ -17,9 +17,15 @@
 //                                          (EFFECTCITY_SPECIALIST_RURAL for the
 //                                          8 rural lines; the urban tiers carry
 //                                          a _1/_2/_3 suffix on the zType).
-//   Reference/XML/Infos/improvement.xml  — <Entry> with <zType> (IMPROVEMENT_*),
+//   Reference/XML/Infos/improvement*.xml — <Entry> with <zType> (IMPROVEMENT_*),
 //                                          a <Specialist> tag iff the improvement
 //                                          can hold a specialist, and <bUrban>1.
+//                                          improvement-event*.xml carry the
+//                                          event/DLC entries (LAURION_MINE takes
+//                                          a Miner) and must be read too: an
+//                                          eligible improvement missing here is
+//                                          missing from both halves of the
+//                                          coverage ratio, not just one.
 //   Reference/XML/Infos/text-*.xml       — <Entry> with <zType>TEXT_*</> and
 //                                          <en-US>. text-specialistClass.xml has
 //                                          the class line names ("Priest"); the
@@ -50,6 +56,10 @@ const REPO_ROOT = resolve(__dirname, "..");
 const SIDECAR = resolve(REPO_ROOT, ".bake/specialists.json");
 
 const RURAL_MARKER = "EFFECTCITY_SPECIALIST_RURAL";
+
+// The base improvement catalogue plus its event/DLC adds, mirroring
+// bake-improvement-builds.ts so both tables are built from the same files.
+const IMPROVEMENT_FILE = /^improvement(-event.*)?\.xml$/;
 
 interface SpecialistEntry {
 	zType?: string;
@@ -120,13 +130,20 @@ async function main(): Promise<void> {
 	const textFiles = allFiles
 		.filter((f) => /^text-.*\.xml$/.test(f))
 		.map((f) => resolve(infosDir, f));
+	const improvementFiles = allFiles
+		.filter((f) => IMPROVEMENT_FILE.test(f))
+		.sort()
+		.map((f) => resolve(infosDir, f));
 
-	const [specialistEntries, improvementEntries, ...textFileEntries] =
+	const [specialistEntries, improvementEntryLists, textFileEntries] =
 		await Promise.all([
 			loadEntries<SpecialistEntry>(resolve(infosDir, "specialist.xml")),
-			loadEntries<ImprovementEntry>(resolve(infosDir, "improvement.xml")),
-			...textFiles.map((p) => loadEntries<TextEntry>(p)),
+			Promise.all(
+				improvementFiles.map((p) => loadEntries<ImprovementEntry>(p)),
+			),
+			Promise.all(textFiles.map((p) => loadEntries<TextEntry>(p))),
 		]);
+	const improvementEntries = improvementEntryLists.flat();
 
 	const textByKey = new Map<string, string>();
 	for (const entries of textFileEntries) {
