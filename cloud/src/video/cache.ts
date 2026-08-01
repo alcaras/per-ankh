@@ -9,10 +9,16 @@
 // repopulates it, so a profile view never blocks on YouTube once warm; a cold
 // miss fetches synchronously. Transient upstream errors never overwrite a good
 // entry (fetchRecent throws rather than returning []) — worst case we serve
-// slightly-stale videos.
+// slightly-stale videos. A fetch that succeeded but degraded says so with
+// UncacheableVideos, and is served without being written (see refresh).
 
 import { logError } from "../log";
-import type { Video, VideoEnv, VideoProvider } from "./types";
+import {
+	UncacheableVideos,
+	type Video,
+	type VideoEnv,
+	type VideoProvider,
+} from "./types";
 
 // Bump when the CachedVideos shape changes — old keys orphan and expire.
 // v2: playlist entries gained per-video uploader fields (PlaylistVideo).
@@ -22,7 +28,10 @@ import type { Video, VideoEnv, VideoProvider } from "./types";
 // v4: playlist fetches now dedupe repeated video ids (a curator re-adding a
 //     video); orphan the v3 entries so a warmed playlist doesn't keep serving a
 //     duplicate-containing list that crashes the Videos tab's keyed {#each}.
-const CACHE_VERSION = 4;
+// v5: live content is dated by when the broadcast aired rather than when its
+//     VOD was published; orphan the v4 entries so a warmed feed doesn't keep
+//     serving dates that are hours-to-a-day too recent.
+const CACHE_VERSION = 5;
 // Serve a cached entry without refetching under this age.
 const SOFT_TTL_MS = 60 * 60 * 1000; // 1h
 // KV hard expiry — a safety net far past the soft TTL.
@@ -71,7 +80,19 @@ async function refresh<T extends Video>(
 	cacheId: string,
 	fetchFn: () => Promise<T[]>,
 ): Promise<T[]> {
-	const videos = await fetchFn();
+	let videos: T[];
+	try {
+		videos = await fetchFn();
+	} catch (e) {
+		// Degraded but serve-able: hand it back without writing, so the
+		// degradation lasts this one response rather than the whole TTL. On the
+		// stale path the caller has already served the prior (good) entry and
+		// discards this; leaving it unwritten is what keeps that entry. The cast
+		// is sound for the same reason the read cast below is — the payload is
+		// exactly what fetchFn produced.
+		if (e instanceof UncacheableVideos) return e.videos as T[];
+		throw e;
+	}
 	await writeCache(env, platform, cacheId, videos);
 	return videos;
 }

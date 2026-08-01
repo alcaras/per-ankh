@@ -179,14 +179,16 @@ ALLOWED_ORIGINS = "https://per-ankh.app,http://localhost:1420"
 DISCORD_CLIENT_ID = "1500901451034263604"
 # DISCORD_CLIENT_SECRET is set out-of-band:
 #   npx wrangler secret put DISCORD_CLIENT_SECRET
-# YOUTUBE_API_KEY (also a secret, set out-of-band) is used only to resolve an
-# @handle / legacy /user/ channel URL to its channel id when a user links a
-# YouTube channel (cloud/src/video/youtube.ts). Fetching recent videos uses the
-# unauthenticated RSS feed and needs no key. It's optional — no preflight
-# requires it (unlike DISCORD_CLIENT_SECRET) — but wrangler secrets are
-# per-environment, so set it in BOTH or handle/username resolution silently
-# fails in whichever env lacks it (that env can then only accept a
-# …/channel/UC… URL):
+# YOUTUBE_API_KEY (also a secret, set out-of-band) has two uses, both in
+# cloud/src/video/youtube.ts: resolving an @handle / legacy /user/ channel URL
+# to its channel id when a user links a YouTube channel, and correcting the
+# dates on live content, which the RSS feed reports as when the VOD went up
+# rather than when the broadcast aired (1 quota unit per channel refresh,
+# behind the 1h video cache). It's optional — no preflight requires it (unlike
+# DISCORD_CLIENT_SECRET) — but wrangler secrets are per-environment, so set it
+# in BOTH or, in whichever env lacks it, handle/username resolution silently
+# fails (that env can then only accept a …/channel/UC… URL) and casts show
+# their VOD dates:
 #   npx wrangler secret put YOUTUBE_API_KEY
 #   npx wrangler secret put YOUTUBE_API_KEY --env staging
 # Session cookie name. A var (not a code const) so staging can use a distinct

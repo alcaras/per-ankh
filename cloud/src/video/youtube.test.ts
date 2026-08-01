@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+	applyBroadcastStarts,
 	decodeXmlEntities,
 	parsePlaylistItemsPage,
+	parseVideosListPage,
 	parseYouTubeChannelUrl,
 	parseYouTubeFeed,
 	parseYouTubePlaylistFeed,
 	parseYouTubePlaylistUrl,
 } from "./youtube";
+import type { Video } from "./types";
 
 // A syntactically valid channel id: UC + 22 url-safe chars.
 const CHANNEL_ID = "UCabcdefghijklmnopqrstuv";
@@ -306,5 +309,90 @@ describe("parsePlaylistItemsPage", () => {
 			videos: [],
 			nextPageToken: null,
 		});
+	});
+});
+
+describe("parseVideosListPage", () => {
+	// Shapes taken from a real videos.list?part=liveStreamingDetails response:
+	// an archived broadcast, an ordinary upload (no liveStreamingDetails at all),
+	// and a broadcast that was scheduled but never aired.
+	const page = {
+		items: [
+			{
+				id: "e5eFJgzYz3Q",
+				liveStreamingDetails: {
+					actualStartTime: "2026-07-31T01:04:43Z",
+					actualEndTime: "2026-07-31T02:56:37Z",
+				},
+			},
+			{ id: "VID0000001" },
+			{
+				id: "VID0000002",
+				liveStreamingDetails: { scheduledStartTime: "2026-08-09T00:00:00Z" },
+			},
+		],
+	};
+
+	it("maps an archived broadcast to the instant it started", () => {
+		expect(parseVideosListPage(page).get("e5eFJgzYz3Q")).toBe(
+			"2026-07-31T01:04:43Z",
+		);
+	});
+
+	it("omits ordinary uploads and never-aired broadcasts", () => {
+		const starts = parseVideosListPage(page);
+		expect(starts.has("VID0000001")).toBe(false);
+		expect(starts.has("VID0000002")).toBe(false);
+		expect(starts.size).toBe(1);
+	});
+
+	it("tolerates a malformed/empty response", () => {
+		expect(parseVideosListPage(null).size).toBe(0);
+		expect(parseVideosListPage({}).size).toBe(0);
+	});
+});
+
+describe("applyBroadcastStarts", () => {
+	const video = (id: string, published_at: string): Video => ({
+		id,
+		title: id,
+		url: `https://www.youtube.com/watch?v=${id}`,
+		thumbnail_url: null,
+		published_at,
+		platform: "youtube",
+	});
+
+	it("re-dates a broadcast to its air time and leaves uploads alone", () => {
+		const out = applyBroadcastStarts(
+			[
+				video("BROADCAST01", "2026-07-31T15:27:03Z"),
+				video("UPLOAD00001", "2026-07-30T09:00:00Z"),
+			],
+			new Map([["BROADCAST01", "2026-07-31T01:04:43Z"]]),
+		);
+		expect(out.map((v) => v.published_at)).toEqual([
+			"2026-07-31T01:04:43Z",
+			"2026-07-30T09:00:00Z",
+		]);
+	});
+
+	// Regression for the reported bug: this cast aired on Jul 30 (21:04 ET) but
+	// its VOD was published 14h later on Jul 31, so the feed dated it Jul 31 and
+	// the home page rendered it as ~18h newer than it was.
+	it("moves a cast back to the day it actually aired", () => {
+		const [corrected] = applyBroadcastStarts(
+			[video("e5eFJgzYz3Q", "2026-07-31T15:27:03Z")],
+			new Map([["e5eFJgzYz3Q", "2026-07-31T01:04:43Z"]]),
+		);
+		const skewHours =
+			(Date.parse("2026-07-31T15:27:03Z") -
+				Date.parse(corrected.published_at)) /
+			3_600_000;
+		expect(skewHours).toBeCloseTo(14.4, 1);
+	});
+
+	it("returns dates untouched when nothing is a broadcast", () => {
+		const videos = [video("UPLOAD00001", "2026-07-30T09:00:00Z")];
+		expect(applyBroadcastStarts(videos, new Map())).toEqual(videos);
 	});
 });

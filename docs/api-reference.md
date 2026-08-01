@@ -314,8 +314,8 @@ Recent videos merged across the user's linked channels (newest first) — feeds 
 
 - **Auth:** Public — channels and their videos are user-published; no PII, same for every viewer.
 - **Path:** `user_id` (21-char).
-- **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform }[] }` (empty when the user has no linked channels).
-- **Notes:** Per-channel KV cache, stale-while-revalidate (serves cached instantly, refreshes in the background past a 1h soft TTL). YouTube videos come from the unauthenticated channel RSS feed.
+- **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform }[] }` (empty when the user has no linked channels). For live content `published_at` is when the broadcast aired, not when its VOD was later published — see the note below.
+- **Notes:** Per-channel KV cache, stale-while-revalidate (serves cached instantly, refreshes in the background past a 1h soft TTL). YouTube videos come from the unauthenticated channel RSS feed. That feed dates live content by its VOD publish instant, which runs hours (routinely a calendar day) after the broadcast, so when `YOUTUBE_API_KEY` is configured each refresh spends one further quota unit on `videos.list` to re-date broadcasts to `liveStreamingDetails.actualStartTime` and re-sorts. Without the key the feed's own dates stand. A refresh whose `videos.list` call fails is served but not cached, so the feed dates never persist past that one response.
 
 ### `GET /v1/users/:user_id/tournaments`
 One player's whole tournament record — played + upcoming matches, and cast appearances — for the profile "Tournaments" tab.
@@ -331,7 +331,7 @@ Cross-creator home feed — the newest uploads across all users' linked channels
 
 - **Auth:** Public — channels and their videos are user-published; no PII, same for every viewer.
 - **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform, user_id, display_name, avatar_url }[] }` (each video carries its creator; empty only when no channel has recent uploads).
-- **Notes:** Cached as one pre-assembled KV entry, stale-while-revalidate (mirrors the per-channel cache): fresh served as-is, stale served instantly while a background task re-assembles it, cold miss built synchronously and cached so the first request already returns the feed. The cold build's per-channel fetches run in parallel over mostly-warm caches (~one RSS fetch at worst). Capped at 8 (two rows of four). Underlying per-channel data is the same SWR RSS cache as `GET /v1/users/:user_id/videos`.
+- **Notes:** Cached as one pre-assembled KV entry, stale-while-revalidate (mirrors the per-channel cache): fresh served as-is, stale served instantly while a background task re-assembles it, cold miss built synchronously and cached so the first request already returns the feed. The cold build's per-channel fetches run in parallel over mostly-warm caches (at worst one RSS fetch per channel, plus one `videos.list` call where a key is configured). Capped at 8 (two rows of four). Underlying per-channel data is the same SWR cache as `GET /v1/users/:user_id/videos`, including its broadcast-date correction — so a cast is placed and labelled by when it aired.
 
 ---
 
@@ -425,9 +425,9 @@ Single match detail.
 - **Errors:** `404 MATCH_NOT_FOUND` (missing, or the match's round isn't in this tournament), `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 
 ### `GET /v1/tournaments/:id/videos`
-Uploads from the tournament's admin-set YouTube playlist (`youtube_playlist_url`) — feeds the Videos tab, whose search filters the returned list client-side. KV-cached (stale-while-revalidate), same as the profile videos read. When `YOUTUBE_API_KEY` is configured the whole playlist is enumerated via the Data API (`playlistItems.list`, paged, capped at 500) so search can reach every video; without the key it falls back to the free RSS feed's ~15 most-recent entries.
+Uploads from the tournament's admin-set YouTube playlist (`youtube_playlist_url`) — feeds the Videos tab, whose search filters the returned list client-side. KV-cached (stale-while-revalidate), same as the profile videos read. When `YOUTUBE_API_KEY` is configured the whole playlist is enumerated via the Data API (`playlistItems.list`, paged, capped at 500) so search can reach every video, and broadcasts are re-dated to when they aired (`videos.list`, one further unit per 50 videos — same correction as the profile videos read); without the key it falls back to the free RSS feed's ~15 most-recent entries, dated as the feed gave them.
 
-- **Response 200:** `{ videos: [{ id, title, url, thumbnail_url, published_at, platform, …uploader }] }`, newest first. Each video carries uploader attribution: a linked Per-Ankh uploader adds `{ user_id, display_name, avatar_url }` (Discord identity, like the creator feed); an unlinked YouTube uploader adds `{ uploader_name, uploader_url }`; a feed without an author adds neither. Empty when no playlist is configured or the stored value no longer parses.
+- **Response 200:** `{ videos: [{ id, title, url, thumbnail_url, published_at, platform, …uploader }] }`, newest first (on the keyed path, by air time for live content). Each video carries uploader attribution: a linked Per-Ankh uploader adds `{ user_id, display_name, avatar_url }` (Discord identity, like the creator feed); an unlinked YouTube uploader adds `{ uploader_name, uploader_url }`; a feed without an author adds neither. Empty when no playlist is configured or the stored value no longer parses.
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 
 ---
