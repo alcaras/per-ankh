@@ -1,5 +1,34 @@
 # Changelog
 
+## [2026-08-01-536831e] - 2026-08-01
+
+### Features
+
+- (cloud) configure Workers Logs and an OTLP log export — [b05cb82](https://github.com/becked/per-ankh/commit/b05cb82dd0e3da62566ac21c85358a219421273e)
+- (cloud) record the serving colo on the access log — [617b604](https://github.com/becked/per-ankh/commit/617b60459052be4cd7072bed1f62a8254d2f3834)
+- (cloud) export traces to Honeycomb, tagged with the normalized route — [7676137](https://github.com/becked/per-ankh/commit/76761378ae4a55385cbc152eb99caa2b25b6e2d8)
+
+### Fixes
+
+- (cloud) require a blob_cache tag on every readBlob call — [dee2cef](https://github.com/becked/per-ankh/commit/dee2cef60a3f7a5f1c69f49d19e4483239fc75ed)
+- (cloud) serve untraced when ctx.tracing is absent — [1079aa9](https://github.com/becked/per-ankh/commit/1079aa99297aa64fbf68f3039df4c71deda3334b)
+- (cloud) address review findings on the D1/R2 instrumentation — [4391501](https://github.com/becked/per-ankh/commit/4391501d59a4712edb776c46dbdf45191b1bd1d4)
+- (cloud) serve untraced when startActiveSpan itself throws — [99b71b7](https://github.com/becked/per-ankh/commit/99b71b7bd3c1876282c19197dfcf22527e628d3d)
+- (video) date live content by when it aired, not when its VOD went up — [709285e](https://github.com/becked/per-ankh/commit/709285e009fca67604c6a6dbaf01756c5a6b5c91)
+- (video) address review findings on the broadcast-date fix — [685f50e](https://github.com/becked/per-ankh/commit/685f50e5a55f2e31b2891b2734fa84d7f481843b)
+
+### Performance
+
+- (cloud) time and count every D1 round trip per request — [d7735b4](https://github.com/becked/per-ankh/commit/d7735b4f4afec0ae7d933feaa391b42f694961a3)
+- (cloud) time R2 blob reads and label the blob-cache outcome — [e8f0d67](https://github.com/becked/per-ankh/commit/e8f0d672fd190044be48b2c867235597d68b5d73)
+
+### Other
+
+- (cloud) stop naming Logpush in comments about the log sinks — [e085b8d](https://github.com/becked/per-ankh/commit/e085b8da8ea3ec5dec1edd81ae50f27afc0ae205)
+- (cloud) scope r2_ms to reads that finish inside the Worker — [35e214b](https://github.com/becked/per-ankh/commit/35e214bf8c10ac90eb4e870e1f7fb3ccc53690bc)
+- (cloud) correct two cross-references in the instrumentation notes — [5fd77e9](https://github.com/becked/per-ankh/commit/5fd77e96e72d0adc7117bc36b1b0ba7ce00b323a)
+- trim derivable content from root CLAUDE.md — [c2ac3ee](https://github.com/becked/per-ankh/commit/c2ac3eec35c0efe7c3990a0cdee243e1103ef533)
+
 ## [2026-07-29-beab8b4] - 2026-07-29
 
 ### Features
