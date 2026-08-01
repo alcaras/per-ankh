@@ -24,6 +24,7 @@ import {
 	getRequestId,
 	logError,
 	logEvent,
+	logWarn,
 	runWithLogContext,
 	setRoute,
 } from "./log";
@@ -896,6 +897,22 @@ function routeEnv(env: RawBindings, spec: RouteSpec): Env {
 	};
 }
 
+// Absence is a property of the isolate, not the request, so warn once rather
+// than on every dispatch — a per-request line would double log volume and burn
+// export events for one fact. Isolates churn often enough that "once each" is
+// still plainly visible in the sinks. Warned at all because silence is the
+// failure mode: tracing that quietly stopped reads exactly like tracing that
+// works until someone queries for spans that were never sent.
+let tracingUnavailableWarned = false;
+
+function warnTracingUnavailable(): void {
+	if (tracingUnavailableWarned) return;
+	tracingUnavailableWarned = true;
+	logWarn("tracing_unavailable", {
+		detail: "ctx.tracing absent — serving untraced, spans will not be sent",
+	});
+}
+
 function dispatch(
 	request: Request,
 	env: RawBindings,
@@ -925,7 +942,21 @@ function dispatch(
 		// cloudflare.colo is a resource attribute present on all spans — so
 		// "p95 by route × colo", the issue #150 question, is a query over
 		// this span alone rather than a join back to the access line.
-		return ctx.tracing.enterSpan(r.route, (span) => {
+		//
+		// Guarded because the type lies. `tracing` is runtime-provided and
+		// declared non-optional, but `createExecutionContext()` in
+		// @cloudflare/vitest-pool-workers hands back a context without it, and a
+		// deployed runtime behind local workerd would have the same shape.
+		// Unguarded, an absent `tracing` throws here for *every* request and the
+		// envelope's safety net turns that into a 500 across the whole API —
+		// tracing is a measurement, so it must never be able to take the app
+		// down. Serving untraced is the right failure.
+		const tracing: Tracing | undefined = ctx.tracing;
+		if (!tracing) {
+			warnTracingUnavailable();
+			return r.handler(request, routeEnv(env, r), m, ctx);
+		}
+		return tracing.enterSpan(r.route, (span) => {
 			span.setAttribute("route", r.route);
 			return r.handler(request, routeEnv(env, r), m, ctx);
 		});
