@@ -25,6 +25,7 @@ import {
 	supportedPlatforms,
 } from "./video/registry";
 import {
+	byPublishedDesc,
 	ChannelResolutionError,
 	type Video,
 	type VideoEnv,
@@ -207,8 +208,8 @@ export async function handleUserVideos(
 
 	const videos = perChannel
 		.flat()
-		// Newest first across all platforms; ISO timestamps sort lexically.
-		.sort((a, b) => (a.published_at < b.published_at ? 1 : -1))
+		// Newest first across all platforms.
+		.sort(byPublishedDesc)
 		.slice(0, MAX_MERGED_VIDEOS);
 
 	return jsonResponse({ videos }, 200, cors);
@@ -243,15 +244,12 @@ export interface CreatorVideo extends Video {
 
 // Merge per-channel lists (each already attributed to its creator) into the
 // home feed: newest-first across all creators, capped. Pure — the DB query and
-// per-channel fetch live in buildCreatorFeed. ISO timestamps sort lexically.
+// per-channel fetch live in buildCreatorFeed.
 export function mergeCreatorFeed(
 	perChannel: CreatorVideo[][],
 	cap = MAX_CREATOR_FEED_VIDEOS,
 ): CreatorVideo[] {
-	return perChannel
-		.flat()
-		.sort((a, b) => (a.published_at < b.published_at ? 1 : -1))
-		.slice(0, cap);
+	return perChannel.flat().sort(byPublishedDesc).slice(0, cap);
 }
 
 // Assemble the feed: every linked channel joined to its owner, each channel's

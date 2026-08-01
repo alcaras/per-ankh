@@ -43,7 +43,11 @@ import { d1Exec, d1Query, sqlStr } from "../wrangler";
 // object (mirrors the tournament-seed import in ./tournament.ts). Types are
 // erased at runtime, so they import cleanly by name.
 import videoRegistry from "../../../cloud/src/video/registry";
-import type { VideoEnv } from "../../../cloud/src/video/types";
+import type {
+	Video,
+	VideoEnv,
+	VideoProvider,
+} from "../../../cloud/src/video/types";
 const { providerForUrl, supportedPlatforms } = videoRegistry;
 
 // scripts/admin/commands/channels.ts → repo root is three levels up.
@@ -60,13 +64,36 @@ const MAX_URL_LEN = 500;
 
 // The Worker reads YOUTUBE_API_KEY from a wrangler secret; the CLI resolves the
 // same way the local Worker does — process env first, else cloud/.dev.vars.
-// Only @handle / /user/ resolution needs it; …/channel/UC… works without.
+// @handle / /user/ resolution needs it (…/channel/UC… works without), as does
+// the broadcast-date pass on the recent-videos fetch.
 function youtubeApiKey(): string | undefined {
 	return (
 		process.env.YOUTUBE_API_KEY ||
 		readDotVars(DEV_VARS_PATH).YOUTUBE_API_KEY ||
 		undefined
 	);
+}
+
+// fetchRecent throws UncacheableVideos when it fetched a feed but couldn't
+// correct its broadcast dates — usable videos the Worker declines to persist
+// (cloud/src/video/types.ts). For a one-off sanity check the dates don't
+// matter, so unwrap it rather than reporting a live feed as unreachable.
+// Matched by name because cloud/ is CJS: its runtime named exports don't cross
+// into this ESM script (see the registry import above), so `instanceof` has no
+// class to test against here.
+async function fetchRecentForCheck(
+	provider: VideoProvider,
+	channelId: string,
+	env: VideoEnv,
+): Promise<Video[]> {
+	try {
+		return await provider.fetchRecent(channelId, env);
+	} catch (e) {
+		if (e instanceof Error && e.name === "UncacheableVideos") {
+			return (e as Error & { videos: Video[] }).videos;
+		}
+		throw e;
+	}
 }
 
 interface UserRow {
@@ -155,10 +182,15 @@ export async function runAddChannel(
 
 	// Confirm the stored id points at a live feed: a mistyped …/channel/UC… id
 	// stores fine but yields an empty Videos tab, so surface the recent-video
-	// count (RSS, no key) as a sanity check. Non-fatal — the row is written.
+	// count (the RSS feed, plus a broadcast-date lookup when a key is present)
+	// as a sanity check. Non-fatal — the row is written.
 	let recent = "unavailable";
 	try {
-		const videos = await provider.fetchRecent(identity.channel_id, env);
+		const videos = await fetchRecentForCheck(
+			provider,
+			identity.channel_id,
+			env,
+		);
 		const latest = videos[0];
 		recent = latest
 			? `${videos.length} (latest: "${trunc(latest.title, 48)}", ${formatDate(latest.published_at)})`

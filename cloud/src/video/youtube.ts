@@ -12,7 +12,9 @@
 
 import { logError, logWarn } from "../log";
 import {
+	byPublishedDesc,
 	ChannelResolutionError,
+	UncacheableVideos,
 	type ChannelIdentity,
 	type PlaylistVideo,
 	type Video,
@@ -307,13 +309,6 @@ export function parseYouTubePlaylistFeed(xml: string): PlaylistVideo[] {
 	return videos;
 }
 
-// Newest first. ISO timestamps sort lexically, and an entry missing a date
-// ("") falls to the end. Shared by all three fetch paths so the "newest first"
-// contract the Videos tab documents has one definition.
-function byPublishedDesc(a: Video, b: Video): number {
-	return a.published_at < b.published_at ? 1 : -1;
-}
-
 // ─── Broadcast dates ─────────────────────────────────────────────────
 //
 // A tournament cast is streamed live, and for live content the feed's
@@ -367,19 +362,22 @@ export function applyBroadcastStarts<T extends Video>(
 }
 
 // Broadcast start instants for `ids`, via videos.list, batched at
-// VIDEOS_LIST_BATCH.
+// VIDEOS_LIST_BATCH. `degraded` is true when any batch failed, so its videos
+// still carry the feed's VOD dates.
 //
 // NEVER throws, unlike the feed fetches around it. Enrichment improves a date we
 // already have; it is not a precondition for having one. A quota-exhausted or
 // failing videos.list therefore degrades that batch to its feed <published> —
 // exactly the pre-enrichment behavior — rather than discarding a feed we already
 // fetched successfully. Each batch is independent, so one bad page doesn't cost
-// the others.
+// the others. What the caller must not do is let a degraded result be cached;
+// that is what `degraded` is for.
 async function fetchBroadcastStarts(
 	ids: string[],
 	apiKey: string,
-): Promise<Map<string, string>> {
+): Promise<{ starts: Map<string, string>; degraded: boolean }> {
 	const starts = new Map<string, string>();
+	let degraded = false;
 	for (let i = 0; i < ids.length; i += VIDEOS_LIST_BATCH) {
 		const url = new URL("https://www.googleapis.com/youtube/v3/videos");
 		url.searchParams.set("part", "liveStreamingDetails");
@@ -389,10 +387,11 @@ async function fetchBroadcastStarts(
 			const res = await fetch(url);
 			if (!res.ok) {
 				const detail = await res.text().catch(() => "");
-				logWarn("youtube_videos_list_failed", {
+				logError("youtube_videos_list_failed", null, {
 					yt_status: res.status,
 					yt_detail: detail.slice(0, 500),
 				});
+				degraded = true;
 				continue;
 			}
 			for (const [id, start] of parseVideosListPage(await res.json())) {
@@ -400,24 +399,31 @@ async function fetchBroadcastStarts(
 			}
 		} catch (e) {
 			logError("youtube_videos_list_failed", e);
+			degraded = true;
 		}
 	}
-	return starts;
+	return { starts, degraded };
 }
 
 // Correct the feed's dates for live content, where a key allows it. Without one
 // every date stands as the feed gave it — the channel path stays usable with no
-// credentials (see the module header). Callers must re-sort afterwards: moving a
-// broadcast back to its air time can push it past a video published after it.
+// credentials (see the module header), and that is not a degraded result but
+// the documented keyless behavior, so `degraded` stays false.
+//
+// Callers must re-sort afterwards — moving a broadcast back to its air time can
+// push it past a video published after it — and must throw UncacheableVideos
+// with the finished list when `degraded`, once the rest of their pipeline has
+// run.
 async function withBroadcastStarts<T extends Video>(
 	videos: T[],
 	apiKey: string | undefined,
-): Promise<T[]> {
-	if (!apiKey || videos.length === 0) return videos;
+): Promise<{ videos: T[]; degraded: boolean }> {
+	if (!apiKey || videos.length === 0) return { videos, degraded: false };
 	// Distinct ids only — a playlist may list one video twice (see dedupeById),
 	// and a repeat would otherwise burn a slot in the 50-id batch.
 	const ids = [...new Set(videos.map((v) => v.id))];
-	return applyBroadcastStarts(videos, await fetchBroadcastStarts(ids, apiKey));
+	const { starts, degraded } = await fetchBroadcastStarts(ids, apiKey);
+	return { videos: applyBroadcastStarts(videos, starts), degraded };
 }
 
 async function fetchYouTubeRecent(
@@ -434,14 +440,20 @@ async function fetchYouTubeRecent(
 		throw new Error(`youtube feed responded ${res.status}`);
 	}
 	const xml = await res.text();
-	// Cap on the feed's own order before enriching, so this costs one videos.list
-	// call rather than one per feed page; then re-sort, because re-dating a
-	// broadcast to when it aired can move it past a video published after it.
-	const recent = await withBroadcastStarts(
+	// The cap runs on the feed's own order, so the feed's dates still decide
+	// which entries we keep: enrichment only ever moves a broadcast earlier, so
+	// one of the ~3 entries past the cap can be newer than a kept broadcast and
+	// go unsurfaced anyway. Then re-sort — that same shift can move a broadcast
+	// past a video published after it.
+	const { videos, degraded } = await withBroadcastStarts(
 		parseYouTubeFeed(xml).slice(0, MAX_VIDEOS),
 		env.YOUTUBE_API_KEY,
 	);
-	return recent.sort(byPublishedDesc);
+	const recent = videos.sort(byPublishedDesc);
+	// Enrichment failed: these are the feed's VOD dates, i.e. the bug. Serve
+	// them, but keep them out of the cache.
+	if (degraded) throw new UncacheableVideos(recent);
+	return recent;
 }
 
 // A YouTube playlist can list the same video in more than one slot — a curator
@@ -484,8 +496,7 @@ export async function fetchYouTubePlaylistVideos(
 	// chronological (a curated or append-ordered playlist won't be) — so sort
 	// newest-first before capping, both to honor the "newest first" contract the
 	// Videos tab documents and so the cap keeps the newest entries, not whichever
-	// happen to sit first. Mirrors the home feed's ordering (mergeCreatorFeed);
-	// ISO timestamps sort lexically and entries missing a date fall to the end.
+	// happen to sit first. Mirrors the home feed's ordering (mergeCreatorFeed).
 	return dedupeById(parseYouTubePlaylistFeed(xml).sort(byPublishedDesc)).slice(
 		0,
 		MAX_VIDEOS,
@@ -556,8 +567,9 @@ export function parsePlaylistItemsPage(data: unknown): {
 // Data API key and spends quota (1 unit/page, plus one per 50 videos for the
 // broadcast-start pass). Uncached (getVideosCached wraps it). Returns [] for a
 // missing/private playlist (404); THROWS on a transient upstream failure so the
-// cache keeps serving a prior good result. Sorted newest-first and capped like
-// the RSS path, for the same reasons.
+// cache keeps serving a prior good result, and throws UncacheableVideos when
+// only the broadcast-start pass failed. Sorted newest-first and capped like the
+// RSS path, for the same reasons.
 export async function fetchYouTubePlaylistVideosViaApi(
 	playlistId: string,
 	apiKey: string,
@@ -602,11 +614,15 @@ export async function fetchYouTubePlaylistVideosViaApi(
 	// Enrich before sorting so the order reflects when casts aired, not when
 	// their VODs went public — two casts from one evening can otherwise land in
 	// the order their VODs were published the next day.
-	const enriched = await withBroadcastStarts(all, apiKey);
-	return dedupeById(enriched.sort(byPublishedDesc)).slice(
+	const { videos, degraded } = await withBroadcastStarts(all, apiKey);
+	const listed = dedupeById(videos.sort(byPublishedDesc)).slice(
 		0,
 		MAX_PLAYLIST_VIDEOS,
 	);
+	// Enrichment failed: these are the feed's VOD dates, i.e. the bug. Serve
+	// them, but keep them out of the cache.
+	if (degraded) throw new UncacheableVideos(listed);
+	return listed;
 }
 
 export const youtubeProvider: VideoProvider = {

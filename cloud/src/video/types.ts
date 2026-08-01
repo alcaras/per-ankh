@@ -44,6 +44,14 @@ export interface PlaylistVideo extends Video {
 	uploader_name: string | null;
 }
 
+// Newest first, for any list of normalized videos. ISO timestamps sort
+// lexically, and an entry missing a date ("") falls to the end. Every fetch and
+// merge path sorts through this, so the "newest first" contract they each
+// document has one definition.
+export function byPublishedDesc(a: Video, b: Video): number {
+	return a.published_at < b.published_at ? 1 : -1;
+}
+
 // A resolved channel: the platform, the (canonicalized) URL we show the
 // user, and the native id the fetch path needs.
 export interface ChannelIdentity {
@@ -54,7 +62,9 @@ export interface ChannelIdentity {
 
 // Bindings a provider may need: KV for the recent-videos cache, and any
 // per-provider API credential. YOUTUBE_API_KEY is optional — a `/channel/UC…`
-// URL resolves without it; only handle/username resolution calls the Data API.
+// URL resolves without it, and the fetch path falls back to the feed's own
+// dates. With it, handle/username resolution and the broadcast-date pass on
+// recent videos both call the Data API (see youtube.ts).
 export interface VideoEnv {
 	SESSIONS_KV: KVNamespace;
 	YOUTUBE_API_KEY?: string;
@@ -74,6 +84,21 @@ export class ChannelResolutionError extends Error {
 	}
 }
 
+// Thrown by a fetch path that produced usable videos it does not want
+// persisted: the list is serve-able but degraded, so caching it would hold the
+// degradation for the whole TTL. Today's one source is a failed broadcast-date
+// enrichment (see fetchBroadcastStarts in youtube.ts), which leaves live
+// content dated by its VOD publish instant — the very bug the enrichment
+// exists to fix. The cache layer serves `videos` and skips the write, so a
+// warm entry keeps its prior good dates and a cold miss simply retries next
+// request.
+export class UncacheableVideos extends Error {
+	constructor(readonly videos: Video[]) {
+		super("video fetch degraded — serve, do not cache");
+		this.name = "UncacheableVideos";
+	}
+}
+
 export interface VideoProvider {
 	readonly platform: VideoPlatform;
 
@@ -90,6 +115,9 @@ export interface VideoProvider {
 	// Fetch the channel's recent videos from the platform (uncached — the
 	// cache layer wraps this). Returns [] for a channel with no uploads;
 	// THROWS on a transient upstream failure so the cache layer can keep
-	// serving a prior good result instead of caching an error as "empty".
+	// serving a prior good result instead of caching an error as "empty", and
+	// throws UncacheableVideos when it has videos worth serving but not
+	// storing. A caller outside the cache layer must handle the latter — it
+	// carries a perfectly good list (see scripts/admin/commands/channels.ts).
 	fetchRecent(channelId: string, env: VideoEnv): Promise<Video[]>;
 }
