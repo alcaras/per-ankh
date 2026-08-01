@@ -30,6 +30,8 @@
 // Only `games/*` reads go through here today. `saves/*` (the raw ZIP download)
 // deliberately does not — see the note at the R2 read in handleGameDownload.
 
+import { beginR2Op, setLogField } from "./log";
+
 // Synthetic key origin — same idiom as the download rate-limit counter in
 // share-legacy.ts. R2 keys are `games/{id}.json.gz` where id is a nanoid(21)
 // over [A-Za-z0-9_-], so they're URL-path-safe as-is with no escaping.
@@ -61,14 +63,49 @@ function cacheKey(r2Key: string, parserVersion: string): Request {
 	});
 }
 
+// How a read that actually reached R2 reports itself as `blob_cache` on the
+// access log: the cache's own fill (`miss`), or a caller that deliberately
+// skipped the cache (`bypass`). The third value the field can take, `hit`, is
+// set by getBlobCached alone and can't arrive here — a hit reads bytes from
+// the colo, never from the bucket.
+type BlobCacheTag = "miss" | "bypass";
+
 // Uncached read. Returns null when the object is absent, which callers map to
 // their own BLOB_MISSING response.
+//
+// The tag is a required parameter, not something call sites remember to set
+// alongside the read. blob_cache is only meaningful if its *absence* means
+// "this route read no `games/*` blob", and that invariant held by convention
+// until a third caller was added without it. Threading it through the one
+// function every cached-tier blob read goes through is what makes it
+// uncompilable to forget — the same move routeEnv makes for the D1 handles.
+//
+// The scope in that sentence is load-bearing. The raw `saves/*` ZIP downloads
+// read R2 without a tag and without a measurable duration, so on the access
+// line they would otherwise be indistinguishable from a route that touched no
+// object at all — `blob_cache IS NULL AND r2_ms = 0` reads as "no R2 work"
+// and would match the routes moving the largest objects in the app. Both of
+// them set r2_op "streamed" instead, which is what makes the difference
+// expressible in a query.
+//
+// r2_ms is accumulated here rather than by wrapping the binding, because
+// bucket.get() resolves as soon as the object's metadata is known — the bytes
+// move in arrayBuffer(), so timing the get alone would report a fraction of
+// the crossing. Wrapping the read is also what keeps the cache hit in
+// getBlobCached *out* of r2_ms, which is the whole point of the number.
 export async function readBlob(
 	bucket: R2Bucket,
 	r2Key: string,
+	tag: BlobCacheTag,
 ): Promise<ArrayBuffer | null> {
-	const obj = await bucket.get(r2Key);
-	return obj ? await obj.arrayBuffer() : null;
+	setLogField("blob_cache", tag);
+	const end = beginR2Op();
+	try {
+		const obj = await bucket.get(r2Key);
+		return obj ? await obj.arrayBuffer() : null;
+	} finally {
+		end();
+	}
 }
 
 // Read an R2 object through the per-POP cache, filling it on a miss.
@@ -86,10 +123,16 @@ export async function getBlobCached(
 	const cache = caches.default;
 	const key = cacheKey(r2Key, parserVersion);
 
+	// blob_cache rides the access log so the tier's hit rate is measurable per
+	// route (issue #150). `hit` is set here rather than in readBlob because it
+	// is the one outcome that never reaches the bucket.
 	const hit = await cache.match(key);
-	if (hit) return await hit.arrayBuffer();
+	if (hit) {
+		setLogField("blob_cache", "hit");
+		return await hit.arrayBuffer();
+	}
 
-	const bytes = await readBlob(bucket, r2Key);
+	const bytes = await readBlob(bucket, r2Key, "miss");
 	// A missing object isn't cached — negative caching would keep a game
 	// unreadable for the whole TTL after an operator restores a blob.
 	if (!bytes) return null;

@@ -48,7 +48,7 @@ A nightly cron (03:47 UTC, `[triggers]` in `cloud/wrangler.toml`) prunes the `ev
 
 - Each game records the uploader's nation (`user_nation`) and win flag (`user_won`) at upload time. Re-uploads from a different perspective produce a new game record.
 - Upload supports an "observer" mode (`uploaderIndex === null`) for tournament admins archiving matches or users uploading a friend's save. Server records nation and won as NULL, no `is_uploader=TRUE` rows, no `online_id` captured.
-- Multiplayer games store `online_id` (Steam/GOG/Epic) per human player in the `player_roster` blob. For anonymous share viewers, `online_id` is the **only** blob field stripped — via a deep walk (`stripOnlineIds`/`stripOnlineIdsDeep` in `cloud/src/games.ts`) before the blob is returned; owners keep it. `discord_id`/`username` live only in D1 metadata, never in the share blob. **PII is never logged.**
+- Multiplayer games store `online_id` (Steam/GOG/Epic) per human player in the `player_roster` blob. For anonymous share viewers, `online_id` is the **only** blob field stripped — via a deep walk (`stripOnlineIds`/`stripOnlineIdsDeep` in `cloud/src/games.ts`) before the blob is returned; owners keep it. `discord_id`/`username` live only in D1 metadata, never in the share blob. **Never put PII in a log field** — the `PII_KEYS` deny-list in `cloud/src/log.ts` is the last line of defense, not the first.
 
 ## Tournament engine
 

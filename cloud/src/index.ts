@@ -17,13 +17,14 @@
 // events-retention sweep (cron in wrangler.toml, policy in retention.ts).
 
 import { cloudCorsHeaders, legacyCorsHeaders } from "./util";
-import { staleTolerantSession } from "./d1";
+import { instrumentD1, staleTolerantSession } from "./d1";
 import type { QueryableD1 } from "./d1";
 import {
 	emitAccessLog,
 	getRequestId,
 	logError,
 	logEvent,
+	logWarn,
 	runWithLogContext,
 	setRoute,
 } from "./log";
@@ -159,7 +160,7 @@ type RawBindings = Omit<Env, "SHARE_DB" | "EVENTS_DB"> & {
 // Routes are declared as a typed table so the dispatch loop can:
 //   (a) match by exact path or regex,
 //   (b) set the route pattern (e.g. "GET /v1/games/:id") on the log
-//       context for stable per-route grouping in Logpush,
+//       context for stable per-route grouping in the log sinks,
 //   (c) keep route additions to a single self-describing edit.
 //
 // More-specific patterns (e.g. /v1/games/:id/download) MUST appear before
@@ -878,14 +879,57 @@ function isCloudPath(pathname: string): boolean {
 // off, and give `staleTolerant` routes a Sessions API handle for everything
 // else. One session per request — sharing one across requests would let
 // bookmarks accumulate globally and defeat the point.
+//
+// Both handles are then wrapped for timing (instrumentD1, d1.ts), which is
+// what puts d1_ms / d1_queries / d1_wall_ms on the access log for every query
+// a handler issues through SHARE_DB or EVENTS_DB. SECURITY_DB is deliberately
+// outside it — see the coverage note in d1.ts. Wrapping each *final* handle
+// rather than the raw binding keeps `withSession()` a call on the binding
+// itself, and keeps the events subset attributable — the two handles are the
+// same database, so the handle is the only thing that distinguishes an events
+// query from a share query.
 function routeEnv(env: RawBindings, spec: RouteSpec): Env {
 	return {
 		...env,
-		EVENTS_DB: env.SHARE_DB,
-		SHARE_DB: spec.staleTolerant
-			? staleTolerantSession(env.SHARE_DB)
-			: env.SHARE_DB,
+		EVENTS_DB: instrumentD1(env.SHARE_DB, "events"),
+		SHARE_DB: instrumentD1(
+			spec.staleTolerant ? staleTolerantSession(env.SHARE_DB) : env.SHARE_DB,
+			"share",
+		),
 	};
+}
+
+// Absence is a property of the isolate, not the request, so warn once rather
+// than on every dispatch — a per-request line would double log volume and burn
+// export events for one fact. Isolates churn often enough that "once each" is
+// still plainly visible in the sinks. Warned at all because silence is the
+// failure mode: tracing that quietly stopped reads exactly like tracing that
+// works until someone queries for spans that were never sent.
+//
+// A startActiveSpan that throws is an isolate-level fact for the same reason,
+// so it gets its own latch rather than an error line per request. Separate
+// latches, not one shared: the two are distinguishable causes with different
+// fixes (a compatibility_date bump vs. whatever the throw says), and a shared
+// one would let the first swallow the second.
+let tracingUnavailableWarned = false;
+let tracingFailedWarned = false;
+
+function warnTracingUnavailable(): void {
+	if (tracingUnavailableWarned) return;
+	tracingUnavailableWarned = true;
+	logWarn("tracing_unavailable", {
+		detail:
+			"ctx.tracing absent or without startActiveSpan — serving untraced, spans will not be sent",
+	});
+}
+
+function warnTracingFailed(err: unknown): void {
+	if (tracingFailedWarned) return;
+	tracingFailedWarned = true;
+	logError("tracing_start_failed", err, {
+		detail:
+			"startActiveSpan threw before the handler ran — serving untraced, spans will not be sent",
+	});
 }
 
 function dispatch(
@@ -896,15 +940,86 @@ function dispatch(
 	const url = new URL(request.url);
 	for (const r of ROUTES) {
 		if (r.method !== request.method) continue;
+		// `null` for path routes is the handler's match argument, not a
+		// sentinel — path routes have no capture groups to pass.
+		let m: RegExpMatchArray | null = null;
 		if (r.match.kind === "path") {
 			if (r.match.path !== url.pathname) continue;
-			setRoute(r.route);
-			return r.handler(request, routeEnv(env, r), null, ctx);
+		} else {
+			m = url.pathname.match(r.match.regex);
+			if (!m) continue;
 		}
-		const m = url.pathname.match(r.match.regex);
-		if (!m) continue;
 		setRoute(r.route);
-		return r.handler(request, routeEnv(env, r), m, ctx);
+		// The same normalized route the access line carries, attached to a
+		// span. Tracing needs its own copy because nothing the platform emits
+		// can stand in: root spans carry url.path, whose cardinality is
+		// unbounded (one cell per game id), and there is no http.route
+		// attribute. setAttribute only works on spans we create, so wrapping
+		// the handler is the only place to put it.
+		//
+		// Every D1 and R2 span the handler produces nests under this one, and
+		// cloudflare.colo is a resource attribute present on all spans — so
+		// "p95 by route × colo", the issue #150 question, is a query over
+		// this span alone rather than a join back to the access line.
+		//
+		// startActiveSpan + an explicit end(), not enterSpan. The callback
+		// returns a *pending* promise, and the two differ in exactly that case:
+		// enterSpan is free to close the span when the callback returns rather
+		// than when its promise settles, which would leave a ~0ms span with
+		// nothing nested under it — losing both halves of the goal above, and
+		// silently, since the route attribute would still be correct. This form
+		// is right under either semantics. `.finally()` is total because every
+		// entry in ROUTES returns Promise<Response>.
+		//
+		// Guarded on the method, not just the object, because two different
+		// things can be missing. `tracing` is runtime-provided and declared
+		// non-optional, but `createExecutionContext()` in
+		// @cloudflare/vitest-pool-workers hands back a context without it, and a
+		// deployed runtime behind local workerd would have the same shape.
+		// startActiveSpan is separately newer than our compatibility_date
+		// (2024-12-01, see wrangler.toml) — nothing in this workerd build gates
+		// it per-method and enterSpan works at that date, so it is expected to
+		// be there, but "expected" is not "checked against the deployed
+		// runtime". Either absence unguarded throws for *every* request and the
+		// envelope's safety net turns that into a 500 across the whole API —
+		// tracing is a measurement, so it must never be able to take the app
+		// down. Serving untraced is the right failure, and the warn is what
+		// makes it visible instead of silent.
+		const tracing: Tracing | undefined = ctx.tracing;
+		if (!tracing || typeof tracing.startActiveSpan !== "function") {
+			warnTracingUnavailable();
+			return r.handler(request, routeEnv(env, r), m, ctx);
+		}
+		// The check above proves the method is *there*, not that calling it
+		// works. Tracing is a beta API and its enablement lives outside this
+		// repo, so a throw out of a function that is plainly present is a
+		// distinct failure from an absent one — and an unguarded one costs the
+		// whole API for exactly the reason the check exists to prevent. Same
+		// guard, same fallback: serve untraced.
+		//
+		// `entered` is what makes that fallback safe to take. Re-running the
+		// handler is only correct if it never ran, and the callback is where it
+		// runs, so a throw from inside the callback rethrows instead — which is
+		// precisely the pre-tracing behaviour (up to the envelope, 500). Set
+		// after setAttribute so a throw from *that* is still recoverable, and
+		// before the handler call so no synchronous throw out of a handler can
+		// re-enter it. Handlers are all `async` and so can't throw
+		// synchronously today; a POST run twice is a much worse failure than an
+		// untraced one, and this doesn't depend on that staying true.
+		let entered = false;
+		try {
+			return tracing.startActiveSpan(r.route, (span) => {
+				span.setAttribute("route", r.route);
+				entered = true;
+				return r
+					.handler(request, routeEnv(env, r), m, ctx)
+					.finally(() => span.end());
+			});
+		} catch (err) {
+			if (entered) throw err;
+			warnTracingFailed(err);
+			return r.handler(request, routeEnv(env, r), m, ctx);
+		}
 	}
 	// 404 — pick CORS based on path so error responses still allow the
 	// origin that asked. The cloud helper echoes the request Origin; the
