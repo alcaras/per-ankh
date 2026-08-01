@@ -92,22 +92,36 @@ export interface StorageTiming {
 	// contributes to the counts above and to none of the durations below:
 	// closing a window that hasn't closed would mean inventing an end.
 	d1Spans: D1Span[];
-	// Sum of the R2 reads that *complete inside the Worker* — today that is
-	// readBlob alone, get plus arrayBuffer, body transfer included (see
-	// blob-cache.ts).
+	// Sum of the R2 operations that *complete inside the Worker*: blob reads
+	// (readBlob — get plus arrayBuffer, body transfer included, see
+	// blob-cache.ts) and the upload/cleanup writes and deletes in games.ts.
+	// Writes are in it because they are as measurable as reads and POST
+	// /v1/games is the heaviest R2 path in the app — a sum that skipped them
+	// would score the upload route as doing no R2 work at all.
+	//
+	// Two exclusions, both deliberate:
 	//
 	// The save-download routes are not in it and cannot be: GET
-	// /v1/games/:id/download, its /v1/admin/ twin and the legacy share read
-	// hand `obj.body` straight to the client, so the bytes cross after the
-	// handler has returned and after emitAccessLog has already fired. There is
-	// no moment at which the Worker knows that transfer finished, so those
-	// routes log r2_ms 0 while moving the largest objects in the app. Their
-	// bucket.get() is still a real cross-region round trip; it shows up as an
-	// auto-instrumented R2 span (wrangler.toml [observability.traces]), which
-	// is where to look for it rather than here.
+	// /v1/games/:id/download and its /v1/admin/ twin hand `obj.body` straight
+	// to the client, so the bytes cross after the handler has returned and
+	// after emitAccessLog has already fired. There is no moment at which the
+	// Worker knows that transfer finished, so those routes log r2_ms 0 while
+	// moving the largest objects in the app — they carry r2_op "streamed" to
+	// say so (see blob-cache.ts on the blob_cache field). Their bucket.get() is
+	// still a real cross-region round trip; it shows up as an auto-instrumented
+	// R2 span (wrangler.toml [observability.traces]), which is where to look
+	// for it rather than here.
 	//
-	// No intervals: nothing issues concurrent R2 reads, so there is no
-	// overlap to measure.
+	// The legacy share routes (share-legacy.ts) are not instrumented at all.
+	// They are frozen and slated for decom, so they were left alone rather than
+	// wired up and then deleted.
+	//
+	// No intervals, unlike the D1 side. The one place concurrent R2 operations
+	// happen — the parallel puts on upload, and the parallel deletes that clean
+	// up after them — opens a single window around the whole `Promise.all`, so
+	// there is no overlap to double-count and nothing for interval algebra to
+	// merge. The overlap question is a D1 one: it is the query round trips
+	// issue #150 is about.
 	r2Ms: number;
 }
 
@@ -224,8 +238,9 @@ export function beginD1Query(handle: D1Handle): () => void {
 	};
 }
 
-// Same shape for one R2 read. Only the sum is kept (see StorageTiming.r2Ms).
-export function beginR2Read(): () => void {
+// Same shape for one R2 operation — read, write or delete. Only the sum is
+// kept (see StorageTiming.r2Ms).
+export function beginR2Op(): () => void {
 	const ctx = als.getStore();
 	if (!ctx) return () => {};
 	const start = performance.now();
@@ -376,8 +391,9 @@ export function emitAccessLog(response: Response): void {
 		// the per-IP rate-limit count (plus its audit insert).
 		d1_events_ms: Math.round(d1EventsMs),
 		d1_events_queries: ctx.timing.d1EventsQueries,
-		// Reads that finish inside the Worker only — the streamed save
-		// downloads log 0 here. See StorageTiming.r2Ms.
+		// Reads, writes and deletes that finish inside the Worker — the
+		// streamed save downloads log 0 here and say so with r2_op. See
+		// StorageTiming.r2Ms.
 		r2_ms: Math.round(ctx.timing.r2Ms),
 		user_id: ctx.user_id,
 		error_code: ctx.error_code,

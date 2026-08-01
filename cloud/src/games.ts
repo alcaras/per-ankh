@@ -40,7 +40,7 @@ import { isSiteAdmin } from "./admin";
 import { buildAvatarUrl } from "./auth";
 import { displayNameSql } from "./identity";
 import { captureOnlineIds } from "./online-ids";
-import { logError, logWarn } from "./log";
+import { beginR2Op, logError, logWarn, setLogField } from "./log";
 import { isTournamentAdmin } from "./tournament/authz";
 import { maybeAdvanceAfterMatchReport } from "./tournament/admin";
 import {
@@ -1714,7 +1714,10 @@ export async function handleGameUpload(
 	const blobKey = `games/${gameId}.json.gz`;
 	const zipKey = `saves/${gameId}.zip`;
 
-	// R2 puts in parallel
+	// R2 puts in parallel. Timed as one window rather than two: they overlap,
+	// so summing them separately would report more R2 time than the request
+	// spent (see StorageTiming.r2Ms).
+	const endPuts = beginR2Op();
 	try {
 		await Promise.all([
 			env.SHARE_BUCKET.put(blobKey, compressedData, {
@@ -1738,6 +1741,8 @@ export async function handleGameUpload(
 	} catch (e) {
 		logError("r2_put_failed", e, { game_id: gameId });
 		return errorResponse("Storage write failed", 500, cors, "R2_FAILED");
+	} finally {
+		endPuts();
 	}
 
 	// Evict the blob-cache entry under the version this re-import supersedes.
@@ -1831,6 +1836,7 @@ export async function handleGameUpload(
 		// row continues to render the new (fresher) data, with a stale
 		// parser_version badge. Acceptable degraded state vs. data loss.
 		if (!isReimport) {
+			const endCleanup = beginR2Op();
 			try {
 				await Promise.all([
 					env.SHARE_BUCKET.delete(blobKey),
@@ -1838,6 +1844,8 @@ export async function handleGameUpload(
 				]);
 			} catch (cleanupErr) {
 				logError("orphaned_blob", cleanupErr, { game_id: gameId });
+			} finally {
+				endCleanup();
 			}
 		}
 		return errorResponse("Database write failed", 500, cors, "D1_FAILED");
@@ -2752,6 +2760,7 @@ export async function handleGameDelete(
 	}
 
 	// R2 cleanup first (hardest to undo); D1 cascade handles dependents.
+	const endDeletes = beginR2Op();
 	try {
 		await Promise.all([
 			env.SHARE_BUCKET.delete(`games/${gameId}.json.gz`),
@@ -2759,6 +2768,8 @@ export async function handleGameDelete(
 		]);
 	} catch (e) {
 		logError("r2_delete_failed", e, { game_id: gameId });
+	} finally {
+		endDeletes();
 	}
 
 	await env.SHARE_DB.prepare("DELETE FROM games WHERE game_id = ?")
@@ -2861,6 +2872,12 @@ export async function handleGameDownload(
 	// costs the streaming guarantee below at the 50MB ceiling — and downloads
 	// are an explicit, rate-limited user action, not the repeat traffic the
 	// cache exists for. See cloud/src/blob-cache.ts.
+	//
+	// Which also means no blob_cache tag and an unmeasurable duration: the body
+	// crosses to the client after emitAccessLog has fired, so this route logs
+	// r2_ms 0 while moving the largest objects in the app. r2_op says which of
+	// the two "no R2 work" shapes this line actually is.
+	setLogField("r2_op", "streamed");
 	const obj = await env.SHARE_BUCKET.get(`saves/${gameId}.zip`);
 	if (!obj) return errorResponse("Save missing", 404, cors, "BLOB_MISSING");
 
@@ -3079,6 +3096,10 @@ export async function handleAdminDownload(
 		.first<{ game_name: string | null; display_name: string | null }>();
 	if (!row) return errorResponse("Not found", 404, cors, "NOT_FOUND");
 
+	// Streams the body like its non-admin twin above, so the same caveat
+	// applies: no blob_cache tag, r2_ms 0, and r2_op to tell that apart from a
+	// route that touched no object.
+	setLogField("r2_op", "streamed");
 	const obj = await env.SHARE_BUCKET.get(`saves/${gameId}.zip`);
 	if (!obj) return errorResponse("Save missing", 404, cors, "BLOB_MISSING");
 

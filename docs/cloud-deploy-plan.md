@@ -504,7 +504,7 @@ the next feature.
 
 > **Status: none of this has ever run.** Every `[observability]` block described here landed on the `perf/d1-instrumentation` branch and `main` has no observability config at all, so no version of it has been deployed. **Read this section as researched, not observed.** Claims about what Cloudflare indexes, what the export delivers, and what a record looks like on arrival come from vendor documentation, and vendor documentation has already proved wrong here once (§6.1.4 on `cloudflare.colo`). §6.1.5 is the checklist that converts this section from researched to observed; until it has been run, do not build anything on a specific field being queryable.
 >
-> Two claims **are** observed, both from source rather than docs: `db.query.text` excludes bound values (§6.1.4) and `ctx.tracing.enterSpan` works at our compatibility date (§6.1.4).
+> Two claims **are** observed, both from source rather than docs: `db.query.text` excludes bound values (§6.1.4) and the `ctx.tracing` API is exposed at our compatibility date (§6.1.4). The second is narrower than it looks — `enterSpan` was exercised at that date, `startActiveSpan` (what `dispatch()` actually calls) was not, and §6.1.4 says what that rests on.
 
 `cloud/src/log.ts` emits one JSON object per `console.log`: one `type=access` line per request carrying `route`, `colo`, `status`, `duration_ms` and the `d1_*`/`r2_*` storage-timing block, plus `type=event` lines correlated by `request_id`. Both **log** sinks below consume exactly those lines, so the `scrubPii` deny-list in `log.ts` is the only PII gate they have.
 
@@ -517,7 +517,7 @@ the next feature.
 
 `persist = true` is set explicitly *because* Cloudflare's own OTLP example sets it to `false`. That value means "export only, keep nothing in Cloudflare" — copying the example would silently delete the hot window.
 
-**The exports send our data to a third-party data processor — Honeycomb (§6.1.2).** For log lines `scrubPii` runs first and the deny-list is unchanged, but `user_id` is on every access line. For spans nothing of ours runs at all. Either way this is a deliberate widening of where app data goes, not an implementation detail.
+**The exports send our data to a third-party data processor — Honeycomb (§6.1.2).** For log lines `scrubPii` runs first and the deny-list is unchanged, but `user_id` is on every access line. For spans nothing of ours runs at all, and that includes the **request query string**, which the access line has never carried and which does contain PII on two routes — §6.1.4 names them and records the decision to accept it. Either way this is a deliberate widening of where app data goes, not an implementation detail.
 
 #### 6.1.1 Why not Logpush → R2
 
@@ -551,10 +551,10 @@ Still rejected, recorded so they don't get reopened: **a Tail Worker** (would st
 
 **Provider: Honeycomb** — chosen over Grafana Cloud and Axiom for 60-day free-tier retention against their 14 and 30, and for high-cardinality slicing that suits the `route` × `colo` question. Honeycomb bills a span as an event against the same 20M/month free allowance the log lines draw on; §6.1.4 sizes the combined draw.
 
-| Destination      | Type   | OTLP endpoint                          |
-| ---------------- | ------ | -------------------------------------- |
-| `per-ankh-logs`   | Logs   | `https://api.honeycomb.io/v1/logs`    |
-| `per-ankh-traces` | Traces | `https://api.honeycomb.io/v1/traces`  |
+| Destination       | Type   | OTLP endpoint                          |
+| ----------------- | ------ | -------------------------------------- |
+| `per-ankh-logs`   | Logs   | `https://api.honeycomb.io/v1/logs`     |
+| `per-ankh-traces` | Traces | `https://api.honeycomb.io/v1/traces`   |
 
 Both take one custom header, `x-honeycomb-team: <ingest key>`. (Those are the US-instance endpoints; an EU account is `api.eu1.honeycomb.io`.)
 
@@ -597,11 +597,13 @@ The double-encoding hazard of the Logpush path does **not** apply here. That was
 
 **Sizing.** Tracing multiplies one invocation into roughly ten spans (invocation + wrapper + per-query D1 + per-operation R2), so ~3k invocations/day is on the order of 900k spans/month. Honeycomb bills a span as an event against the same 20M/month free allowance the ~90k log lines draw on, which puts the combined draw near 5% of it. That is the headroom `head_sampling_rate = 1` spends: sampling would thin exactly the tail-colo cells issue #150 exists to measure. Revisit if invocation volume grows by an order of magnitude, not before.
 
-**The route attribute is ours, not the platform's.** `dispatch()` in `cloud/src/index.ts` wraps each handler in `ctx.tracing.enterSpan(r.route, …)` and sets `route` on it, next to the existing `setRoute()` call so the span and the access line carry the same value from the same place. This is load-bearing: root spans carry no `http.route`, only `url.path`, whose cardinality is unbounded — one cell per game id. Every D1 and R2 span nests under the wrapper, and `cloudflare.colo` is a **resource** attribute present on all spans, so "p95 by `route` × `colo`" is a query over the wrapper span alone, not a join back to the access line on `ray_id`.
+**The route attribute is ours, not the platform's.** `dispatch()` in `cloud/src/index.ts` wraps each handler in `ctx.tracing.startActiveSpan(r.route, …)`, sets `route` on it next to the existing `setRoute()` call so the span and the access line carry the same value from the same place, and ends it with `.finally(() => span.end())` on the handler's promise. This is load-bearing: root spans carry no `http.route`, only `url.path`, whose cardinality is unbounded — one cell per game id. Every D1 and R2 span nests under the wrapper, and `cloudflare.colo` is a **resource** attribute present on all spans, so "p95 by `route` × `colo`" is a query over the wrapper span alone, not a join back to the access line on `ray_id`.
+
+**Why `startActiveSpan` and an explicit `end()` rather than `enterSpan`.** The callback returns a *pending* promise, and the two APIs differ precisely there: if `enterSpan` closes its span when the callback returns rather than when that promise settles, the wrapper span has ~0ms duration and nothing nests inside it. That is a silent failure — the `route` attribute would still be correct, so the sink would show the right cells with the wrong numbers, and it takes out both halves of the paragraph above, not just the nesting half. The explicit form is right under either semantics. `cloud/test/integration/tracing.test.ts` pins `end()` at exactly once and after the handler's storage work, which is what moves the span's duration from the platform's side of the line to ours.
 
 Two things were verified rather than assumed, because the docs are contradictory on both:
 
-- **No `compatibility_date` bump is needed.** The compatibility-flags page gates only the *implicit* form — `enable_workers_observability_tracing`, which makes `[observability] enabled` imply tracing. The explicit `[observability.traces] enabled = true` works at any date. The `startActiveSpan` changelog says custom spans need "an updated compatibility_date"; `ctx.tracing.enterSpan` was checked against workerd at our `2024-12-01` and works, and the 352 integration tests exercise it through `SELF.fetch`.
+- **No `compatibility_date` bump is needed.** The compatibility-flags page gates only the *implicit* form — `enable_workers_observability_tracing`, which makes `[observability] enabled` imply tracing. The explicit `[observability.traces] enabled = true` works at any date. The `startActiveSpan` changelog says custom spans need "an updated compatibility_date"; `ctx.tracing.enterSpan` was checked against workerd at our `2024-12-01` and works, which means the `Tracing` object itself is exposed to us ungated. `startActiveSpan` is the method we actually call and has *not* been exercised at that date: the installed workerd (`1.20260722.1`) carries both methods on the same interface and defines no `enable_*observability*` flag to gate either, so they are expected to arrive together — but "expected" is why `dispatch()` guards on the method rather than the object. If the expectation is wrong the API serves untraced and logs `tracing_unavailable`, instead of 500ing every route. §6.1.5 item 5 is where that gets settled.
 - **`cloudflare.colo` is on every span**, not just the root — it is listed under resource attributes. The old text asserted it was a root-span attribute, which would have made the wrapper useless for the `colo` half of the grouping.
 
 **`db.query.text` does not carry bound values — settled from workerd, not inferred.** Every D1 span carries the attribute and Cloudflare's docs don't describe its contents, which matters because spans bypass `scrubPii` (§6.1) and go to a third party. The runtime is open source and answers it three ways:
@@ -612,7 +614,14 @@ Two things were verified rather than assumed, because the docs are contradictory
 
 The transport span underneath doesn't leak them either — the `fetch` to the D1 backend records `http.request.body.size` but not the body, and the params live in that body. This also matches the OTel convention, which says parameterized query text should *not* be sanitized precisely because parameters ride separately.
 
-What does still reach the provider unfiltered is the request URL — `url.path`/`url.full` on the fetch handler span, carrying game and user ids. That is the same data the access line's `path` field already exports, so tracing widens the path, not the field set.
+**What does still reach the provider unfiltered is the request URL — and it is more than the access line has ever carried.** `url.path`/`url.full` on the fetch handler span carry game and user ids, which the access line's `path` field already exports (`cloud/src/log.ts` sets `path: url.pathname`). `url.full` also carries the **query string**, which `path` has never included, so this is a widening of the field set and not just of the path it travels. `scrubPii` sees none of it — spans are the platform's, not `log.ts`'s.
+
+Concretely new to Honeycomb:
+
+- `q=` on `GET /v1/users/search` and `GET /v1/games`. User-typed, and on the users search it is frequently a username — a value `PII_KEYS` redacts when a handler puts it in a log field.
+- `discord_id`/`username` on `GET /v1/auth/dev/login`. Dark in production (the route requires `env.DEV_LOGIN` and a non-secure request), but a crafted request is spanned before it 404s, so the values ride out on the span regardless.
+
+**This is accepted, not mitigated.** There is no filter to apply: the attribute is set by the platform on a span this repo does not create, so the only alternative to accepting it is not tracing at all. The root `CLAUDE.md` guardrail no longer asserts that PII is never logged, because with tracing on that would be false. What still holds, and is still enforced in code, is the lane rule: `online_id` stripped from the share blob for anonymous viewers, `discord_id`/`username` in D1 metadata only, `PII_KEYS` redaction on every log line. Revisit if the search endpoints ever carry something more sensitive than a username, or if Honeycomb stops being the destination.
 
 Tracing is still in early beta, and its known-limitations page states that span and attribute names may change to align with OpenTelemetry conventions. Our own `route` attribute is unaffected by that churn; the `cloudflare.*` ones are not.
 
@@ -633,7 +642,11 @@ Everything above is vendor documentation until this is run once (§6.1 status no
 
 **4. What is the exported log record's body encoding?** The open question in §6.1.3 — string, nested object, or double-encoded JSON. Not answerable from source: unlike the D1 spans, the log exporter is Cloudflare infrastructure, not workerd. Look at one raw record and write the answer into §6.1.3.
 
-**5. Does the `route` attribute land on spans?** Confirm `route` is present and groupable alongside `cloudflare.colo`, and that D1/R2 spans nest under the wrapper span (§6.1.4). This is the half most likely to be correct — it was exercised locally and in the integration tests — but it has still never run against the real exporter.
+**5. Do the wrapper spans arrive, with a duration and with children?** Three things, in this order, because each is meaningless if the one before it failed (§6.1.4):
+
+- **Are there wrapper spans at all?** `startActiveSpan` has never run at our `compatibility_date`. If it isn't exposed there, `dispatch()` serves untraced by design and logs a `tracing_unavailable` warn — so check the log sink for that event before concluding anything about the spans. The fix would be a `compatibility_date` bump, not a code change.
+- **Is `route` present and groupable alongside `cloudflare.colo`?** The grouping key the whole section exists for.
+- **Do the spans have a real duration, and do D1/R2 spans nest under them?** A wrapper span with a correct `route` and a ~0ms duration is the silent failure the `.finally(() => span.end())` form exists to prevent; a p95 built on it would be wrong rather than absent. Ours is pinned by the integration tests, but only against a stand-in — the platform's half has still never run against the real exporter.
 
 **6. Sanity-check the event burn.** §6.1.4 estimates ~900k spans + ~90k log lines/month against Honeycomb's 20M. Check the actual rate after a day against Honeycomb's usage view. `head_sampling_rate` is 1 on both sinks precisely because the estimate says there is room; if the real number is an order of magnitude off, that is the setting to revisit.
 

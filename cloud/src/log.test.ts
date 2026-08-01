@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
 	beginD1Query,
-	beginR2Read,
+	beginR2Op,
 	emitAccessLog,
 	mergeBusyMs,
 	runWithLogContext,
@@ -154,9 +154,9 @@ describe("access log storage timing", () => {
 		expect(line.d1_events_ms).toBe(0);
 	});
 
-	it("accumulates R2 read time separately", async () => {
+	it("accumulates R2 operation time separately", async () => {
 		const [line] = await captureAccessLog(async () => {
-			const end = beginR2Read();
+			const end = beginR2Op();
 			await new Promise((resolve) => setTimeout(resolve, 20));
 			end();
 		});
@@ -180,6 +180,6 @@ describe("access log storage timing", () => {
 		// The `scheduled` handler runs without runWithLogContext and queries
 		// events on the raw binding.
 		expect(() => beginD1Query("events")()).not.toThrow();
-		expect(() => beginR2Read()()).not.toThrow();
+		expect(() => beginR2Op()()).not.toThrow();
 	});
 });

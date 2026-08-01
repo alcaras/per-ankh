@@ -30,7 +30,7 @@
 // Only `games/*` reads go through here today. `saves/*` (the raw ZIP download)
 // deliberately does not — see the note at the R2 read in handleGameDownload.
 
-import { beginR2Read, setLogField } from "./log";
+import { beginR2Op, setLogField } from "./log";
 
 // Synthetic key origin — same idiom as the download rate-limit counter in
 // share-legacy.ts. R2 keys are `games/{id}.json.gz` where id is a nanoid(21)
@@ -75,10 +75,18 @@ type BlobCacheTag = "miss" | "bypass";
 //
 // The tag is a required parameter, not something call sites remember to set
 // alongside the read. blob_cache is only meaningful if its *absence* means
-// "this route read no blob at all", and that invariant held by convention
+// "this route read no `games/*` blob", and that invariant held by convention
 // until a third caller was added without it. Threading it through the one
-// function every R2 blob read goes through is what makes it uncompilable to
-// forget — the same move routeEnv makes for the D1 handles.
+// function every cached-tier blob read goes through is what makes it
+// uncompilable to forget — the same move routeEnv makes for the D1 handles.
+//
+// The scope in that sentence is load-bearing. The raw `saves/*` ZIP downloads
+// read R2 without a tag and without a measurable duration, so on the access
+// line they would otherwise be indistinguishable from a route that touched no
+// object at all — `blob_cache IS NULL AND r2_ms = 0` reads as "no R2 work"
+// and would match the routes moving the largest objects in the app. Both of
+// them set r2_op "streamed" instead, which is what makes the difference
+// expressible in a query.
 //
 // r2_ms is accumulated here rather than by wrapping the binding, because
 // bucket.get() resolves as soon as the object's metadata is known — the bytes
@@ -91,7 +99,7 @@ export async function readBlob(
 	tag: BlobCacheTag,
 ): Promise<ArrayBuffer | null> {
 	setLogField("blob_cache", tag);
-	const end = beginR2Read();
+	const end = beginR2Op();
 	try {
 		const obj = await bucket.get(r2Key);
 		return obj ? await obj.arrayBuffer() : null;

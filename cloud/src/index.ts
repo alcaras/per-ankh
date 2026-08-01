@@ -882,10 +882,12 @@ function isCloudPath(pathname: string): boolean {
 //
 // Both handles are then wrapped for timing (instrumentD1, d1.ts), which is
 // what puts d1_ms / d1_queries / d1_wall_ms on the access log for every query
-// in the Worker. Wrapping each *final* handle rather than the raw binding
-// keeps `withSession()` a call on the binding itself, and keeps the events
-// subset attributable — the two handles are the same database, so the handle
-// is the only thing that distinguishes an events query from a share query.
+// a handler issues through SHARE_DB or EVENTS_DB. SECURITY_DB is deliberately
+// outside it — see the coverage note in d1.ts. Wrapping each *final* handle
+// rather than the raw binding keeps `withSession()` a call on the binding
+// itself, and keeps the events subset attributable — the two handles are the
+// same database, so the handle is the only thing that distinguishes an events
+// query from a share query.
 function routeEnv(env: RawBindings, spec: RouteSpec): Env {
 	return {
 		...env,
@@ -909,7 +911,8 @@ function warnTracingUnavailable(): void {
 	if (tracingUnavailableWarned) return;
 	tracingUnavailableWarned = true;
 	logWarn("tracing_unavailable", {
-		detail: "ctx.tracing absent — serving untraced, spans will not be sent",
+		detail:
+			"ctx.tracing absent or without startActiveSpan — serving untraced, spans will not be sent",
 	});
 }
 
@@ -943,22 +946,39 @@ function dispatch(
 		// "p95 by route × colo", the issue #150 question, is a query over
 		// this span alone rather than a join back to the access line.
 		//
-		// Guarded because the type lies. `tracing` is runtime-provided and
-		// declared non-optional, but `createExecutionContext()` in
+		// startActiveSpan + an explicit end(), not enterSpan. The callback
+		// returns a *pending* promise, and the two differ in exactly that case:
+		// enterSpan is free to close the span when the callback returns rather
+		// than when its promise settles, which would leave a ~0ms span with
+		// nothing nested under it — losing both halves of the goal above, and
+		// silently, since the route attribute would still be correct. This form
+		// is right under either semantics. `.finally()` is total because every
+		// entry in ROUTES returns Promise<Response>.
+		//
+		// Guarded on the method, not just the object, because two different
+		// things can be missing. `tracing` is runtime-provided and declared
+		// non-optional, but `createExecutionContext()` in
 		// @cloudflare/vitest-pool-workers hands back a context without it, and a
 		// deployed runtime behind local workerd would have the same shape.
-		// Unguarded, an absent `tracing` throws here for *every* request and the
+		// startActiveSpan is separately newer than our compatibility_date
+		// (2024-12-01, see wrangler.toml) — nothing in this workerd build gates
+		// it per-method and enterSpan works at that date, so it is expected to
+		// be there, but "expected" is not "checked against the deployed
+		// runtime". Either absence unguarded throws for *every* request and the
 		// envelope's safety net turns that into a 500 across the whole API —
 		// tracing is a measurement, so it must never be able to take the app
-		// down. Serving untraced is the right failure.
+		// down. Serving untraced is the right failure, and the warn is what
+		// makes it visible instead of silent.
 		const tracing: Tracing | undefined = ctx.tracing;
-		if (!tracing) {
+		if (!tracing || typeof tracing.startActiveSpan !== "function") {
 			warnTracingUnavailable();
 			return r.handler(request, routeEnv(env, r), m, ctx);
 		}
-		return tracing.enterSpan(r.route, (span) => {
+		return tracing.startActiveSpan(r.route, (span) => {
 			span.setAttribute("route", r.route);
-			return r.handler(request, routeEnv(env, r), m, ctx);
+			return r
+				.handler(request, routeEnv(env, r), m, ctx)
+				.finally(() => span.end());
 		});
 	}
 	// 404 — pick CORS based on path so error responses still allow the

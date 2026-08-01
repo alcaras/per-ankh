@@ -84,11 +84,19 @@ export function staleTolerantSession(db: D1Database): QueryableD1 {
 
 // === Per-request query instrumentation ===
 //
-// Both handles are wrapped in `routeEnv`, so every query the Worker issues is
-// timed and counted onto the access log (see the storage-timing block in
-// log.ts) without a single call site changing. `routeEnv` is the one place
-// both handles are derived, which is what makes that coverage structural
-// rather than a convention someone has to remember.
+// Both handles are wrapped in `routeEnv`, so every query a handler issues
+// through `SHARE_DB` or `EVENTS_DB` is timed and counted onto the access log
+// (see the storage-timing block in log.ts) without a single call site
+// changing. `routeEnv` is the one place both handles are derived, which is
+// what makes that coverage structural rather than a convention someone has to
+// remember.
+//
+// `SECURITY_DB` is deliberately outside it. The security tee fires from the
+// envelope *after* emitAccessLog, via ctx.waitUntil (index.ts), so its inserts
+// could not land on the line even if the handle were wrapped — the line is
+// already gone. The whole value of the numbers is that they are complete for
+// what they claim to cover, so the claim is scoped rather than the gap papered
+// over.
 //
 // The signature is generic and type-preserving on purpose. Typing this
 // `(db: QueryableD1) => D1Database` would also compile, and would be a

@@ -70,6 +70,12 @@ describe("access log storage timing on GET /v1/games/:id", () => {
 		// 1 SHARE_DB (games row) + 2 EVENTS_DB (rate-limit count, audit insert).
 		// The insert is never awaited and may still be open at emit; it is
 		// counted anyway, because it costs the database a round trip either way.
+		//
+		// This number is the point of the test, and the issue #150 fix will
+		// change it by design — cutting a round trip off this route is the
+		// whole objective. A failure here means "update the count to the new
+		// query plan", not "a regression crept in"; it is only a regression if
+		// the plan didn't change.
 		expect(line.d1_queries).toBe(3);
 		expect(line.d1_events_queries).toBe(2);
 	});
@@ -141,6 +147,29 @@ describe("blob_cache on the access log", () => {
 		const { line } = await accessLog(() =>
 			request.get({ path: "/v1/games/public-recent" }),
 		);
+		expect(line.blob_cache).toBeUndefined();
+		expect(line.r2_ms).toBe(0);
+		expect(line.r2_op).toBeUndefined();
+	});
+
+	it("marks the streamed save download so it can't be read as no R2 work", async () => {
+		// The one line above and this one are otherwise identical on the fields
+		// that describe R2 — no blob_cache, r2_ms 0 — and they mean opposite
+		// things: nothing read, versus the largest object in the app streamed
+		// straight to the client. r2_op is what separates them in a query.
+		const owner = await makeUser();
+		const gameId = await seedGame(owner, { isPublic: true });
+		await env.SHARE_BUCKET.put(
+			`saves/${gameId}.zip`,
+			new TextEncoder().encode("per-ankh-test-zip"),
+		);
+
+		const { response, line } = await accessLog(() =>
+			request.get({ path: `/v1/games/${gameId}/download`, as: owner }),
+		);
+		expect(response.status).toBe(200);
+		expect(line.route).toBe("GET /v1/games/:id/download");
+		expect(line.r2_op).toBe("streamed");
 		expect(line.blob_cache).toBeUndefined();
 		expect(line.r2_ms).toBe(0);
 	});
