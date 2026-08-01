@@ -905,7 +905,14 @@ function routeEnv(env: RawBindings, spec: RouteSpec): Env {
 // still plainly visible in the sinks. Warned at all because silence is the
 // failure mode: tracing that quietly stopped reads exactly like tracing that
 // works until someone queries for spans that were never sent.
+//
+// A startActiveSpan that throws is an isolate-level fact for the same reason,
+// so it gets its own latch rather than an error line per request. Separate
+// latches, not one shared: the two are distinguishable causes with different
+// fixes (a compatibility_date bump vs. whatever the throw says), and a shared
+// one would let the first swallow the second.
 let tracingUnavailableWarned = false;
+let tracingFailedWarned = false;
 
 function warnTracingUnavailable(): void {
 	if (tracingUnavailableWarned) return;
@@ -913,6 +920,15 @@ function warnTracingUnavailable(): void {
 	logWarn("tracing_unavailable", {
 		detail:
 			"ctx.tracing absent or without startActiveSpan — serving untraced, spans will not be sent",
+	});
+}
+
+function warnTracingFailed(err: unknown): void {
+	if (tracingFailedWarned) return;
+	tracingFailedWarned = true;
+	logError("tracing_start_failed", err, {
+		detail:
+			"startActiveSpan threw before the handler ran — serving untraced, spans will not be sent",
 	});
 }
 
@@ -974,12 +990,36 @@ function dispatch(
 			warnTracingUnavailable();
 			return r.handler(request, routeEnv(env, r), m, ctx);
 		}
-		return tracing.startActiveSpan(r.route, (span) => {
-			span.setAttribute("route", r.route);
-			return r
-				.handler(request, routeEnv(env, r), m, ctx)
-				.finally(() => span.end());
-		});
+		// The check above proves the method is *there*, not that calling it
+		// works. Tracing is a beta API and its enablement lives outside this
+		// repo, so a throw out of a function that is plainly present is a
+		// distinct failure from an absent one — and an unguarded one costs the
+		// whole API for exactly the reason the check exists to prevent. Same
+		// guard, same fallback: serve untraced.
+		//
+		// `entered` is what makes that fallback safe to take. Re-running the
+		// handler is only correct if it never ran, and the callback is where it
+		// runs, so a throw from inside the callback rethrows instead — which is
+		// precisely the pre-tracing behaviour (up to the envelope, 500). Set
+		// after setAttribute so a throw from *that* is still recoverable, and
+		// before the handler call so no synchronous throw out of a handler can
+		// re-enter it. Handlers are all `async` and so can't throw
+		// synchronously today; a POST run twice is a much worse failure than an
+		// untraced one, and this doesn't depend on that staying true.
+		let entered = false;
+		try {
+			return tracing.startActiveSpan(r.route, (span) => {
+				span.setAttribute("route", r.route);
+				entered = true;
+				return r
+					.handler(request, routeEnv(env, r), m, ctx)
+					.finally(() => span.end());
+			});
+		} catch (err) {
+			if (entered) throw err;
+			warnTracingFailed(err);
+			return r.handler(request, routeEnv(env, r), m, ctx);
+		}
 	}
 	// 404 — pick CORS based on path so error responses still allow the
 	// origin that asked. The cloud helper echoes the request Origin; the
