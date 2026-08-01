@@ -622,7 +622,7 @@ Still true: if spans plus the route attribute prove they cover it, the `d1_*`/`r
 
 Everything above is vendor documentation until this is run once (§6.1 status note). It is a ten-minute pass on the first deploy that carries these blocks, and it wants doing **before** the multi-week measurement window starts — a window that turns out to be measuring an opaque string is a window spent twice. Record answers inline in the sections named; delete a checkbox only by replacing it with what you saw.
 
-**1. Is the access line indexed as fields, or one opaque string?** The highest-stakes item, because §6.1 line 511 and the entire issue #150 query plan rest on it. In the Workers Logs dashboard, try `groupBy route` and a `p95` of `d1_wall_ms`.
+**1. Is the access line indexed as fields, or one opaque string?** The highest-stakes item, because §6.1's Workers Logs bullet — "Cloudflare parses and indexes our custom fields automatically" — and the entire issue #150 query plan rest on it. In the Workers Logs dashboard, try `groupBy route` and a `p95` of `d1_wall_ms`.
 
 - If `route`, `colo`, `d1_wall_ms` appear as filterable fields → the claim holds, strike this item.
 - If the line arrives as a single `message` string → **`emit()` in `cloud/src/log.ts` is the cause.** It calls `console.log(JSON.stringify(line, replacer))`, so it logs a *string*; Cloudflare's structured-logging examples all pass an *object*, and the documented behavior for a string argument is `{message: "…"}`. The fix is passing the object, but the replacer exists to coerce stray `Error`s to `{name, message}` — so apply it before logging rather than dropping it. Fixing this later means discarding the data collected until then.

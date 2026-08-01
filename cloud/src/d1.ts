@@ -95,8 +95,12 @@ export function staleTolerantSession(db: D1Database): QueryableD1 {
 // laundering device: it would hand back a real `D1Database` for a session
 // handle and so quietly delete the barrier the header above builds — the one
 // that stops `countEventsSince` from ever accepting a replica session.
-// Generic keeps SHARE_DB a `QueryableD1` and EVENTS_DB a `D1Database`, and
-// stale-tolerant-routes.test.ts pins the invariant.
+// Generic keeps SHARE_DB a `QueryableD1` and EVENTS_DB a `D1Database`. That
+// half is pinned by the `@ts-expect-error` in d1.test.ts, which fails if a
+// wrapped session ever becomes assignable to `D1Database`.
+// stale-tolerant-routes.test.ts pins the half the compiler can't see: that the
+// ROUTES table and the reviewed-route list agree, and that an inline
+// `INSERT INTO events` is written through `env.EVENTS_DB`.
 //
 // Two layers, because `prepare()` is synchronous: the round trip is awaited
 // on the statement, so the handle wrapper covers `prepare`/`batch` and the
