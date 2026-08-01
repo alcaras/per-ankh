@@ -3,9 +3,10 @@
 	// a center-split diverging-bar row (player A grows left, B grows right),
 	// with the absent side left blank when only one player has a type. Used on
 	// the Military tab for the Ending Army / Military Built comparisons, on the
-	// Economy tab for improvements and worker-turns, and on the Specialists tab
-	// for rural / urban specialists — hence the icon category and label being
-	// the caller's to choose. A 1v1 framing; the caller gates it to two players.
+	// Economy tab for improvements, worker-turns and projects, and on the
+	// Specialists tab for rural / urban specialists — hence the icon category
+	// and label being the caller's to choose, down to having no icons at all.
+	// A 1v1 framing; the caller gates it to two players.
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
 	import type { BuildItem, SpriteCategory } from "./helpers";
@@ -36,7 +37,11 @@
 		// type absent from this panel renders as a blank placeholder row.
 		// Omitted, the panel derives its own union from a/b.
 		keys?: string[];
-		iconCategory?: SpriteCategory;
+		// The sprite manifest rows draw their icon from, or null for subjects
+		// with no baked art of their own (projects). The icon slot keeps its
+		// fixed width either way, so a label-only panel still lines its rows up
+		// with one that has icons.
+		iconCategory?: SpriteCategory | null;
 		// eslint-disable-next-line no-unused-vars -- callback type signature
 		labelOf?: (key: string) => string;
 		// Trailing ±N column: how far ahead the leading side is on that row. Level
@@ -107,7 +112,9 @@
 				>
 					<div class="flex min-w-0 items-center gap-1.5">
 						<span class="flex w-3.5 flex-none">
-							<SpriteIcon category={iconCategory} value={r.key} size={14} />
+							{#if iconCategory}
+								<SpriteIcon category={iconCategory} value={r.key} size={14} />
+							{/if}
 						</span>
 						<span class="truncate text-[11px] text-bright"
 							>{labelOf(r.key)}</span

@@ -569,11 +569,10 @@
 		),
 	);
 
+	// ─── Projects ─────────────────────────────────────────────────────
 	// Projects are the third thing a city builds besides units and (via
 	// workers) improvements, and the save's ProjectsProduced map is the
-	// whole-game record. Single flat panel, biggest total first — projects
-	// have no rural/urban axis. Rows are keyed by PROJECT_* zType; there is
-	// no baked 2D art for projects, so rows render label-only.
+	// whole-game record. Rows are keyed by PROJECT_* zType.
 	// formatEnum strips trailing digits ("Garrison 1" → "Garrison"), which is
 	// right where tiers aggregate — but project tiers are distinct rows here
 	// (Council 1/2/3 are separate accomplishments), so put the tier back.
@@ -583,9 +582,9 @@
 		return tier != null ? `${label} ${tier}` : label;
 	};
 
-	const projectPanel = $derived.by(() => {
-		if (projectsProduced.length === 0) return null;
-		const sides = orderedPlayers.map((player) => {
+	// Per-nation project counts, the source for the comparison panel below.
+	const projectsByPlayer = $derived(
+		orderedPlayers.map((player) => {
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
 			const counts = new Map<string, number>();
 			for (const row of projectsProduced) {
@@ -593,20 +592,36 @@
 				counts.set(row.project, (counts.get(row.project) ?? 0) + row.count);
 			}
 			return counts;
-		});
+		}),
+	);
+
+	// Raw per-side rows: BuildComparison re-aggregates these and gap-fills
+	// against the shared `keys`, so a side that built none of a project just
+	// omits it.
+	const projectItems = $derived<BuildItem[][]>(
+		projectsByPlayer.map((counts) =>
+			[...counts].map(([key, count]) => ({ key, count })),
+		),
+	);
+
+	// One flat row order — projects have no rural/urban axis to split on. Same
+	// ordering the improvement panels use: biggest total first, ties on the
+	// displayed name rather than the raw zType, which sorts the underscore
+	// before a letter and would put Councillor ahead of Council 1.
+	const projectKeys = $derived.by(() => {
 		const total = (key: string) =>
-			sides.reduce((sum, m) => sum + (m.get(key) ?? 0), 0);
-		const keys = [...new Set(sides.flatMap((m) => [...m.keys()]))].sort(
-			(a, b) => total(b) - total(a) || a.localeCompare(b),
+			projectsByPlayer.reduce((sum, m) => sum + (m.get(key) ?? 0), 0);
+		return comparisonRowKeys(
+			projectItems,
+			(a, b) =>
+				total(b) - total(a) || projectLabel(a).localeCompare(projectLabel(b)),
 		);
-		if (keys.length === 0) return null;
-		return {
-			keys,
-			items: sides.map((m) =>
-				keys.map((key) => ({ key, count: m.get(key) ?? 0 })),
-			),
-		};
 	});
+
+	// False on 2.12.0 and older blobs, which carry no ProjectsProduced at all,
+	// and on a game where nobody finished one. Both hide the panel below rather
+	// than showing zeroes that would imply nobody built projects.
+	const hasProjects = $derived(projectKeys.length > 0);
 
 	const PANEL_LABELS: Record<string, string> = {
 		rural: "Rural",
@@ -838,7 +853,7 @@
 					{/each}
 				</div>
 			</div>
-			{#if projectPanel}
+			{#if hasProjects}
 				<div
 					class="rounded-lg p-4"
 					style="background-color: rgb(var(--color-surface));"
@@ -846,12 +861,12 @@
 					<h3 class="mb-3 text-base font-bold text-tan">Projects completed</h3>
 					<BuildComparison
 						title="All projects"
-						a={projectPanel.items[0]}
-						b={projectPanel.items[1]}
+						a={projectItems[0]}
+						b={projectItems[1]}
 						ca={matchup[0].color}
 						cb={matchup[1].color}
-						keys={projectPanel.keys}
-						iconCategory="improvements"
+						keys={projectKeys}
+						iconCategory={null}
 						labelOf={projectLabel}
 						showDiff
 					/>

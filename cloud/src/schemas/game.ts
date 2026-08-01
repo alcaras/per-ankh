@@ -108,7 +108,7 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         player who owned the wonder's tile on the turn it completed, read
 //         from the ownership history, rather than whoever holds the tile at
 //         the end. Blobs below 2.12.0 credit a captured wonder to its captor.
-// 2.13.0: adds projects_produced — the Player node's ProjectsProduced map
+// 2.13.0 — projects_produced, the Player node's ProjectsProduced map
 //         (every project completed, whole-game counts). Purely additive;
 //         older blobs simply lack the field and the Economy tab hides the
 //         panel.
