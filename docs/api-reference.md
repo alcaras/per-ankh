@@ -627,7 +627,7 @@ List a tournament's admins.
 
 - **Auth:** Tournament admin (the read still requires admin and consumes the admin rate-limit budget).
 - **Path:** `id` (21-char).
-- **Response 200:** `{ admins: [{ user_id, display_name, avatar_url, is_creator: boolean }] }` (ordered by grant time).
+- **Response 200:** `{ admins: [{ user_id, display_name, slug: string|null, avatar_url, is_creator: boolean }] }` (ordered by grant time).
 - **Errors:** `401 UNAUTHORIZED`, `403 NOT_TOURNAMENT_ADMIN`, `429 RATE_LIMIT_TOURNAMENT_ADMIN`, `404 TOURNAMENT_NOT_FOUND`.
 - **Notes:** The only tournament endpoint that exposes admin `user_id`s (public detail hides them).
 
@@ -637,7 +637,7 @@ Grant co-admin.
 - **Auth:** Tournament admin.
 - **Path:** `id` (21-char).
 - **Body:** `GrantAdminSchema` — `{ user_id: string }` (21-char).
-- **Response 201:** `{ admin: { user_id, display_name, avatar_url, is_creator } }`.
+- **Response 201:** `{ admin: { user_id, display_name, slug, avatar_url, is_creator } }` — the same shape the list endpoint returns.
 - **Errors:** `404 USER_NOT_FOUND`, plus auth/body codes.
 - **Notes:** Idempotent (`INSERT OR IGNORE`). A granted admin can act regardless of beta status.
 

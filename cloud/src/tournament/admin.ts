@@ -838,7 +838,7 @@ export async function handleListTournamentAdmins(
 	if (!a.ok) return a.response;
 
 	const rows = await env.SHARE_DB.prepare(
-		`SELECT ta.user_id, ${displayNameSql("u")} AS display_name, u.discord_id, u.avatar_hash
+		`SELECT ta.user_id, ${displayNameSql("u")} AS display_name, u.slug, u.discord_id, u.avatar_hash
 		 FROM tournament_admins ta
 		 JOIN users u ON u.user_id = ta.user_id
 		 WHERE ta.tournament_id = ?
@@ -848,12 +848,16 @@ export async function handleListTournamentAdmins(
 		.all<{
 			user_id: string;
 			display_name: string;
+			slug: string | null;
 			discord_id: string;
 			avatar_hash: string | null;
 		}>();
 	const admins = (rows.results ?? []).map((r) => ({
 		user_id: r.user_id,
 		display_name: r.display_name,
+		// Bare `slug` — an admin row is user-shaped (Decision 1, #186). The grant
+		// response below returns the same shape and carries it too.
+		slug: r.slug,
 		avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
 		is_creator: r.user_id === a.tournament.created_by_user_id,
 	}));
@@ -878,12 +882,13 @@ export async function handleGrantTournamentAdmin(
 	const targetUserId = body.body.user_id;
 
 	const target = await env.SHARE_DB.prepare(
-		`SELECT user_id, ${displayNameSql("users")} AS display_name, discord_id, avatar_hash FROM users WHERE user_id = ?`,
+		`SELECT user_id, ${displayNameSql("users")} AS display_name, slug, discord_id, avatar_hash FROM users WHERE user_id = ?`,
 	)
 		.bind(targetUserId)
 		.first<{
 			user_id: string;
 			display_name: string;
+			slug: string | null;
 			discord_id: string;
 			avatar_hash: string | null;
 		}>();
@@ -908,6 +913,7 @@ export async function handleGrantTournamentAdmin(
 			admin: {
 				user_id: target.user_id,
 				display_name: target.display_name,
+				slug: target.slug,
 				avatar_url: buildAvatarUrl(target.discord_id, target.avatar_hash),
 				is_creator: target.user_id === a.tournament.created_by_user_id,
 			},

@@ -98,6 +98,7 @@
 					<span class="flex items-center gap-2">
 						<ProfileLink
 							userId={admin.user_id}
+							slug={admin.slug}
 							class="flex min-w-0 items-center gap-2 hover:underline"
 						>
 							<img

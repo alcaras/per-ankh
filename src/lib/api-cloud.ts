@@ -1763,6 +1763,9 @@ export interface PatchTournamentBody {
 export interface TournamentAdmin {
 	user_id: string;
 	display_name: string;
+	// The admin's claimed profile slug, null while unclaimed. Bare — an admin
+	// row is user-shaped, and the tournament's own slug isn't on it.
+	slug: string | null;
 	avatar_url: string;
 	// The creator can't be removed from the admin list.
 	is_creator: boolean;
