@@ -48,6 +48,11 @@ export async function makeUser(opts?: {
 	// field fails loudly. Tournament labels are display names site-wide;
 	// the handle is storage-level only.
 	displayName?: string;
+	// users.alias — the operator-set override that replaces display_name in
+	// every API response (COALESCE at read time, cloud/src/identity.ts).
+	// Omitted → NULL, which is "no override", so the default user is
+	// unchanged.
+	alias?: string;
 	// Skip the default tournament_beta_users seed. Beta now only gates
 	// tournament *creation*; the default is "allowlisted" so created users
 	// can create tournaments. Tests of the create gate opt out.
@@ -61,9 +66,9 @@ export async function makeUser(opts?: {
 	const displayName = opts?.displayName ?? `Display ${discordUsername}`;
 
 	await env.SHARE_DB.prepare(
-		`INSERT INTO users (user_id, discord_id, display_name, discord_username) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO users (user_id, discord_id, display_name, discord_username, alias) VALUES (?, ?, ?, ?, ?)`,
 	)
-		.bind(userId, discordId, displayName, discordUsername)
+		.bind(userId, discordId, displayName, discordUsername, opts?.alias ?? null)
 		.run();
 
 	const sessionToken = nanoid(32);

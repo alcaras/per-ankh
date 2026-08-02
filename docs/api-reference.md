@@ -86,6 +86,7 @@ Counters live in the D1 `events` table (or the Cache API for legacy downloads) a
 | `tournament_schedule` | 60 / hr per user | match schedule + caster self-service |
 | `tournament_create` | 5 / hr per user | `POST /v1/tournaments` |
 | user search | 60 / hr per user | `GET /v1/users/search` |
+| `user_search_public` | 300 / hr per user | `GET /v1/users/public-search` |
 | upload / download | per-user + per-IP + global | game upload / download |
 
 Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents are exempt from the anonymous read/view limits (and their audit rows).
@@ -289,6 +290,15 @@ Autocomplete users (for slot creation).
 - **Response 200:** `{ users: [{ user_id, discord_id, discord_username, display_name }] }` (empty when `q<2`).
 - **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_USER_SEARCH` (60/hr per user), `400 VALIDATION_ERROR`.
 - **Notes:** Only these four identity fields — no email, avatar, or timestamps.
+
+### `GET /v1/users/public-search`
+Find players by name — the "Players" group in the header search.
+
+- **Auth:** Session (any logged-in user). Anonymous search stays gated to keep user enumeration behind a login.
+- **Query:** `q` (trimmed, lowercased, 1–32; results only when ≥2 chars), `limit` (1–20, default 10).
+- **Response 200:** `{ users: [{ user_id, display_name, avatar_url }] }` (empty when `q<2`).
+- **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_USER_SEARCH_PUBLIC` (300/hr per user), `400 VALIDATION_ERROR`.
+- **Notes:** **No `discord_id` / `discord_username`** — `discord_id` is read to build `avatar_url` and never serialized, and matching is on `display_name` + `alias` only, so the endpoint can't confirm a Discord-handle prefix. Results are scoped to users who made something public — a public game, a tournament slot, or a linked video channel; a user with none of those is absent from every result. The `/users` directory is a deliberate non-goal, so people are findable here only through what they chose to publish. Distinct from `GET /v1/users/search`, which serves the admin autocomplete and returns the Discord fields the slot pre-link needs.
 
 ### `GET /v1/users/:user_id`
 Public profile + all-time summary.

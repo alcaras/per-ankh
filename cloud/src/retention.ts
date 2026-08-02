@@ -26,6 +26,9 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			"anon_read",
 			"tournament_view",
 			"user_search",
+			// Header people search (users.ts): same counter role as
+			// user_search, its own budget. Metadata is q_length only.
+			"user_search_public",
 			// Caster self-service ledger (player.ts): inserted per cast/uncast,
 			// read only by the 1h schedule budget. Metadata-free by design.
 			"tournament_schedule",

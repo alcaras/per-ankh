@@ -1,16 +1,24 @@
-// User-table-shaped endpoints: search (tournament admin autocomplete)
-// and public profile (the /users/[user_id] page chrome).
+// User-table-shaped endpoints: two searches — the tournament admin's
+// autocomplete and the header's people search — plus the public profile
+// (the /users/[user_id] page chrome).
 //
 // Anything more user-table-shaped that grows beyond a few hundred lines
 // can split into its own subdir.
 //
-// Auth model:
-//   1. session required (anonymous → 401) — the search returns user
+// Auth model, shared by both searches:
+//   1. session required (anonymous → 401) — a search returns user
 //      identity fields, so it's logged-in only.
 //   2. per-user rate limit on the user_id, audited via the shared
 //      `events` table — same engine as the tournament_view limit.
 //
-// Privacy: only the four fields the autocomplete needs are returned
+// The two searches are deliberately separate handlers rather than one
+// parameterized by audience: they differ in which columns match, which
+// columns serialize, which rows are eligible, and how big the budget is.
+// Folding them together would put an `isPublic` flag in front of the PII
+// decision, which is the one thing that must not be a parameter. See
+// handlePublicUserSearch for the three differences.
+//
+// Privacy: /search returns only the four fields the autocomplete needs
 // (user_id, discord_id, discord_username, display_name). No email,
 // avatar, or timestamps. Result cap defaults to 10, max 20.
 
@@ -32,8 +40,17 @@ import type { QueryableD1, EventsEnv } from "./d1";
 // the limit mostly bounds runaway scripts.
 export const USER_SEARCH_PER_USER_PER_HOUR = 60;
 
+// The public people search runs off the header's search-as-you-type, so it
+// spends one audited call per debounced keystroke past the 2-char floor —
+// finding one player costs several requests, and the admin search's 60/hr
+// would allow only about seven lookups an hour. 300 keeps the dropdown
+// usable across a browsing session while still bounding a runaway script.
+export const PUBLIC_USER_SEARCH_PER_USER_PER_HOUR = 300;
+
 const DEFAULT_LIMIT = 10;
 
+// Both searches want the same three things: a session, SHARE_DB for the
+// lookup, and EVENTS_DB for the budget.
 export interface UserSearchEnv extends SessionEnv, TournamentEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 }
@@ -139,6 +156,142 @@ export async function handleUserSearch(
 		}>();
 
 	return jsonResponse({ users: rows.results ?? [] }, 200, cors);
+}
+
+// GET /v1/users/public-search — the header search's "Players" group.
+//
+// The public-facing sibling of handleUserSearch above: same auth, same
+// rate-limit engine, three deliberate differences.
+//
+//   1. Matches display_name and alias only, never discord_username. The
+//      admin search matches the canonical @ handle so an admin can type
+//      whichever name they know; doing that here would let any logged-in
+//      caller confirm Discord-handle prefixes, which is the thing the PII
+//      stance forbids.
+//   2. Serializes no discord_* field. discord_id is still SELECTed —
+//      buildAvatarUrl needs it to address the CDN — and then used without
+//      being emitted, the same select-use-don't-serialize shape
+//      handleUserProfile uses for the profile header's avatar.
+//   3. Returns only users who made something public (the EXISTS block).
+//
+// Rows are { user_id, display_name, avatar_url }.
+interface PublicUserSearchRow {
+	user_id: string;
+	discord_id: string;
+	display_name: string;
+	avatar_hash: string | null;
+}
+
+export async function handlePublicUserSearch(
+	request: Request,
+	env: UserSearchEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const session = await sessionFromRequest(env, request);
+	if (!session) {
+		return errorResponse("Authentication required", 401, cors, "UNAUTHORIZED");
+	}
+
+	// Same ordering as handleUserSearch: budget first, so a hammered account
+	// fails before any DB work or audit insert.
+	const count = await countEventsSince(
+		env.EVENTS_DB,
+		"user_search_public",
+		"user_id",
+		session.data.user_id,
+	);
+	if (count >= PUBLIC_USER_SEARCH_PER_USER_PER_HOUR) {
+		return errorResponse(
+			"User search rate limit exceeded",
+			429,
+			cors,
+			"RATE_LIMIT_USER_SEARCH_PUBLIC",
+		);
+	}
+
+	const url = new URL(request.url);
+	const rawQ = url.searchParams.get("q") ?? "";
+	const rawLimit = url.searchParams.get("limit");
+	const limitNum = rawLimit !== null ? parseInt(rawLimit, 10) : NaN;
+	const parsed = v.safeParse(UserSearchQuerySchema, {
+		q: rawQ,
+		...(Number.isFinite(limitNum) ? { limit: limitNum } : {}),
+	});
+	if (!parsed.success) {
+		return errorResponse(
+			`Invalid query: ${parsed.issues[0]?.message ?? "unknown"}`,
+			400,
+			cors,
+			"VALIDATION_ERROR",
+		);
+	}
+	const { q, limit = DEFAULT_LIMIT } = parsed.output;
+
+	// "Still typing" floor — empty result, no audit row, so per-keystroke
+	// calls below 2 chars neither churn the events table nor spend budget.
+	if (q.length < 2) {
+		return jsonResponse({ users: [] }, 200, cors);
+	}
+
+	// Audit row doubles as the rate-limit counter. Fire-and-forget, and the
+	// metadata is the query's LENGTH only — never its text, which is a
+	// person's name being looked up.
+	env.EVENTS_DB.prepare(
+		`INSERT INTO events (event_type, user_id, metadata)
+		 VALUES ('user_search_public', ?, ?)`,
+	)
+		.bind(session.data.user_id, JSON.stringify({ q_length: q.length }))
+		.run()
+		.catch((e: unknown) => {
+			logError("user_search_public_audit_failed", e, {
+				user_id: session.data.user_id,
+			});
+		});
+
+	// Scoped to users who made something public: a session-gated prefix index
+	// over the whole users table would be enumeration with a rate limiter on
+	// it, and the product rule is that people are discoverable through the
+	// things they chose to publish. One EXISTS leg per such thing, each
+	// seeking on a user_id index rather than scanning — idx_games_user (0002)
+	// filtered down to is_public, idx_slots_user (0006), and
+	// user_video_channels' (user_id, platform) PK (0031); verified with
+	// EXPLAIN QUERY PLAN against representative row counts. The outer scan
+	// over `users` is the same one handleUserSearch does, on the same "table
+	// is small enough" reasoning. Issue #186 Part B adds a fourth disjunct —
+	// `u.slug IS NOT NULL`, a claimed profile URL — once that column exists.
+	//
+	// Prefix match on the two name columns only (see difference 1 above); a
+	// row can only match if one of them is non-null, so the resolved
+	// display_name never needs its own NOT NULL guard. LOWER(...) matches the
+	// already-lowercased `q`.
+	const rows = await env.SHARE_DB.prepare(
+		`SELECT u.user_id, u.discord_id, u.avatar_hash,
+		        ${displayNameSql("u")} AS display_name
+		 FROM users u
+		 WHERE (LOWER(u.display_name) LIKE ? OR LOWER(u.alias) LIKE ?)
+		   AND (
+		        EXISTS (SELECT 1 FROM games g
+		                 WHERE g.user_id = u.user_id AND g.is_public = TRUE)
+		     OR EXISTS (SELECT 1 FROM tournament_slots s WHERE s.user_id = u.user_id)
+		     OR EXISTS (SELECT 1 FROM user_video_channels c WHERE c.user_id = u.user_id)
+		   )
+		 ORDER BY display_name
+		 LIMIT ?`,
+	)
+		.bind(q + "%", q + "%", limit)
+		.all<PublicUserSearchRow>();
+
+	return jsonResponse(
+		{
+			users: (rows.results ?? []).map((r) => ({
+				user_id: r.user_id,
+				display_name: r.display_name,
+				avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
+			})),
+		},
+		200,
+		cors,
+	);
 }
 
 // GET /v1/users/:user_id — public user profile.

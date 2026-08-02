@@ -89,7 +89,11 @@ import {
 	handleUncastMatchPart,
 } from "./tournament/player";
 import { handleUserStats } from "./stats/handlers";
-import { handleUserProfile, handleUserSearch } from "./users";
+import {
+	handlePublicUserSearch,
+	handleUserProfile,
+	handleUserSearch,
+} from "./users";
 import {
 	handleAddChannel,
 	handleCreatorVideos,
@@ -736,6 +740,15 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "path", path: "/v1/users/search" },
 		route: "GET /v1/users/search",
 		handler: (r, e) => handleUserSearch(r, e),
+	},
+	// People search for the header dropdown — the public-facing sibling of
+	// /search above (no discord_* in the response, scoped to users with
+	// public activity). Same exact-path-before-nanoid-regex placement.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/users/public-search" },
+		route: "GET /v1/users/public-search",
+		handler: (r, e) => handlePublicUserSearch(r, e),
 	},
 	// Public user profile. Regex match — the 21-char constraint distinguishes
 	// nanoid user_ids from the other /v1/users/{search,me,…} routes above.
