@@ -24,6 +24,7 @@
 		type CollectionInfo,
 	} from "$lib/api-cloud";
 	import { toast } from "$lib/ui/toast";
+	import { profileHref } from "$lib/utils/profile-href";
 
 	interface Props {
 		gameId: string;
@@ -214,7 +215,8 @@
 			// to their profile (the previous /dashboard equivalent).
 			const userId = page.data.user?.user_id;
 			if (userId) {
-				await goto(resolve(`/users/${userId}`), { replaceState: true });
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- profileHref() returns a resolve() result; lint can't see through the call
+				await goto(profileHref({ user_id: userId }), { replaceState: true });
 			} else {
 				await goto(resolve("/"), { replaceState: true });
 			}

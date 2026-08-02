@@ -10,12 +10,12 @@
 	// header carries an avatar + name linking to their profile. A plain
 	// RecentVideo (a single profile's tab) has no uploader — every video is that
 	// one user's, so attribution would be redundant — and only the date pill shows.
-	import { resolve } from "$app/paths";
 	import type {
 		CreatorVideo,
 		RecentVideo,
 		YouTubeAttributedVideo,
 	} from "$lib/api-cloud";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { formatRelativeToNow } from "$lib/utils/formatting";
 
 	let {
@@ -55,8 +55,8 @@
 	     it stays right-aligned even when the uploader is absent. -->
 	<div class="mb-2 flex items-center gap-2">
 		{#if uploader}
-			<a
-				href={resolve(`/users/${uploader.user_id}`)}
+			<ProfileLink
+				userId={uploader.user_id}
 				class="relative z-20 flex min-w-0 flex-1 items-center gap-1 hover:underline"
 			>
 				<img
@@ -70,7 +70,7 @@
 				<span class="truncate text-lg font-bold text-white lg:text-sm">
 					{uploader.display_name}
 				</span>
-			</a>
+			</ProfileLink>
 		{:else if ytUploader}
 			<!-- Unlinked YouTube uploader: name links out to the channel (external URL,
 			     not an app route), sitting above the card's stretched link. -->

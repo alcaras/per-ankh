@@ -33,6 +33,7 @@
 	} from "$lib/parser/upload-helpers";
 	import { cloudApi, ApiError, DuplicateUploadError } from "$lib/api-cloud";
 	import { formatEnum } from "$lib/utils/formatting";
+	import { profileHref } from "$lib/utils/profile-href";
 	import RadioGroup from "$lib/ui/RadioGroup.svelte";
 	import RadioItem from "$lib/ui/RadioItem.svelte";
 
@@ -457,7 +458,7 @@
 		// page.data.user is set here; the resolve("/") fallback is
 		// purely defensive.
 		const userId = page.data.user?.user_id;
-		const fallback = userId ? resolve(`/users/${userId}`) : resolve("/");
+		const fallback = userId ? profileHref({ user_id: userId }) : resolve("/");
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- doneRedirect is produced by the parent via resolve(); lint can't see through the prop
 		void goto(doneRedirect ?? fallback);
 	}

@@ -10,6 +10,7 @@
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import { resolve } from "$app/paths";
 	import { formatGameTitle } from "$lib/utils/formatting";
+	import { profileHref } from "$lib/utils/profile-href";
 	import Breadcrumb, { type Crumb } from "$lib/Breadcrumb.svelte";
 	import ReimportButton from "$lib/ReimportButton.svelte";
 	import AdminReimportButton from "$lib/AdminReimportButton.svelte";
@@ -115,7 +116,7 @@
 		} else if (game.user_id && game.user_display_name) {
 			trail.push({
 				label: game.user_display_name,
-				href: resolve("/users/[user_id]", { user_id: game.user_id }),
+				href: profileHref({ user_id: game.user_id }),
 			});
 		}
 		trail.push({ label: gameTitle });
