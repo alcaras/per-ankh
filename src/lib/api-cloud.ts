@@ -1802,6 +1802,12 @@ export interface SlotStanding {
 	// name the admin typed when adding the player).
 	display_name: string | null;
 	user_id: string | null;
+	// The claiming user's profile slug, null when the slot is unclaimed or the
+	// occupant never claimed one. Bare (not `slot_slug`): a standings row is
+	// user-shaped and carries no tournament slug. Only ever paired with
+	// `user_id` through profileHref/ProfileLink — a slug never makes a
+	// null-`user_id` row linkable.
+	slug: string | null;
 	// Discord avatar URL of the claiming user, or null when the slot is
 	// unclaimed (render the EFFECTUNIT_ENLIST_ICON fallback in that case).
 	avatar_url: string | null;

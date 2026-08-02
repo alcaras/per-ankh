@@ -173,6 +173,7 @@
 									<SlotUsernameCell
 										slotId={s.slot_id}
 										userId={s.user_id}
+										slug={s.slug}
 										username={s.display_name}
 										handle={s.discord_username}
 										disabled={busy}
@@ -180,7 +181,11 @@
 											onSubstitute(s.slot_id, u, userId)}
 									/>
 								{:else}
-									<ProfileLink userId={s.user_id} class="hover:underline">
+									<ProfileLink
+										userId={s.user_id}
+										slug={s.slug}
+										class="hover:underline"
+									>
 										<span class:line-through={s.withdrawn}>{slotLabel(s)}</span>
 									</ProfileLink>
 								{/if}

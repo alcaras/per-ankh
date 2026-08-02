@@ -8,6 +8,11 @@ import type { BracketResponse, StandingsResponse } from "$lib/api-cloud";
 export interface SlotMaps {
 	labels: Record<string, string>;
 	userIds: Record<string, string | null>;
+	// Each linked user's claimed profile slug — the companion to `userIds` that
+	// lets a link resolve straight to /u/<slug> instead of the id URL's 308.
+	// Null for an unclaimed slot and for an occupant who never claimed a slug;
+	// either way the pair still renders (ProfileLink falls back to the id).
+	slugs: Record<string, string | null>;
 	avatars: Record<string, string | null>;
 	// Each slot's signup answer (timezone/availability), admin-only — null for
 	// non-admin viewers and slots that never answered. Only the Swiss standings
@@ -25,6 +30,7 @@ export function buildSlotMaps(
 ): SlotMaps {
 	const labels: Record<string, string> = {};
 	const userIds: Record<string, string | null> = {};
+	const slugs: Record<string, string | null> = {};
 	const avatars: Record<string, string | null> = {};
 	const signupAnswers: Record<string, string | null> = {};
 
@@ -32,6 +38,7 @@ export function buildSlotMaps(
 		for (const s of standings.divisions[div].standings) {
 			if (s.display_name) labels[s.slot_id] = s.display_name;
 			userIds[s.slot_id] = s.user_id;
+			slugs[s.slot_id] = s.slug;
 			avatars[s.slot_id] = s.avatar_url;
 			signupAnswers[s.slot_id] = s.signup_answer;
 		}
@@ -42,5 +49,5 @@ export function buildSlotMaps(
 		avatars[s.slot_id] = s.avatar_url;
 	}
 
-	return { labels, userIds, avatars, signupAnswers };
+	return { labels, userIds, slugs, avatars, signupAnswers };
 }

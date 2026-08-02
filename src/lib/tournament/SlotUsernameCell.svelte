@@ -9,6 +9,9 @@
 		// read-mode name to that profile; null (an unclaimed slot) renders the name
 		// exactly as before.
 		userId: string | null;
+		// That same account's claimed profile slug, when its payload carries one —
+		// it picks /u/<slug> over the id permalink. Omitted is always safe.
+		slug?: string | null;
 		// Displayed label for the occupant (the account display name when claimed,
 		// else the typed name). Shown verbatim when not editing — NOT used to seed
 		// the editor.
@@ -45,6 +48,7 @@
 	let {
 		slotId,
 		userId,
+		slug = null,
 		username,
 		handle = null,
 		disabled,
@@ -159,7 +163,7 @@
 {:else}
 	<span class="inline-flex flex-col gap-0.5">
 		<span class="inline-flex items-center gap-1">
-			<ProfileLink {userId} class="hover:underline">
+			<ProfileLink {userId} {slug} class="hover:underline">
 				<span class:opacity-60={!username}>
 					{username ?? `slot ${slotId.slice(0, 6)}`}
 				</span>

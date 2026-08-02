@@ -22,7 +22,11 @@ import {
 	expectOk,
 	expectStatus,
 } from "../../helpers/assertions";
-import { makeUser, type TestUser } from "../../helpers/builders";
+import {
+	makeTournament,
+	makeUser,
+	type TestUser,
+} from "../../helpers/builders";
 import { seedGame } from "../../helpers/games";
 import { request } from "../../helpers/requests";
 
@@ -251,6 +255,44 @@ describe("users.slug — game detail", () => {
 			expect(body.user_id).toBe(uploader.userId);
 			expect(body.user_slug).toBe(expected);
 		}
+	});
+});
+
+interface StandingsResponse {
+	divisions: {
+		A: {
+			standings: Array<{
+				slot_id: string;
+				user_id: string | null;
+				slug: string | null;
+			}>;
+		};
+	};
+}
+
+describe("users.slug — tournament standings", () => {
+	it("ships the occupant's slug on their standings row, null on an unclaimed slot's", async () => {
+		const owner = await makeUser({ slug: "seeded-player" });
+		const t = await makeTournament({
+			slotOwners: { A: [owner] },
+			advanceTo: "swiss-round-1-generated",
+		});
+
+		const body = await expectOk<StandingsResponse>(
+			await request.get({
+				path: `/v1/tournaments/${t.tournamentId}/standings`,
+				as: owner,
+			}),
+		);
+		const rows = body.divisions.A.standings;
+		const claimed = rows.find((r) => r.user_id === owner.userId);
+		expect(claimed?.slug).toBe("seeded-player");
+
+		// makeTournament fills the rest of the division with unclaimed slots —
+		// no account, so no slug, and ProfileLink leaves those names unlinked.
+		const unclaimed = rows.find((r) => r.user_id === null);
+		expect(unclaimed).toBeTruthy();
+		expect(unclaimed!.slug).toBeNull();
 	});
 });
 

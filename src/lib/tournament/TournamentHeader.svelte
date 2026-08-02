@@ -265,6 +265,7 @@
 							<p class="text-sm">
 								<ProfileLink
 									userId={hero.championUserId}
+									slug={hero.championSlug}
 									class="hover:underline"
 								>
 									<span class="font-bold text-orange">{hero.champion}</span>
@@ -294,6 +295,7 @@
 							<p class="text-sm">
 								<ProfileLink
 									userId={hero.finalistUserId}
+									slug={hero.finalistSlug}
 									class="hover:underline"
 								>
 									<span class="font-bold text-orange">{hero.finalist}</span>

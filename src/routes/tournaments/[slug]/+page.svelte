@@ -145,6 +145,7 @@
 	const slotSignupAnswers = $derived(slotMaps.signupAnswers);
 	const slotLabels = $derived(slotMaps.labels);
 	const slotUserIds = $derived(slotMaps.userIds);
+	const slotSlugs = $derived(slotMaps.slugs);
 	const slotAvatars = $derived(slotMaps.avatars);
 
 	// --- Match modal state. pushState is shallow routing — page.url updates
@@ -274,7 +275,9 @@
 			champion: string | null;
 			finalist: string | null;
 			championUserId: string | null;
+			championSlug: string | null;
 			finalistUserId: string | null;
+			finalistSlug: string | null;
 			finalSummary: string | null;
 		} => {
 			const rounds = data.bracket.rounds;
@@ -282,7 +285,9 @@
 				champion: null,
 				finalist: null,
 				championUserId: null,
+				championSlug: null,
 				finalistUserId: null,
+				finalistSlug: null,
 				finalSummary: null,
 			};
 			if (rounds.length === 0) return empty;
@@ -321,13 +326,16 @@
 			if (turns != null)
 				finalSummary += ` in ${turns} turn${turns === 1 ? "" : "s"}`;
 
-			// Ids resolve from the same live slot maps the labels above do, so the
-			// hero's name and its link can't name different people.
+			// Ids (and the slugs that shape their URLs) resolve from the same live
+			// slot maps the labels above do, so the hero's name and its link can't
+			// name different people.
 			return {
 				champion: slotLabelFor(finalMatch.winner_slot_id),
 				finalist: loserId ? slotLabelFor(loserId) : null,
 				championUserId: slotUserIds[finalMatch.winner_slot_id] ?? null,
+				championSlug: slotSlugs[finalMatch.winner_slot_id] ?? null,
 				finalistUserId: loserId ? (slotUserIds[loserId] ?? null) : null,
+				finalistSlug: loserId ? (slotSlugs[loserId] ?? null) : null,
 				finalSummary,
 			};
 		},
@@ -958,6 +966,7 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 													<SlotUsernameCell
 														slotId={s.slot_id}
 														userId={s.user_id}
+														slug={s.slug}
 														username={s.display_name}
 														handle={s.discord_username}
 														answer={s.signup_answer}
@@ -969,6 +978,7 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 												{:else}
 													<ProfileLink
 														userId={s.user_id}
+														slug={s.slug}
 														class="hover:underline"
 													>
 														<span>

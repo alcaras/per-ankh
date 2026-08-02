@@ -814,6 +814,7 @@ export async function computeStandingsResponse(
 		{
 			display_name: string | null;
 			user_id: string | null;
+			slug: string | null;
 			avatar_url: string | null;
 			swiss_seed: number | null;
 			division: "A" | "B" | null;
@@ -825,6 +826,9 @@ export async function computeStandingsResponse(
 		slotIdentity.set(s.slot_id, {
 			display_name: slotDisplayName(s),
 			user_id: s.user_id,
+			// Bare `slug` — a standings row is user-shaped and carries no
+			// tournament slug of its own (Decision 1, #186).
+			slug: s.user_slug,
 			avatar_url: slotAvatarUrl(s),
 			swiss_seed: s.swiss_seed,
 			division: s.division,
@@ -845,6 +849,7 @@ export async function computeStandingsResponse(
 			RankedStanding & {
 				display_name: string | null;
 				user_id: string | null;
+				slug: string | null;
 				avatar_url: string | null;
 				swiss_seed: number | null;
 				signup_answer: string | null;
@@ -866,6 +871,7 @@ export async function computeStandingsResponse(
 			const id = slotIdentity.get(r.slot_id) ?? {
 				display_name: null,
 				user_id: null,
+				slug: null,
 				avatar_url: null,
 				swiss_seed: null,
 				division: null,

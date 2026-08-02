@@ -91,12 +91,16 @@ export type HeaderHero =
 			kind: "complete";
 			champion: string | null;
 			finalist: string | null;
-			// The accounts behind those two names, so the hero cards can link them.
-			// Resolved from the live slot maps by the page, alongside the labels —
-			// null for an unclaimed slot, and for the finalist whenever `finalist`
-			// is.
+			// The accounts behind those two names, so the hero cards can link them,
+			// each with the profile slug that shapes its URL. Resolved from the live
+			// slot maps by the page, alongside the labels — null for an unclaimed
+			// slot, and for the finalist whenever `finalist` is. A slug is null
+			// again whenever the account never claimed one; the link still renders,
+			// against the id permalink.
 			championUserId: string | null;
+			championSlug: string | null;
 			finalistUserId: string | null;
+			finalistSlug: string | null;
 			// Champion subtitle, e.g. "Won the final on Duel Continent Mirror in 68
 			// turns" — the map name comes from the final's pool entry, the turn
 			// count from the linked game (omitted when no game was uploaded).

@@ -407,7 +407,7 @@ Tournament detail (the only read keyed by **slug**).
 ### `GET /v1/tournaments/:id/standings`
 Swiss standings per division + combined qualifier ranking.
 
-- **Response 200:** `{ tournament_id, divisions: { A: { name, standings: RankedStanding[] }, B: {...} }, combined_qualifier_ranking?: [...] }`. Per-row fields include `slot_id, rank, wins, losses, status, h2h, buchholz_cut1, opponents_buchholz, cumulative, division, display_name, avatar_url, swiss_seed, withdrawn`; admins additionally see `signup_answer` and `discord_username` (null for public).
+- **Response 200:** `{ tournament_id, divisions: { A: { name, standings: RankedStanding[] }, B: {...} }, combined_qualifier_ranking?: [...] }`. Per-row fields include `slot_id, rank, wins, losses, status, h2h, buchholz_cut1, opponents_buchholz, cumulative, division, display_name, user_id, slug, avatar_url, swiss_seed, withdrawn`; admins additionally see `signup_answer` and `discord_username` (null for public).
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 
 ### `GET /v1/tournaments/:id/bracket`

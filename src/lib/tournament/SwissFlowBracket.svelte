@@ -186,6 +186,17 @@
 		return out;
 	});
 
+	// The claimed profile slug for those same accounts, so a chip links straight
+	// to /u/<slug> rather than through the id URL's redirect. Same source, same
+	// key — null both for an unclaimed slot and for an occupant without a slug.
+	const slugOf = $derived.by(() => {
+		const out: Record<string, string | null> = {};
+		for (const s of standings) {
+			out[s.slot_id] = s.slug;
+		}
+		return out;
+	});
+
 	type Bucket = {
 		round: number;
 		wins: number; // entering this round
@@ -521,6 +532,7 @@
 								>
 									<ProfileLink
 										userId={userIdOf[a.slot_id] ?? null}
+										slug={slugOf[a.slot_id] ?? null}
 										class="flex min-w-0 flex-1 items-center gap-2 hover:underline"
 									>
 										<PlayerAvatar avatarUrl={avatarOf[a.slot_id]} size={12} />
@@ -554,6 +566,7 @@
 								>
 									<ProfileLink
 										userId={userIdOf[e.slot_id] ?? null}
+										slug={slugOf[e.slot_id] ?? null}
 										class="flex min-w-0 flex-1 items-center gap-2 hover:underline"
 									>
 										<PlayerAvatar avatarUrl={avatarOf[e.slot_id]} size={12} />
