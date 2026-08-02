@@ -1,9 +1,16 @@
 // `./per-ankh admin users` — list users (recent login first by default).
 // `./per-ankh admin user <id>` — full detail for one user.
 // `./per-ankh admin find-user <query>` — search users by handle / display name
-//   / email, with their tournament-slot involvement.
+//   / slug / email, with their tournament-slot involvement.
+// `./per-ankh admin set-slug|clear-slug <id>` — operator control over the
+//   profile URL, which users otherwise claim once and can't change.
 
 import { d1Batch, d1Exec, d1Query, sqlStr } from "../wrangler";
+// The profile-URL rule, shared with the claim endpoint rather than restated
+// here — see cloud/src/schemas/user-slug.ts for why it's a module of its own.
+// cloud/ is a CJS package (no "type":"module") while scripts/ runs as ESM, so
+// its named exports surface only through the default-interop object.
+import userSlugRule from "../../../cloud/src/schemas/user-slug";
 import {
 	bold,
 	type Column,
@@ -25,6 +32,8 @@ import {
 	printJson,
 } from "../../lib/cli";
 
+const { normalizeUserSlug, userSlugError } = userSlugRule;
+
 interface UserListRow {
 	user_id: string;
 	display_name: string;
@@ -40,6 +49,7 @@ interface UserRow {
 	user_id: string;
 	display_name: string;
 	alias: string | null;
+	slug: string | null;
 	discord_id: string;
 	avatar_hash: string | null;
 	email: string | null;
@@ -89,6 +99,7 @@ interface UserMatchRow {
 	discord_username: string | null;
 	display_name: string;
 	alias: string | null;
+	slug: string | null;
 	discord_id: string;
 	email: string | null;
 	created_at: string;
@@ -239,6 +250,7 @@ export async function runDetail(
 		["User ID", user.user_id],
 		["Display name", emdash(user.display_name)],
 		["Alias", emdash(user.alias)],
+		["Slug", user.slug ? `/u/${user.slug}` : emdash(user.slug)],
 		["Discord ID", user.discord_id],
 		["Email", emdash(user.email)],
 		["Email verified", user.email_verified ? "yes" : "no"],
@@ -348,26 +360,29 @@ export async function runFind(
 	const query = positional[0];
 	if (!query) {
 		throw new Error(
-			"Usage: ./per-ankh admin find-user <query>  (matches discord handle, display name, or email)",
+			"Usage: ./per-ankh admin find-user <query>  (matches discord handle, display name, profile slug, or email)",
 		);
 	}
 	const limit = flagInt(flags, "limit", 25);
 
 	info(`Searching users matching "${query}"...`);
 
-	// Case-insensitive substring match. discord_username is stored lowercase
-	// (auth.ts), display_name/email are mixed-case, so we lower() both sides.
+	// Case-insensitive substring match. discord_username and slug are stored
+	// lowercase (auth.ts / the claim endpoint), display_name/email are
+	// mixed-case, so we lower() both sides throughout.
 	// Any `%` / `_` in the query stay live wildcards — useful for operators.
 	const like = sqlStr(`%${query.toLowerCase()}%`);
 	const userPredicate =
 		`lower(u.discord_username) LIKE ${like} ` +
 		`OR lower(u.display_name) LIKE ${like} ` +
 		`OR lower(u.alias) LIKE ${like} ` +
+		`OR lower(u.slug) LIKE ${like} ` +
 		`OR lower(u.email) LIKE ${like}`;
 
 	const batch = await d1Batch([
 		`SELECT
-		   u.user_id, u.discord_username, u.display_name, u.alias, u.discord_id, u.email,
+		   u.user_id, u.discord_username, u.display_name, u.alias, u.slug,
+		   u.discord_id, u.email,
 		   u.created_at, u.last_login_at,
 		   (SELECT COUNT(*) FROM games g WHERE g.user_id = u.user_id) AS game_count
 		 FROM users u
@@ -410,6 +425,7 @@ export async function runFind(
 				{ header: "HANDLE", width: 20 },
 				{ header: "NAME", width: 18 },
 				{ header: "ALIAS", width: 16 },
+				{ header: "SLUG", width: 16 },
 				{ header: "EMAIL", width: 26 },
 				{ header: "GAMES", width: 5, align: "right" },
 				{ header: "LAST LOGIN", width: 16 },
@@ -419,6 +435,7 @@ export async function runFind(
 				emdash(u.discord_username),
 				emdash(u.display_name),
 				emdash(u.alias),
+				emdash(u.slug),
 				emdash(u.email),
 				String(u.game_count),
 				formatDate(u.last_login_at),
@@ -565,4 +582,128 @@ export async function runClearAlias(
 		return;
 	}
 	ok(`Alias cleared: ${user.display_name} (${userId}) (was "${user.alias}")`);
+}
+
+interface SlugUserRow {
+	user_id: string;
+	display_name: string;
+	slug: string | null;
+}
+
+// `./per-ankh admin set-slug <user_id> <slug>` — set the profile URL
+// (per-ankh.app/u/<slug>) a user would otherwise claim for themselves via
+// POST /v1/users/me/slug. Claiming is set-once for users, so this is also how
+// a mistaken or abandoned name gets replaced. Unlike the endpoint it may
+// overwrite an existing slug — that's the operator override — but it applies
+// the endpoint's rule unchanged, since a name the endpoint would have refused
+// is one the user is then stuck with.
+export async function runSetSlug(
+	argv: string[],
+	opts: CommandOpts,
+): Promise<void> {
+	const { positional } = parseFlags(argv);
+	const userId = positional[0];
+	const rawSlug = positional[1];
+	if (!userId || rawSlug === undefined) {
+		throw new Error("Usage: ./per-ankh admin set-slug <user_id> <slug>");
+	}
+	const slug = normalizeUserSlug(rawSlug);
+	const problem = userSlugError(slug);
+	if (problem) {
+		throw new Error(`${problem}.`);
+	}
+
+	// Who the operator named, and who (if anyone) holds the name already —
+	// the unique index would reject the collision, but with a D1 constraint
+	// error instead of the holder's identity.
+	const batch = await d1Batch([
+		`SELECT user_id, display_name, slug FROM users WHERE user_id = ${sqlStr(userId)}`,
+		`SELECT user_id, display_name, slug FROM users WHERE slug = ${sqlStr(slug)}`,
+	]);
+	const user = (batch[0] as SlugUserRow[])[0];
+	const holder = (batch[1] as SlugUserRow[])[0];
+	if (!user) {
+		throw new Error(`User not found: ${userId}`);
+	}
+	if (holder && holder.user_id !== userId) {
+		throw new Error(
+			`Profile URL /u/${slug} is taken by ${holder.display_name} (${holder.user_id}).`,
+		);
+	}
+	if (user.slug === slug) {
+		info(`User ${user.display_name} (${userId}) already has /u/${slug}.`);
+		return;
+	}
+
+	await d1Exec(
+		`UPDATE users SET slug = ${sqlStr(slug)} WHERE user_id = ${sqlStr(userId)}`,
+	);
+
+	if (opts.json) {
+		printJson({
+			user_id: userId,
+			display_name: user.display_name,
+			slug,
+			previous_slug: user.slug,
+		});
+		return;
+	}
+	ok(`Profile URL set: ${user.display_name} (${userId}) → /u/${slug}`);
+	if (user.slug) {
+		info(`/u/${user.slug} now 404s and is free for anyone to claim.`);
+	}
+}
+
+// `./per-ankh admin clear-slug <user_id>` — release the profile URL, letting
+// the user claim a different one (the claim endpoint's set-once check is
+// `slug IS NULL`).
+//
+// No guard beyond "the row exists": clearing is allowed to break the old
+// /u/<slug> link, which is the accepted cost of operator-only renames — the
+// user's profile is permanently reachable at /users/<user_id> either way, and
+// every internal link resolves through that permalink. What the operator does
+// need told is the part they can't undo alone: the freed name is claimable by
+// anyone, so releasing a recognizable one hands over the chance to be mistaken
+// for its previous holder.
+export async function runClearSlug(
+	argv: string[],
+	opts: CommandOpts,
+): Promise<void> {
+	const { positional } = parseFlags(argv);
+	const userId = positional[0];
+	if (!userId) {
+		throw new Error("Usage: ./per-ankh admin clear-slug <user_id>");
+	}
+
+	const rows = await d1Query<SlugUserRow>(
+		`SELECT user_id, display_name, slug FROM users WHERE user_id = ${sqlStr(userId)}`,
+	);
+	const user = rows[0];
+	if (!user) {
+		throw new Error(`User not found: ${userId}`);
+	}
+	if (user.slug === null) {
+		info(`User ${user.display_name} (${userId}) has no profile URL set.`);
+		return;
+	}
+
+	await d1Exec(
+		`UPDATE users SET slug = NULL WHERE user_id = ${sqlStr(userId)}`,
+	);
+
+	if (opts.json) {
+		printJson({
+			user_id: userId,
+			display_name: user.display_name,
+			slug: null,
+			previous_slug: user.slug,
+		});
+		return;
+	}
+	ok(
+		`Profile URL cleared: ${user.display_name} (${userId}) (was /u/${user.slug})`,
+	);
+	info(
+		`/u/${user.slug} now 404s and is free for anyone to claim; the profile stays at /users/${userId}.`,
+	);
 }

@@ -4,6 +4,13 @@
 import * as v from "valibot";
 
 import { StreamUrlSchema } from "./tournament";
+import {
+	normalizeUserSlug,
+	RESERVED_USER_SLUGS,
+	USER_SLUG_FORMAT_MESSAGE,
+	USER_SLUG_RESERVED_MESSAGE,
+	userSlugRegex,
+} from "./user-slug";
 
 // User-editable account preferences. Every field is optional so a caller
 // updates only what it sends (see handleSettings in cloud/src/auth.ts):
@@ -19,55 +26,18 @@ export const UserSettingsSchema = v.object({
 
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
-// The user slug — the <slug> in per-ankh.app/u/<slug>. Its own regex rather
-// than the exported tournament `slugRegex` (schemas/tournament.ts): the same
-// shape by design, but 3-30 chars instead of 1-64 and no trailing hyphen,
-// because this one is a name a person picks once for themselves and then
-// can't change, not a machine-derivable label with a disambiguating suffix.
-const userSlugRegex = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
-
-// Reserved for impersonation and brand reasons ONLY — not route safety. The
-// tournament list (RESERVED_SLUGS, tournament/admin.ts) holds segments that
-// could collide with a route under /tournaments/; under /u/ nothing can
-// collide by construction, so a route-derived entry here would restrict a
-// legitimate name for nothing. Deliberately not the tournament set, and
-// deliberately short: the risk being priced is a profile that reads as
-// official, not a URL that breaks.
-//
-// "me" is doubly covered — the 3-char floor rejects it before this check runs
-// — and is listed anyway so the set reads as the complete brand hold rather
-// than "the brand holds that happen to be 3+ characters".
-export const RESERVED_USER_SLUGS = new Set([
-	"admin",
-	"staff",
-	"moderator",
-	"support",
-	"me",
-	"per-ankh",
-	"perankh",
-]);
-
-// Trim → lowercase BEFORE validating, so a user may type mixed case (and a
-// trailing space from a paste) and still claim the name they meant. The stored
-// value is always the normalized one — which is also what makes the unique
-// index a case-insensitive uniqueness guarantee and a usable prefix index.
-//
-// One format check, one message. Splitting the length bound out into
-// minLength/maxLength would put the 3-30 rule in two places that can drift,
-// and the message below already states the whole rule — which matters because
-// the claim endpoint surfaces it to the user verbatim.
+// The user slug — the <slug> in per-ankh.app/u/<slug>. The rule itself lives
+// in ./user-slug, valibot-free, because the admin CLI writes this same column
+// and can't import valibot; this is only the pipe that puts it on the wire.
+// Normalization (trim → lowercase) runs BEFORE the rules, so a user may type
+// mixed case and still claim the name they meant, and the rules see the value
+// that would be stored. Two actions rather than one so each rejection carries
+// its own message — the claim endpoint shows them to the user verbatim.
 export const SlugSchema = v.pipe(
 	v.string(),
-	v.trim(),
-	v.toLowerCase(),
-	v.regex(
-		userSlugRegex,
-		"Profile URL must be 3-30 characters — lowercase letters, numbers, and hyphens — and must start and end with a letter or number",
-	),
-	v.check(
-		(slug) => !RESERVED_USER_SLUGS.has(slug),
-		"That profile URL is reserved",
-	),
+	v.transform(normalizeUserSlug),
+	v.regex(userSlugRegex, USER_SLUG_FORMAT_MESSAGE),
+	v.check((slug) => !RESERVED_USER_SLUGS.has(slug), USER_SLUG_RESERVED_MESSAGE),
 );
 
 // The claim request envelope. The field is a bare string here, validated

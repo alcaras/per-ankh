@@ -29,9 +29,11 @@ function printHelp(): void {
 			"  stats                            Global counts + recent activity",
 			"  users [--limit N] [--sort K]     List users (sort: recent|uploads|created)",
 			"  user <user_id>                   Show one user's detail",
-			"  find-user <query> [--limit N]    Find users by handle / name / email (+ slots)",
+			"  find-user <query> [--limit N]    Find users by handle / name / slug / email (+ slots)",
 			"  set-alias <user_id> <alias>      Set an operator display alias (overrides name)",
 			"  clear-alias <user_id>            Remove a user's display alias",
+			"  set-slug <user_id> <slug>        Set a user's profile URL (per-ankh.app/u/<slug>)",
+			"  clear-slug <user_id>             Remove it, freeing the name for anyone to claim",
 			"  games [--limit N] [--user U]     List recent cloud games",
 			"  game <game_id>                   Show one game's detail",
 			"  delete-game <game_id>            Delete one game (D1 + R2); account stays",
@@ -137,6 +139,10 @@ export async function main(argv: string[]): Promise<void> {
 			return users.runSetAlias(subArgs, opts);
 		case "clear-alias":
 			return users.runClearAlias(subArgs, opts);
+		case "set-slug":
+			return users.runSetSlug(subArgs, opts);
+		case "clear-slug":
+			return users.runClearSlug(subArgs, opts);
 		case "add-channel":
 			return channels.runAddChannel(subArgs, opts);
 		case "remove-channel":

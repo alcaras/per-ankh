@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
-import { RESERVED_USER_SLUGS, SlugSchema } from "./user";
+import { SlugSchema } from "./user";
+import { RESERVED_USER_SLUGS } from "./user-slug";
 
 // The user slug is claimed once and then can't be changed by the user, and it
 // becomes a public URL — so what the schema accepts is the whole of the
