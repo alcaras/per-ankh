@@ -108,6 +108,10 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         player who owned the wonder's tile on the turn it completed, read
 //         from the ownership history, rather than whoever holds the tile at
 //         the end. Blobs below 2.12.0 credit a captured wonder to its captor.
+// 2.13.0 — projects_produced, the Player node's ProjectsProduced map
+//         (every project completed, whole-game counts). Purely additive;
+//         older blobs simply lack the field and the Economy tab hides the
+//         panel.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -127,13 +131,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.10.0",
 	"2.11.0",
 	"2.12.0",
+	"2.13.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.12.0";
+export const CURRENT_PARSER_VERSION = "2.13.0";
 
 // ----- Reusable atoms -----
 

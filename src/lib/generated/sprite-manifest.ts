@@ -116,10 +116,12 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 	"icons/GOAL_STARTED": "/sprites/icons/GOAL_STARTED.202fc07c.png",
 	"icons/IMPROVEMENT_FINISHED":
 		"/sprites/icons/IMPROVEMENT_FINISHED.302b621c.png",
-	"icons/LAWS": "/sprites/icons/LAWS.442998b8.png",
+	"icons/LAWS": "/sprites/icons/LAWS.f8514971.png",
 	"icons/LAWS_Normal": "/sprites/icons/LAWS_Normal.bcd65937.png",
 	"icons/MAP_OVERVIEW": "/sprites/icons/MAP_OVERVIEW.5c63299a.png",
 	"icons/MILITARY": "/sprites/icons/MILITARY.cad1b950.png",
+	"icons/MISSION_REMOVE_HERESY":
+		"/sprites/icons/MISSION_REMOVE_HERESY.ea9b5457.png",
 	"icons/MULTIPLAYER": "/sprites/icons/MULTIPLAYER.4f62ad02.png",
 	"icons/PENDING_CRITICAL": "/sprites/icons/PENDING_CRITICAL.093c72e4.png",
 	"icons/PLAYER_DIPLOMACY": "/sprites/icons/PLAYER_DIPLOMACY.d8f52750.png",
@@ -1424,6 +1426,122 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/YUEZHI_LEADER_MALE_09_ADULT.de0e9759.webp",
 	"portraits/YUEZHI_LEADER_MALE_10":
 		"/sprites/portraits/YUEZHI_LEADER_MALE_10_ADULT.d6931637.webp",
+	"projects/PROJECT_AFRICA": "/sprites/projects/PROJECT_AFRICA.36431d31.png",
+	"projects/PROJECT_ARCHIVE_1":
+		"/sprites/projects/PROJECT_ARCHIVE_1.12e82c1c.png",
+	"projects/PROJECT_ARCHIVE_2":
+		"/sprites/projects/PROJECT_ARCHIVE_2.c3ba201d.png",
+	"projects/PROJECT_ARCHIVE_3":
+		"/sprites/projects/PROJECT_ARCHIVE_3.0c053e7e.png",
+	"projects/PROJECT_ARCHIVE_4":
+		"/sprites/projects/PROJECT_ARCHIVE_4.50b7af0c.png",
+	"projects/PROJECT_CHILD_LABOR":
+		"/sprites/projects/PROJECT_CHILD_LABOR.1f0e6d08.png",
+	"projects/PROJECT_CITY_CULT":
+		"/sprites/projects/PROJECT_CITY_CULT.7e401345.png",
+	"projects/PROJECT_CONVOY_1":
+		"/sprites/projects/PROJECT_CONVOY_1.701ca68d.png",
+	"projects/PROJECT_CONVOY_2":
+		"/sprites/projects/PROJECT_CONVOY_2.3af36aef.png",
+	"projects/PROJECT_CONVOY_3":
+		"/sprites/projects/PROJECT_CONVOY_3.de42103f.png",
+	"projects/PROJECT_CONVOY_4":
+		"/sprites/projects/PROJECT_CONVOY_4.bec3dd97.png",
+	"projects/PROJECT_CONVOY_5":
+		"/sprites/projects/PROJECT_CONVOY_5.2aeb15ba.png",
+	"projects/PROJECT_CORRUPTION_REFORM":
+		"/sprites/projects/PROJECT_CORRUPTION_REFORM.218b711b.png",
+	"projects/PROJECT_COTHON": "/sprites/projects/PROJECT_COTHON.d902b0c0.png",
+	"projects/PROJECT_COUNCIL_1":
+		"/sprites/projects/PROJECT_COUNCIL_1.81230c1a.png",
+	"projects/PROJECT_COUNCIL_2":
+		"/sprites/projects/PROJECT_COUNCIL_2.3e7f42b8.png",
+	"projects/PROJECT_COUNCIL_3":
+		"/sprites/projects/PROJECT_COUNCIL_3.91078fd2.png",
+	"projects/PROJECT_COUNCIL_4":
+		"/sprites/projects/PROJECT_COUNCIL_4.a0be59d7.png",
+	"projects/PROJECT_DECREE_1":
+		"/sprites/projects/PROJECT_DECREE_1.9d25c0a2.png",
+	"projects/PROJECT_DECREE_2":
+		"/sprites/projects/PROJECT_DECREE_2.6bc05fd6.png",
+	"projects/PROJECT_DECREE_3":
+		"/sprites/projects/PROJECT_DECREE_3.7942e796.png",
+	"projects/PROJECT_DECREE_4":
+		"/sprites/projects/PROJECT_DECREE_4.5098b193.png",
+	"projects/PROJECT_FESTIVAL_1":
+		"/sprites/projects/PROJECT_FESTIVAL_1.e35e1e41.png",
+	"projects/PROJECT_FESTIVAL_2":
+		"/sprites/projects/PROJECT_FESTIVAL_2.9fc53e44.png",
+	"projects/PROJECT_FESTIVAL_3":
+		"/sprites/projects/PROJECT_FESTIVAL_3.8b9eede0.png",
+	"projects/PROJECT_FESTIVAL_4":
+		"/sprites/projects/PROJECT_FESTIVAL_4.346fc9a5.png",
+	"projects/PROJECT_FESTIVAL_5":
+		"/sprites/projects/PROJECT_FESTIVAL_5.13d5f626.png",
+	"projects/PROJECT_FORUM_1": "/sprites/projects/PROJECT_FORUM_1.69e9cc49.png",
+	"projects/PROJECT_FORUM_2": "/sprites/projects/PROJECT_FORUM_2.0ae4cde1.png",
+	"projects/PROJECT_FORUM_3": "/sprites/projects/PROJECT_FORUM_3.59e0766c.png",
+	"projects/PROJECT_FORUM_4": "/sprites/projects/PROJECT_FORUM_4.7fd4b39e.png",
+	"projects/PROJECT_FOUND_RELIGION":
+		"/sprites/projects/PROJECT_FOUND_RELIGION.955211ed.png",
+	"projects/PROJECT_GLADIATORS":
+		"/sprites/projects/PROJECT_GLADIATORS.57645956.png",
+	"projects/PROJECT_GOVERNOR":
+		"/sprites/projects/PROJECT_GOVERNOR.0926b40c.png",
+	"projects/PROJECT_HUNT_1": "/sprites/projects/PROJECT_HUNT_1.35118e63.png",
+	"projects/PROJECT_HUNT_2": "/sprites/projects/PROJECT_HUNT_2.074fd405.png",
+	"projects/PROJECT_HUNT_3": "/sprites/projects/PROJECT_HUNT_3.50277a44.png",
+	"projects/PROJECT_HUNT_4": "/sprites/projects/PROJECT_HUNT_4.e1a95b3a.png",
+	"projects/PROJECT_HUNT_5": "/sprites/projects/PROJECT_HUNT_5.fcc54e4f.png",
+	"projects/PROJECT_IBERIA": "/sprites/projects/PROJECT_IBERIA.fb8247d6.png",
+	"projects/PROJECT_INQUIRY_1":
+		"/sprites/projects/PROJECT_INQUIRY_1.236ee656.png",
+	"projects/PROJECT_INQUIRY_2":
+		"/sprites/projects/PROJECT_INQUIRY_2.9de07ccd.png",
+	"projects/PROJECT_INQUIRY_3":
+		"/sprites/projects/PROJECT_INQUIRY_3.3ab81804.png",
+	"projects/PROJECT_INQUIRY_4":
+		"/sprites/projects/PROJECT_INQUIRY_4.cd3a7b56.png",
+	"projects/PROJECT_INQUIRY_5":
+		"/sprites/projects/PROJECT_INQUIRY_5.ee72f967.png",
+	"projects/PROJECT_LAVISH_LIFESTYLE":
+		"/sprites/projects/PROJECT_LAVISH_LIFESTYLE.7a97be00.png",
+	"projects/PROJECT_MOAT": "/sprites/projects/PROJECT_MOAT.514107b3.png",
+	"projects/PROJECT_MONARCH": "/sprites/projects/PROJECT_MONARCH.fc865d7e.png",
+	"projects/PROJECT_OFFERING_OF_GOODS":
+		"/sprites/projects/PROJECT_OFFERING_OF_GOODS.35c273fc.png",
+	"projects/PROJECT_OLYMPICS_1":
+		"/sprites/projects/PROJECT_OLYMPICS_1.da1f66f6.png",
+	"projects/PROJECT_OLYMPICS_2":
+		"/sprites/projects/PROJECT_OLYMPICS_2.bf1eeb00.png",
+	"projects/PROJECT_OLYMPICS_3":
+		"/sprites/projects/PROJECT_OLYMPICS_3.05483bf5.png",
+	"projects/PROJECT_OLYMPICS_4":
+		"/sprites/projects/PROJECT_OLYMPICS_4.3e05f544.png",
+	"projects/PROJECT_OLYMPICS_5":
+		"/sprites/projects/PROJECT_OLYMPICS_5.5cff0196.png",
+	"projects/PROJECT_REPAIR": "/sprites/projects/PROJECT_REPAIR.e2d90f2d.png",
+	"projects/PROJECT_SANGAM_1":
+		"/sprites/projects/PROJECT_SANGAM_1.85221de0.png",
+	"projects/PROJECT_SANGAM_2":
+		"/sprites/projects/PROJECT_SANGAM_2.bc700cd9.png",
+	"projects/PROJECT_SANGAM_3":
+		"/sprites/projects/PROJECT_SANGAM_3.d81279f0.png",
+	"projects/PROJECT_SANGAM_4":
+		"/sprites/projects/PROJECT_SANGAM_4.cf2c47e3.png",
+	"projects/PROJECT_TOWERS": "/sprites/projects/PROJECT_TOWERS.313189e2.png",
+	"projects/PROJECT_TREASURY_1":
+		"/sprites/projects/PROJECT_TREASURY_1.d8aee4ef.png",
+	"projects/PROJECT_TREASURY_2":
+		"/sprites/projects/PROJECT_TREASURY_2.b74ec6f9.png",
+	"projects/PROJECT_TREASURY_3":
+		"/sprites/projects/PROJECT_TREASURY_3.c5fd07fd.png",
+	"projects/PROJECT_TREASURY_4":
+		"/sprites/projects/PROJECT_TREASURY_4.a913a3e1.png",
+	"projects/PROJECT_TRIUMPH": "/sprites/projects/PROJECT_TRIUMPH.5e1a14bf.png",
+	"projects/PROJECT_VEDIC_RITUALS":
+		"/sprites/projects/PROJECT_VEDIC_RITUALS.cf51320e.png",
+	"projects/PROJECT_WALLS": "/sprites/projects/PROJECT_WALLS.375af844.png",
 	"religions/RELIGION_ATENISM":
 		"/sprites/religions/RELIGION_ATENISM.212e3c6f.png",
 	"religions/RELIGION_ATENISM_HERESY":
@@ -1577,6 +1695,61 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 	"religions/RELIGION_ZOROASTRIANISM_HOLY":
 		"/sprites/religions/RELIGION_ZOROASTRIANISM_HOLY.dce7a2da.png",
 	"religions/Religion_Frame": "/sprites/religions/Religion_Frame.5b1b488a.png",
+	"resources/RESOURCE_BARLEY":
+		"/sprites/resources/RESOURCE_BARLEY.7e59f058.png",
+	"resources/RESOURCE_CAMEL": "/sprites/resources/RESOURCE_CAMEL.5cbb0be4.png",
+	"resources/RESOURCE_CATTLE":
+		"/sprites/resources/RESOURCE_CATTLE.49c4fbf2.png",
+	"resources/RESOURCE_CITRUS":
+		"/sprites/resources/RESOURCE_CITRUS.712dc65d.png",
+	"resources/RESOURCE_CRAB": "/sprites/resources/RESOURCE_CRAB.a80c9e3f.png",
+	"resources/RESOURCE_DYE": "/sprites/resources/RESOURCE_DYE.576f3844.png",
+	"resources/RESOURCE_EBONY": "/sprites/resources/RESOURCE_EBONY.7983824f.png",
+	"resources/RESOURCE_ELEPHANT":
+		"/sprites/resources/RESOURCE_ELEPHANT.eb309a26.png",
+	"resources/RESOURCE_EXOTIC_FUR":
+		"/sprites/resources/RESOURCE_EXOTIC_FUR.cf01834c.png",
+	"resources/RESOURCE_FISH": "/sprites/resources/RESOURCE_FISH.01a96298.png",
+	"resources/RESOURCE_FUR": "/sprites/resources/RESOURCE_FUR.eb759f14.png",
+	"resources/RESOURCE_GAME": "/sprites/resources/RESOURCE_GAME.eb45b782.png",
+	"resources/RESOURCE_GEM": "/sprites/resources/RESOURCE_GEM.8fe6ce48.png",
+	"resources/RESOURCE_GENERIC_LUXURY":
+		"/sprites/resources/RESOURCE_GENERIC_LUXURY.bbeb1c98.png",
+	"resources/RESOURCE_GOAT": "/sprites/resources/RESOURCE_GOAT.4da80319.png",
+	"resources/RESOURCE_GOLD": "/sprites/resources/RESOURCE_GOLD.27b52d54.png",
+	"resources/RESOURCE_HONEY": "/sprites/resources/RESOURCE_HONEY.fb212b05.png",
+	"resources/RESOURCE_HORSE": "/sprites/resources/RESOURCE_HORSE.1bd8bada.png",
+	"resources/RESOURCE_INCENSE":
+		"/sprites/resources/RESOURCE_INCENSE.4a8ab4da.png",
+	"resources/RESOURCE_IRON": "/sprites/resources/RESOURCE_IRON.1a768b48.png",
+	"resources/RESOURCE_JADE": "/sprites/resources/RESOURCE_JADE.d12843b5.png",
+	"resources/RESOURCE_LAVENDER":
+		"/sprites/resources/RESOURCE_LAVENDER.254c0ff5.png",
+	"resources/RESOURCE_LITERATURE":
+		"/sprites/resources/RESOURCE_LITERATURE.b0070178.png",
+	"resources/RESOURCE_OLIVE": "/sprites/resources/RESOURCE_OLIVE.76116331.png",
+	"resources/RESOURCE_PEARL": "/sprites/resources/RESOURCE_PEARL.9a0d171c.png",
+	"resources/RESOURCE_PERFUME":
+		"/sprites/resources/RESOURCE_PERFUME.7a63d9a9.png",
+	"resources/RESOURCE_PIG": "/sprites/resources/RESOURCE_PIG.ef0eaf79.png",
+	"resources/RESOURCE_PORCELAIN":
+		"/sprites/resources/RESOURCE_PORCELAIN.e66a0a47.png",
+	"resources/RESOURCE_SALT": "/sprites/resources/RESOURCE_SALT.81c9c5b4.png",
+	"resources/RESOURCE_SHEEP": "/sprites/resources/RESOURCE_SHEEP.e8cb5417.png",
+	"resources/RESOURCE_SHORTFALL":
+		"/sprites/resources/RESOURCE_SHORTFALL.83f8c88a.png",
+	"resources/RESOURCE_SILK": "/sprites/resources/RESOURCE_SILK.d8b66090.png",
+	"resources/RESOURCE_SILVER":
+		"/sprites/resources/RESOURCE_SILVER.331591e1.png",
+	"resources/RESOURCE_SORGHUM":
+		"/sprites/resources/RESOURCE_SORGHUM.55012027.png",
+	"resources/RESOURCE_SPICES":
+		"/sprites/resources/RESOURCE_SPICES.0ac3d2ff.png",
+	"resources/RESOURCE_STONE": "/sprites/resources/RESOURCE_STONE.f1ad812a.png",
+	"resources/RESOURCE_WHEAT": "/sprites/resources/RESOURCE_WHEAT.1a95a6f9.png",
+	"resources/RESOURCE_WINE": "/sprites/resources/RESOURCE_WINE.39d3b43b.png",
+	"resources/RESOURCE_WOOTZ_STEEL":
+		"/sprites/resources/RESOURCE_WOOTZ_STEEL.2cbd811f.png",
 	"specialists/SPECIALIST_ACOLYTE":
 		"/sprites/specialists/SPECIALIST_ACOLYTE.3e9e8de8.png",
 	"specialists/SPECIALIST_ARTIST":
@@ -1700,51 +1873,51 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 	"techs/TECH_VAULTING": "/sprites/techs/TECH_VAULTING.9e5a6927.png",
 	"techs/TECH_WINDLASS": "/sprites/techs/TECH_WINDLASS.e97cc75d.png",
 	"traits-trimmed/TRAIT_BUILDER":
-		"/sprites/traits-trimmed/TRAIT_BUILDER.2c768072.png",
+		"/sprites/traits-trimmed/TRAIT_BUILDER.031c3079.png",
 	"traits-trimmed/TRAIT_BUILDER_SILVER":
-		"/sprites/traits-trimmed/TRAIT_BUILDER_SILVER.5fdfa787.png",
+		"/sprites/traits-trimmed/TRAIT_BUILDER_SILVER.e7c75b9b.png",
 	"traits-trimmed/TRAIT_COMMANDER":
-		"/sprites/traits-trimmed/TRAIT_COMMANDER.5516ed4d.png",
+		"/sprites/traits-trimmed/TRAIT_COMMANDER.527906c4.png",
 	"traits-trimmed/TRAIT_COMMANDER_SILVER":
-		"/sprites/traits-trimmed/TRAIT_COMMANDER_SILVER.7af7309f.png",
+		"/sprites/traits-trimmed/TRAIT_COMMANDER_SILVER.1f69be54.png",
 	"traits-trimmed/TRAIT_CONNECTION_TACTICAL_ADVANTAGE":
-		"/sprites/traits-trimmed/TRAIT_CONNECTION_TACTICAL_ADVANTAGE.e79a355d.png",
+		"/sprites/traits-trimmed/TRAIT_CONNECTION_TACTICAL_ADVANTAGE.32569cee.png",
 	"traits-trimmed/TRAIT_DIPLOMAT":
-		"/sprites/traits-trimmed/TRAIT_DIPLOMAT.f4ae54fc.png",
+		"/sprites/traits-trimmed/TRAIT_DIPLOMAT.63ff541f.png",
 	"traits-trimmed/TRAIT_DIPLOMAT_SILVER":
-		"/sprites/traits-trimmed/TRAIT_DIPLOMAT_SILVER.67027264.png",
+		"/sprites/traits-trimmed/TRAIT_DIPLOMAT_SILVER.3ca57760.png",
 	"traits-trimmed/TRAIT_HERO":
-		"/sprites/traits-trimmed/TRAIT_HERO.f60386da.png",
+		"/sprites/traits-trimmed/TRAIT_HERO.3ccf0888.png",
 	"traits-trimmed/TRAIT_HERO_SILVER":
-		"/sprites/traits-trimmed/TRAIT_HERO_SILVER.e0a24ae9.png",
+		"/sprites/traits-trimmed/TRAIT_HERO_SILVER.1274e0eb.png",
 	"traits-trimmed/TRAIT_JUDGE":
-		"/sprites/traits-trimmed/TRAIT_JUDGE.f45d060e.png",
+		"/sprites/traits-trimmed/TRAIT_JUDGE.94dfe958.png",
 	"traits-trimmed/TRAIT_JUDGE_SILVER":
-		"/sprites/traits-trimmed/TRAIT_JUDGE_SILVER.ac6426dc.png",
+		"/sprites/traits-trimmed/TRAIT_JUDGE_SILVER.533f3dde.png",
 	"traits-trimmed/TRAIT_ORATOR":
-		"/sprites/traits-trimmed/TRAIT_ORATOR.c1515782.png",
+		"/sprites/traits-trimmed/TRAIT_ORATOR.1604bf8a.png",
 	"traits-trimmed/TRAIT_ORATOR_SILVER":
-		"/sprites/traits-trimmed/TRAIT_ORATOR_SILVER.72441143.png",
+		"/sprites/traits-trimmed/TRAIT_ORATOR_SILVER.3fb7ad47.png",
 	"traits-trimmed/TRAIT_SCHEMER":
-		"/sprites/traits-trimmed/TRAIT_SCHEMER.d1c5a95e.png",
+		"/sprites/traits-trimmed/TRAIT_SCHEMER.e4cbb5b1.png",
 	"traits-trimmed/TRAIT_SCHEMER_SILVER":
-		"/sprites/traits-trimmed/TRAIT_SCHEMER_SILVER.fdcc4c6d.png",
+		"/sprites/traits-trimmed/TRAIT_SCHEMER_SILVER.9ee12333.png",
 	"traits-trimmed/TRAIT_SCHOLAR":
-		"/sprites/traits-trimmed/TRAIT_SCHOLAR.bb866161.png",
+		"/sprites/traits-trimmed/TRAIT_SCHOLAR.25cc9f05.png",
 	"traits-trimmed/TRAIT_SCHOLAR_SILVER":
-		"/sprites/traits-trimmed/TRAIT_SCHOLAR_SILVER.50d0e890.png",
+		"/sprites/traits-trimmed/TRAIT_SCHOLAR_SILVER.3aeb6780.png",
 	"traits-trimmed/TRAIT_STRENGTH":
-		"/sprites/traits-trimmed/TRAIT_STRENGTH.a0cfcb79.png",
+		"/sprites/traits-trimmed/TRAIT_STRENGTH.b4ca565a.png",
 	"traits-trimmed/TRAIT_TACTICIAN":
-		"/sprites/traits-trimmed/TRAIT_TACTICIAN.f01a8a97.png",
+		"/sprites/traits-trimmed/TRAIT_TACTICIAN.c635cffb.png",
 	"traits-trimmed/TRAIT_TACTICIAN_SILVER":
-		"/sprites/traits-trimmed/TRAIT_TACTICIAN_SILVER.f72fcd9a.png",
+		"/sprites/traits-trimmed/TRAIT_TACTICIAN_SILVER.df1a9134.png",
 	"traits-trimmed/TRAIT_WEAKNESS":
-		"/sprites/traits-trimmed/TRAIT_WEAKNESS.c7b9d5ce.png",
+		"/sprites/traits-trimmed/TRAIT_WEAKNESS.7bb432ab.png",
 	"traits-trimmed/TRAIT_ZEALOT":
-		"/sprites/traits-trimmed/TRAIT_ZEALOT.b9006852.png",
+		"/sprites/traits-trimmed/TRAIT_ZEALOT.8b99d784.png",
 	"traits-trimmed/TRAIT_ZEALOT_SILVER":
-		"/sprites/traits-trimmed/TRAIT_ZEALOT_SILVER.cd9e84d6.png",
+		"/sprites/traits-trimmed/TRAIT_ZEALOT_SILVER.a65da4e7.png",
 	"traits/TRAIT_BUILDER": "/sprites/traits/TRAIT_BUILDER.5f6408ba.png",
 	"traits/TRAIT_BUILDER_SILVER":
 		"/sprites/traits/TRAIT_BUILDER_SILVER.5bb742f3.png",

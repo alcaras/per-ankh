@@ -17,6 +17,7 @@
 	import type { PlayerWonder } from "$lib/types/PlayerWonder";
 	import type {
 		PlayerResourceInfo,
+		ProjectProducedInfo,
 		TileOwnershipEntry,
 		UnitInfo,
 		YieldPriceEntry,
@@ -71,6 +72,7 @@
 		yieldPrices = [],
 		eventLogs,
 		playerResources = [],
+		projectsProduced = [],
 		cityStatistics,
 		playerWonders,
 		unitsProduced,
@@ -96,6 +98,10 @@
 		// End-of-game stockpiles — the National wealth panel. Defaults to [] for
 		// legacy callers (frozen web/ viewer), which hides that panel.
 		playerResources?: PlayerResourceInfo[];
+		// Every project each player completed, whole-game counts. Present on
+		// 2.13.0+ blobs only; the panel hides on older games rather than
+		// implying nobody built projects.
+		projectsProduced?: ProjectProducedInfo[];
 		cityStatistics: CityStatistics;
 		playerWonders: PlayerWonder[];
 		unitsProduced: PlayerUnitProduced[];
@@ -563,6 +569,101 @@
 		),
 	);
 
+	// ─── Projects ─────────────────────────────────────────────────────
+	// Projects are the third thing a city builds besides units and (via
+	// workers) improvements, and the save's ProjectsProduced map is the
+	// whole-game record. Rows are keyed by PROJECT_* zType.
+	// formatEnum strips trailing digits ("Garrison 1" → "Garrison"), which is
+	// right where tiers aggregate — but project tiers are distinct rows here
+	// (Council 1/2/3 are separate accomplishments), so put the tier back.
+	const projectLabel = (key: string): string => {
+		const label = formatEnum(key, "PROJECT_");
+		const tier = /_(\d+)$/.exec(key)?.[1];
+		return tier != null ? `${label} ${tier}` : label;
+	};
+
+	// Per-nation project counts — the shared source for both surfaces below:
+	// the duel's comparison panel and the per-nation cards that stand in for it
+	// when the game has any other number of players.
+	const projectsByPlayer = $derived(
+		orderedPlayers.map((player) => {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+			const counts = new Map<string, number>();
+			for (const row of projectsProduced) {
+				if (row.player_xml_id !== player.playerId) continue;
+				counts.set(row.project, (counts.get(row.project) ?? 0) + row.count);
+			}
+			return counts;
+		}),
+	);
+
+	// Raw per-nation rows: BuildComparison re-aggregates these and gap-fills
+	// them against whatever `keys` it was handed, so a nation that built none
+	// of a project just omits it here.
+	const projectItems = $derived<BuildItem[][]>(
+		projectsByPlayer.map((counts) =>
+			[...counts].map(([key, count]) => ({ key, count })),
+		),
+	);
+
+	// The duel panel's row order, and the union every project in the game
+	// appears in. One flat list — projects have no rural/urban axis to split
+	// on. Same ordering the improvement panels use: biggest total first, ties
+	// on the displayed name rather than the raw zType, which sorts the
+	// underscore before a letter and would put Councillor ahead of Council 1.
+	const projectKeys = $derived.by(() => {
+		const total = (key: string) =>
+			projectsByPlayer.reduce((sum, m) => sum + (m.get(key) ?? 0), 0);
+		return comparisonRowKeys(
+			projectItems,
+			(a, b) =>
+				total(b) - total(a) || projectLabel(a).localeCompare(projectLabel(b)),
+		);
+	});
+
+	// False on 2.12.0 and older blobs, which carry no ProjectsProduced at all,
+	// and on a game where nobody finished one. Both hide the surfaces below
+	// rather than showing zeroes that would imply nobody built projects.
+	const hasProjects = $derived(projectKeys.length > 0);
+
+	// One bar scale across every nation's ledger, so a bar length means the
+	// same thing on each card — the busiest single nation-and-project cell in
+	// the game. Scaling each card to its own longest row instead would draw a
+	// nation with two projects exactly like one with twenty.
+	const projectMax = $derived(
+		Math.max(
+			1,
+			...projectsByPlayer.map((counts) => Math.max(0, ...counts.values())),
+		),
+	);
+
+	// Project names run far longer than the unit and improvement names the
+	// panel's 110px column was cut for ("Codex Of Highland Wisdom"), so size the
+	// column off the longest name in the game instead of clipping it. One width
+	// for every panel, so the bars keep the shared scale above meaningful — a
+	// per-card column would hand each nation a different amount of bar. The
+	// 20px covers the icon slot and its gap, which share the column.
+	const projectLabelWidth = $derived(
+		`calc(${Math.max(0, ...projectKeys.map((key) => projectLabel(key).length))}ch + 20px)`,
+	);
+
+	// Each nation's ledger lists only what that nation built, biggest first.
+	// Handing every card the shared row order instead would pad it with a blank
+	// row for each project the other nations built and it didn't.
+	const projectLedgers = $derived(
+		orderedPlayers.map((player, i) => ({
+			player,
+			items: projectItems[i],
+			keys: comparisonRowKeys([projectItems[i]], (a, b) => {
+				const counts = projectsByPlayer[i];
+				return (
+					(counts.get(b) ?? 0) - (counts.get(a) ?? 0) ||
+					projectLabel(a).localeCompare(projectLabel(b))
+				);
+			}),
+		})),
+	);
+
 	const PANEL_LABELS: Record<string, string> = {
 		rural: "Rural",
 		urban: "Urban",
@@ -738,14 +839,54 @@
 		{/each}
 	</div>
 
-	{#if !matchup}
-		<p
-			class="rounded-lg p-4 text-sm italic text-tan"
+	{#if !matchup && hasProjects}
+		<!-- Projects have no pivot table below to fall back on the way
+		     improvements do, so without these the data would parse, ship and
+		     then show nowhere in a game that isn't a duel. One ledger panel
+		     per nation, sharing a bar scale so the cards read against each
+		     other rather than each alone. -->
+		<div
+			class="rounded-lg p-4"
 			style="background-color: rgb(var(--color-surface));"
 		>
-			Side-by-side comparison needs exactly two nations. Every improvement is
-			listed below.
-		</p>
+			<h3 class="mb-3 text-base font-bold text-tan">Projects completed</h3>
+			<!-- Columns rather than a grid: nations build wildly different
+			     numbers of projects, and grid rows are as tall as their tallest
+			     cell, so a short nation beside a long one leaves the gap its
+			     neighbour's rows opened. Column flow packs each ledger under the
+			     last instead. break-inside-avoid keeps one nation whole. -->
+			<div class="gap-3 lg:columns-2">
+				{#each projectLedgers as ledger (ledger.player.playerId)}
+					<div class="mb-3 flex break-inside-avoid flex-col gap-1.5">
+						<div class="flex items-center gap-2">
+							{#if ledger.player.nation}
+								<SpriteIcon
+									category="crests"
+									value={ledger.player.nation}
+									size={16}
+									alt={formatEnum(ledger.player.nation, "NATION_")}
+								/>
+							{/if}
+							<span
+								class="truncate text-xs font-bold"
+								style="color: {ledger.player.color};"
+								>{ledger.player.label}</span
+							>
+						</div>
+						<BuildComparison
+							title="All projects"
+							a={ledger.items}
+							ca={ledger.player.color}
+							keys={ledger.keys}
+							max={projectMax}
+							labelWidth={projectLabelWidth}
+							iconCategory="projects"
+							labelOf={projectLabel}
+						/>
+					</div>
+				{/each}
+			</div>
+		</div>
 	{/if}
 	{#if matchup}
 		<!-- Counts beside cost: two columns read better than one full-width panel,
@@ -793,6 +934,26 @@
 					{/each}
 				</div>
 			</div>
+			{#if hasProjects}
+				<div
+					class="rounded-lg p-4"
+					style="background-color: rgb(var(--color-surface));"
+				>
+					<h3 class="mb-3 text-base font-bold text-tan">Projects completed</h3>
+					<BuildComparison
+						title="All projects"
+						a={projectItems[0]}
+						b={projectItems[1]}
+						ca={matchup[0].color}
+						cb={matchup[1].color}
+						keys={projectKeys}
+						labelWidth={projectLabelWidth}
+						iconCategory="projects"
+						labelOf={projectLabel}
+						showDiff
+					/>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </section>
