@@ -8,6 +8,7 @@
 	import { page } from "$app/state";
 	import HeaderGameSearch from "$lib/users/HeaderGameSearch.svelte";
 	import AboutModal from "$lib/AboutModal.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { resolveLoginNext } from "$lib/utils/safe-next";
 	import { cloudApi, ApiError, type UserMe } from "$lib/api-cloud";
 
@@ -107,7 +108,7 @@
 		Left: hieroglyph wordmark. Always routes to / — the home page is the
 		public discovery surface (recent saves, active tournaments) served to
 		signed-in and signed-out viewers alike. Signed-in users can still jump
-		to their personal dashboard via the hamburger menu.
+		to their own profile via the hamburger menu.
 	-->
 	<a
 		href={resolve("/")}
@@ -193,11 +194,12 @@
 				<span>Upload</span>
 			</a>
 			<!-- eslint-enable svelte/no-navigation-without-resolve -->
-			<!-- Avatar (profile link). -->
-			<a
-				href={resolve(`/users/${user.user_id}`)}
+			<!-- Avatar (profile link) — the icon-only shortcut to the labeled
+			     "Profile" item in the menu below. -->
+			<ProfileLink
+				userId={user.user_id}
 				class="flex-shrink-0"
-				aria-label="Your profile"
+				ariaLabel="Your profile"
 				title="Your profile"
 			>
 				<img
@@ -207,7 +209,7 @@
 					width="28"
 					height="28"
 				/>
-			</a>
+			</ProfileLink>
 		{:else}
 			<!-- Signed out: a plain login button stands in for the avatar. -->
 			<button
@@ -250,6 +252,13 @@
 					class="absolute right-0 z-50 mt-2 w-40 rounded border-2 border-black bg-blue-gray shadow-lg"
 				>
 					{#if user}
+						<ProfileLink
+							userId={user.user_id}
+							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
+							onclick={closeMenu}
+						>
+							Profile
+						</ProfileLink>
 						<a
 							href={resolve("/account")}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
