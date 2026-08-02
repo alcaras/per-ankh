@@ -127,6 +127,7 @@
 		{tournament}
 		{user}
 		{slotLabels}
+		{slotUserIds}
 		{slotAvatars}
 		onRowClick={pick}
 		isLive={(row) => liveSet.has(row)}

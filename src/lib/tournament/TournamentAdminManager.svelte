@@ -13,6 +13,7 @@
 		type TournamentDetail,
 		type UserSearchResult,
 	} from "$lib/api-cloud";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { toast } from "$lib/ui/toast";
 	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 
@@ -95,13 +96,18 @@
 					class="flex items-center justify-between gap-3 rounded border border-black bg-surface-raised p-2"
 				>
 					<span class="flex items-center gap-2">
-						<img
-							src={admin.avatar_url}
-							alt=""
-							class="h-5 w-5 rounded-full"
-							loading="lazy"
-						/>
-						<span>{admin.display_name}</span>
+						<ProfileLink
+							userId={admin.user_id}
+							class="flex min-w-0 items-center gap-2 hover:underline"
+						>
+							<img
+								src={admin.avatar_url}
+								alt=""
+								class="h-5 w-5 rounded-full"
+								loading="lazy"
+							/>
+							<span>{admin.display_name}</span>
+						</ProfileLink>
 						{#if admin.is_creator}
 							<span class="opacity-60">(creator)</span>
 						{/if}

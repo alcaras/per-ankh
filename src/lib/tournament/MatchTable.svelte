@@ -14,6 +14,7 @@
 		UserMe,
 	} from "$lib/api-cloud";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import CastControls from "$lib/tournament/CastControls.svelte";
 	import { matchBracketLabel } from "$lib/tournament/bracket-label";
@@ -22,6 +23,7 @@
 		matchSlotDisplayName,
 		matchSlotNation,
 		matchSlotOutcome,
+		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
 	import {
 		atlasMapUrl,
@@ -59,6 +61,7 @@
 		tournament,
 		user,
 		slotLabels,
+		slotUserIds,
 		slotAvatars,
 		sortColumn = null,
 		sortDirection = "asc",
@@ -80,6 +83,10 @@
 		// "needs a caster" flag but no action buttons.
 		user: UserMe | null;
 		slotLabels: Record<string, string>;
+		// Live slot → per-ankh account, the fallback half of the same snapshot-
+		// first rule the labels and avatars resolve under. Only the player cells
+		// read it (casters carry their own user_id on the part).
+		slotUserIds: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		// The active sort column/direction, for the header arrow. Only meaningful
 		// alongside onSort (a sortable surface).
@@ -130,7 +137,9 @@
      A decided match emphasizes its winner (bold orange, as the Swiss and
      championship bracket cards already do) and dims the loser — the outcome
      lives here rather than in a `result` column, which would be
-     perspective-dependent ("W" for whom?) where every other column is not. -->
+     perspective-dependent ("W" for whom?) where every other column is not.
+     Avatar + name link to the occupant's profile when they have an account;
+     the crest is the nation, not the player, so it stays outside the link. -->
 {#snippet playerCell(m: TournamentMatch, side: "a" | "b")}
 	{@const slotId = side === "a" ? m.slot_a_id : m.slot_b_id}
 	{#if slotId === null}
@@ -151,15 +160,21 @@
 					alt={formatEnum(nation, "NATION_")}
 				/>
 			{/if}
-			<PlayerAvatar
-				avatarUrl={matchSlotAvatarUrl(m, side, slotAvatars)}
-				size={16}
-			/>
-			<span
-				class="truncate {outcome === 'won'
-					? 'font-bold text-orange'
-					: 'text-bright'}">{name}</span
+			<ProfileLink
+				userId={matchSlotUserId(m, side, slotUserIds)}
+				class="inline-flex min-w-0 items-center gap-1 hover:underline"
+				onclick={(e) => e.stopPropagation()}
 			>
+				<PlayerAvatar
+					avatarUrl={matchSlotAvatarUrl(m, side, slotAvatars)}
+					size={16}
+				/>
+				<span
+					class="truncate {outcome === 'won'
+						? 'font-bold text-orange'
+						: 'text-bright'}">{name}</span
+				>
+			</ProfileLink>
 		</span>
 	{/if}
 {/snippet}
@@ -352,11 +367,19 @@
 												{/if}
 												<span class="inline-flex items-center gap-1.5">
 													<span class="inline-flex items-center gap-1">
-														<PlayerAvatar
-															avatarUrl={casters[0].avatar_url}
-															size={16}
-														/>
-														{casters[0].display_name ?? casters[0].name}
+														<!-- Free-text casters (an admin typed a name) carry a
+														     null user_id and stay unlinked. -->
+														<ProfileLink
+															userId={casters[0].user_id}
+															class="inline-flex items-center gap-1 hover:underline"
+															onclick={(e) => e.stopPropagation()}
+														>
+															<PlayerAvatar
+																avatarUrl={casters[0].avatar_url}
+																size={16}
+															/>
+															{casters[0].display_name ?? casters[0].name}
+														</ProfileLink>
 													</span>
 													{#if casters.length > 1}
 														<span class="text-[10px] opacity-60">with</span>
@@ -365,11 +388,17 @@
 															<span
 																class="inline-flex items-center gap-1 opacity-70"
 															>
-																<PlayerAvatar
-																	avatarUrl={c.avatar_url}
-																	size={16}
-																/>
-																{c.display_name ?? c.name}
+																<ProfileLink
+																	userId={c.user_id}
+																	class="inline-flex items-center gap-1 hover:underline"
+																	onclick={(e) => e.stopPropagation()}
+																>
+																	<PlayerAvatar
+																		avatarUrl={c.avatar_url}
+																		size={16}
+																	/>
+																	{c.display_name ?? c.name}
+																</ProfileLink>
 															</span>
 														{/each}
 													{/if}

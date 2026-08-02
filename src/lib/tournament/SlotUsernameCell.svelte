@@ -1,9 +1,14 @@
 <script lang="ts">
 	import type { UserSearchResult } from "$lib/api-cloud";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 
 	interface Props {
 		slotId: string;
+		// The account occupying the slot, when it has been claimed. Links the
+		// read-mode name to that profile; null (an unclaimed slot) renders the name
+		// exactly as before.
+		userId: string | null;
 		// Displayed label for the occupant (the account display name when claimed,
 		// else the typed name). Shown verbatim when not editing — NOT used to seed
 		// the editor.
@@ -39,6 +44,7 @@
 
 	let {
 		slotId,
+		userId,
 		username,
 		handle = null,
 		disabled,
@@ -153,9 +159,11 @@
 {:else}
 	<span class="inline-flex flex-col gap-0.5">
 		<span class="inline-flex items-center gap-1">
-			<span class:opacity-60={!username}>
-				{username ?? `slot ${slotId.slice(0, 6)}`}
-			</span>
+			<ProfileLink {userId} class="hover:underline">
+				<span class:opacity-60={!username}>
+					{username ?? `slot ${slotId.slice(0, 6)}`}
+				</span>
+			</ProfileLink>
 			<button
 				type="button"
 				class="text-tan opacity-40 transition-colors hover:text-orange hover:opacity-100"

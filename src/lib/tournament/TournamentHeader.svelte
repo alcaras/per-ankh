@@ -10,6 +10,7 @@
 		UserMe,
 	} from "$lib/api-cloud";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import Progress from "$lib/ui/Progress.svelte";
 	import SignupPopover from "./SignupPopover.svelte";
 	import TransitionPopover from "./TransitionPopover.svelte";
@@ -262,7 +263,12 @@
 						<p class="text-xs uppercase tracking-wide text-tan">Champion</p>
 						{#if hero.champion}
 							<p class="text-sm">
-								<span class="font-bold text-orange">{hero.champion}</span>
+								<ProfileLink
+									userId={hero.championUserId}
+									class="hover:underline"
+								>
+									<span class="font-bold text-orange">{hero.champion}</span>
+								</ProfileLink>
 							</p>
 							{#if hero.finalSummary}
 								<p class="text-xs text-tan">{hero.finalSummary}</p>
@@ -286,7 +292,12 @@
 						<div class="min-w-0">
 							<p class="text-xs uppercase tracking-wide text-tan">Runner-up</p>
 							<p class="text-sm">
-								<span class="font-bold text-orange">{hero.finalist}</span>
+								<ProfileLink
+									userId={hero.finalistUserId}
+									class="hover:underline"
+								>
+									<span class="font-bold text-orange">{hero.finalist}</span>
+								</ProfileLink>
 							</p>
 							{#if hero.fieldSize > 0}
 								<p class="text-xs text-tan">

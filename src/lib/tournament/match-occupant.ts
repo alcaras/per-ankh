@@ -19,6 +19,14 @@ interface MatchAvatarLike {
 	slot_b_avatar_url: string | null;
 }
 
+interface MatchUserIdLike {
+	status: "pending" | "complete" | "forfeit" | "bye";
+	slot_a_id: string | null;
+	slot_b_id: string | null;
+	slot_a_user_id: string | null;
+	slot_b_user_id: string | null;
+}
+
 interface MatchNationLike {
 	slot_a_nation: string | null;
 	slot_b_nation: string | null;
@@ -93,6 +101,28 @@ export function matchSlotAvatarUrl(
 	if (match.status !== "pending") {
 		const snap =
 			side === "a" ? match.slot_a_avatar_url : match.slot_b_avatar_url;
+		if (snap !== null && snap !== undefined) return snap;
+	}
+	return liveBySlotId[slotId] ?? null;
+}
+
+// The per-ankh account behind one side of a match, with the same snapshot-vs-
+// live rule as the name and avatar above — which is the whole point of it
+// living here rather than being read off `slot_a/b_user_id` at each link site.
+// A decided match shows the occupant pinned at report time, so its link must go
+// to that player; resolving the id from the live slot instead would point a
+// substituted-out player's name at whoever holds their seat now. Null when the
+// side has no slot, or when the occupant has no per-ankh account (an unclaimed
+// slot) — callers render exactly as before in that case rather than linking.
+export function matchSlotUserId(
+	match: MatchUserIdLike,
+	side: "a" | "b",
+	liveBySlotId: Record<string, string | null | undefined>,
+): string | null {
+	const slotId = side === "a" ? match.slot_a_id : match.slot_b_id;
+	if (slotId === null) return null;
+	if (match.status !== "pending") {
+		const snap = side === "a" ? match.slot_a_user_id : match.slot_b_user_id;
 		if (snap !== null && snap !== undefined) return snap;
 	}
 	return liveBySlotId[slotId] ?? null;

@@ -91,6 +91,12 @@ export type HeaderHero =
 			kind: "complete";
 			champion: string | null;
 			finalist: string | null;
+			// The accounts behind those two names, so the hero cards can link them.
+			// Resolved from the live slot maps by the page, alongside the labels —
+			// null for an unclaimed slot, and for the finalist whenever `finalist`
+			// is.
+			championUserId: string | null;
+			finalistUserId: string | null;
 			// Champion subtitle, e.g. "Won the final on Duel Continent Mirror in 68
 			// turns" — the map name comes from the final's pool entry, the turn
 			// count from the linked game (omitted when no game was uploaded).

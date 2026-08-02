@@ -597,6 +597,7 @@
 					tournament={data.tournament}
 					{user}
 					slotLabels={slotMaps.labels}
+					slotUserIds={slotMaps.userIds}
 					slotAvatars={slotMaps.avatars}
 					isLive={(row) => liveSet.has(row)}
 					onRowClick={(m, e) => pick(m.match_id, e)}
@@ -620,6 +621,7 @@
 					tournament={data.tournament}
 					{user}
 					slotLabels={slotMaps.labels}
+					slotUserIds={slotMaps.userIds}
 					slotAvatars={slotMaps.avatars}
 					sortColumn={tableState.sortColumn}
 					sortDirection={tableState.sortDirection}
@@ -634,6 +636,7 @@
 					zone={clock.zone}
 					{user}
 					slotLabels={slotMaps.labels}
+					slotUserIds={slotMaps.userIds}
 					slotAvatars={slotMaps.avatars}
 					search={searchTerm}
 					onOpenMatch={(m, e) => pick(m.match_id, e)}

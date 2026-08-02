@@ -12,6 +12,7 @@
 		type TournamentMatch,
 		type UserMe,
 	} from "$lib/api-cloud";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { synthesizeChampionshipPlaceholders } from "$lib/tournament/bracket-placeholders";
 	import ChampionshipBracketTree from "$lib/tournament/ChampionshipBracketTree.svelte";
 	import ChampionshipStandings from "$lib/tournament/ChampionshipStandings.svelte";
@@ -272,10 +273,18 @@
 		(): {
 			champion: string | null;
 			finalist: string | null;
+			championUserId: string | null;
+			finalistUserId: string | null;
 			finalSummary: string | null;
 		} => {
 			const rounds = data.bracket.rounds;
-			const empty = { champion: null, finalist: null, finalSummary: null };
+			const empty = {
+				champion: null,
+				finalist: null,
+				championUserId: null,
+				finalistUserId: null,
+				finalSummary: null,
+			};
 			if (rounds.length === 0) return empty;
 			const finalRound = rounds.reduce((a, b) =>
 				b.round_number > a.round_number ? b : a,
@@ -312,9 +321,13 @@
 			if (turns != null)
 				finalSummary += ` in ${turns} turn${turns === 1 ? "" : "s"}`;
 
+			// Ids resolve from the same live slot maps the labels above do, so the
+			// hero's name and its link can't name different people.
 			return {
 				champion: slotLabelFor(finalMatch.winner_slot_id),
 				finalist: loserId ? slotLabelFor(loserId) : null,
+				championUserId: slotUserIds[finalMatch.winner_slot_id] ?? null,
+				finalistUserId: loserId ? (slotUserIds[loserId] ?? null) : null,
 				finalSummary,
 			};
 		},
@@ -934,11 +947,17 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 											{s.swiss_seed ?? s.rank}
 										</td>
 										<td class="py-1 pr-2">
+											<!-- Name links to the claiming player; the "Claimed" ✓
+											     column beside it is literally this same user_id.
+											     Avatar stays unlinked for the reason SwissStandings
+											     documents (the admin row's name lives inside the
+											     substitute editor). -->
 											<span class="flex items-start gap-1">
 												<PlayerAvatar avatarUrl={s.avatar_url} size={15} />
 												{#if isAdmin}
 													<SlotUsernameCell
 														slotId={s.slot_id}
+														userId={s.user_id}
 														username={s.display_name}
 														handle={s.discord_username}
 														answer={s.signup_answer}
@@ -948,9 +967,15 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 															substituteSlot(s.slot_id, u, userId, answer)}
 													/>
 												{:else}
-													<span>
-														{s.display_name ?? `slot ${s.slot_id.slice(0, 6)}`}
-													</span>
+													<ProfileLink
+														userId={s.user_id}
+														class="hover:underline"
+													>
+														<span>
+															{s.display_name ??
+																`slot ${s.slot_id.slice(0, 6)}`}
+														</span>
+													</ProfileLink>
 												{/if}
 											</span>
 										</td>
