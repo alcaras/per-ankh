@@ -470,9 +470,9 @@
 
 	// ─── Side-by-side comparisons ─────────────────────────────────────
 	// The Military tab's diverging-bar module, pointed at what this tab counts.
-	// One panel per kind — rural / urban / wonders — because that split is the
-	// strategic axis: a wide farm empire and a tall urban one show up as
-	// different blocks rather than one undifferentiated list. 1v1 like the
+	// One panel per kind — rural / urban — because that split is the strategic
+	// axis: a wide farm empire and a tall urban one show up as different
+	// blocks rather than one undifferentiated list. 1v1 like the
 	// Military panels, so it renders only for a two-sided game. (Specialists
 	// get the same treatment on the Specialists tab, next to the coverage
 	// numbers they explain.)
@@ -548,7 +548,7 @@
 
 	const improvementPanels = $derived(
 		panels(
-			["rural", "urban", "wonder"],
+			["rural", "urban"],
 			(imp) => IMPROVEMENT_BUILDS[imp.improvement]?.kind ?? null,
 			(imp) => (IMPROVEMENT_BUILDS[imp.improvement] ? imp.improvement : null),
 			(key) => IMPROVEMENT_UNLOCK_COST[key] ?? 0,
@@ -561,7 +561,7 @@
 	// cost, since that's the question this panel answers.
 	const workerTurnPanels = $derived(
 		panels(
-			["rural", "urban", "wonder"],
+			["rural", "urban"],
 			(imp) => IMPROVEMENT_BUILDS[imp.improvement]?.kind ?? null,
 			(imp) => (IMPROVEMENT_BUILDS[imp.improvement] ? imp.improvement : null),
 			null,
@@ -664,10 +664,10 @@
 		})),
 	);
 
+	// Wonders have their own tab; the Built panels carry only worker economy.
 	const PANEL_LABELS: Record<string, string> = {
 		rural: "Rural",
 		urban: "Urban",
-		wonder: "Wonders",
 	};
 </script>
 

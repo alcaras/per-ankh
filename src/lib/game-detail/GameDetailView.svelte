@@ -58,6 +58,7 @@
 	import MilitaryTab from "./MilitaryTab.svelte";
 	import CitiesTab from "./CitiesTab.svelte";
 	import EconomyTab from "./EconomyTab.svelte";
+	import WondersTab from "./WondersTab.svelte";
 	import FamiliesTab from "./FamiliesTab.svelte";
 	import SpecialistsTab from "./SpecialistsTab.svelte";
 	import MapTab from "./MapTab.svelte";
@@ -509,6 +510,8 @@
 
 		<Tabs.Trigger value="economy" class={triggerClass}>Economy</Tabs.Trigger>
 
+		<Tabs.Trigger value="wonders" class={triggerClass}>Wonders</Tabs.Trigger>
+
 		<Tabs.Trigger value="families" class={triggerClass}>Families</Tabs.Trigger>
 
 		<Tabs.Trigger value="specialists" class={triggerClass}>
@@ -669,6 +672,15 @@
 			totalTurns={gameDetails.total_turns}
 			{userNation}
 			bind:tableState={tables.improvements}
+		/>
+	</Tabs.Content>
+
+	<!-- Tab Content: Wonders -->
+	<Tabs.Content value="wonders" class="tab-pane min-h-[400px]">
+		<WondersTab
+			players={resolvedPlayers}
+			{playerWonders}
+			disabledImprovements={gameDetails.disabled_improvements}
 		/>
 	</Tabs.Content>
 
