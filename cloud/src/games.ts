@@ -23,6 +23,7 @@ import {
 	cloudCorsHeaders,
 	decompressWithLimit,
 	errorResponse,
+	escapeLikeValue,
 	getClientIp,
 	jsonResponse,
 	sha256Hex,
@@ -140,7 +141,8 @@ export type RateLimitedEventType =
 	| "tournament_export"
 	| "tournament_schedule"
 	| "user_search"
-	| "user_search_public";
+	| "user_search_public"
+	| "slug_claim_attempt";
 
 // Upload rate limits cover both first-time uploads and re-imports — both
 // hit the same R2 puts + D1 batch, so they cost the same.
@@ -2025,8 +2027,7 @@ export async function handleGameList(
 		// search for "100%" doesn't match everything. ESCAPE '\\' opts the
 		// pattern into backslash-escaping. LOWER both sides for
 		// case-insensitive substring match without depending on D1 collation.
-		const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
-		const likePattern = `%${escaped.toLowerCase()}%`;
+		const likePattern = `%${escapeLikeValue(q).toLowerCase()}%`;
 		// Match the game title (game_name / owner rename) and the nation.
 		// user_nation is the raw enum (e.g. NATION_MAURYA), so a search for
 		// "maurya" matches via substring — searching by nation is the common

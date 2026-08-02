@@ -181,11 +181,33 @@ describe("GET /v1/users/public-search — matching", () => {
 				"user_id",
 			]);
 		}
-		// discord_id is still read server-side — it addresses the CDN — which
-		// is exactly why its absence from the payload has to be asserted.
+		// The projection carries no discord_* field. It is NOT a claim that the
+		// discord_id is withheld — avatar_url is a Discord CDN URL with the
+		// snowflake in its path, same as every other public avatar payload. The
+		// property this endpoint actually enforces is the one above: the handle
+		// is neither returned nor matchable.
 		expect(body.users[0].avatar_url).toMatch(
 			/^https:\/\/cdn\.discordapp\.com\//,
 		);
+	});
+
+	// LIKE reads `%` and `_` as wildcards inside the bound value, so an
+	// unescaped query is a pattern. Left live, `%%` matches every row and
+	// `%a` becomes a contains-search — which would turn the deliberately
+	// prefix-only lookup into the user directory the scoping block below
+	// exists to prevent.
+	it("treats LIKE wildcards in the query as literal characters", async () => {
+		const caller = await makeUser();
+		const target = await makeFindableUser({ displayName: "Wildcard Probe" });
+
+		// A bare wildcard sweep finds nobody...
+		expect(await idsMatching(caller, "%%")).not.toContain(target.userId);
+		// ...nor does one anchored to a letter the name contains.
+		expect(await idsMatching(caller, "%w")).not.toContain(target.userId);
+		// `_` is the single-char wildcard; "_ildcard" must not match "Wildcard".
+		expect(await idsMatching(caller, "_ildcard")).not.toContain(target.userId);
+		// Sanity: the real prefix still works, so the escaping didn't over-reach.
+		expect(await idsMatching(caller, "wildcard")).toContain(target.userId);
 	});
 });
 

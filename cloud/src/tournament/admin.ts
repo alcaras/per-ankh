@@ -31,6 +31,7 @@ import { displayNameSql } from "../identity";
 import {
 	cloudCorsHeaders,
 	errorResponse,
+	isUniqueViolation,
 	jsonResponse,
 	parseJsonBody,
 } from "../util";
@@ -611,11 +612,7 @@ export async function handleCreateTournament(
 		// Race: another batch landed the same slug between our pre-check
 		// and the INSERT. D1 surfaces the SQLite error; identify the slug
 		// UNIQUE constraint specifically to return 409.
-		const msg = e instanceof Error ? e.message : String(e);
-		if (
-			msg.includes("UNIQUE constraint failed") &&
-			msg.includes("tournaments.slug")
-		) {
+		if (isUniqueViolation(e, "tournaments.slug")) {
 			return errorResponse(`Slug "${slug}" is taken`, 409, cors, "SLUG_TAKEN");
 		}
 		throw e;

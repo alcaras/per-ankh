@@ -29,6 +29,11 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			// Header people search (users.ts): same counter role as
 			// user_search, its own budget. Metadata is q_length only.
 			"user_search_public",
+			// Profile-URL claim attempts (users.ts): written per request, not
+			// per success, because it's the rejected claims that need bounding.
+			// Metadata-free — which name was tried isn't worth keeping; the one
+			// that landed is recorded by slug_claim in the bucket below.
+			"slug_claim_attempt",
 			// Caster self-service ledger (player.ts): inserted per cast/uncast,
 			// read only by the 1h schedule budget. Metadata-free by design.
 			"tournament_schedule",

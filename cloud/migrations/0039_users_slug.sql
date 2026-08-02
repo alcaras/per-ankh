@@ -24,11 +24,18 @@
 -- Index: UNIQUE *is* the uniqueness enforcement the claim's 409 SLUG_TAKEN
 -- rides on — a race-safe constraint, not a convenience over a pre-SELECT, since
 -- two concurrent claims of the same name would both pass a check-then-write.
--- It doubles as the read index: GET /v1/users/by-slug/:slug is an equality
--- probe on it, and because slugs are lowercased before they're written, SQLite
--- can also use it for the LIKE 'q%' prefix scan the public people search adds
--- when it starts matching slugs (the same case-sensitivity note as 0016's
--- idx_users_discord_username). One index, three readers.
+-- It doubles as the read index for GET /v1/users/by-slug/:slug, which is an
+-- equality probe on it. Two readers.
+--
+-- It does NOT serve the public people search's slug leg, and isn't expected to:
+-- that predicate is LOWER(u.slug) LIKE ?, and wrapping the column in a function
+-- rules out the index outright. Even unwrapped it wouldn't qualify — SQLite's
+-- LIKE optimization needs the column to be COLLATE NOCASE (or case_sensitive_like
+-- ON), which storing values lowercase does not arrange. That search is a full
+-- scan of `users` regardless, since its display_name and alias legs have no
+-- usable index either; it's fine on a table this size, and the handler comment
+-- says so. (0016's note on idx_users_discord_username claimed the same
+-- optimization for the same reason; corrected in place when this landed.)
 
 ALTER TABLE users ADD COLUMN slug TEXT;
 

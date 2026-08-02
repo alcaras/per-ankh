@@ -24,9 +24,12 @@ export interface UserSearchResult {
 
 // Result row returned by cloudApi.searchPublicUsers — the "Players" group
 // in the header search. The public-facing counterpart of UserSearchResult:
-// no discord_id, no discord_username, because a public people search must
-// not confirm Discord-handle prefixes. `avatar_url` is built server-side,
-// so the id behind it never reaches the client.
+// no discord_id or discord_username field, and — the part that matters —
+// discord_username is not a match key either, so this endpoint can't confirm
+// a Discord-handle prefix. (`avatar_url` is a cdn.discordapp.com URL and so
+// still carries the uploader's discord_id in its path, exactly as every other
+// public payload's avatar does; that's the cost of rendering the avatar at
+// all, and it's the handle, not the snowflake, that the PII stance protects.)
 export interface PublicUserSearchResult {
 	user_id: string;
 	display_name: string;

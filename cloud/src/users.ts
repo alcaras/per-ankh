@@ -35,6 +35,8 @@ import { USER_MATCHES_WHERE, type TournamentEnv } from "./tournament/data";
 import {
 	cloudCorsHeaders,
 	errorResponse,
+	escapeLikeValue,
+	isUniqueViolation,
 	jsonResponse,
 	parseJsonBody,
 } from "./util";
@@ -142,19 +144,24 @@ export async function handleUserSearch(
 	// idx_users_discord_username covers the handle prefix; display_name has no
 	// index. Table is small enough that the scan is fine — promote to a
 	// functional index if user count grows past a few thousand.
+	//
+	// escapeLikeValue + ESCAPE keeps `q` a literal: without it a `%` or `_` in
+	// the query is a live wildcard, so `q = "%%"` matches every row and the
+	// "prefix only" contract silently becomes "anything".
+	const pattern = escapeLikeValue(q) + "%";
 	const rows = await env.SHARE_DB.prepare(
 		`SELECT user_id, discord_id, discord_username,
 		        ${displayNameSql("users")} AS display_name
 		 FROM users
-		 WHERE (LOWER(display_name) LIKE ?
-		        OR LOWER(discord_username) LIKE ?
-		        OR LOWER(alias) LIKE ?)
+		 WHERE (LOWER(display_name) LIKE ? ESCAPE '\\'
+		        OR LOWER(discord_username) LIKE ? ESCAPE '\\'
+		        OR LOWER(alias) LIKE ? ESCAPE '\\')
 		   AND discord_username IS NOT NULL
 		   AND display_name IS NOT NULL
 		 ORDER BY display_name
 		 LIMIT ?`,
 	)
-		.bind(q + "%", q + "%", q + "%", limit)
+		.bind(pattern, pattern, pattern, limit)
 		.all<{
 			user_id: string;
 			discord_id: string;
@@ -176,12 +183,21 @@ export async function handleUserSearch(
 //      caller confirm Discord-handle prefixes, which is the thing the PII
 //      stance forbids.
 //   2. Serializes no discord_* field. discord_id is still SELECTed —
-//      buildAvatarUrl needs it to address the CDN — and then used without
-//      being emitted, the same select-use-don't-serialize shape
+//      buildAvatarUrl needs it to address the CDN — and is not emitted as a
+//      field of its own, the same select-use-don't-serialize shape
 //      handleUserProfile uses for the profile header's avatar.
+//
+//      Not a claim that the id is withheld: buildAvatarUrl returns
+//      cdn.discordapp.com/avatars/<discord_id>/<hash>.png, so the snowflake
+//      travels inside avatar_url on every row here — as it already does on
+//      the public profile, standings, and creator-feed payloads. That is
+//      accepted app-wide (a Discord CDN URL is the only way to render the
+//      avatar), and it is the *handle* — discord_username — that the PII
+//      stance keeps out of public payloads. Difference 1 is what enforces
+//      that; this one is only about not adding a discord_* field.
 //   3. Returns only users who made something public (the EXISTS block).
 //
-// Rows are { user_id, display_name, avatar_url }.
+// Rows are { user_id, display_name, slug, avatar_url }.
 interface PublicUserSearchRow {
 	user_id: string;
 	discord_id: string;
@@ -272,18 +288,25 @@ export async function handlePublicUserSearch(
 	//
 	// Prefix match on the two name columns plus the slug (see difference 1
 	// above) — never discord_username, which a public endpoint must not
-	// confirm. idx_users_slug (0039) covers the slug leg. The resolved
-	// display_name needs no NOT NULL guard even for a slug-only match:
-	// users.display_name is NOT NULL (0002), so the COALESCE always yields a
-	// name. LOWER(...) matches the already-lowercased `q`; slugs are stored
-	// lowercase, so that leg's LOWER is a no-op kept for symmetry.
+	// confirm. The resolved display_name needs no NOT NULL guard even for a
+	// slug-only match: users.display_name is NOT NULL (0002), so the COALESCE
+	// always yields a name. LOWER(...) matches the already-lowercased `q`;
+	// slugs are stored lowercase, so that leg's LOWER is a no-op kept for
+	// symmetry.
+	//
+	// escapeLikeValue + ESCAPE is load-bearing for the scoping above, not a
+	// nicety: an unescaped `%` or `_` in `q` is a live wildcard, so `q = "%%"`
+	// would match every row and `q = "%a"` would become a contains-search —
+	// turning the deliberately prefix-only lookup into the directory sweep the
+	// EXISTS block exists to prevent.
+	const pattern = escapeLikeValue(q) + "%";
 	const rows = await env.SHARE_DB.prepare(
 		`SELECT u.user_id, u.discord_id, u.avatar_hash, u.slug,
 		        ${displayNameSql("u")} AS display_name
 		 FROM users u
-		 WHERE (LOWER(u.display_name) LIKE ?
-		     OR LOWER(u.alias) LIKE ?
-		     OR LOWER(u.slug) LIKE ?)
+		 WHERE (LOWER(u.display_name) LIKE ? ESCAPE '\\'
+		     OR LOWER(u.alias) LIKE ? ESCAPE '\\'
+		     OR LOWER(u.slug) LIKE ? ESCAPE '\\')
 		   AND (
 		        u.slug IS NOT NULL
 		     OR EXISTS (SELECT 1 FROM games g
@@ -294,7 +317,7 @@ export async function handlePublicUserSearch(
 		 ORDER BY display_name
 		 LIMIT ?`,
 	)
-		.bind(q + "%", q + "%", q + "%", limit)
+		.bind(pattern, pattern, pattern, limit)
 		.all<PublicUserSearchRow>();
 
 	return jsonResponse(
@@ -510,9 +533,19 @@ async function buildUserProfile(
 // answers — "you already have one" vs. "someone else has that one" — so they
 // get distinct codes for the Settings card to phrase differently.
 //
-// No rate limit: the write can succeed at most once per account, the endpoint
-// is session-gated, and validation is pure compute. A budget here would spend
-// an events read on a request that a conditional UPDATE already bounds.
+// Rate-limited on *attempts*, not successes. The conditional UPDATE bounds how
+// often this can succeed (once per account), but not how often it can be
+// called: until a user has claimed, every well-formed request runs a real D1
+// UPDATE that the unique index rejects, so failed claims are unbounded writes
+// and a name-availability oracle. Slugs are public by design, so the oracle is
+// cheap — the writes are the reason for the budget.
+//
+// Hence its own counter (`slug_claim_attempt`, 24h retention) rather than
+// counting `slug_claim`: that row is the durable success record and there is at
+// most one, so it can't bound anything. Claiming is a once-per-account act, so
+// the ceiling only has to leave room for a few rejected names in a sitting.
+export const SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR = 15;
+
 export interface ClaimSlugEnv extends UserProfileEnv, EventsEnv {}
 
 export async function handleClaimSlug(
@@ -523,6 +556,23 @@ export async function handleClaimSlug(
 	const session = await sessionFromRequest(env, request);
 	if (!session) {
 		return errorResponse("Authentication required", 401, cors, "UNAUTHORIZED");
+	}
+
+	// Budget first, same ordering as the two searches: a hammered account fails
+	// before any body parse, DB write, or counter insert.
+	const attempts = await countEventsSince(
+		env.EVENTS_DB,
+		"slug_claim_attempt",
+		"user_id",
+		session.data.user_id,
+	);
+	if (attempts >= SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR) {
+		return errorResponse(
+			"Too many profile URL attempts — try again later",
+			429,
+			cors,
+			"RATE_LIMIT_SLUG_CLAIM",
+		);
 	}
 
 	// Shared parse for the envelope — it carries the Content-Type check that
@@ -545,6 +595,22 @@ export async function handleClaimSlug(
 	}
 	const slug = validated.output;
 
+	// Counter row, written before the write it bounds — a rejected claim is
+	// exactly the case the budget exists for, so spending it must not depend on
+	// the outcome. Fire-and-forget and metadata-free: which names a user tried
+	// is not worth retaining, and the successful one is recorded by slug_claim
+	// below.
+	env.EVENTS_DB.prepare(
+		`INSERT INTO events (event_type, user_id) VALUES ('slug_claim_attempt', ?)`,
+	)
+		.bind(session.data.user_id)
+		.run()
+		.catch((e: unknown) => {
+			logError("slug_claim_attempt_audit_failed", e, {
+				user_id: session.data.user_id,
+			});
+		});
+
 	// The `slug IS NULL` predicate is what makes this set-once: a user who
 	// already claimed one matches no row. Uniqueness is the index's job, not a
 	// pre-SELECT's — two concurrent claims of the same name would both pass a
@@ -558,11 +624,7 @@ export async function handleClaimSlug(
 			.run();
 		changes = result.meta?.changes ?? 0;
 	} catch (e) {
-		const msg = e instanceof Error ? e.message : String(e);
-		if (
-			msg.includes("UNIQUE constraint failed") &&
-			msg.includes("users.slug")
-		) {
+		if (isUniqueViolation(e, "users.slug")) {
 			return errorResponse(
 				`"${slug}" is already taken`,
 				409,

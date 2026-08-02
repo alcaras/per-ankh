@@ -17,6 +17,7 @@
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR } from "../../../src/users";
 import {
 	expectErrorCode,
 	expectOk,
@@ -134,6 +135,46 @@ describe("POST /v1/users/me/slug", () => {
 			status: 409,
 			code: "SLUG_TAKEN",
 		});
+	});
+
+	// The budget counts attempts, not successes: a user who hasn't claimed yet
+	// can fire unlimited *rejected* claims, each a real D1 write and a probe
+	// for whether a name is free. One-per-account successes can't bound that.
+	it("429s past SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR attempts", async () => {
+		const u = await makeUser();
+		for (let i = 0; i < SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR; i++) {
+			await env.SHARE_DB.prepare(
+				`INSERT INTO events (event_type, user_id) VALUES ('slug_claim_attempt', ?)`,
+			)
+				.bind(u.userId)
+				.run();
+		}
+
+		await expectErrorCode(await claim("over-budget", u), {
+			status: 429,
+			code: "RATE_LIMIT_SLUG_CLAIM",
+		});
+	});
+
+	it("spends budget on a rejected claim, not just a successful one", async () => {
+		const holder = await makeUser({ slug: "already-mine" });
+		const other = await makeUser();
+
+		await expectErrorCode(await claim("already-mine", other), {
+			status: 409,
+			code: "SLUG_TAKEN",
+		});
+
+		const row = await env.SHARE_DB.prepare(
+			`SELECT COUNT(*) AS n FROM events
+			 WHERE event_type = 'slug_claim_attempt' AND user_id = ?`,
+		)
+			.bind(other.userId)
+			.first<{ n: number }>();
+		expect(row?.n).toBe(1);
+		// The holder is untouched — the failed claim took neither the name nor
+		// the other user's budget.
+		expect(holder.userId).not.toBe(other.userId);
 	});
 
 	it("rejects a second claim by the same user with 409 SLUG_ALREADY_SET", async () => {
