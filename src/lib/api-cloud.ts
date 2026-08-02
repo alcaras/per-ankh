@@ -59,6 +59,10 @@ export interface RecentVideo {
 export interface CreatorVideo extends RecentVideo {
 	user_id: string;
 	display_name: string;
+	// The creator's claimed profile slug, null while unclaimed. Bare (not
+	// `uploader_slug`): these three fields are the creator themself, and nothing
+	// on a video row carries a competing slug. Feeds profileHref/ProfileLink.
+	slug: string | null;
 	avatar_url: string;
 }
 

@@ -349,7 +349,7 @@ One player's whole tournament record — played + upcoming matches, and cast app
 Cross-creator home feed — the newest uploads across all users' linked channels, merged newest-first for the home page's "Latest from creators" strip.
 
 - **Auth:** Public — channels and their videos are user-published; no PII, same for every viewer.
-- **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform, user_id, display_name, avatar_url }[] }` (each video carries its creator; empty only when no channel has recent uploads).
+- **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform, user_id, display_name, slug: string|null, avatar_url }[] }` (each video carries its creator; empty only when no channel has recent uploads).
 - **Notes:** Cached as one pre-assembled KV entry, stale-while-revalidate (mirrors the per-channel cache): fresh served as-is, stale served instantly while a background task re-assembles it, cold miss built synchronously and cached so the first request already returns the feed. The cold build's per-channel fetches run in parallel over mostly-warm caches (at worst one RSS fetch per channel, plus one `videos.list` call where a key is configured). Capped at 8 (two rows of four). Underlying per-channel data is the same SWR cache as `GET /v1/users/:user_id/videos`, including its broadcast-date correction — so a cast is placed and labelled by when it aired.
 
 ---

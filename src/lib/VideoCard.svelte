@@ -57,6 +57,7 @@
 		{#if uploader}
 			<ProfileLink
 				userId={uploader.user_id}
+				slug={uploader.slug}
 				class="relative z-20 flex min-w-0 flex-1 items-center gap-1 hover:underline"
 			>
 				<img
