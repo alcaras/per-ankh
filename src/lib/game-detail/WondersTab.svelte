@@ -106,10 +106,11 @@
 					class="w-48 rounded-lg border-2 bg-surface-raised p-2 text-center"
 					style="border-color: {card.builderColor ?? 'transparent'};"
 				>
-					<!-- Reserve the slot: five wonders ship no improvement sprite, and
-					     SpriteIcon draws nothing when the path is missing, which would
-					     pull their name up to the card's top edge and break the row's
-					     alignment. Same idiom as BuildComparison's icon column. -->
+					<!-- The wrapper is what the disabled dim applies to, so the art
+					     fades while the name and the "Not in this game" note stay
+					     legible — the states differ by what they say, not by a filter
+					     over all of it. Sized to the icon's square, the same way
+					     BuildComparison's icon column is. -->
 					<span
 						class="mx-auto flex h-14 w-14 flex-none items-center {card.state ===
 						'disabled'
