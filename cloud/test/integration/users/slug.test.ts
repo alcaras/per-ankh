@@ -1,5 +1,6 @@
 // Behavior tests for the user-claimed profile URL (users.slug) — the claim
-// endpoint and the resolver that serves /u/<slug>.
+// endpoint, the resolver that serves /u/<slug>, and the identity payloads the
+// slug rides along on.
 //
 // Covers:
 //   * POST /v1/users/me/slug: happy path (and the lowercasing that lets a
@@ -9,6 +10,10 @@
 //   * The claim's awaited audit row
 //   * GET /v1/users/by-slug/:slug: resolves to the same payload the id route
 //     serves, 404 for an unknown slug, 404 for a malformed one
+//   * Propagation onto the identity payloads whose links would otherwise take
+//     the /users/<id> → /u/<slug> redirect hop. Each case also asserts the
+//     un-claimed neighbour still reads null, because a payload that returned a
+//     slug for everyone would pass a one-sided check.
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -18,6 +23,7 @@ import {
 	expectStatus,
 } from "../../helpers/assertions";
 import { makeUser, type TestUser } from "../../helpers/builders";
+import { seedGame } from "../../helpers/games";
 import { request } from "../../helpers/requests";
 
 beforeAll(async () => {
@@ -186,3 +192,37 @@ describe("GET /v1/users/by-slug/:slug", () => {
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// B5b — slug propagation onto the identity payloads
+//
+// Each surface below emits a profile link. Without the slug the link is the
+// /users/<id> permalink, which 308s; with it the link is already canonical.
+// Nothing breaks when a slug is absent, which is exactly why every case here
+// also pins the null.
+// ---------------------------------------------------------------------------
+
+interface PublicRecentResponse {
+	games: Array<{
+		game_id: string;
+		uploader_user_id: string;
+		uploader_slug: string | null;
+	}>;
+}
+
+describe("users.slug — public-recent", () => {
+	it("ships uploader_slug for a claimed uploader and null for an unclaimed one", async () => {
+		const claimed = await makeUser({ slug: "feed-uploader" });
+		const unclaimed = await makeUser();
+		const claimedGame = await seedGame(claimed, { isPublic: true });
+		const unclaimedGame = await seedGame(unclaimed, { isPublic: true });
+
+		const body = await expectOk<PublicRecentResponse>(
+			await request.get({ path: "/v1/games/public-recent" }),
+		);
+		const byId = new Map(body.games.map((g) => [g.game_id, g]));
+		expect(byId.get(claimedGame)?.uploader_slug).toBe("feed-uploader");
+		expect(byId.get(unclaimedGame)?.uploader_slug).toBeNull();
+	});
+});
+

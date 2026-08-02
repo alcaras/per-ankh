@@ -277,6 +277,11 @@ export interface PublicRecentGame {
 	created_at: string;
 	uploader_user_id: string;
 	uploader_display_name: string;
+	// The uploader's claimed profile slug, null while unclaimed. Prefixed
+	// because it sits on a game row rather than a user-shaped object — a bare
+	// `slug` would read as the game's. Feeds profileHref/ProfileLink alongside
+	// uploader_user_id; never render it directly.
+	uploader_slug: string | null;
 	uploader_avatar_url: string;
 	players: PublicRecentPlayer[];
 }

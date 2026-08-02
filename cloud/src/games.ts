@@ -2154,6 +2154,7 @@ export async function handlePublicRecentGames(
 		        g.save_date, g.created_at,
 		        g.user_id AS uploader_user_id,
 		        ${displayNameSql("u")} AS uploader_display_name,
+		        u.slug AS uploader_slug,
 		        u.discord_id AS uploader_discord_id,
 		        u.avatar_hash AS uploader_avatar_hash
 		 FROM games g
@@ -2180,6 +2181,10 @@ export async function handlePublicRecentGames(
 			created_at: string;
 			uploader_user_id: string;
 			uploader_display_name: string;
+			// Prefixed like the other uploader columns: a game row is one of the
+			// flattened shapes Decision 1 (#186) names, so a bare `slug` here would
+			// read as the game's own.
+			uploader_slug: string | null;
 			uploader_discord_id: string;
 			uploader_avatar_hash: string | null;
 		}>();
@@ -2308,6 +2313,7 @@ export async function handlePublicRecentGames(
 		created_at: g.created_at,
 		uploader_user_id: g.uploader_user_id,
 		uploader_display_name: g.uploader_display_name,
+		uploader_slug: g.uploader_slug,
 		uploader_avatar_url: buildAvatarUrl(
 			g.uploader_discord_id,
 			g.uploader_avatar_hash,

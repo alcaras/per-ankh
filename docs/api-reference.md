@@ -200,7 +200,7 @@ List a user's games (search + filters + scope).
 Most-recent public games across all users (home-page feed).
 
 - **Auth:** Public. Serves `is_public=1` rows only.
-- **Response 200:** `PublicRecentGamesResponse` — `{ games: PublicRecentGame[] }` (≤20), each with uploader identity and per-player `vp_series` points.
+- **Response 200:** `PublicRecentGamesResponse` — `{ games: PublicRecentGame[] }` (≤20), each with uploader identity (`uploader_user_id`, `uploader_display_name`, `uploader_slug: string|null`, `uploader_avatar_url`) and per-player `vp_series` points.
 - **Errors:** `429 RATE_LIMIT`.
 - **Notes:** `anon_read` bucket (200/hr per IP; scraper UAs exempt). Only `display_name`/`player_name` exposed — no `online_id`/email. Cached `public, max-age=300, s-maxage=60`.
 

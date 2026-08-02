@@ -168,6 +168,7 @@
 		<div class="flex min-w-0 flex-1">
 			<ProfileLink
 				userId={game.uploader_user_id}
+				slug={game.uploader_slug}
 				class="relative z-20 flex min-w-0 items-center gap-1 hover:underline"
 			>
 				<img
