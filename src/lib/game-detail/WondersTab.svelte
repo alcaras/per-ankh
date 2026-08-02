@@ -116,12 +116,18 @@
 					style="background-color: rgb(var(--color-surface)); border-color: {card.builderColor ??
 						'transparent'};"
 				>
-					<SpriteIcon
-						category="improvements"
-						value={card.wonder}
-						size={56}
-						alt={improvementDisplayName(card.wonder)}
-					/>
+					<!-- Reserve the slot: five wonders ship no improvement sprite, and
+					     SpriteIcon draws nothing when the path is missing, which would
+					     pull their name up to the card's top edge and break the row's
+					     alignment. Same idiom as BuildComparison's icon column. -->
+					<span class="mx-auto flex h-14 w-14 flex-none items-center">
+						<SpriteIcon
+							category="improvements"
+							value={card.wonder}
+							size={56}
+							alt={improvementDisplayName(card.wonder)}
+						/>
+					</span>
 					<div class="mt-1.5 text-xs font-semibold text-white">
 						{improvementDisplayName(card.wonder)}
 					</div>
