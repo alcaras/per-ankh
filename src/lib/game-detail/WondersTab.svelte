@@ -89,7 +89,7 @@
 
 {#each rows as row (row.level)}
 	<section class="mb-4 rounded-lg bg-surface p-4">
-		<h2 class="mb-2 text-base font-bold text-bright">
+		<h2 class="mb-2 text-lg font-bold text-bright">
 			<span class="inline-flex items-center gap-1.5">
 				<SpriteIcon
 					category="icons"
