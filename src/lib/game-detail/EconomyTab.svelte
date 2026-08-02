@@ -839,63 +839,54 @@
 		{/each}
 	</div>
 
-	{#if !matchup}
-		<p
-			class="rounded-lg p-4 text-sm italic text-tan"
+	{#if !matchup && hasProjects}
+		<!-- Projects have no pivot table below to fall back on the way
+		     improvements do, so without these the data would parse, ship and
+		     then show nowhere in a game that isn't a duel. One ledger panel
+		     per nation, sharing a bar scale so the cards read against each
+		     other rather than each alone. -->
+		<div
+			class="rounded-lg p-4"
 			style="background-color: rgb(var(--color-surface));"
 		>
-			Side-by-side comparison needs exactly two nations. Every improvement is
-			listed below.
-		</p>
-		{#if hasProjects}
-			<!-- Projects have no pivot table below to fall back on the way
-			     improvements do, so without these the data would parse, ship and
-			     then show nowhere in a game that isn't a duel. One ledger panel
-			     per nation, sharing a bar scale so the cards read against each
-			     other rather than each alone. -->
-			<div
-				class="mt-4 rounded-lg p-4"
-				style="background-color: rgb(var(--color-surface));"
-			>
-				<h3 class="mb-3 text-base font-bold text-tan">Projects completed</h3>
-				<!-- Columns rather than a grid: nations build wildly different
-				     numbers of projects, and grid rows are as tall as their tallest
-				     cell, so a short nation beside a long one leaves the gap its
-				     neighbour's rows opened. Column flow packs each ledger under the
-				     last instead. break-inside-avoid keeps one nation whole. -->
-				<div class="gap-3 lg:columns-2">
-					{#each projectLedgers as ledger (ledger.player.playerId)}
-						<div class="mb-3 flex break-inside-avoid flex-col gap-1.5">
-							<div class="flex items-center gap-2">
-								{#if ledger.player.nation}
-									<SpriteIcon
-										category="crests"
-										value={ledger.player.nation}
-										size={16}
-										alt={formatEnum(ledger.player.nation, "NATION_")}
-									/>
-								{/if}
-								<span
-									class="truncate text-xs font-bold"
-									style="color: {ledger.player.color};"
-									>{ledger.player.label}</span
-								>
-							</div>
-							<BuildComparison
-								title="All projects"
-								a={ledger.items}
-								ca={ledger.player.color}
-								keys={ledger.keys}
-								max={projectMax}
-								labelWidth={projectLabelWidth}
-								iconCategory="projects"
-								labelOf={projectLabel}
-							/>
+			<h3 class="mb-3 text-base font-bold text-tan">Projects completed</h3>
+			<!-- Columns rather than a grid: nations build wildly different
+			     numbers of projects, and grid rows are as tall as their tallest
+			     cell, so a short nation beside a long one leaves the gap its
+			     neighbour's rows opened. Column flow packs each ledger under the
+			     last instead. break-inside-avoid keeps one nation whole. -->
+			<div class="gap-3 lg:columns-2">
+				{#each projectLedgers as ledger (ledger.player.playerId)}
+					<div class="mb-3 flex break-inside-avoid flex-col gap-1.5">
+						<div class="flex items-center gap-2">
+							{#if ledger.player.nation}
+								<SpriteIcon
+									category="crests"
+									value={ledger.player.nation}
+									size={16}
+									alt={formatEnum(ledger.player.nation, "NATION_")}
+								/>
+							{/if}
+							<span
+								class="truncate text-xs font-bold"
+								style="color: {ledger.player.color};"
+								>{ledger.player.label}</span
+							>
 						</div>
-					{/each}
-				</div>
+						<BuildComparison
+							title="All projects"
+							a={ledger.items}
+							ca={ledger.player.color}
+							keys={ledger.keys}
+							max={projectMax}
+							labelWidth={projectLabelWidth}
+							iconCategory="projects"
+							labelOf={projectLabel}
+						/>
+					</div>
+				{/each}
 			</div>
-		{/if}
+		</div>
 	{/if}
 	{#if matchup}
 		<!-- Counts beside cost: two columns read better than one full-width panel,
