@@ -2,10 +2,13 @@
 	import { Tabs } from "bits-ui";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { cloudApi, type GameListItem } from "$lib/api-cloud";
+	import { ApiError, cloudApi, type GameListItem } from "$lib/api-cloud";
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import BulkReparseModal from "$lib/BulkReparseModal.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import ChannelSettings from "$lib/settings/ChannelSettings.svelte";
+	import CopyButton from "$lib/tournament/CopyButton.svelte";
+	import { PUBLIC_ORIGIN } from "$lib/page-meta";
 	import { PARSER_VERSION } from "$lib/parser/types";
 	import { formatGameTitle } from "$lib/utils/formatting";
 	import { isNewer } from "$lib/utils/semver";
@@ -37,6 +40,22 @@
 	// svelte-ignore state_referenced_locally
 	let streamUrl = $state(data.user.stream_url ?? "");
 	let savingStream = $state(false);
+
+	// Profile URL. Same save-on-submit shape as the stream link, but claimed
+	// once: the server refuses a second claim, so once `slug` is non-null the
+	// card shows the link instead of the form. The worker trims + lowercases
+	// before validating and returns what it stored, so we echo its value.
+	// svelte-ignore state_referenced_locally
+	let slug = $state(data.user.slug);
+	let slugInput = $state("");
+	let claiming = $state(false);
+
+	// What the user shares — absolute, since the point of the card is a link
+	// that can be pasted into Discord.
+	const profileUrl = $derived(slug ? `${PUBLIC_ORIGIN}/u/${slug}` : "");
+	// The same origin as a prefix label on the input, so what they type reads
+	// as the tail of the URL it becomes.
+	const SLUG_PREFIX = `${PUBLIC_ORIGIN.replace(/^https?:\/\//, "")}/u/`;
 
 	// Already filtered to out-of-date games server-side (see +page.ts), so the
 	// count and modal list cover the user's entire library, not just a page.
@@ -117,6 +136,29 @@
 		}
 	}
 
+	async function claimSlug() {
+		const wanted = slugInput.trim();
+		if (claiming || !wanted) return;
+		claiming = true;
+		try {
+			const saved = await cloudApi.claimSlug(wanted);
+			slug = saved.slug;
+			slugInput = "";
+			toast.info("Profile URL claimed");
+		} catch (err) {
+			// The worker's rejections — bad format, reserved name, already
+			// taken, already claimed — carry user-safe messages; show them
+			// verbatim rather than restating the rule in a second place.
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: `Couldn't claim that profile URL: ${err instanceof Error ? err.message : err}`,
+			);
+		} finally {
+			claiming = false;
+		}
+	}
+
 	async function onReparseClose(didReparse: boolean) {
 		reparseGames = null;
 		if (didReparse) await invalidateAll();
@@ -175,6 +217,74 @@
 								>{data.user.discord_id}</span
 							>
 						</div>
+					</div>
+
+					<!-- Profile URL: claim once, then it's the link to share. The
+					     permanence is stated with the input, before the click —
+					     nothing after it can be undone by the user. -->
+					<div
+						class="mt-3 rounded-lg p-3"
+						style="background-color: rgb(var(--color-surface-raised));"
+					>
+						<div class="text-sm font-bold text-tan">Profile URL</div>
+						{#if slug}
+							<p class="mt-1 text-xs text-gray-400">
+								Your profile is at this link.
+							</p>
+							<div class="mt-2 flex items-center gap-2">
+								<span
+									class="min-w-0 flex-1 truncate font-mono text-sm text-bright"
+									>{profileUrl}</span
+								>
+								<CopyButton
+									text={profileUrl}
+									label="Copy"
+									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+								/>
+								<ProfileLink
+									userId={data.user.user_id}
+									{slug}
+									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+								>
+									View profile
+								</ProfileLink>
+							</div>
+						{:else}
+							<p class="mt-1 text-xs text-gray-400">
+								Choose the name in your profile link: 3-30 characters, lowercase
+								letters, numbers and hyphens. You can't change it afterwards —
+								ask an admin if you need it cleared.
+							</p>
+							<form
+								class="mt-2 flex items-center gap-2"
+								onsubmit={(e) => {
+									e.preventDefault();
+									claimSlug();
+								}}
+							>
+								<div
+									class="flex min-w-0 flex-1 items-center rounded border border-input bg-surface-sunken focus-within:border-orange"
+								>
+									<span class="shrink-0 pl-2 text-sm text-gray-400"
+										>{SLUG_PREFIX}</span
+									>
+									<input
+										type="text"
+										class="min-w-0 flex-1 bg-transparent py-1.5 pr-2 text-sm text-tan focus:outline-none"
+										aria-label="Profile URL"
+										bind:value={slugInput}
+										disabled={claiming}
+									/>
+								</div>
+								<button
+									type="submit"
+									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
+									disabled={claiming || slugInput.trim() === ""}
+								>
+									Claim
+								</button>
+							</form>
+						{/if}
 					</div>
 
 					<div class="mt-3">

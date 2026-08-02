@@ -592,6 +592,17 @@ export const cloudApi = {
 		}
 	},
 
+	// Claim the caller's profile URL. Set-once — a user who already has one
+	// gets a 409, as does a name someone else took; a malformed or reserved
+	// name gets a 400. All three arrive as ApiError with a message written to
+	// be shown to the user verbatim.
+	//
+	// The Worker trims and lowercases before validating, so mixed-case input
+	// is legal; it returns the stored value, which is what callers should
+	// render rather than what was typed.
+	claimSlug: (slug: string, opts?: CallOpts): Promise<{ slug: string }> =>
+		postJson<{ slug: string }>("/users/me/slug", { slug }, opts),
+
 	// Recent videos merged across the target user's linked channels, newest
 	// first. Public read; feeds the profile "Videos" tab.
 	getUserVideos: async (
