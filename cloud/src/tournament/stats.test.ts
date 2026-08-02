@@ -91,7 +91,14 @@ describe("computeCasterLeaderboard", () => {
 
 	it("enriches linked casters from the identity map; free-text fall back to name", () => {
 		const identities = new Map<string, UserIdentity>([
-			["u1", { display_name: "Alcaras", avatar_url: "https://cdn/av/1.png" }],
+			[
+				"u1",
+				{
+					display_name: "Alcaras",
+					avatar_url: "https://cdn/av/1.png",
+					slug: "alcaras",
+				},
+			],
 		]);
 		const board = computeCasterLeaderboard(
 			[
@@ -311,7 +318,10 @@ describe("computePlayerPicks", () => {
 
 	it("enriches linked players from the identity map; skips sides with no index or summary", () => {
 		const identities = new Map<string, UserIdentity>([
-			["u2", { display_name: "Bob", avatar_url: "https://cdn/av/2.png" }],
+			[
+				"u2",
+				{ display_name: "Bob", avatar_url: "https://cdn/av/2.png", slug: null },
+			],
 		]);
 		const matches = [
 			pickMatch({

@@ -296,3 +296,98 @@ describe("users.slug — tournament standings", () => {
 	});
 });
 
+interface MatchesResponse {
+	matches: Array<{
+		match_id: string;
+		status: string;
+		slot_a_id: string;
+		slot_a_user_id: string | null;
+		slot_a_slug: string | null;
+		slot_b_slug: string | null;
+		parts: Array<{
+			id: string;
+			casters: Array<{ user_id: string | null; slug: string | null }>;
+		}>;
+	}>;
+}
+
+describe("users.slug — serializeMatch", () => {
+	it("resolves slot_a_slug from the report-time snapshot occupant", async () => {
+		const player = await makeUser({ slug: "match-winner" });
+		const t = await makeTournament({
+			slotOwners: { A: [player] },
+			advanceTo: "swiss-round-1-complete",
+		});
+
+		const body = await expectOk<MatchesResponse>(
+			await request.get({
+				path: `/v1/tournaments/${t.tournamentId}/matches`,
+				as: player,
+			}),
+		);
+		// The snapshot columns only exist once a match is decided; a pending one
+		// carries nulls by design and the client falls back to its live maps.
+		const decided = body.matches.find(
+			(m) => m.status !== "pending" && m.slot_a_user_id === player.userId,
+		);
+		expect(decided).toBeTruthy();
+		expect(decided!.slot_a_slug).toBe("match-winner");
+		// Side B of that match is an unclaimed slot in the same fixture.
+		expect(decided!.slot_b_slug).toBeNull();
+
+		const pending = body.matches.find((m) => m.status === "pending");
+		if (pending) expect(pending.slot_a_slug).toBeNull();
+	});
+
+	it("resolves a linked caster's slug and leaves a slug-less one null", async () => {
+		const t = await makeTournament({ advanceTo: "swiss-round-1-generated" });
+		const match = (await t.matches()).find((m) => m.status === "pending")!;
+		const scheduled = await expectOk<{
+			match: { parts: Array<{ id: string }> };
+		}>(
+			await request.patch({
+				path: `/v1/tournaments/${t.tournamentId}/matches/${match.match_id}/schedule`,
+				as: t.admin,
+				body: {
+					parts: [
+						{
+							scheduled_at: "2026-08-01T18:00:00.000Z",
+							casters: [],
+							streams: [],
+						},
+					],
+				},
+			}),
+		);
+		const partId = scheduled.match.parts[0].id;
+
+		const withSlug = await makeUser({ slug: "the-caster" });
+		const withoutSlug = await makeUser();
+		for (const caster of [withSlug, withoutSlug]) {
+			await expectStatus(
+				await request.post({
+					path: `/v1/tournaments/${t.tournamentId}/matches/${match.match_id}/parts/${partId}/casters/me`,
+					as: caster,
+					body: {},
+				}),
+				204,
+			);
+		}
+
+		const body = await expectOk<MatchesResponse>(
+			await request.get({
+				path: `/v1/tournaments/${t.tournamentId}/matches`,
+				as: t.admin,
+			}),
+		);
+		const casters =
+			body.matches.find((m) => m.match_id === match.match_id)?.parts[0]
+				.casters ?? [];
+		expect(casters.find((c) => c.user_id === withSlug.userId)?.slug).toBe(
+			"the-caster",
+		);
+		expect(
+			casters.find((c) => c.user_id === withoutSlug.userId)?.slug,
+		).toBeNull();
+	});
+});

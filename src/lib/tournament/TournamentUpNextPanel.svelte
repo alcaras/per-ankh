@@ -29,6 +29,7 @@
 		zone: ScheduleZone;
 		slotLabels: Record<string, string>;
 		slotUserIds: Record<string, string | null>;
+		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		user: UserMe | null;
 		// Admin substitute, threaded into the match card; undefined for non-admins.
@@ -48,6 +49,7 @@
 		zone,
 		slotLabels,
 		slotUserIds,
+		slotSlugs,
 		slotAvatars,
 		user,
 		onSubstitute,
@@ -128,6 +130,7 @@
 		{user}
 		{slotLabels}
 		{slotUserIds}
+		{slotSlugs}
 		{slotAvatars}
 		onRowClick={pick}
 		isLive={(row) => liveSet.has(row)}
@@ -157,6 +160,7 @@
 				{tournament}
 				{slotLabels}
 				{slotUserIds}
+				{slotSlugs}
 				{slotAvatars}
 				{user}
 				{onSubstitute}

@@ -174,6 +174,7 @@
 							user={null}
 							slotLabels={record.slot_labels}
 							slotUserIds={record.slot_user_ids}
+							slotSlugs={record.slot_slugs}
 							slotAvatars={record.slot_avatars}
 							onRowClick={(m) => openRow(m, g.tournament.slug)}
 						/>
@@ -198,6 +199,7 @@
 							user={null}
 							slotLabels={record.slot_labels}
 							slotUserIds={record.slot_user_ids}
+							slotSlugs={record.slot_slugs}
 							slotAvatars={record.slot_avatars}
 							onRowClick={(m) => openRow(m, g.tournament.slug)}
 						/>

@@ -23,6 +23,7 @@
 		user,
 		slotLabels,
 		slotUserIds,
+		slotSlugs,
 		slotAvatars,
 		search = "",
 		onOpenMatch,
@@ -35,6 +36,7 @@
 		user: UserMe | null;
 		slotLabels: Record<string, string>;
 		slotUserIds: Record<string, string | null>;
+		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		// Free-text filter, shared with the other match surfaces via the matches
 		// page header. Empty string = no filter.
@@ -119,6 +121,7 @@
 	{user}
 	{slotLabels}
 	{slotUserIds}
+	{slotSlugs}
 	{slotAvatars}
 	onRowClick={onOpenMatch}
 	emptyMessage={upcoming.length === 0

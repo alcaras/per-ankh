@@ -1941,6 +1941,10 @@ export interface TournamentMatchPartCaster {
 	user_id: string | null;
 	name: string | null;
 	display_name: string | null;
+	// The linked user's claimed profile slug, resolved server-side from user_id
+	// like display_name and avatar_url. Bare (a caster is user-shaped); null for
+	// free-text casters and for anyone who hasn't claimed one.
+	slug: string | null;
 	avatar_url: string | null;
 }
 
@@ -1989,6 +1993,14 @@ export interface TournamentMatch {
 	slot_a_user_id: string | null;
 	slot_b_display_name: string | null;
 	slot_b_user_id: string | null;
+	// Claimed profile slug of each side's snapshot occupant, resolved from the
+	// same server-side identity batch as the names and avatars — so a link and
+	// the name beside it can't describe different people. Prefixed, like every
+	// slot_a/b_* field. Null for pending matches (no snapshot; renderers fall
+	// through to the live slot maps via matchSlotSlug), for unclaimed occupants,
+	// and for anyone who claimed no slug — all of which the id URL covers.
+	slot_a_slug: string | null;
+	slot_b_slug: string | null;
 	// Raw stored Discord handle of each side's LIVE slot occupant (not the
 	// snapshot). Only populated for admin viewers (null otherwise, and null for
 	// pending/bye sides). The substitute editor seeds and compares against this
@@ -2102,12 +2114,14 @@ export interface UserTournamentsResponse {
 	tournaments: UserTournamentEntry[];
 	matches: UserTournamentMatch[];
 	casts: UserTournamentCast[];
-	// Live slot occupant identity keyed by slot_id — the same three maps the
+	// Live slot occupant identity keyed by slot_id — the same maps the
 	// per-tournament pages build client-side from standings + bracket. Load-
 	// bearing for pending (upcoming) rows, whose display names, profile links and
 	// avatars the match payload deliberately leaves null.
 	slot_labels: Record<string, string>;
 	slot_user_ids: Record<string, string | null>;
+	// Prefixed: this payload's `tournaments[]` carry their own slugs.
+	slot_slugs: Record<string, string | null>;
 	slot_avatars: Record<string, string | null>;
 }
 

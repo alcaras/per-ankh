@@ -789,6 +789,7 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 		zone={clock.zone}
 		{slotLabels}
 		{slotUserIds}
+		{slotSlugs}
 		{slotAvatars}
 		{user}
 		onSubstitute={isAdmin ? substituteSlot : undefined}
@@ -1206,6 +1207,7 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 				tournament={data.tournament}
 				{slotLabels}
 				{slotUserIds}
+				{slotSlugs}
 				{slotAvatars}
 				{user}
 				{slotSignupAnswers}

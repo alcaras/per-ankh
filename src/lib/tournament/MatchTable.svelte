@@ -23,6 +23,7 @@
 		matchSlotDisplayName,
 		matchSlotNation,
 		matchSlotOutcome,
+		matchSlotSlug,
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
 	import {
@@ -62,6 +63,7 @@
 		user,
 		slotLabels,
 		slotUserIds,
+		slotSlugs,
 		slotAvatars,
 		sortColumn = null,
 		sortDirection = "asc",
@@ -87,6 +89,9 @@
 		// first rule the labels and avatars resolve under. Only the player cells
 		// read it (casters carry their own user_id on the part).
 		slotUserIds: Record<string, string | null>;
+		// Live slot → that account's claimed profile slug, the same fallback half
+		// again. Only the player cells read it (casters carry their own slug).
+		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		// The active sort column/direction, for the header arrow. Only meaningful
 		// alongside onSort (a sortable surface).
@@ -162,6 +167,7 @@
 			{/if}
 			<ProfileLink
 				userId={matchSlotUserId(m, side, slotUserIds)}
+				slug={matchSlotSlug(m, side, slotSlugs)}
 				class="inline-flex min-w-0 items-center gap-1 hover:underline"
 				onclick={(e) => e.stopPropagation()}
 			>
@@ -371,6 +377,7 @@
 														     null user_id and stay unlinked. -->
 														<ProfileLink
 															userId={casters[0].user_id}
+															slug={casters[0].slug}
 															class="inline-flex items-center gap-1 hover:underline"
 															onclick={(e) => e.stopPropagation()}
 														>
@@ -390,6 +397,7 @@
 															>
 																<ProfileLink
 																	userId={c.user_id}
+																	slug={c.slug}
 																	class="inline-flex items-center gap-1 hover:underline"
 																	onclick={(e) => e.stopPropagation()}
 																>

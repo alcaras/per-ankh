@@ -40,6 +40,7 @@
 		matchSlotNation,
 		matchSlotDisplayName,
 		matchSlotOutcome,
+		matchSlotSlug,
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
 	import { upcomingScheduledParts } from "$lib/tournament/parts";
@@ -65,6 +66,9 @@
 		tournament: TournamentDetail;
 		slotLabels: Record<string, string>;
 		slotUserIds: Record<string, string | null>;
+		// Live slot → claimed profile slug, resolved alongside slotUserIds so a
+		// link's two halves always describe the same person (see matchSlotSlug).
+		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		// Each slot's signup answer (timezone/availability), admin-only — drives
 		// the "Copy DM" scheduling template. Empty/null when unavailable.
@@ -90,6 +94,7 @@
 		tournament,
 		slotLabels,
 		slotUserIds,
+		slotSlugs,
 		slotAvatars,
 		slotSignupAnswers,
 		user,
@@ -305,6 +310,11 @@
 		winnerSide !== null
 			? matchSlotUserId(match, winnerSide, slotUserIds)
 			: null,
+	);
+	// Resolved from the same side under the same rule, so the winner cards'
+	// link points at the account winnerUserId names.
+	const winnerSlug = $derived(
+		winnerSide !== null ? matchSlotSlug(match, winnerSide, slotSlugs) : null,
 	);
 
 	// The map_pool instance this match was assigned, resolved from its id.
@@ -663,6 +673,7 @@
 			     target right beside the link. -->
 			<ProfileLink
 				userId={matchSlotUserId(match, side, slotUserIds)}
+				slug={matchSlotSlug(match, side, slotSlugs)}
 				class="inline-flex min-w-0 items-center gap-1 hover:underline"
 			>
 				<PlayerAvatar avatarUrl={avatar} size={14} />
@@ -916,6 +927,7 @@
 						>
 							<ProfileLink
 								userId={winnerUserId}
+								slug={winnerSlug}
 								class="inline-flex min-w-0 items-center gap-1 hover:underline"
 							>
 								{#if winnerLabel}
@@ -984,6 +996,7 @@
 			<p class="flex items-center gap-1 text-sm font-bold text-bright">
 				<ProfileLink
 					userId={winnerUserId}
+					slug={winnerSlug}
 					class="inline-flex min-w-0 items-center gap-1 hover:underline"
 				>
 					<PlayerAvatar avatarUrl={winnerAvatar} size={14} />
@@ -1134,6 +1147,7 @@
 								<span class="truncate">
 									Cast by <ProfileLink
 										userId={part.casters[0].user_id}
+										slug={part.casters[0].slug}
 										class="hover:underline"
 										>{part.casters[0].display_name}</ProfileLink
 									>{#if part.casters.length > 1}
@@ -1143,6 +1157,7 @@
 													? ", "
 													: ""}<ProfileLink
 													userId={c.user_id}
+													slug={c.slug}
 													class="hover:underline">{c.display_name}</ProfileLink
 												>{/each}</span
 										>{/if}

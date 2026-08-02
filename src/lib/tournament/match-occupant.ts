@@ -27,6 +27,13 @@ interface MatchUserIdLike {
 	slot_b_user_id: string | null;
 }
 
+// The slug helper needs the snapshot user_id as well as the snapshot slug —
+// see matchSlotSlug for why the two can't be resolved independently.
+interface MatchSlugLike extends MatchUserIdLike {
+	slot_a_slug: string | null;
+	slot_b_slug: string | null;
+}
+
 interface MatchNationLike {
 	slot_a_nation: string | null;
 	slot_b_nation: string | null;
@@ -124,6 +131,38 @@ export function matchSlotUserId(
 	if (match.status !== "pending") {
 		const snap = side === "a" ? match.slot_a_user_id : match.slot_b_user_id;
 		if (snap !== null && snap !== undefined) return snap;
+	}
+	return liveBySlotId[slotId] ?? null;
+}
+
+// The profile slug of that same occupant — the other half of the URL
+// matchSlotUserId names, which is why it lives here rather than being read off
+// `slot_a/b_slug` at each link site.
+//
+// Both halves must come from the SAME source, so this branches on the snapshot
+// *user_id* rather than on the snapshot slug: a decided match whose pinned
+// occupant simply never claimed a slug has a non-null snapshot id and a null
+// snapshot slug, and falling through to the live map on that null would pair
+// the historical player's id with the current occupant's slug — and profileHref
+// prefers the slug, so the link would quietly open the wrong player's profile
+// after a substitution. Committing to the snapshot's null instead just yields
+// the id URL, which redirects correctly.
+//
+// Null likewise when the side has no slot and when the resolved occupant has no
+// account at all — every case degrading to the permanent id permalink.
+export function matchSlotSlug(
+	match: MatchSlugLike,
+	side: "a" | "b",
+	liveBySlotId: Record<string, string | null | undefined>,
+): string | null {
+	const slotId = side === "a" ? match.slot_a_id : match.slot_b_id;
+	if (slotId === null) return null;
+	if (match.status !== "pending") {
+		const snapUserId =
+			side === "a" ? match.slot_a_user_id : match.slot_b_user_id;
+		if (snapUserId !== null && snapUserId !== undefined) {
+			return (side === "a" ? match.slot_a_slug : match.slot_b_slug) ?? null;
+		}
 	}
 	return liveBySlotId[slotId] ?? null;
 }
