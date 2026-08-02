@@ -4,12 +4,14 @@
 // their own bytes for safe long-cache HTTP serving.
 //
 // SOURCES (all under <pinacotheca>/extracted/sprites/):
-//   crests/, techs/, laws/, religions/, yields/  → category dir minus __ICON
-//                                                  glyph siblings (see below)
+//   crests/, techs/, laws/, religions/,          → category dir minus __ICON
+//   yields/, projects/                             glyph siblings (see below)
 //   traits/ (2nd pass)                           → traits-trimmed/ content-
 //                                                  trimmed+squared, rail only
 //   units/                                       → UNIT_*.png minus UNIT_3D_*,
 //                                                  incl. UNIT_*__ICON glyphs
+//   resources/                                   → RESOURCE_*.png minus the
+//                                                  RESOURCE_3D_* map renders
 //   portraits/                                   → leader ADULT portraits, keyed
 //                                                  by portrait zType (see below)
 //   improvements/IMPROVEMENT_FINISHED.png        → icons/IMPROVEMENT_FINISHED.png
@@ -21,6 +23,7 @@
 //   other/GAME_HELP.png                          → icons/GAME_HELP.png
 //   other/MultiplayerLogo.png                    → icons/MULTIPLAYER.png
 //   events_images/TURN_SUMMARY_PLAYER_DIPLOMACY.png → icons/PLAYER_DIPLOMACY.png
+//   missions/MISSION_REMOVE_HERESY.png           → icons/MISSION_REMOVE_HERESY.png
 //   city/CITY_FOUNDED.png                        → icons/CITY_FOUNDED.png
 //   achievements/ACHIEVEMENT_WIN.png             → icons/ACHIEVEMENT_WIN.png
 //   achievements/ACHIEVEMENT.png                 → icons/ACHIEVEMENT.png
@@ -86,6 +89,11 @@ const MIRROR_CATEGORIES = [
 	// character's archetype as a TRAIT_<X>_ARCHETYPE trait; the icon drops the
 	// _ARCHETYPE suffix. Powers the Leaders-tab succession chips.
 	"traits",
+	// City-project icons, named by the project's <zIcon> rather than its zType —
+	// most projects share the two, but tiers point at the tier-1 art and a few
+	// borrow another project's, so the runtime resolves through PROJECT_ICON
+	// (baked by bake-project-icons.ts). Powers the Economy tab's project panels.
+	"projects",
 ] as const;
 
 // Pinacotheca's units/ holds the 2D portrait icons (UNIT_*.png), the 3D
@@ -103,8 +111,13 @@ const UNITS_CATEGORY = "units";
 // specialists/ holds one class-level icon per specialist line
 // (SPECIALIST_POET.png — tiers share it) plus a lowercase border overlay
 // that isn't an icon.
+// resources/ mixes the 2D icons (RESOURCE_HORSE.png) with the 3D map-tile
+// renders (RESOURCE_3D_*.png + sidecar .json) the resource atlas is packed
+// from — only the 2D set is baked, for the three import projects whose
+// <zIcon> names a resource (PROJECT_IMPORT_CAMEL → RESOURCE_CAMEL).
 const IMPROVEMENTS_CATEGORY = "improvements";
 const SPECIALISTS_CATEGORY = "specialists";
+const RESOURCES_CATEGORY = "resources";
 
 // Pinacotheca ships a co-named white flag glyph (UNIT_ARCHER__ICON.png) beside
 // each full-art tile across units/, crests/, religions/, traits/, … Only units
@@ -192,6 +205,13 @@ const ICON_MAPPINGS: readonly IconMapping[] = [
 	{
 		source: "events_images/TURN_SUMMARY_PLAYER_DIPLOMACY.png",
 		target: "PLAYER_DIPLOMACY.png",
+	},
+	// The one mission glyph a project names: the six PROJECT_SUPPRESS_DISSENT_*
+	// projects all point their <zIcon> at it. One file rather than a mirrored
+	// missions/ category, since nothing else here draws a mission.
+	{
+		source: "missions/MISSION_REMOVE_HERESY.png",
+		target: "MISSION_REMOVE_HERESY.png",
 	},
 	// City culture-level icons (used by the Cities-tab Culture column). Names
 	// match the culture.xml zIconName values; copied 1:1 from other/.
@@ -551,6 +571,13 @@ async function main(): Promise<void> {
 		SPECIALISTS_CATEGORY,
 		"SPECIALIST_",
 		"SPECIALIST_3D_",
+		sidecar,
+	);
+	counts[RESOURCES_CATEGORY] = await copyPrefixed(
+		"resources",
+		RESOURCES_CATEGORY,
+		"RESOURCE_",
+		"RESOURCE_3D_",
 		sidecar,
 	);
 	counts.icons = await copyIcons(sidecar);
