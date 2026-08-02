@@ -296,9 +296,9 @@ Find players by name — the "Players" group in the header search.
 
 - **Auth:** Session (any logged-in user). Anonymous search stays gated to keep user enumeration behind a login.
 - **Query:** `q` (trimmed, lowercased, 1–32; results only when ≥2 chars), `limit` (1–20, default 10).
-- **Response 200:** `{ users: [{ user_id, display_name, avatar_url }] }` (empty when `q<2`).
+- **Response 200:** `{ users: [{ user_id, display_name, slug: string|null, avatar_url }] }` (empty when `q<2`).
 - **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_USER_SEARCH_PUBLIC` (300/hr per user), `400 VALIDATION_ERROR`.
-- **Notes:** **No `discord_id` / `discord_username`** — `discord_id` is read to build `avatar_url` and never serialized, and matching is on `display_name` + `alias` only, so the endpoint can't confirm a Discord-handle prefix. Results are scoped to users who made something public — a public game, a tournament slot, or a linked video channel; a user with none of those is absent from every result. The `/users` directory is a deliberate non-goal, so people are findable here only through what they chose to publish. Distinct from `GET /v1/users/search`, which serves the admin autocomplete and returns the Discord fields the slot pre-link needs.
+- **Notes:** **No `discord_id` / `discord_username`** — `discord_id` is read to build `avatar_url` and never serialized, and matching is on `display_name` + `alias` + `slug` only, so the endpoint can't confirm a Discord-handle prefix. Results are scoped to users who made something public — a claimed profile slug, a public game, a tournament slot, or a linked video channel; a user with none of those is absent from every result. A claimed slug counts because claiming one is itself the deliberate act of publishing a name, so a claimant who has done nothing else is still findable. The `/users` directory is a deliberate non-goal, so people are findable here only through what they chose to publish. Distinct from `GET /v1/users/search`, which serves the admin autocomplete and returns the Discord fields the slot pre-link needs.
 
 ### `GET /v1/users/:user_id`
 Public profile + all-time summary.

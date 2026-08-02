@@ -30,6 +30,11 @@ export interface UserSearchResult {
 export interface PublicUserSearchResult {
 	user_id: string;
 	display_name: string;
+	// The claimed profile slug, null while unclaimed — the one identifier here
+	// that is safe to publish, being user-chosen and opt-in. Also a match key:
+	// a user is findable by their slug, and holding one makes them findable at
+	// all (it counts as public activity for the endpoint's scoping).
+	slug: string | null;
 	avatar_url: string;
 }
 

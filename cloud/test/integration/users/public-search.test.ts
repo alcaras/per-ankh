@@ -4,13 +4,13 @@
 // Covers:
 //   * Auth (anonymous → 401)
 //   * "Still typing" floor (q.length < 2 returns empty, writes no audit row)
-//   * Prefix matching on display_name and on alias — and NOT on
+//   * Prefix matching on display_name, alias and slug — and NOT on
 //     discord_username, which a public endpoint must not confirm
 //   * The response carries no discord_* field at all (discord_id is still
 //     read server-side to build avatar_url; it just never ships)
 //   * Per-user rate limit at PUBLIC_USER_SEARCH_PER_USER_PER_HOUR
 //   * Decision 2 scoping: only users who made something public are findable
-//     (public game / tournament slot / linked video channel)
+//     (public game / tournament slot / linked video channel / claimed slug)
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -32,6 +32,7 @@ interface PublicSearchResponse {
 	users: Array<{
 		user_id: string;
 		display_name: string;
+		slug: string | null;
 		avatar_url: string;
 	}>;
 }
@@ -141,7 +142,32 @@ describe("GET /v1/users/public-search — matching", () => {
 		expect(await idsMatching(caller, "khepri")).toContain(target.userId);
 	});
 
-	it("returns only user_id, display_name and avatar_url — no discord_* field", async () => {
+	it("matches a prefix of slug, and returns the slug on the row", async () => {
+		const caller = await makeUser();
+		const target = await makeFindableUser({
+			displayName: "Renenutet Harvest",
+			slug: "sobekemsaf",
+		});
+
+		const body = await search(caller, "sobekem");
+		const hit = body.users.find((u) => u.user_id === target.userId);
+		expect(hit).toBeTruthy();
+		// The slug is a match key AND ships on the row, so the picked result can
+		// navigate straight to /u/<slug> with no redirect hop.
+		expect(hit!.slug).toBe("sobekemsaf");
+	});
+
+	it("returns a null slug for a user who hasn't claimed one", async () => {
+		const caller = await makeUser();
+		const target = await makeFindableUser({ displayName: "Ineni Unclaimed" });
+
+		const body = await search(caller, "ineni");
+		const hit = body.users.find((u) => u.user_id === target.userId);
+		expect(hit).toBeTruthy();
+		expect(hit!.slug).toBeNull();
+	});
+
+	it("returns only user_id, display_name, slug and avatar_url — no discord_* field", async () => {
 		const caller = await makeUser();
 		await makeFindableUser({ displayName: "Ptahmose Fieldcheck" });
 
@@ -151,6 +177,7 @@ describe("GET /v1/users/public-search — matching", () => {
 			expect(Object.keys(u).sort()).toEqual([
 				"avatar_url",
 				"display_name",
+				"slug",
 				"user_id",
 			]);
 		}
@@ -163,7 +190,7 @@ describe("GET /v1/users/public-search — matching", () => {
 });
 
 describe("GET /v1/users/public-search — scoped to public activity", () => {
-	it("omits a user with no public game, tournament slot, or video channel", async () => {
+	it("omits a user with no public game, tournament slot, video channel, or slug", async () => {
 		const caller = await makeUser();
 		const invisible = await makeUser({ displayName: "Sobeknakht Quiet" });
 		const visible = await makeFindableUser({
@@ -189,6 +216,20 @@ describe("GET /v1/users/public-search — scoped to public activity", () => {
 		await makeTournament({ slotOwners: { A: [player] } });
 
 		expect(await idsMatching(caller, "herihor")).toContain(player.userId);
+	});
+
+	// Decision 2 lists `u.slug IS NOT NULL` first among the disjuncts: claiming
+	// a profile URL is itself the deliberate act of publishing a name, so a
+	// claimant who has done nothing else must still be reachable — otherwise the
+	// claim buys them a URL that no search can surface.
+	it("finds a user whose only public activity is a claimed slug", async () => {
+		const caller = await makeUser();
+		const claimant = await makeUser({
+			displayName: "Nebamun Slugonly",
+			slug: "nebamun",
+		});
+
+		expect(await idsMatching(caller, "nebamun")).toContain(claimant.userId);
 	});
 
 	it("finds a user whose only public activity is a linked video channel", async () => {

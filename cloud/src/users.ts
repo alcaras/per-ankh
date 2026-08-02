@@ -186,6 +186,7 @@ interface PublicUserSearchRow {
 	user_id: string;
 	discord_id: string;
 	display_name: string;
+	slug: string | null;
 	avatar_hash: string | null;
 }
 
@@ -258,26 +259,34 @@ export async function handlePublicUserSearch(
 	// Scoped to users who made something public: a session-gated prefix index
 	// over the whole users table would be enumeration with a rate limiter on
 	// it, and the product rule is that people are discoverable through the
-	// things they chose to publish. One EXISTS leg per such thing, each
-	// seeking on a user_id index rather than scanning — idx_games_user (0002)
-	// filtered down to is_public, idx_slots_user (0006), and
-	// user_video_channels' (user_id, platform) PK (0031); verified with
-	// EXPLAIN QUERY PLAN against representative row counts. The outer scan
-	// over `users` is the same one handleUserSearch does, on the same "table
-	// is small enough" reasoning. Issue #186 Part B adds a fourth disjunct —
-	// `u.slug IS NOT NULL`, a claimed profile URL — once that column exists.
+	// things they chose to publish. Claiming a profile URL is itself such a
+	// choice — a deliberate, opt-in act of publishing a name — so `slug IS NOT
+	// NULL` leads the disjunction; a user who claimed one and has done nothing
+	// else must still be findable, or the claim buys them a URL nobody can
+	// reach. The other three legs each seek on a user_id index rather than
+	// scanning — idx_games_user (0002) filtered down to is_public,
+	// idx_slots_user (0006), and user_video_channels' (user_id, platform) PK
+	// (0031); verified with EXPLAIN QUERY PLAN against representative row
+	// counts. The outer scan over `users` is the same one handleUserSearch
+	// does, on the same "table is small enough" reasoning.
 	//
-	// Prefix match on the two name columns only (see difference 1 above); a
-	// row can only match if one of them is non-null, so the resolved
-	// display_name never needs its own NOT NULL guard. LOWER(...) matches the
-	// already-lowercased `q`.
+	// Prefix match on the two name columns plus the slug (see difference 1
+	// above) — never discord_username, which a public endpoint must not
+	// confirm. idx_users_slug (0039) covers the slug leg. The resolved
+	// display_name needs no NOT NULL guard even for a slug-only match:
+	// users.display_name is NOT NULL (0002), so the COALESCE always yields a
+	// name. LOWER(...) matches the already-lowercased `q`; slugs are stored
+	// lowercase, so that leg's LOWER is a no-op kept for symmetry.
 	const rows = await env.SHARE_DB.prepare(
-		`SELECT u.user_id, u.discord_id, u.avatar_hash,
+		`SELECT u.user_id, u.discord_id, u.avatar_hash, u.slug,
 		        ${displayNameSql("u")} AS display_name
 		 FROM users u
-		 WHERE (LOWER(u.display_name) LIKE ? OR LOWER(u.alias) LIKE ?)
+		 WHERE (LOWER(u.display_name) LIKE ?
+		     OR LOWER(u.alias) LIKE ?
+		     OR LOWER(u.slug) LIKE ?)
 		   AND (
-		        EXISTS (SELECT 1 FROM games g
+		        u.slug IS NOT NULL
+		     OR EXISTS (SELECT 1 FROM games g
 		                 WHERE g.user_id = u.user_id AND g.is_public = TRUE)
 		     OR EXISTS (SELECT 1 FROM tournament_slots s WHERE s.user_id = u.user_id)
 		     OR EXISTS (SELECT 1 FROM user_video_channels c WHERE c.user_id = u.user_id)
@@ -285,7 +294,7 @@ export async function handlePublicUserSearch(
 		 ORDER BY display_name
 		 LIMIT ?`,
 	)
-		.bind(q + "%", q + "%", limit)
+		.bind(q + "%", q + "%", q + "%", limit)
 		.all<PublicUserSearchRow>();
 
 	return jsonResponse(
@@ -293,6 +302,10 @@ export async function handlePublicUserSearch(
 			users: (rows.results ?? []).map((r) => ({
 				user_id: r.user_id,
 				display_name: r.display_name,
+				// The one identifier here that IS safe to publish: user-chosen and
+				// opt-in, unlike the Discord handle this endpoint refuses to expose.
+				// It lets the picked row navigate straight to /u/<slug>.
+				slug: r.slug,
 				avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
 			})),
 		},
