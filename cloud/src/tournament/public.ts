@@ -644,6 +644,9 @@ export async function handleTournamentPlaylistVideos(
 interface PlaylistUploader {
 	user_id: string;
 	display_name: string;
+	// The uploader's claimed profile slug, null while unclaimed. Bare, matching
+	// the home creator feed's author shape this one mirrors.
+	slug: string | null;
 	avatar_url: string;
 }
 
@@ -674,7 +677,7 @@ async function loadPlaylistUploaders(
 		const res = await env.SHARE_DB.prepare(
 			`SELECT c.channel_id, c.user_id,
 			        ${displayNameSql("u")} AS display_name,
-			        u.discord_id, u.avatar_hash
+			        u.slug, u.discord_id, u.avatar_hash
 			 FROM user_video_channels c
 			 JOIN users u ON u.user_id = c.user_id
 			 WHERE c.platform = 'youtube'
@@ -689,6 +692,7 @@ async function loadPlaylistUploaders(
 				channel_id: string;
 				user_id: string;
 				display_name: string;
+				slug: string | null;
 				discord_id: string;
 				avatar_hash: string | null;
 			}>();
@@ -698,6 +702,7 @@ async function loadPlaylistUploaders(
 			map.set(row.channel_id, {
 				user_id: row.user_id,
 				display_name: row.display_name,
+				slug: row.slug,
 				avatar_url: buildAvatarUrl(row.discord_id, row.avatar_hash),
 			});
 		}
