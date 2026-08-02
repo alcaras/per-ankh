@@ -22,6 +22,17 @@ export interface UserSearchResult {
 	display_name: string;
 }
 
+// Result row returned by cloudApi.searchPublicUsers — the "Players" group
+// in the header search. The public-facing counterpart of UserSearchResult:
+// no discord_id, no discord_username, because a public people search must
+// not confirm Discord-handle prefixes. `avatar_url` is built server-side,
+// so the id behind it never reaches the client.
+export interface PublicUserSearchResult {
+	user_id: string;
+	display_name: string;
+	avatar_url: string;
+}
+
 // A user-linked video/stream channel (public). `channel_id` is present on the
 // self-service CRUD responses; the profile payload carries only platform + URL
 // (all the tab gate and any "manage" link need).
@@ -1283,6 +1294,27 @@ export const cloudApi = {
 			method: "GET",
 		});
 		return res.json() as Promise<{ users: UserSearchResult[] }>;
+	},
+
+	// People search for the header dropdown. Same session requirement and
+	// still-typing floor as searchUsers, but a public payload (no Discord
+	// fields) matched on display name / alias only, and narrowed to users
+	// with public activity — a public game, a tournament slot, or a linked
+	// video channel. Throws ApiError(429, RATE_LIMIT_USER_SEARCH_PUBLIC)
+	// past its own, larger, per-user ceiling.
+	searchPublicUsers: async (
+		q: string,
+		opts?: { limit?: number } & CallOpts,
+	): Promise<{ users: PublicUserSearchResult[] }> => {
+		const params = new URLSearchParams({ q });
+		if (opts?.limit !== undefined) {
+			params.set("limit", String(opts.limit));
+		}
+		const res = await request(`/users/public-search?${params.toString()}`, {
+			...opts,
+			method: "GET",
+		});
+		return res.json() as Promise<{ users: PublicUserSearchResult[] }>;
 	},
 
 	// Self-service tournament signup. The player picks a division and may
