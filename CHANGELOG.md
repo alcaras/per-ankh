@@ -1,5 +1,30 @@
 # Changelog
 
+## [2026-08-02-0725ea9] - 2026-08-02
+
+### Features
+
+- (game-detail) specialist coverage split by slot kind, and side-by-side — [01bdab1](https://github.com/becked/per-ankh/commit/01bdab174d21d0a8f0f2270b5eeb60f6dd052aff)
+- (parser) projects_produced — PARSER_VERSION 2.13.0 — [5f2d5bb](https://github.com/becked/per-ankh/commit/5f2d5bbdf2dac4c24ec5cc3ee794290e411810a9)
+- (game-detail) show projects per nation when the game isn't a duel — [b531efc](https://github.com/becked/per-ankh/commit/b531efcd9d88aa0d6bb92a8d7b2371c936bba5a0)
+- (bake) bake project art, and the PROJECT_ICON name table — [a2124b6](https://github.com/becked/per-ankh/commit/a2124b6ec041960dfc42a7e506dd3ab75e462b11)
+- (game-detail) draw project icons, and head the FFA ledger cards — [6bc2465](https://github.com/becked/per-ankh/commit/6bc2465155e37a86d9c8271dcf544a3cf1e12384)
+- (game-detail) Wonders tab — the catalogue with this game painted on — [efd931b](https://github.com/becked/per-ankh/commit/efd931bf8506d93993b126a404b979cdee31293d)
+- (game-detail) panel the wonder tiers, and crest the builder line — [14cb455](https://github.com/becked/per-ankh/commit/14cb455bb600c6b10ccda27a954d35d0fa812add)
+
+### Fixes
+
+- (game-detail) let the projects panel own its icons and row order — [3907b43](https://github.com/becked/per-ankh/commit/3907b431e2147ae06a63b9067d21f1cde78b961b)
+- (game-detail) drop the FFA "needs two nations" note from Economy — [717d059](https://github.com/becked/per-ankh/commit/717d0596b70ece42732a49bec1b8cab5046eb1e5)
+- (game-detail) reserve the wonder card's icon slot — [9c061d8](https://github.com/becked/per-ankh/commit/9c061d8ffbcaaa4777320262cf24cba56137d0df)
+- (game-detail) size the wonder tier heading like every other h2 — [972c26c](https://github.com/becked/per-ankh/commit/972c26cfb4db41582430e93f6acfff37ec390db8)
+
+### Other
+
+- (game-detail) stop listing wonders among the Built panel kinds — [63369f5](https://github.com/becked/per-ankh/commit/63369f599491167b58eda1b76a0c6d1deb07abe3)
+- (game-detail) match a wonder's builder by id directly — [90cc3aa](https://github.com/becked/per-ankh/commit/90cc3aa6f9eee26b0c1e0ba503e8ffcf2d8d47c6)
+- (game-detail) correct why the wonder card wraps its icon — [c9b3c03](https://github.com/becked/per-ankh/commit/c9b3c03245aaf62c4b030a62c9f99c714abf88ba)
+
 ## [2026-08-01-536831e] - 2026-08-01
 
 ### Features
