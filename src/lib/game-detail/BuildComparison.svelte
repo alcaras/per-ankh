@@ -10,7 +10,7 @@
 	// Used on the Military tab for the Ending Army / Military Built comparisons,
 	// on the Economy tab for improvements, worker-turns and projects, and on the
 	// Specialists tab for rural / urban specialists — hence the icon category
-	// and label being the caller's to choose, down to having no icons at all.
+	// and label being the caller's to choose.
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
 	import type { BuildItem, SpriteCategory } from "./helpers";
@@ -30,8 +30,8 @@
 		labelOf = (key: string) => formatEnum(key, "UNIT_"),
 		showDiff = false,
 	}: {
-		// Omitted when the caller heads the panel itself — the Economy tab's
-		// ledger cards carry a crest and the nation's colour above the box.
+		// Panel heading. With neither a title nor a stat pair the header bar
+		// collapses rather than drawing an empty strip.
 		title?: string;
 		// Reads "statA v statB", so both or neither. Duel only.
 		statA?: string;
@@ -58,11 +58,10 @@
 		// Highland Wisdom") has to widen it. `ch` units resolve against the row's
 		// own 11px, so a caller can size this off its longest label directly.
 		labelWidth?: string;
-		// The sprite manifest rows draw their icon from, or null for subjects
-		// with no baked art of their own (projects). The icon slot keeps its
-		// fixed width either way, so a label-only panel still lines its rows up
-		// with one that has icons.
-		iconCategory?: SpriteCategory | null;
+		// The sprite manifest rows draw their icon from. The slot keeps its fixed
+		// width whether or not a key resolves to art, so a row that ships no
+		// sprite still lines its label up with one that does.
+		iconCategory?: SpriteCategory;
 		// eslint-disable-next-line no-unused-vars -- callback type signature
 		labelOf?: (key: string) => string;
 		// Trailing ±N column: how far ahead the leading side is on that row. Level
@@ -147,9 +146,7 @@
 				>
 					<div class="flex min-w-0 items-center gap-1.5">
 						<span class="flex w-3.5 flex-none">
-							{#if iconCategory}
-								<SpriteIcon category={iconCategory} value={r.key} size={14} />
-							{/if}
+							<SpriteIcon category={iconCategory} value={r.key} size={14} />
 						</span>
 						<span class="truncate text-[11px] text-bright"
 							>{labelOf(r.key)}</span

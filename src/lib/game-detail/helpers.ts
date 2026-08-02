@@ -18,6 +18,7 @@ import { UNIT_STATS } from "$lib/generated/unit-stats";
 import { TECH_NAMES } from "$lib/generated/tech-names";
 import { IMPROVEMENT_NAMES } from "$lib/generated/improvement-names";
 import { SHRINE_TYPE, IMPROVEMENT_ICON } from "$lib/generated/science-yields";
+import { PROJECT_ICON } from "$lib/generated/project-icons";
 import {
 	OWTT_BASE_URL,
 	OWTT_NATION_INDEX,
@@ -446,7 +447,8 @@ export type SpriteCategory =
 	| "traits-trimmed"
 	| "portraits"
 	| "improvements"
-	| "specialists";
+	| "specialists"
+	| "projects";
 
 // Known tech name corrections (game data typos or alternate names)
 const TECH_SPRITE_FIXES: Record<string, string> = {
@@ -550,6 +552,21 @@ export function getSpritePath(
 		// (SPECIALIST_POET_2 → SPECIALIST_POET).
 		return (
 			SPRITE_MANIFEST[`specialists/${enumValue.replace(/_\d+$/, "")}`] ?? null
+		);
+	}
+	if (category === "projects") {
+		// Projects name their icon with <zIcon> (baked into PROJECT_ICON), and
+		// that name crosses sprite sets: most are a project's own art, the import
+		// projects name the resource they import (PROJECT_IMPORT_CAMEL →
+		// RESOURCE_CAMEL), the dissent ones a religion, and the suppress-dissent
+		// ones the MISSION_REMOVE_HERESY glyph baked into icons/. Each in turn.
+		const icon = PROJECT_ICON[enumValue] ?? enumValue;
+		return (
+			SPRITE_MANIFEST[`projects/${icon}`] ??
+			SPRITE_MANIFEST[`resources/${icon}`] ??
+			SPRITE_MANIFEST[`religions/${icon}`] ??
+			SPRITE_MANIFEST[`icons/${icon}`] ??
+			null
 		);
 	}
 	if (category === "units") {

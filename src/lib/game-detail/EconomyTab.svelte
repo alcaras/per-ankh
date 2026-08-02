@@ -882,12 +882,13 @@
 								>
 							</div>
 							<BuildComparison
+								title="All projects"
 								a={ledger.items}
 								ca={ledger.player.color}
 								keys={ledger.keys}
 								max={projectMax}
 								labelWidth={projectLabelWidth}
-								iconCategory={null}
+								iconCategory="projects"
 								labelOf={projectLabel}
 							/>
 						</div>
@@ -956,7 +957,7 @@
 						cb={matchup[1].color}
 						keys={projectKeys}
 						labelWidth={projectLabelWidth}
-						iconCategory={null}
+						iconCategory="projects"
 						labelOf={projectLabel}
 						showDiff
 					/>
