@@ -1,0 +1,35 @@
+-- User-chosen profile slug — the <slug> in a public profile URL, per-ankh.app/u/<slug>.
+--
+-- This is the *user* slug, distinct from tournaments.slug (0006). Same concept
+-- deliberately named the same word — a human-readable URL identifier standing
+-- in for an opaque nanoid — but two tables, two namespaces, two independent
+-- uniqueness domains: /u/parthia and /tournaments/parthia can coexist, and
+-- neither claim consults the other's table.
+--
+-- Why: a profile URL is /users/<21-char nanoid> today, which can't be typed,
+-- remembered, or recognized in a pasted Discord link — the one entity below the
+-- URL standard /tournaments/<slug> already sets, in a community product where
+-- player identity is the point. The value is user-chosen and opt-in (claimed in
+-- Settings), which is what makes a name in a public URL compatible with the PII
+-- stance: discord_username is deliberately absent from every public payload, so
+-- the URL is never derived from an identity the user didn't publish.
+--
+-- Backfill: none, and there can be none — a slug is a consent decision, not a
+-- derivation from existing columns. NULL means unclaimed, which is every row
+-- today; those profiles keep being served at /users/<user_id>, which stays a
+-- permanent permalink either way. SQLite treats NULLs as distinct under UNIQUE,
+-- so any number of rows may sit unclaimed. Set-once in v1: the claim endpoint's
+-- UPDATE is conditional on `slug IS NULL`, and only the admin CLI clears it.
+--
+-- Index: UNIQUE *is* the uniqueness enforcement the claim's 409 SLUG_TAKEN
+-- rides on — a race-safe constraint, not a convenience over a pre-SELECT, since
+-- two concurrent claims of the same name would both pass a check-then-write.
+-- It doubles as the read index: GET /v1/users/by-slug/:slug is an equality
+-- probe on it, and because slugs are lowercased before they're written, SQLite
+-- can also use it for the LIKE 'q%' prefix scan the public people search adds
+-- when it starts matching slugs (the same case-sensitivity note as 0016's
+-- idx_users_discord_username). One index, three readers.
+
+ALTER TABLE users ADD COLUMN slug TEXT;
+
+CREATE UNIQUE INDEX idx_users_slug ON users(slug);

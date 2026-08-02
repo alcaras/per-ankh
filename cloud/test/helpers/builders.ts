@@ -53,6 +53,12 @@ export async function makeUser(opts?: {
 	// Omitted → NULL, which is "no override", so the default user is
 	// unchanged.
 	alias?: string;
+	// users.slug — the user-claimed profile URL served at /u/<slug>. Omitted
+	// → NULL, i.e. unclaimed, which is what every user is until they claim
+	// one, so the default row is unchanged. Set it to seed a user who already
+	// holds a slug (claiming through POST /v1/users/me/slug is the flow's own
+	// test).
+	slug?: string;
 	// Skip the default tournament_beta_users seed. Beta now only gates
 	// tournament *creation*; the default is "allowlisted" so created users
 	// can create tournaments. Tests of the create gate opt out.
@@ -66,9 +72,16 @@ export async function makeUser(opts?: {
 	const displayName = opts?.displayName ?? `Display ${discordUsername}`;
 
 	await env.SHARE_DB.prepare(
-		`INSERT INTO users (user_id, discord_id, display_name, discord_username, alias) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO users (user_id, discord_id, display_name, discord_username, alias, slug) VALUES (?, ?, ?, ?, ?, ?)`,
 	)
-		.bind(userId, discordId, displayName, discordUsername, opts?.alias ?? null)
+		.bind(
+			userId,
+			discordId,
+			displayName,
+			discordUsername,
+			opts?.alias ?? null,
+			opts?.slug ?? null,
+		)
 		.run();
 
 	const sessionToken = nanoid(32);

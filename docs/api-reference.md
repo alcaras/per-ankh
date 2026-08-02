@@ -13,7 +13,7 @@ This reference is drift-guarded: `cloud/src/routes-doc.test.ts` asserts it docum
 - [Games](#games----v1games) — `/v1/games/*`
 - [Collections](#collections----v1collections) — `/v1/collections`
 - [Users & profiles](#users--profiles) — `/v1/users/*` (public)
-- [Account](#account) — `/v1/users/me/online-ids`, settings
+- [Account](#account) — `/v1/users/me/online-ids`, profile URL, settings
 - [Tournaments — reads](#tournaments--reads)
 - [Tournaments — lifecycle & configuration](#tournaments--lifecycle--configuration)
 - [Tournaments — slots](#tournaments--slots)
@@ -97,7 +97,7 @@ Cloud paths use **credentialed, echo-Origin** CORS (the request `Origin` is refl
 
 ### PII
 
-`online_id` (Steam/GOG/Epic) is stripped from game blobs for non-owner viewers via a deep walk (`stripOnlineIds`). The raw save ZIP retains it, which is why `GET /v1/games/:id/download` requires a session while the JSON `GET /v1/games/:id` serves public games anonymously. `discord_id` / `discord_username` appear only in admin-tier tournament responses, never in public payloads. PII is never logged.
+`online_id` (Steam/GOG/Epic) is stripped from game blobs for non-owner viewers via a deep walk (`stripOnlineIds`). The raw save ZIP retains it, which is why `GET /v1/games/:id/download` requires a session while the JSON `GET /v1/games/:id` serves public games anonymously. `discord_id` / `discord_username` appear only in admin-tier tournament responses, never in public payloads. A user's `slug` is public by design — it is user-chosen and opt-in (claimed via [`POST /v1/users/me/slug`](#post-v1usersmeslug), never derived from an identity field), which is exactly what lets a name appear in a URL without publishing anything the user didn't choose to. PII is never logged.
 
 ---
 
@@ -117,7 +117,7 @@ Exchange the OAuth code for a session.
 
 - **Auth:** Public (this call establishes the session).
 - **Body:** JSON `{ code: string, state: string, redirect_uri: string }` (all required); also requires the `oauth_pending` cookie. `state` and `redirect_uri` are checked against the pending KV entry (timing-safe).
-- **Response 200:** `{ user_id, discord_id, display_name, avatar_url, next }`; sets the session cookie and clears `oauth_pending`.
+- **Response 200:** `{ user_id, discord_id, display_name, avatar_url, slug: string|null, next }`; sets the session cookie and clears `oauth_pending`.
 - **Errors:** `400` (`INVALID_BODY`, `MISSING_FIELDS`, `MISSING_PENDING`, `PENDING_NOT_FOUND`, `STATE_MISMATCH`, `REDIRECT_URI_MISMATCH`), `500 CORRUPT_PENDING`, `502` (`TOKEN_EXCHANGE_FAILED`, `NO_ACCESS_TOKEN`, `USER_FETCH_FAILED`, `NO_USER_ID`), `500 UPSERT_FAILED`.
 - **Notes:** Pending entry is single-use (read-then-deleted). On first-ever login, seeds a `Personal` collection, pins beta status, and claims any pre-linked tournament slots. Writes a `login` audit event.
 
@@ -125,9 +125,9 @@ Exchange the OAuth code for a session.
 Current session's user profile.
 
 - **Auth:** Session.
-- **Response 200:** `{ user_id, discord_id, display_name, discord_username, avatar_url, is_beta: boolean, is_admin: boolean, default_game_public: boolean, stream_url: string|null }`.
+- **Response 200:** `{ user_id, discord_id, display_name, discord_username, avatar_url, slug: string|null, is_beta: boolean, is_admin: boolean, default_game_public: boolean, stream_url: string|null }`.
 - **Errors:** `401 UNAUTHORIZED` (also if the session points at a deleted user, which clears the cookie).
-- **Notes:** Re-claims pre-linked tournament slots on every call. `is_beta`/`is_admin` are advisory (frontend gating); the server re-checks per endpoint.
+- **Notes:** Re-claims pre-linked tournament slots on every call. `slug` is the caller's claimed profile URL, null until claimed — carried here so the account page has it without a second fetch. `is_beta`/`is_admin` are advisory (frontend gating); the server re-checks per endpoint.
 
 ### `GET /v1/auth/dev/login`
 Local-only login bypass (no Discord).
@@ -305,9 +305,18 @@ Public profile + all-time summary.
 
 - **Auth:** Public (owner extras) — the owner's summary includes private games; others/anon see public-only.
 - **Path:** `user_id` (21-char).
-- **Response 200:** `{ user_id, display_name, avatar_url, summary: { total_games, win_rate: number|null, favorite_nation: string|null, favorite_day_of_week: number|null }, channels: { platform, channel_url }[], tournament_participant: boolean }`.
+- **Response 200:** `{ user_id, display_name, avatar_url, slug: string|null, summary: { total_games, win_rate: number|null, favorite_nation: string|null, favorite_day_of_week: number|null }, channels: { platform, channel_url }[], tournament_participant: boolean }`.
 - **Errors:** `404 NOT_FOUND`.
-- **Notes:** Summary is all-time over all saves (ignores any scope selector). `channels` are the user's linked video/stream channels (public) — drives whether the profile shows the "Videos" tab. `tournament_participant` plays the same role for the "Tournaments" tab: true when the user has a match attributable to them (same rule `GET /v1/users/:user_id/tournaments` uses — report-time snapshot for a decided match, live slot per side otherwise, byes excluded) **or** has cast a match sitting, so a dedicated caster who never plays still gets the tab. Holding a slot is deliberately not the test: a seat before round one renders nothing, and a substituted-out player holds no slot yet keeps every match they played. Both are flags only; the tabs' payloads load lazily from their own endpoints.
+- **Notes:** `slug` is the user's claimed profile URL (`/u/<slug>`), null while unclaimed — see [`POST /v1/users/me/slug`](#post-v1usersmeslug). Summary is all-time over all saves (ignores any scope selector). `channels` are the user's linked video/stream channels (public) — drives whether the profile shows the "Videos" tab. `tournament_participant` plays the same role for the "Tournaments" tab: true when the user has a match attributable to them (same rule `GET /v1/users/:user_id/tournaments` uses — report-time snapshot for a decided match, live slot per side otherwise, byes excluded) **or** has cast a match sitting, so a dedicated caster who never plays still gets the tab. Holding a slot is deliberately not the test: a seat before round one renders nothing, and a substituted-out player holds no slot yet keeps every match they played. Both are flags only; the tabs' payloads load lazily from their own endpoints.
+
+### `GET /v1/users/by-slug/:slug`
+The same public profile, resolved by the user's claimed slug — what `/u/<slug>` reads.
+
+- **Auth:** Public (owner extras) — identical to `GET /v1/users/:user_id`; no rate limit either, for the same reason.
+- **Path:** `slug` — 3–30 chars, `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`.
+- **Response 200:** the same payload as `GET /v1/users/:user_id`, field for field — one shared builder assembles both, so the two can't drift.
+- **Errors:** `404 NOT_FOUND` — unknown slug, and equally a malformed one (the route pattern admits only the stored lowercase shape, so anything else never matches a route).
+- **Notes:** No case folding: `/u/Foo` is a miss, not a redirect, so each user has exactly one canonical URL. `/users/<user_id>` remains a permanent permalink and keeps serving every profile, claimed slug or not.
 
 ### `GET /v1/users/:user_id/stats`
 User-corpus aggregate stats bundle.
@@ -362,6 +371,15 @@ Forget one online id.
 - **Response:** `204 No Content` (idempotent).
 - **Errors:** `401 UNAUTHORIZED`.
 - **Notes:** Scoped to the caller's own row; re-uploading a save re-links the id.
+
+### `POST /v1/users/me/slug`
+Claim the caller's profile URL (`/u/<slug>`). Opt-in, and set-once.
+
+- **Auth:** Session.
+- **Body:** JSON `{ slug: string }`. Trimmed and lowercased before validation, so mixed-case input claims the lowercase name; must then match `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$` (3–30 chars) and not be reserved (`admin`, `staff`, `moderator`, `support`, `me`, `per-ankh`, `perankh` — impersonation/brand holds, not route safety).
+- **Response 200:** `{ slug }` — the normalized value as stored.
+- **Errors:** `401 UNAUTHORIZED`, `400 INVALID_SLUG` (bad format **or** reserved; the message states the rule and is safe to show verbatim), `409 SLUG_TAKEN` (another user holds it), `409 SLUG_ALREADY_SET` (the caller already claimed one), `415 UNSUPPORTED_MEDIA_TYPE`, `400 INVALID_BODY`.
+- **Notes:** No rate limit — the write can succeed at most once per account (a conditional `UPDATE … WHERE slug IS NULL`), the endpoint is session-gated, and validation is pure compute. Uniqueness is enforced by the `users.slug` unique index rather than a pre-check, so two simultaneous claims of the same name can't both win. Set-once is a support-burden decision, not a link-integrity one: `/users/<user_id>` stays a permanent permalink either way. No API path releases or renames a claimed slug — clearing one is an operator action against the row. Writes a `slug_claim` audit event (awaited; 90-day retention).
 
 _(Account settings live at [`POST /v1/auth/settings`](#post-v1authsettings).)_
 

@@ -90,7 +90,9 @@ import {
 } from "./tournament/player";
 import { handleUserStats } from "./stats/handlers";
 import {
+	handleClaimSlug,
 	handlePublicUserSearch,
+	handleUserBySlug,
 	handleUserProfile,
 	handleUserSearch,
 } from "./users";
@@ -400,6 +402,16 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "regex", regex: /^\/v1\/users\/me\/online-ids\/(.+)$/ },
 		route: "DELETE /v1/users/me/online-ids/:id",
 		handler: (r, e, m) => handleRemoveOnlineId(decodeURIComponent(m![1]), r, e),
+	},
+
+	// Claim the caller's profile URL (/u/<slug>) — account self-service, so
+	// it sits with the other /v1/users/me/* account routes rather than with
+	// the public profile reads. Set-once; the handler owns the conflicts.
+	{
+		method: "POST",
+		match: { kind: "path", path: "/v1/users/me/slug" },
+		route: "POST /v1/users/me/slug",
+		handler: (r, e) => handleClaimSlug(r, e),
 	},
 
 	// CSP violation reports — unauthenticated; the browser POSTs here
@@ -749,6 +761,21 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "path", path: "/v1/users/public-search" },
 		route: "GET /v1/users/public-search",
 		handler: (r, e) => handlePublicUserSearch(r, e),
+	},
+	// The same public profile as /v1/users/:user_id, resolved by the user's
+	// claimed slug — what /u/<slug> reads. The literal `by-slug/` segment
+	// can't be swallowed by the nanoid regex below ("/" isn't in its class),
+	// but specific-before-generic is the house rule. The pattern admits only
+	// the stored lowercase shape, so a malformed slug 404s here rather than
+	// reaching D1.
+	{
+		method: "GET",
+		match: {
+			kind: "regex",
+			regex: /^\/v1\/users\/by-slug\/([a-z0-9][a-z0-9-]{1,28}[a-z0-9])$/,
+		},
+		route: "GET /v1/users/by-slug/:slug",
+		handler: (r, e, m) => handleUserBySlug(m![1], r, e),
 	},
 	// Public user profile. Regex match — the 21-char constraint distinguishes
 	// nanoid user_ids from the other /v1/users/{search,me,…} routes above.

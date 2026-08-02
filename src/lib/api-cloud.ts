@@ -86,6 +86,11 @@ export interface UserProfile {
 	user_id: string;
 	display_name: string;
 	avatar_url: string;
+	// The user's claimed profile URL (`/u/<slug>`), or null while unclaimed —
+	// which is the default, since claiming is opt-in. Pass the whole profile to
+	// `profileHref` rather than reading this directly: that helper is where the
+	// slug-vs-permalink choice lands (issue #186 B6).
+	slug: string | null;
 	// All-time stats for the profile-header card — over ALL the user's
 	// saves (visibility-scoped to the viewer), independent of the scope
 	// selector on the page.
@@ -115,6 +120,9 @@ export interface UserMe {
 	// be entered under.
 	discord_username: string;
 	avatar_url: string;
+	// The caller's claimed profile URL (`/u/<slug>`), null until they claim
+	// one. Set-once, so a non-null value never changes under the client.
+	slug: string | null;
 	// True iff the user is on the tournament allowlist, i.e. may *create*
 	// tournaments. Drives the create-button visibility on /tournaments.
 	// (Reads, signup, and granted-admin actions are open to all users.)

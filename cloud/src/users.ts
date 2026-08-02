@@ -1,6 +1,7 @@
 // User-table-shaped endpoints: two searches — the tournament admin's
 // autocomplete and the header's people search — plus the public profile
-// (the /users/[user_id] page chrome).
+// (the /users/[user_id] page chrome), served by user_id or by slug, and the
+// slug claim behind it.
 //
 // Anything more user-table-shaped that grows beyond a few hundred lines
 // can split into its own subdir.
@@ -28,9 +29,15 @@ import { countEventsSince } from "./games";
 import { displayNameSql } from "./identity";
 import { logError } from "./log";
 import { UserSearchQuerySchema } from "./schemas/tournament";
+import { ClaimSlugSchema, SlugSchema } from "./schemas/user";
 import { sessionFromRequest, type SessionEnv } from "./session";
 import { USER_MATCHES_WHERE, type TournamentEnv } from "./tournament/data";
-import { cloudCorsHeaders, errorResponse, jsonResponse } from "./util";
+import {
+	cloudCorsHeaders,
+	errorResponse,
+	jsonResponse,
+	parseJsonBody,
+} from "./util";
 import type { QueryableD1, EventsEnv } from "./d1";
 
 // Generous ceiling — typing 5 chars to find someone, picking from the
@@ -294,11 +301,13 @@ export async function handlePublicUserSearch(
 	);
 }
 
-// GET /v1/users/:user_id — public user profile.
+// The public user profile, addressed two ways: GET /v1/users/:user_id (the
+// permanent permalink) and GET /v1/users/by-slug/:slug (the /u/<slug> pretty
+// URL). Both return the same payload — see buildUserProfile.
 //
-// Returns identity fields the /users/[user_id] profile page needs to
-// render its chrome (display name + avatar). No auth, no beta gate;
-// 404 if the user doesn't exist.
+// Returns identity fields the profile page needs to render its chrome
+// (display name + avatar). No auth, no beta gate; 404 if the user doesn't
+// exist.
 export interface UserProfileEnv extends SessionEnv {
 	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
@@ -309,7 +318,15 @@ interface UserProfileRow {
 	discord_id: string;
 	display_name: string;
 	avatar_hash: string | null;
+	slug: string | null;
 }
+
+// One projection, two keys — the routes differ only in what they look the row
+// up BY. Keeping the column list here means a field added to the profile
+// header can't reach one route and miss the other.
+const PROFILE_ROW_SQL = `SELECT user_id, discord_id, ${displayNameSql("users")} AS display_name,
+	        avatar_hash, slug
+	 FROM users`;
 
 export async function handleUserProfile(
 	userId: string,
@@ -318,15 +335,57 @@ export async function handleUserProfile(
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 
-	const row = await env.SHARE_DB.prepare(
-		`SELECT user_id, discord_id, ${displayNameSql("users")} AS display_name, avatar_hash FROM users WHERE user_id = ?`,
-	)
+	const row = await env.SHARE_DB.prepare(`${PROFILE_ROW_SQL} WHERE user_id = ?`)
 		.bind(userId)
 		.first<UserProfileRow>();
 
 	if (!row) {
 		return errorResponse("User not found", 404, cors, "NOT_FOUND");
 	}
+
+	return jsonResponse(await buildUserProfile(row, request, env), 200, cors);
+}
+
+// GET /v1/users/by-slug/:slug — the same profile, resolved by the user's
+// claimed slug. Public, no auth, no rate limit, exactly like the id route
+// (the comment inside buildUserProfile explains why the hottest public read
+// takes no events INSERT).
+//
+// A malformed slug never arrives: the route regex only admits the stored
+// lowercase shape, so anything else falls through the router to a 404 without
+// touching D1. Nothing here lowercases the input — one canonical URL per user
+// is the point, so /u/Foo is a miss, not a redirect.
+export async function handleUserBySlug(
+	slug: string,
+	request: Request,
+	env: UserProfileEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+
+	const row = await env.SHARE_DB.prepare(`${PROFILE_ROW_SQL} WHERE slug = ?`)
+		.bind(slug)
+		.first<UserProfileRow>();
+
+	if (!row) {
+		return errorResponse("User not found", 404, cors, "NOT_FOUND");
+	}
+
+	return jsonResponse(await buildUserProfile(row, request, env), 200, cors);
+}
+
+// The profile payload, assembled from an already-resolved users row.
+//
+// Takes the row rather than a user_id because each route resolved it by its
+// own key and holds it already — an id parameter would mean re-SELECTing a row
+// in hand, a second query on the site's hottest public read. It also leaves
+// the 404 where it belongs: "no such user" is each route's own finding, and
+// this function never gets the chance to answer it differently per path.
+async function buildUserProfile(
+	row: UserProfileRow,
+	request: Request,
+	env: UserProfileEnv,
+) {
+	const userId = row.user_id;
 
 	// All-time profile summary for the profile-header card. Deliberately
 	// over ALL the user's saves (no collection / game-type scope) — the
@@ -410,21 +469,122 @@ export async function handleUserProfile(
 				.first<{ participates: number }>(),
 		]);
 
-	return jsonResponse(
-		{
-			user_id: row.user_id,
-			display_name: row.display_name,
-			avatar_url: buildAvatarUrl(row.discord_id, row.avatar_hash),
-			summary: {
-				total_games: countsRow?.total ?? 0,
-				win_rate: countsRow?.win_rate ?? null,
-				favorite_nation: nationRow?.user_nation ?? null,
-				favorite_day_of_week: dayRow?.weekday ?? null,
-			},
-			channels: channelsRes.results ?? [],
-			tournament_participant: (participationRow?.participates ?? 0) === 1,
+	return {
+		user_id: row.user_id,
+		display_name: row.display_name,
+		avatar_url: buildAvatarUrl(row.discord_id, row.avatar_hash),
+		// The claimed profile URL, or null for the unclaimed majority. Carried
+		// on the payload so a link site that already holds the profile can emit
+		// /u/<slug> directly instead of the id URL plus a redirect hop.
+		slug: row.slug,
+		summary: {
+			total_games: countsRow?.total ?? 0,
+			win_rate: countsRow?.win_rate ?? null,
+			favorite_nation: nationRow?.user_nation ?? null,
+			favorite_day_of_week: dayRow?.weekday ?? null,
 		},
-		200,
-		cors,
-	);
+		channels: channelsRes.results ?? [],
+		tournament_participant: (participationRow?.participates ?? 0) === 1,
+	};
+}
+
+// POST /v1/users/me/slug — claim the caller's profile URL.
+//
+// Set-once by design (issue #186 Decision 5): a self-service rename is a
+// support-burden tradeoff we're not taking in v1, and an operator can still
+// clear/re-set via the admin CLI. That makes the write a conditional UPDATE
+// rather than a plain one, and it makes the two conflicts genuinely different
+// answers — "you already have one" vs. "someone else has that one" — so they
+// get distinct codes for the Settings card to phrase differently.
+//
+// No rate limit: the write can succeed at most once per account, the endpoint
+// is session-gated, and validation is pure compute. A budget here would spend
+// an events read on a request that a conditional UPDATE already bounds.
+export interface ClaimSlugEnv extends UserProfileEnv, EventsEnv {}
+
+export async function handleClaimSlug(
+	request: Request,
+	env: ClaimSlugEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const session = await sessionFromRequest(env, request);
+	if (!session) {
+		return errorResponse("Authentication required", 401, cors, "UNAUTHORIZED");
+	}
+
+	// Shared parse for the envelope — it carries the Content-Type check that
+	// keeps a form-encoded cross-origin POST off this endpoint. The slug field
+	// is then validated on its own so a bad *name* answers INVALID_SLUG with
+	// the format rule, rather than the generic INVALID_BODY a schema failure
+	// inside parseJsonBody would produce; the claim UI renders the message
+	// verbatim, so it has to read as advice.
+	const body = await parseJsonBody(request, ClaimSlugSchema, cors);
+	if (!body.ok) return body.response;
+
+	const validated = v.safeParse(SlugSchema, body.body.slug);
+	if (!validated.success) {
+		return errorResponse(
+			validated.issues[0]?.message ?? "Invalid profile URL",
+			400,
+			cors,
+			"INVALID_SLUG",
+		);
+	}
+	const slug = validated.output;
+
+	// The `slug IS NULL` predicate is what makes this set-once: a user who
+	// already claimed one matches no row. Uniqueness is the index's job, not a
+	// pre-SELECT's — two concurrent claims of the same name would both pass a
+	// check-then-write.
+	let changes: number;
+	try {
+		const result = await env.SHARE_DB.prepare(
+			`UPDATE users SET slug = ? WHERE user_id = ? AND slug IS NULL`,
+		)
+			.bind(slug, session.data.user_id)
+			.run();
+		changes = result.meta?.changes ?? 0;
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : String(e);
+		if (
+			msg.includes("UNIQUE constraint failed") &&
+			msg.includes("users.slug")
+		) {
+			return errorResponse(
+				`"${slug}" is already taken`,
+				409,
+				cors,
+				"SLUG_TAKEN",
+			);
+		}
+		throw e;
+	}
+
+	if (changes === 0) {
+		return errorResponse(
+			"Your profile URL is already set and can't be changed — contact an admin",
+			409,
+			cors,
+			"SLUG_ALREADY_SET",
+		);
+	}
+
+	// Awaited, unlike the searches' fire-and-forget audits above: this one is
+	// a durable record of a once-per-account, irreversible-to-the-user change,
+	// and an un-awaited write can be canceled by response teardown (issue #75).
+	// The .catch keeps a failed audit from failing a claim that has already
+	// committed.
+	await env.EVENTS_DB.prepare(
+		`INSERT INTO events (event_type, user_id, metadata)
+		 VALUES ('slug_claim', ?, ?)`,
+	)
+		.bind(session.data.user_id, JSON.stringify({ slug }))
+		.run()
+		.catch((e: unknown) => {
+			logError("slug_claim_audit_failed", e, {
+				user_id: session.data.user_id,
+			});
+		});
+
+	return jsonResponse({ slug }, 200, cors);
 }

@@ -51,6 +51,10 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			"visibility_change",
 			"collection_change",
 			"name_change",
+			// Profile-URL claim (users.ts): once per account, and the only
+			// record of who took a name, since the claim is set-once and the
+			// users row shows only the current value.
+			"slug_claim",
 			"login",
 			"logout",
 			"login_denied",
