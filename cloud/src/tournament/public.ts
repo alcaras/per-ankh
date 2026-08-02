@@ -1158,6 +1158,9 @@ export async function handleTournamentBracket(
 			championship_seed: s.championship_seed,
 			display_name: slotDisplayName(s),
 			user_id: s.user_id,
+			// Bare `slug` — a bracket slot is user-shaped; the tournament's own
+			// slug is the URL that addressed this read (Decision 1, #186).
+			slug: s.user_slug,
 			avatar_url: slotAvatarUrl(s),
 		})),
 		rounds: champRounds.map((r) => ({

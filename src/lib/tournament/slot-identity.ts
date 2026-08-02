@@ -46,6 +46,7 @@ export function buildSlotMaps(
 	for (const s of bracket.slots) {
 		if (s.display_name) labels[s.slot_id] = s.display_name;
 		userIds[s.slot_id] = s.user_id;
+		slugs[s.slot_id] = s.slug;
 		avatars[s.slot_id] = s.avatar_url;
 	}
 

@@ -1903,6 +1903,10 @@ export interface BracketSlot {
 	// Same server-resolved display label as SlotStanding.display_name.
 	display_name: string | null;
 	user_id: string | null;
+	// Same claimed profile slug as SlotStanding.slug, and bare for the same
+	// reason. buildSlotMaps unions this with the standings' copy — a
+	// championship-only slot has no standings row, so both loops must set it.
+	slug: string | null;
 	avatar_url: string | null;
 }
 

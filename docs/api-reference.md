@@ -413,7 +413,7 @@ Swiss standings per division + combined qualifier ranking.
 ### `GET /v1/tournaments/:id/bracket`
 Championship bracket.
 
-- **Response 200:** `{ tournament_id, slots: [{ slot_id, championship_seed, display_name, user_id, avatar_url }], rounds: [{ round_id, round_number, status, matches: [<serializeMatch> & { total_turns }] }] }` (championship-phase only).
+- **Response 200:** `{ tournament_id, slots: [{ slot_id, championship_seed, display_name, user_id, slug, avatar_url }], rounds: [{ round_id, round_number, status, matches: [<serializeMatch> & { total_turns }] }] }` (championship-phase only).
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 - **Notes:** Admin-only `slot_*_discord_username` / `slot_*_discord_id` inside matches are null for public viewers.
 

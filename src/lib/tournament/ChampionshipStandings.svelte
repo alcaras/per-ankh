@@ -21,6 +21,8 @@
 		name: string;
 		// The account holding the seat, or null for an unclaimed slot.
 		userId: string | null;
+		// That account's claimed profile slug; null when it has none.
+		slug: string | null;
 		avatarUrl: string | null;
 		round: string;
 		eliminated: boolean;
@@ -83,6 +85,7 @@
 					seed: s.championship_seed,
 					name: s.display_name ?? `seed ${s.championship_seed ?? "?"}`,
 					userId: s.user_id,
+					slug: s.slug,
 					avatarUrl: s.avatar_url,
 					round: roundCell(p),
 					eliminated: p?.outcome === "lost",
@@ -119,6 +122,7 @@
 							<span class="flex items-center gap-1">
 								<ProfileLink
 									userId={r.userId}
+									slug={r.slug}
 									class="flex min-w-0 items-center gap-1 hover:underline"
 								>
 									<PlayerAvatar avatarUrl={r.avatarUrl} size={15} />
