@@ -1,9 +1,9 @@
 <script lang="ts">
 	// Wonders tab — the whole catalogue, one row per culture tier, with this
-	// game's reality painted on: wonders the save disabled are faded, wonders
-	// still open are plain, and a built wonder carries its builder's colour,
-	// nation and completion turn. One glance answers "what was in the pool,
-	// and who got what".
+	// game's reality painted on: wonders the save disabled carry dimmed art and
+	// a muted name, wonders still open are full-strength, and a built wonder
+	// carries its builder's colour, nation and completion turn. One glance
+	// answers "what was in the pool, and who got what".
 	import type { PlayerWonder } from "$lib/types/PlayerWonder";
 	import {
 		CULTURE_LEVELS,
@@ -26,7 +26,7 @@
 		playerWonders: PlayerWonder[];
 		// Wonders the save switched off. Null on pre-2.12.0 blobs, where the
 		// pool is unknown — which is not the same claim as "nothing disabled",
-		// so nothing fades and a note says why.
+		// so nothing is dimmed and a note says why.
 		disabledImprovements?: string[] | null;
 	} = $props();
 
@@ -39,6 +39,7 @@
 		turn?: number;
 		builderLabel?: string;
 		builderColor?: string;
+		builderNation?: string | null;
 	};
 
 	// One row per culture tier, in game order, each tier's wonders A→Z by
@@ -75,6 +76,7 @@
 									? formatEnum(built.nation, "NATION_")
 									: built.player_name),
 							builderColor: player?.color,
+							builderNation: player?.nation ?? built.nation,
 						};
 					}
 					return {
@@ -89,12 +91,12 @@
 {#if disabledImprovements == null}
 	<p class="mb-3 text-xs italic text-tan">
 		This save predates the wonder-pool data, so which wonders were disabled is
-		unknown — nothing is faded.
+		unknown — nothing is marked as out of the pool.
 	</p>
 {/if}
 
 {#each rows as row (row.level)}
-	<section class="mb-5">
+	<section class="mb-4 rounded-lg bg-surface p-4">
 		<h2 class="mb-2 text-base font-bold text-bright">
 			<span class="inline-flex items-center gap-1.5">
 				<SpriteIcon
@@ -109,18 +111,19 @@
 		<div class="flex flex-wrap gap-3">
 			{#each row.cards as card (card.wonder)}
 				<div
-					class="w-36 rounded-lg border-2 p-3 text-center {card.state ===
-					'disabled'
-						? 'opacity-35 grayscale'
-						: ''}"
-					style="background-color: rgb(var(--color-surface)); border-color: {card.builderColor ??
-						'transparent'};"
+					class="w-48 rounded-lg border-2 bg-surface-raised p-2 text-center"
+					style="border-color: {card.builderColor ?? 'transparent'};"
 				>
 					<!-- Reserve the slot: five wonders ship no improvement sprite, and
 					     SpriteIcon draws nothing when the path is missing, which would
 					     pull their name up to the card's top edge and break the row's
 					     alignment. Same idiom as BuildComparison's icon column. -->
-					<span class="mx-auto flex h-14 w-14 flex-none items-center">
+					<span
+						class="mx-auto flex h-14 w-14 flex-none items-center {card.state ===
+						'disabled'
+							? 'opacity-35'
+							: ''}"
+					>
 						<SpriteIcon
 							category="improvements"
 							value={card.wonder}
@@ -128,17 +131,42 @@
 							alt={improvementDisplayName(card.wonder)}
 						/>
 					</span>
-					<div class="mt-1.5 text-xs font-semibold text-white">
+					<div
+						class="mt-1.5 text-xs font-semibold {card.state === 'disabled'
+							? 'text-muted'
+							: 'text-white'}"
+					>
 						{improvementDisplayName(card.wonder)}
 					</div>
 					{#if card.state === "built"}
+						<!-- Builder and turn read as one phrase ("Egypt Turn 81"), so they
+						     share a line. Only the nation carries its colour; the turn
+						     stays tan. The card is sized for the longest wonder name, which
+						     leaves room for every plain nation label — but a mirror match
+						     labels its players "Babylonia (name)", which no fixed width
+						     fits, so that one truncates rather than wrapping the card
+						     taller. The turn never gives up space; the label does. -->
 						<div
-							class="mt-1 text-[11px] font-bold"
-							style="color: {card.builderColor ?? 'rgb(var(--color-tan))'};"
+							class="mt-1 flex items-center justify-center gap-x-1 text-[11px] leading-tight"
 						>
-							{card.builderLabel}
+							<span
+								class="flex min-w-0 items-center gap-1 font-bold"
+								style="color: {card.builderColor ?? 'rgb(var(--color-tan))'};"
+							>
+								{#if card.builderNation}
+									<SpriteIcon
+										category="crests"
+										value={card.builderNation}
+										size={13}
+										alt=""
+									/>
+								{/if}
+								<span class="truncate" title={card.builderLabel}>
+									{card.builderLabel}
+								</span>
+							</span>
+							<span class="shrink-0 text-tan">Turn {card.turn}</span>
 						</div>
-						<div class="text-[10px] text-tan">Turn {card.turn}</div>
 					{:else if card.state === "disabled"}
 						<div class="mt-1 text-[10px] italic text-tan">Not in this game</div>
 					{/if}
