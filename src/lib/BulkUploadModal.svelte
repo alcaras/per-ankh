@@ -457,8 +457,10 @@
 		// stats). The /upload route already gates on a session, so
 		// page.data.user is set here; the resolve("/") fallback is
 		// purely defensive.
-		const userId = page.data.user?.user_id;
-		const fallback = userId ? profileHref({ user_id: userId }) : resolve("/");
+		// The whole /auth/me row goes in, not just its id — it carries the
+		// user's slug, so this lands on /u/<slug> without a redirect hop.
+		const me = page.data.user;
+		const fallback = me ? profileHref(me) : resolve("/");
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- doneRedirect is produced by the parent via resolve(); lint can't see through the prop
 		void goto(doneRedirect ?? fallback);
 	}

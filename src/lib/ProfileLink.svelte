@@ -15,6 +15,7 @@
 
 	let {
 		userId,
+		slug = null,
 		class: className = "",
 		title,
 		ariaLabel,
@@ -22,6 +23,13 @@
 		children,
 	}: {
 		userId: string | null;
+		// The same user's claimed profile slug, when the caller's payload
+		// carries one — it decides `/u/<slug>` vs. the id permalink. Two props
+		// rather than one identity object because most callers hold a bare id
+		// resolved from a map (slot → user_id) and not a row; omitting it is
+		// always safe (the id URL 308-redirects). It must describe the SAME
+		// user as `userId`.
+		slug?: string | null;
 		// Applied to the anchor only (see above) — the unlinked branch renders
 		// children unwrapped.
 		class?: string;
@@ -42,7 +50,7 @@
 	     call, and this is the one place the app builds a profile anchor. -->
 	<!-- eslint-disable svelte/no-navigation-without-resolve -->
 	<a
-		href={profileHref({ user_id: userId })}
+		href={profileHref({ user_id: userId, slug })}
 		class={className}
 		{title}
 		aria-label={ariaLabel}

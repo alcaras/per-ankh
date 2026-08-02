@@ -170,6 +170,7 @@
 			     "Profile" item in the menu below. -->
 			<ProfileLink
 				userId={user.user_id}
+				slug={user.slug}
 				class="flex-shrink-0"
 				ariaLabel="Your profile"
 				title="Your profile"
@@ -226,6 +227,7 @@
 					{#if user}
 						<ProfileLink
 							userId={user.user_id}
+							slug={user.slug}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
 							onclick={closeMenu}
 						>

@@ -575,6 +575,23 @@ export const cloudApi = {
 		}
 	},
 
+	// The same profile, addressed by the user's claimed slug — what /u/<slug>
+	// loads. One builder serves both routes on the Worker, so the payload is
+	// identical to getUserProfile's; only the key differs. Unknown slugs 404,
+	// returned as null for the same reason as above.
+	getUserProfileBySlug: async (
+		slug: string,
+		opts?: CallOpts,
+	): Promise<UserProfile | null> => {
+		try {
+			const res = await request(`/users/by-slug/${slug}`, opts);
+			return res.json() as Promise<UserProfile>;
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 404) return null;
+			throw err;
+		}
+	},
+
 	// Recent videos merged across the target user's linked channels, newest
 	// first. Public read; feeds the profile "Videos" tab.
 	getUserVideos: async (

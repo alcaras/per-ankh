@@ -1,18 +1,22 @@
-// User home load — a single scoped ChartBundle (feeds Overview + Stats)
-// plus profile + collections for the scope row. The games-list first page
-// is fetched only when the Games tab is active. Owner sees private+public;
-// visitor / anon sees only the target's is_public=1 games (enforced
-// server-side). Tab + scope + filter state all live in the URL.
+// The profile permalink. Every user is permanently addressable here by id;
+// a user who claimed a slug is *canonically* at /u/<slug>, so this route
+// 308-redirects to it (the /dashboard precedent — see
+// src/routes/dashboard/+page.ts for why 308) and keeps the query string, so
+// ?tab= / ?scope= deep links survive the hop. Slug-less users — the default,
+// since claiming is opt-in — are served here exactly as before.
+//
+// The page itself and everything downstream of the profile live in
+// $lib/users/profile-load + ProfilePage, shared with /u/[slug].
 
 import { error, redirect } from "@sveltejs/kit";
-import { ApiError, cloudApi, UnauthorizedError } from "$lib/api-cloud";
-import { loginBounce } from "$lib/utils/safe-next";
-import type { UserScope } from "$lib/stats/types";
+import { resolve } from "$app/paths";
+import { cloudApi } from "$lib/api-cloud";
+import {
+	buildProfilePage,
+	profileScope,
+	rethrowProfileLoadError,
+} from "$lib/users/profile-load";
 import type { PageLoad } from "./$types";
-
-const FIRST_PAGE_SIZE = 50;
-const TABS = new Set(["overview", "stats", "games", "videos", "tournaments"]);
-const SCOPE_KEYWORDS = new Set(["public", "vs_ai", "mp", "tournament"]);
 
 export const load: PageLoad = async ({ fetch, url, params, parent }) => {
 	const targetUserId = params.user_id;
@@ -22,114 +26,50 @@ export const load: PageLoad = async ({ fetch, url, params, parent }) => {
 
 	const { user: viewer } = await parent();
 	const isOwner = viewer?.user_id === targetUserId;
+	const scope = profileScope(url);
 
-	const tabRaw = url.searchParams.get("tab");
-	let tab = tabRaw && TABS.has(tabRaw) ? tabRaw : "overview";
-
-	// Scope row: one selection feeding the bundle and the games list, so
-	// all tabs agree on the in-scope set.
-	const scopeRaw = url.searchParams.get("scope");
-	const scope: UserScope =
-		scopeRaw && (SCOPE_KEYWORDS.has(scopeRaw) || /^\d+$/.test(scopeRaw))
-			? scopeRaw
-			: "all";
-
-	// Games-tab filters (only meaningful when tab === "games").
-	const q = url.searchParams.get("q")?.trim() || "";
-	const nationRaw = url.searchParams.get("nation");
-	const nation = nationRaw && /^[A-Z_]+$/.test(nationRaw) ? nationRaw : null;
-	const dateRaw = url.searchParams.get("date");
-	const date = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
-	const resultRaw = url.searchParams.get("result");
-	const result: "win" | "loss" | null =
-		resultRaw === "win" || resultRaw === "loss" ? resultRaw : null;
-	const sort = url.searchParams.get("sort") ?? "date_desc";
+	// All three start together, as they always have. The redirect decision
+	// needs the profile alone: awaiting all three first would make a slug-holder
+	// wait on two responses they're about to discard, while starting the other
+	// two only after the profile arrives would cost every slug-less user the
+	// parallelism. So — start all three, await the profile, then either redirect
+	// (abandoning the other two) or await them together.
+	//
+	// The no-op .catch is what keeps an abandoned rejection from surfacing as an
+	// unhandled rejection. It handles a *derived* promise, so awaiting the
+	// originals below still propagates their failures into the catch block.
+	const profileP = cloudApi.getUserProfile(targetUserId, { fetch });
+	const collectionsP = cloudApi.listCollections({
+		fetch,
+		userId: targetUserId,
+	});
+	const bundleP = cloudApi.getUserStats(targetUserId, { fetch, scope });
+	collectionsP.catch(() => {});
+	bundleP.catch(() => {});
 
 	try {
-		const [profile, collectionsRes, bundle] = await Promise.all([
-			cloudApi.getUserProfile(targetUserId, { fetch }),
-			cloudApi.listCollections({ fetch, userId: targetUserId }),
-			cloudApi.getUserStats(targetUserId, { fetch, scope }),
-		]);
+		const profile = await profileP;
 		if (!profile) {
 			throw error(404, "User not found");
 		}
+		if (profile.slug != null) {
+			throw redirect(
+				308,
+				`${resolve("/u/[slug]", { slug: profile.slug })}${url.search}`,
+			);
+		}
 
-		// The Videos tab only exists when the user has linked channels; fall back
-		// to overview so a stale ?tab=videos link doesn't land on an empty tab.
-		const hasChannels = profile.channels.length > 0;
-		if (tab === "videos" && !hasChannels) tab = "overview";
-
-		// Same rule for Tournaments: the flag is "holds a slot OR has cast", so a
-		// dedicated caster who never plays still gets the tab.
-		const isTournamentParticipant = profile.tournament_participant;
-		if (tab === "tournaments" && !isTournamentParticipant) tab = "overview";
-
-		// Fetch recent videos only when the Videos tab is active.
-		const videos =
-			tab === "videos"
-				? await cloudApi.getUserVideos(targetUserId, { fetch })
-				: [];
-
-		// Same lazy load for the tournament record — one request covering
-		// matches and casts, only when that tab is open.
-		const tournamentRecord =
-			tab === "tournaments"
-				? await cloudApi.getUserTournaments(targetUserId, { fetch })
-				: null;
-
-		// Fetch the first games page only when the Games tab is active —
-		// Overview/Stats render entirely from the bundle.
-		const gamesRes =
-			tab === "games"
-				? await cloudApi.listGames({
-						fetch,
-						userId: targetUserId,
-						limit: FIRST_PAGE_SIZE,
-						offset: 0,
-						scope,
-						q: q || undefined,
-						nation: nation ?? undefined,
-						result: result ?? undefined,
-						date: date ?? undefined,
-						sort,
-					})
-				: null;
-
-		return {
+		const [collectionsRes, bundle] = await Promise.all([collectionsP, bundleP]);
+		return await buildProfilePage({
+			fetch,
+			url,
 			profile,
-			meta: {
-				title: `${profile.display_name} - Per-Ankh`,
-				description: `${profile.display_name}'s Old World games and statistics on Per-Ankh.`,
-			},
-			isOwner,
+			collectionsRes,
 			bundle,
-			collections: collectionsRes.collections,
-			scopeCounts: collectionsRes.scope_counts,
-			tab,
+			isOwner,
 			scope,
-			hasChannels,
-			videos,
-			isTournamentParticipant,
-			tournamentRecord,
-			category: url.searchParams.get("category"),
-			// Games-tab state.
-			games: gamesRes?.games ?? [],
-			gamesTotal: gamesRes?.total ?? 0,
-			pageSize: FIRST_PAGE_SIZE,
-			q,
-			nation,
-			result,
-			date,
-			sort,
-		};
+		});
 	} catch (err) {
-		if (err instanceof UnauthorizedError) {
-			throw redirect(303, loginBounce(url));
-		}
-		if (err instanceof ApiError && err.status === 404) {
-			throw error(404, "User not found");
-		}
-		throw err;
+		rethrowProfileLoadError(err, url);
 	}
 };
