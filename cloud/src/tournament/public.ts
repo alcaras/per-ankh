@@ -1386,15 +1386,26 @@ async function loadLiveSlotIdentities(
 	env: TournamentEnv,
 	slotIds: string[],
 ): Promise<
-	Map<string, { display_name: string | null; avatar_url: string | null }>
+	Map<
+		string,
+		{
+			display_name: string | null;
+			user_id: string | null;
+			avatar_url: string | null;
+		}
+	>
 > {
 	const out = new Map<
 		string,
-		{ display_name: string | null; avatar_url: string | null }
+		{
+			display_name: string | null;
+			user_id: string | null;
+			avatar_url: string | null;
+		}
 	>();
 	for (const ids of chunk(slotIds, CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
-			`SELECT s.slot_id, s.discord_id, s.discord_username,
+			`SELECT s.slot_id, s.user_id, s.discord_id, s.discord_username,
 			        u.avatar_hash AS user_avatar_hash,
 			        ${displayNameSql("u")} AS user_display_name
 			 FROM tournament_slots s
@@ -1406,6 +1417,7 @@ async function loadLiveSlotIdentities(
 				Pick<
 					SlotRow,
 					| "slot_id"
+					| "user_id"
 					| "discord_id"
 					| "discord_username"
 					| "user_avatar_hash"
@@ -1415,6 +1427,7 @@ async function loadLiveSlotIdentities(
 		for (const row of res.results ?? []) {
 			out.set(row.slot_id, {
 				display_name: slotDisplayName(row),
+				user_id: row.user_id,
 				avatar_url: slotAvatarUrl(row),
 			});
 		}
@@ -1557,10 +1570,12 @@ export async function handleUserTournaments(
 	});
 
 	const slotLabels: Record<string, string> = {};
+	const slotUserIds: Record<string, string | null> = {};
 	const slotAvatars: Record<string, string | null> = {};
 	for (const [slotId, identity] of liveBySlotId) {
 		if (identity.display_name !== null)
 			slotLabels[slotId] = identity.display_name;
+		slotUserIds[slotId] = identity.user_id;
 		slotAvatars[slotId] = identity.avatar_url;
 	}
 
@@ -1589,6 +1604,10 @@ export async function handleUserTournaments(
 				part_id: partId,
 			})),
 			slot_labels: slotLabels,
+			// Exposure-neutral: the same ids already ship on every row here as
+			// matches[].slot_a/b_user_id. This map is what lets a PENDING row (whose
+			// snapshot columns are null by design) link its opponent's profile.
+			slot_user_ids: slotUserIds,
 			slot_avatars: slotAvatars,
 		},
 		200,

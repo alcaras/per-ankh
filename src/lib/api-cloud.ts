@@ -2007,11 +2007,12 @@ export interface UserTournamentsResponse {
 	tournaments: UserTournamentEntry[];
 	matches: UserTournamentMatch[];
 	casts: UserTournamentCast[];
-	// Live slot occupant identity keyed by slot_id — the same two maps the
+	// Live slot occupant identity keyed by slot_id — the same three maps the
 	// per-tournament pages build client-side from standings + bracket. Load-
-	// bearing for pending (upcoming) rows, whose display names the match payload
-	// deliberately leaves null.
+	// bearing for pending (upcoming) rows, whose display names, profile links and
+	// avatars the match payload deliberately leaves null.
 	slot_labels: Record<string, string>;
+	slot_user_ids: Record<string, string | null>;
 	slot_avatars: Record<string, string | null>;
 }
 

@@ -49,6 +49,7 @@ interface UserTournamentsBody {
 	matches: Record<string, unknown>[];
 	casts: Record<string, unknown>[];
 	slot_labels: Record<string, string>;
+	slot_user_ids: Record<string, string | null>;
 	slot_avatars: Record<string, string | null>;
 }
 
@@ -123,6 +124,11 @@ describe("GET /v1/users/:user_id/tournaments", () => {
 		// render layer falls through to.
 		expect(body.matches[0].slot_a_display_name).toBeNull();
 		expect(body.slot_labels[slotId]).toBe(player.displayName);
+		// Same fallthrough for the profile link: the snapshot user_id is null on a
+		// pending match, so slot_user_ids is the only way the tab can link an
+		// upcoming opponent.
+		expect(body.matches[0].slot_a_user_id).toBeNull();
+		expect(body.slot_user_ids[slotId]).toBe(player.userId);
 	});
 
 	it("keeps a DECIDED match with the player who actually played it after a substitution", async () => {
