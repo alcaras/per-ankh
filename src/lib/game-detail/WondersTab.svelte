@@ -11,11 +11,7 @@
 	} from "$lib/generated/wonders";
 	import { formatEnum } from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
-	import {
-		type DetailPlayer,
-		findByPlayer,
-		improvementDisplayName,
-	} from "./helpers";
+	import { type DetailPlayer, improvementDisplayName } from "./helpers";
 
 	let {
 		players,
@@ -57,15 +53,11 @@
 				.map((wonder): WonderCard => {
 					const built = builtBy.get(wonder);
 					if (built) {
-						// Resolve the builder to the mirror-match-safe player list
-						// (id match, nation fallback); the wonder row's own
-						// name/nation cover blobs where neither resolves.
-						const player = findByPlayer(
-							players,
-							{ playerId: built.player_id, nation: built.nation },
-							(p) => p.playerId,
-							(p) => p.nation,
-						);
+						// Id match and nothing else: the wonder row always carries its
+						// builder's id, and in a mirror match nation can't tell the two
+						// players apart. Same join the Economy tab's wonder rail makes;
+						// the row's own nation/name cover a blob that matches nothing.
+						const player = players.find((p) => p.playerId === built.player_id);
 						return {
 							wonder,
 							state: "built",
