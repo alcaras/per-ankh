@@ -657,6 +657,11 @@ export const cloudApi = {
 			uploader_nation?: string | null;
 			user_won?: boolean | null;
 			user_display_name?: string | null;
+			// Uploader's claimed profile slug, null while unclaimed. Prefixed
+			// (Decision 1, #186): these fields are spread onto the game blob, so a
+			// bare `slug` would read as the game's — and the detail page also holds
+			// its tournament's slug.
+			user_slug?: string | null;
 			display_name?: string | null;
 		}
 	> => {
@@ -669,6 +674,7 @@ export const cloudApi = {
 				uploader_nation?: string | null;
 				user_won?: boolean | null;
 				user_display_name?: string | null;
+				user_slug?: string | null;
 				display_name?: string | null;
 			}
 		>;
@@ -687,6 +693,7 @@ export const cloudApi = {
 			user_nation?: string | null;
 			user_won?: boolean | null;
 			user_display_name?: string | null;
+			user_slug?: string | null;
 			display_name?: string | null;
 		}
 	> => {
@@ -706,6 +713,7 @@ export const cloudApi = {
 				user_nation?: string | null;
 				user_won?: boolean | null;
 				user_display_name?: string | null;
+				user_slug?: string | null;
 				display_name?: string | null;
 			}
 		>;

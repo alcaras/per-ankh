@@ -116,7 +116,7 @@
 		} else if (game.user_id && game.user_display_name) {
 			trail.push({
 				label: game.user_display_name,
-				href: profileHref({ user_id: game.user_id }),
+				href: profileHref({ user_id: game.user_id, slug: game.user_slug }),
 			});
 		}
 		trail.push({ label: gameTitle });

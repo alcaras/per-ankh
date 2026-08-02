@@ -2381,7 +2381,8 @@ export async function handleGameDetail(
 		            WHERE ps.game_id = g.game_id AND ps.is_human = 1
 		            ORDER BY ps.player_index ASC LIMIT 1
 		        )) AS user_nation,
-		        ${displayNameSql("u")} AS user_display_name
+		        ${displayNameSql("u")} AS user_display_name,
+		        u.slug AS user_slug
 		 FROM games g
 		 JOIN users u ON g.user_id = u.user_id
 		 WHERE g.game_id = ?`,
@@ -2400,6 +2401,9 @@ export async function handleGameDetail(
 			uploader_nation: string | null;
 			user_won: number | null;
 			user_display_name: string;
+			// Prefixed: these fields are spread onto the blob, which already
+			// carries the game's own identity (see the transform below).
+			user_slug: string | null;
 		}>();
 	if (!row) return errorResponse("Not found", 404, cors, "NOT_FOUND");
 
@@ -2497,6 +2501,7 @@ export async function handleGameDetail(
 		uploader_nation: row.uploader_nation,
 		user_won: coerceD1Bool(row.user_won),
 		user_display_name: row.user_display_name,
+		user_slug: row.user_slug,
 		display_name: row.display_name,
 	};
 	const bodyText = JSON.stringify(transformed);

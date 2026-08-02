@@ -226,3 +226,31 @@ describe("users.slug — public-recent", () => {
 	});
 });
 
+interface GameDetailResponse {
+	user_id: string;
+	user_display_name: string;
+	user_slug: string | null;
+}
+
+// The detail read's uploader fields are injected over the stored blob, so this
+// asserts against a seeded blob rather than in local dev — the dev D1 snapshot
+// carries no R2 objects, and the handler 404s before it serializes.
+describe("users.slug — game detail", () => {
+	it("injects user_slug beside user_display_name, null for an unclaimed uploader", async () => {
+		const claimed = await makeUser({ slug: "detail-uploader" });
+		const unclaimed = await makeUser();
+
+		for (const [uploader, expected] of [
+			[claimed, "detail-uploader"],
+			[unclaimed, null],
+		] as const) {
+			const gameId = await seedGame(uploader, { isPublic: true });
+			const body = await expectOk<GameDetailResponse>(
+				await request.get({ path: `/v1/games/${gameId}` }),
+			);
+			expect(body.user_id).toBe(uploader.userId);
+			expect(body.user_slug).toBe(expected);
+		}
+	});
+});
+
