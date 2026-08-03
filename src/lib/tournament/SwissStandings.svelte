@@ -258,12 +258,13 @@
 											{@const eligible = isSwapEligible(s)}
 											<SlotPickerPopover
 												candidates={eligible ? swapCandidatesFor(s) : []}
-												{eligible}
 												disabled={busy}
 												actionLabel="Swap"
 												ariaLabel="Swap with player"
+												ineligibleReason={eligible
+													? null
+													: "Can't swap — already has a result this phase"}
 												titleEnabled="Swap this player's seat with another same-division pending player"
-												titleIneligible="Can't swap — already has a result this phase"
 												titleEmpty="No swap-eligible players (others have results this round)"
 												onSelect={(otherSlotId) =>
 													onSwap?.(s.slot_id, otherSlotId)}
@@ -272,7 +273,6 @@
 										{#if onAddMatch && isPairEligible(s)}
 											<SlotPickerPopover
 												candidates={pairCandidatesFor(s)}
-												eligible={true}
 												disabled={busy}
 												actionLabel="Pair"
 												ariaLabel="Pair against player"

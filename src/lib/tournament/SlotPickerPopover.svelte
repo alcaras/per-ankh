@@ -3,7 +3,7 @@
 	// that opens a searchable list of same-division candidates. Backs both
 	// row actions that need a second player: Swap (trade seats) and Pair
 	// (add a catch-up match to the open round); the caller supplies the
-	// candidates, the button label, and the three trigger titles.
+	// candidates, the button label, and the trigger titles.
 	//
 	// Why Popover + Combobox (two bits-ui floating primitives nested):
 	//   * The Popover portals its content, so the dropdown escapes the standings
@@ -42,28 +42,27 @@
 
 	let {
 		candidates,
-		eligible,
 		disabled = false,
 		actionLabel,
 		ariaLabel,
+		ineligibleReason = null,
 		titleEnabled,
-		titleIneligible,
 		titleEmpty,
 		onSelect,
 	}: {
 		candidates: SlotPickerCandidate[];
-		// Whether this row's player may act at all; drives the disabled-trigger
-		// title. candidates is empty when ineligible.
-		eligible: boolean;
 		disabled?: boolean;
 		// Trigger button text ("Swap", "Pair").
 		actionLabel: string;
 		ariaLabel: string;
-		// Trigger titles: eligible with candidates / this row ineligible / no
-		// eligible partners. titleIneligible may be omitted at a call site
-		// whose render branch already guarantees eligibility (Pair).
+		// Non-null when this row's player may not act at all: the string is
+		// both the gate and the disabled-trigger title. Callers that render
+		// the trigger only on eligible rows (Pair) omit it — one prop rather
+		// than a boolean plus a title that its own render branch can't reach.
+		ineligibleReason?: string | null;
+		// Trigger titles for the eligible cases: with candidates / with no
+		// eligible partners.
 		titleEnabled: string;
-		titleIneligible?: string;
 		titleEmpty: string;
 		// eslint-disable-next-line no-unused-vars -- param name documentary
 		onSelect: (otherSlotId: string) => void;
@@ -86,14 +85,10 @@
 	// partners exist, or while another action is in flight — a disabled
 	// Popover trigger can't open, so this gates the whole picker.
 	const triggerDisabled = $derived(
-		disabled || !eligible || candidates.length === 0,
+		disabled || ineligibleReason != null || candidates.length === 0,
 	);
 	const triggerTitle = $derived(
-		!eligible
-			? (titleIneligible ?? "")
-			: candidates.length === 0
-				? titleEmpty
-				: titleEnabled,
+		ineligibleReason ?? (candidates.length === 0 ? titleEmpty : titleEnabled),
 	);
 </script>
 
