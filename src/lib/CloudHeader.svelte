@@ -166,8 +166,8 @@
 				<span>Upload</span>
 			</a>
 			<!-- eslint-enable svelte/no-navigation-without-resolve -->
-			<!-- Avatar (profile link) — the icon-only shortcut to the labeled
-			     "Profile" item in the menu below. -->
+			<!-- Avatar (profile link) — the only way into your own profile from
+			     the header. -->
 			<ProfileLink
 				userId={user.user_id}
 				slug={user.slug}
@@ -225,14 +225,6 @@
 					class="absolute right-0 z-50 mt-2 w-40 rounded border-2 border-black bg-blue-gray shadow-lg"
 				>
 					{#if user}
-						<ProfileLink
-							userId={user.user_id}
-							slug={user.slug}
-							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
-							onclick={closeMenu}
-						>
-							Profile
-						</ProfileLink>
 						<a
 							href={resolve("/account")}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
