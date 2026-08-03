@@ -213,7 +213,7 @@
 	<div class="mx-auto max-w-xl">
 		<Tabs.Root bind:value={activeTab}>
 			<Tabs.List
-				class="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg"
+				class="mx-auto mb-4 flex w-fit flex-wrap items-center gap-1 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg"
 			>
 				<Tabs.Trigger value="account" class={triggerClass}>Account</Tabs.Trigger
 				>
@@ -276,9 +276,6 @@
 					>
 						<div class="text-sm font-bold text-tan">Profile URL</div>
 						{#if slug}
-							<p class="mt-1 text-xs text-gray-400">
-								Your profile is at this link.
-							</p>
 							<div class="mt-2 flex items-center gap-2">
 								<span class="min-w-0 truncate font-mono text-sm text-bright"
 									>{profileUrl}</span
@@ -293,23 +290,25 @@
 										{#if copied}{@render iconCheck()}{:else}{@render iconCopy()}{/if}
 									{/snippet}
 								</CopyButton>
-								<div class="ml-auto flex shrink-0 items-center gap-2">
-									<button
-										type="button"
-										onclick={() => (editing = !editing)}
-										class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
-									>
-										{editing ? "Cancel" : "Change"}
-									</button>
-									<button
-										type="button"
-										onclick={releaseSlug}
-										disabled={releasing}
-										class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
-									>
-										{releasing ? "Removing…" : "Remove"}
-									</button>
-								</div>
+							</div>
+							<!-- Actions sit on their own row so a long handle keeps the
+							     full width of the line above. -->
+							<div class="mt-2 flex items-center justify-end gap-2">
+								<button
+									type="button"
+									onclick={() => (editing = !editing)}
+									class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+								>
+									{editing ? "Cancel" : "Change"}
+								</button>
+								<button
+									type="button"
+									onclick={releaseSlug}
+									disabled={releasing}
+									class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
+								>
+									{releasing ? "Removing…" : "Remove"}
+								</button>
 							</div>
 						{/if}
 						{#if editing}
