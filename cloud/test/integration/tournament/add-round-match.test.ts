@@ -222,4 +222,23 @@ describe("add match to an open swiss round", () => {
 			{ status: 401, code: "UNAUTHORIZED" },
 		);
 	});
+
+	it("locks once the tournament leaves the Swiss phase", async () => {
+		const { t, subA, subB, r2 } = await substitutionScenario();
+		// No builder phase reaches championship; flip the status directly —
+		// the gate under test only reads tournaments.status.
+		await env.SHARE_DB.prepare(
+			"UPDATE tournaments SET status = 'championship' WHERE tournament_id = ?",
+		)
+			.bind(t.tournamentId)
+			.run();
+		await expectErrorCode(
+			await request.post({
+				path: `/v1/tournaments/${t.tournamentId}/rounds/${r2.round_id}/matches`,
+				as: t.admin,
+				body: { slot_a_id: subA, slot_b_id: subB },
+			}),
+			{ status: 409, code: "TOURNAMENT_LOCKED" },
+		);
+	});
 });

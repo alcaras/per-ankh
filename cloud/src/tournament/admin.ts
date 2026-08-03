@@ -2079,15 +2079,31 @@ export async function handleAddRoundMatch(
 	// Column set mirrors buildSwissRoundStatements' pending-match INSERT:
 	// pick order defaults to slot_b (player listed second picks first),
 	// occupant snapshots stay NULL while pending and resolve live.
-	await env.SHARE_DB.prepare(
+	//
+	// Guarded write, not a plain INSERT: between the checks above and this
+	// statement, a concurrent report can close the round (generating the
+	// next one — which would then pair these very slots) or a concurrent
+	// add can pair one of the slots. The WHERE re-asserts both invariants
+	// atomically; meta.changes === 0 means we lost that race (same idiom as
+	// the claim-slot INSERT in player.ts).
+	// Numbered parameters throughout: NEXT_MATCH_NUMBER_SQL carries a bare
+	// `?`, which SQLite assigns max-used-index + 1 — with ?1–?6 before it,
+	// it becomes ?7 (the tournament id). Pick order reuses ?4 (slot_b:
+	// player listed second picks first), and the guards reuse ?2–?4.
+	const write = await env.SHARE_DB.prepare(
 		`INSERT INTO tournament_matches
 		   (match_id, round_id, slot_a_id, slot_b_id, map_pool_id, map_script,
 		    pick_order_winner_slot_id, status, winner_slot_id, match_index,
 		    match_number)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL,
-		         (SELECT COALESCE(MAX(m3.match_index), 0) + 1
-		          FROM tournament_matches m3 WHERE m3.round_id = ?),
-		         ${NEXT_MATCH_NUMBER_SQL})`,
+		 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?4, 'pending', NULL,
+		        (SELECT COALESCE(MAX(m3.match_index), 0) + 1
+		         FROM tournament_matches m3 WHERE m3.round_id = ?2),
+		        ${NEXT_MATCH_NUMBER_SQL}
+		 WHERE EXISTS (SELECT 1 FROM tournament_rounds r3
+		               WHERE r3.round_id = ?2 AND r3.status = 'in_progress')
+		   AND NOT EXISTS (SELECT 1 FROM tournament_matches m4
+		                   WHERE m4.round_id = ?2
+		                     AND (m4.slot_a_id IN (?3, ?4) OR m4.slot_b_id IN (?3, ?4)))`,
 	)
 		.bind(
 			matchId,
@@ -2096,11 +2112,26 @@ export async function handleAddRoundMatch(
 			slot_b_id,
 			assigned.map_pool_id,
 			assigned.map_script,
-			slot_b_id,
-			roundId,
 			tournamentId,
 		)
 		.run();
+	if ((write.meta?.changes ?? 0) === 0) {
+		// Rare: distinguish which invariant broke for an accurate code.
+		const nowRound = await loadRound(env, roundId);
+		return nowRound?.status !== "in_progress"
+			? errorResponse(
+					"Round closed while the request was in flight",
+					409,
+					cors,
+					"ROUND_CLOSED",
+				)
+			: errorResponse(
+					"Slot already has a match in this round",
+					409,
+					cors,
+					"ALREADY_PAIRED",
+				);
+	}
 	await bumpTournamentUpdatedAt(env, tournamentId);
 	await logTournamentAdminAction(env, a.userId, tournamentId, "match_added", {
 		match_id: matchId,

@@ -271,7 +271,7 @@
 												actionLabel="Pair"
 												ariaLabel="Pair against player"
 												titleEnabled="Add a match to the open round between this player and a picked partner"
-												titleIneligible=""
+												titleIneligible="Can't pair — already has a match in the open round"
 												titleEmpty="No other unpaired active players in this division"
 												onSelect={(otherSlotId) =>
 													onAddMatch?.(s.slot_id, otherSlotId)}
