@@ -95,7 +95,7 @@ export type HeaderHero =
 			// each with the profile slug that shapes its URL. Resolved from the live
 			// slot maps by the page, alongside the labels — null for an unclaimed
 			// slot, and for the finalist whenever `finalist` is. A slug is null
-			// again whenever the account never claimed one; the link still renders,
+			// again whenever the account has none; the link still renders,
 			// against the id permalink.
 			championUserId: string | null;
 			championSlug: string | null;

@@ -66,7 +66,7 @@
 		tournament: TournamentDetail;
 		slotLabels: Record<string, string>;
 		slotUserIds: Record<string, string | null>;
-		// Live slot → claimed profile slug, resolved alongside slotUserIds so a
+		// Live slot → profile slug, resolved alongside slotUserIds so a
 		// link's two halves always describe the same person (see matchSlotSlug).
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;

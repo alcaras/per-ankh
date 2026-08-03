@@ -1,5 +1,5 @@
-// The profile at its claimed pretty URL — the canonical address for a user
-// who has one. /users/[user_id] stays the permanent permalink and 307s here.
+// The profile at its pretty URL — the canonical address for a user who has a
+// slug. /users/[user_id] stays the permanent permalink and 307s here.
 //
 // Name-first lookup costs one serialized round trip the id route doesn't pay:
 // the collections + stats fetches are keyed by user_id, which only the profile
@@ -21,7 +21,7 @@ import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ fetch, url, params, parent }) => {
 	const slug = params.slug;
-	// Nothing outside the claim format is ever a stored slug, so a junk URL is
+	// Nothing outside the stored format is ever a slug, so a junk URL is
 	// a 404 here rather than a round trip that would 404 anyway.
 	if (!USER_SLUG_RE.test(slug)) {
 		throw error(404, "User not found");

@@ -1,6 +1,6 @@
 // The player-profile page's load, shared by the two routes that serve it:
-// /users/[user_id] (the permanent permalink) and /u/[slug] (the claimed pretty
-// URL). They render the same page from the same payload and differ only in how
+// /users/[user_id] (the permanent permalink) and /u/[slug] (the pretty URL).
+// They render the same page from the same payload and differ only in how
 // they resolve the profile — and in the fetch ordering that difference allows,
 // which is why the orchestration stays in each +page.ts and everything that
 // follows from a resolved profile lives here.

@@ -644,7 +644,7 @@ export async function handleTournamentPlaylistVideos(
 interface PlaylistUploader {
 	user_id: string;
 	display_name: string;
-	// The uploader's claimed profile slug, null while unclaimed. Bare, matching
+	// The uploader's profile slug, null when they have none. Bare, matching
 	// the home creator feed's author shape this one mirrors.
 	slug: string | null;
 	avatar_url: string;
@@ -1771,7 +1771,7 @@ function serializeMatch(
 				name: c.name,
 				display_name: identity?.display_name ?? c.name,
 				// Bare `slug` — a caster is a user-shaped object. Null for a
-				// free-text caster (no account) and for one who claimed no slug.
+				// free-text caster (no account) and for one with no slug.
 				slug: identity?.slug ?? null,
 				avatar_url: identity?.avatar_url ?? null,
 			};
@@ -1815,7 +1815,7 @@ function serializeMatch(
 		// the player it just named. Prefixed, like every other slot_a/b_* field:
 		// a match row is flattened, and the tournament's slug rides alongside it
 		// on the per-user payload (Decision 1, #186). Null for pending matches,
-		// for unclaimed occupants, and for anyone who claimed no slug — each of
+		// for unclaimed occupants, and for anyone without a slug — each of
 		// which the id-URL fallback covers.
 		slot_a_slug: slotAIdentity?.slug ?? null,
 		slot_a_avatar_url: slotAIdentity?.avatar_url ?? null,
@@ -1921,7 +1921,7 @@ async function loadNationsForMatches(
 export interface UserIdentity {
 	avatar_url: string | null;
 	display_name: string | null;
-	// The user's claimed profile URL slug, null while unclaimed. Sits here with
+	// The user's profile URL slug, null when they have none. Sits here with
 	// the other two because it follows the same rule they do: the snapshot pins
 	// WHO played, and everything presentational about them — including the shape
 	// of the link to their profile — follows that user's profile as it is now.

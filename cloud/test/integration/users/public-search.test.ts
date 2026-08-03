@@ -10,7 +10,7 @@
 //     read server-side to build avatar_url; it just never ships)
 //   * Per-user rate limit at PUBLIC_USER_SEARCH_PER_USER_PER_HOUR
 //   * Decision 2 scoping: only users who made something public are findable
-//     (public game / tournament slot / linked video channel / claimed slug)
+//     (public game / tournament slot / linked video channel / profile slug)
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -157,7 +157,7 @@ describe("GET /v1/users/public-search — matching", () => {
 		expect(hit!.slug).toBe("sobekemsaf");
 	});
 
-	it("returns a null slug for a user who hasn't claimed one", async () => {
+	it("returns a null slug for a user who has none", async () => {
 		const caller = await makeUser();
 		const target = await makeFindableUser({ displayName: "Ineni Unclaimed" });
 
@@ -240,18 +240,19 @@ describe("GET /v1/users/public-search — scoped to public activity", () => {
 		expect(await idsMatching(caller, "herihor")).toContain(player.userId);
 	});
 
-	// Decision 2 lists `u.slug IS NOT NULL` first among the disjuncts: claiming
-	// a profile URL is itself the deliberate act of publishing a name, so a
-	// claimant who has done nothing else must still be reachable — otherwise the
-	// claim buys them a URL that no search can surface.
-	it("finds a user whose only public activity is a claimed slug", async () => {
+	// Decision 2 lists `u.slug IS NOT NULL` first among the disjuncts: a user
+	// whose profile URL is their only presence here must still be reachable, or
+	// the URL is no use to them. Since slugs are derived at first login, this
+	// leg now holds for nearly every account — an accepted consequence, argued
+	// where the query lives (handlePublicUserSearch).
+	it("finds a user whose only public activity is a profile slug", async () => {
 		const caller = await makeUser();
-		const claimant = await makeUser({
+		const slugHolder = await makeUser({
 			displayName: "Nebamun Slugonly",
 			slug: "nebamun",
 		});
 
-		expect(await idsMatching(caller, "nebamun")).toContain(claimant.userId);
+		expect(await idsMatching(caller, "nebamun")).toContain(slugHolder.userId);
 	});
 
 	it("finds a user whose only public activity is a linked video channel", async () => {

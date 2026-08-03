@@ -84,8 +84,8 @@ export interface SlotRow {
 	// display_name of the claiming user, LEFT JOINed the same way. NULL when
 	// the slot is unclaimed. Feeds slotDisplayName().
 	user_display_name: string | null;
-	// Claimed profile slug of the claiming user, LEFT JOINed the same way. NULL
-	// when the slot is unclaimed OR the user never claimed a slug — a plain
+	// Profile slug of the claiming user, LEFT JOINed the same way. NULL when
+	// the slot is unclaimed OR that user has no slug — a plain
 	// column with no fallback rule, so it gets no slotSlug() sibling to
 	// slotDisplayName()/slotAvatarUrl(); read it directly.
 	user_slug: string | null;

@@ -5,7 +5,7 @@ import { resolve } from "$app/paths";
 // dozen-odd surfaces that name a player.
 //
 // It takes the identity object a payload already carries rather than a bare id
-// because the URL has two shapes: a user who claimed a profile slug is at
+// because the URL has two shapes: a user with a profile slug is at
 // `/u/<slug>`, everyone else at their permanent `/users/[user_id]` permalink.
 // Call sites pass whatever row they hold and never have to learn which applies.
 //

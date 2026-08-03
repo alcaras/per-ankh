@@ -89,7 +89,7 @@
 		// first rule the labels and avatars resolve under. Only the player cells
 		// read it (casters carry their own user_id on the part).
 		slotUserIds: Record<string, string | null>;
-		// Live slot → that account's claimed profile slug, the same fallback half
+		// Live slot → that account's profile slug, the same fallback half
 		// again. Only the player cells read it (casters carry their own slug).
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;

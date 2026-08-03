@@ -188,9 +188,9 @@ describe("POST /v1/users/me/slug", () => {
 		});
 	});
 
-	// The budget counts attempts, not successes: a user who hasn't claimed yet
-	// can fire unlimited *rejected* claims, each a real D1 write and a probe
-	// for whether a name is free. One-per-account successes can't bound that.
+	// The budget counts attempts, not successes: any caller can fire unlimited
+	// *rejected* claims, each a real D1 write and a probe for whether a name is
+	// free. The cooldown bounds successes, not calls, so it can't bound that.
 	it("429s past SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR attempts", async () => {
 		const u = await makeUser();
 		for (let i = 0; i < SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR; i++) {
@@ -426,18 +426,18 @@ interface PublicRecentResponse {
 }
 
 describe("users.slug — public-recent", () => {
-	it("ships uploader_slug for a claimed uploader and null for an unclaimed one", async () => {
-		const claimed = await makeUser({ slug: "feed-uploader" });
-		const unclaimed = await makeUser();
-		const claimedGame = await seedGame(claimed, { isPublic: true });
-		const unclaimedGame = await seedGame(unclaimed, { isPublic: true });
+	it("ships uploader_slug for an uploader who has one and null for one who doesn't", async () => {
+		const withSlug = await makeUser({ slug: "feed-uploader" });
+		const noSlug = await makeUser();
+		const withSlugGame = await seedGame(withSlug, { isPublic: true });
+		const noSlugGame = await seedGame(noSlug, { isPublic: true });
 
 		const body = await expectOk<PublicRecentResponse>(
 			await request.get({ path: "/v1/games/public-recent" }),
 		);
 		const byId = new Map(body.games.map((g) => [g.game_id, g]));
-		expect(byId.get(claimedGame)?.uploader_slug).toBe("feed-uploader");
-		expect(byId.get(unclaimedGame)?.uploader_slug).toBeNull();
+		expect(byId.get(withSlugGame)?.uploader_slug).toBe("feed-uploader");
+		expect(byId.get(noSlugGame)?.uploader_slug).toBeNull();
 	});
 });
 
@@ -451,13 +451,13 @@ interface GameDetailResponse {
 // asserts against a seeded blob rather than in local dev — the dev D1 snapshot
 // carries no R2 objects, and the handler 404s before it serializes.
 describe("users.slug — game detail", () => {
-	it("injects user_slug beside user_display_name, null for an unclaimed uploader", async () => {
-		const claimed = await makeUser({ slug: "detail-uploader" });
-		const unclaimed = await makeUser();
+	it("injects user_slug beside user_display_name, null for an uploader without one", async () => {
+		const withSlug = await makeUser({ slug: "detail-uploader" });
+		const noSlug = await makeUser();
 
 		for (const [uploader, expected] of [
-			[claimed, "detail-uploader"],
-			[unclaimed, null],
+			[withSlug, "detail-uploader"],
+			[noSlug, null],
 		] as const) {
 			const gameId = await seedGame(uploader, { isPublic: true });
 			const body = await expectOk<GameDetailResponse>(

@@ -141,7 +141,7 @@ export function matchSlotUserId(
 //
 // Both halves must come from the SAME source, so this branches on the snapshot
 // *user_id* rather than on the snapshot slug: a decided match whose pinned
-// occupant simply never claimed a slug has a non-null snapshot id and a null
+// occupant simply has no slug carries a non-null snapshot id and a null
 // snapshot slug, and falling through to the live map on that null would pair
 // the historical player's id with the current occupant's slug — and profileHref
 // prefers the slug, so the link would quietly open the wrong player's profile

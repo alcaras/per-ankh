@@ -21,7 +21,7 @@
 		name: string;
 		// The account holding the seat, or null for an unclaimed slot.
 		userId: string | null;
-		// That account's claimed profile slug; null when it has none.
+		// That account's profile slug; null when it has none.
 		slug: string | null;
 		avatarUrl: string | null;
 		round: string;

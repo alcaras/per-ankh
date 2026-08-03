@@ -9,7 +9,7 @@
 		// read-mode name to that profile; null (an unclaimed slot) renders the name
 		// exactly as before.
 		userId: string | null;
-		// That same account's claimed profile slug, when its payload carries one —
+		// That same account's profile slug, when its payload carries one —
 		// it picks /u/<slug> over the id permalink. Omitted is always safe.
 		slug?: string | null;
 		// Displayed label for the occupant (the account display name when claimed,

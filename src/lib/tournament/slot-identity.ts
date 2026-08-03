@@ -8,9 +8,9 @@ import type { BracketResponse, StandingsResponse } from "$lib/api-cloud";
 export interface SlotMaps {
 	labels: Record<string, string>;
 	userIds: Record<string, string | null>;
-	// Each linked user's claimed profile slug — the companion to `userIds` that
+	// Each linked user's profile slug — the companion to `userIds` that
 	// lets a link resolve straight to /u/<slug> instead of the id URL's 307.
-	// Null for an unclaimed slot and for an occupant who never claimed a slug;
+	// Null for an unclaimed slot and for an occupant who has none;
 	// either way the pair still renders (ProfileLink falls back to the id).
 	slugs: Record<string, string | null>;
 	avatars: Record<string, string | null>;

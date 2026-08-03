@@ -23,7 +23,7 @@
 		children,
 	}: {
 		userId: string | null;
-		// The same user's claimed profile slug, when the caller's payload
+		// The same user's profile slug, when the caller's payload
 		// carries one — it decides `/u/<slug>` vs. the id permalink. Two props
 		// rather than one identity object because most callers hold a bare id
 		// resolved from a map (slot → user_id) and not a row; omitting it is

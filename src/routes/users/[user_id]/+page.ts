@@ -1,12 +1,14 @@
 // The profile permalink. Every user is permanently addressable here by id;
-// a user who claimed a slug is *canonically* at /u/<slug>, so this route
+// a user with a slug is *canonically* at /u/<slug>, so this route
 // 307-redirects to it and keeps the query string, so ?tab= / ?scope= deep
-// links survive the hop. Slug-less users — the default, since claiming is
-// opt-in — are served here exactly as before.
+// links survive the hop. Slug-less users — a display name that slugified to
+// nothing or collided, or a slug its owner released — are served here exactly
+// as before.
 //
-// 307, not 308, because the id → slug mapping is revocable: `admin clear-slug`
-// frees a name and `set-slug` overwrites one, so a cached permanent redirect
-// would send this user's permalink to whoever claims the name next. 307 is not
+// 307, not 308, because the id → slug mapping is revocable, and by the user
+// themselves: POST /v1/users/me/slug renames and DELETE releases, on top of
+// `admin set-slug`/`clear-slug`. A cached permanent redirect would send this
+// user's permalink to whoever claims the freed name next. 307 is not
 // cacheable by default and preserves the request method just as 308 does. This
 // is where the /dashboard precedent stops applying — that route redirects to an
 // immutable user_id, so its 308 is permanent in the strong sense.

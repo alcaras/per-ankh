@@ -186,7 +186,7 @@
 		return out;
 	});
 
-	// The claimed profile slug for those same accounts, so a chip links straight
+	// The profile slug for those same accounts, so a chip links straight
 	// to /u/<slug> rather than through the id URL's redirect. Same source, same
 	// key — null both for an unclaimed slot and for an occupant without a slug.
 	const slugOf = $derived.by(() => {

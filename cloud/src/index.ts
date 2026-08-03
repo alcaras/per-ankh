@@ -772,7 +772,7 @@ const ROUTES: RouteSpec[] = [
 		handler: (r, e) => handlePublicUserSearch(r, e),
 	},
 	// The same public profile as /v1/users/:user_id, resolved by the user's
-	// claimed slug — what /u/<slug> reads. The literal `by-slug/` segment
+	// slug — what /u/<slug> reads. The literal `by-slug/` segment
 	// can't be swallowed by the nanoid regex below ("/" isn't in its class),
 	// but specific-before-generic is the house rule. The pattern admits only
 	// the stored lowercase shape, so a malformed slug 404s here rather than

@@ -68,7 +68,7 @@ export interface RecentVideo {
 export interface CreatorVideo extends RecentVideo {
 	user_id: string;
 	display_name: string;
-	// The creator's claimed profile slug, null while unclaimed. Bare (not
+	// The creator's profile slug, null when they have none. Bare (not
 	// `uploader_slug`): these three fields are the creator themself, and nothing
 	// on a video row carries a competing slug. Feeds profileHref/ProfileLink.
 	slug: string | null;
@@ -292,7 +292,7 @@ export interface PublicRecentGame {
 	created_at: string;
 	uploader_user_id: string;
 	uploader_display_name: string;
-	// The uploader's claimed profile slug, null while unclaimed. Prefixed
+	// The uploader's profile slug, null when they have none. Prefixed
 	// because it sits on a game row rather than a user-shaped object — a bare
 	// `slug` would read as the game's. Feeds profileHref/ProfileLink alongside
 	// uploader_user_id; never render it directly.
@@ -684,7 +684,7 @@ export const cloudApi = {
 			uploader_nation?: string | null;
 			user_won?: boolean | null;
 			user_display_name?: string | null;
-			// Uploader's claimed profile slug, null while unclaimed. Prefixed
+			// Uploader's profile slug, null when they have none. Prefixed
 			// (Decision 1, #186): these fields are spread onto the game blob, so a
 			// bare `slug` would read as the game's — and the detail page also holds
 			// its tournament's slug.
@@ -1781,7 +1781,7 @@ export interface PatchTournamentBody {
 export interface TournamentAdmin {
 	user_id: string;
 	display_name: string;
-	// The admin's claimed profile slug, null while unclaimed. Bare — an admin
+	// The admin's profile slug, null when they have none. Bare — an admin
 	// row is user-shaped, and the tournament's own slug isn't on it.
 	slug: string | null;
 	avatar_url: string;
@@ -1829,7 +1829,7 @@ export interface SlotStanding {
 	display_name: string | null;
 	user_id: string | null;
 	// The claiming user's profile slug, null when the slot is unclaimed or the
-	// occupant never claimed one. Bare (not `slot_slug`): a standings row is
+	// occupant has none. Bare (not `slot_slug`): a standings row is
 	// user-shaped and carries no tournament slug. Only ever paired with
 	// `user_id` through profileHref/ProfileLink — a slug never makes a
 	// null-`user_id` row linkable.
@@ -1929,7 +1929,7 @@ export interface BracketSlot {
 	// Same server-resolved display label as SlotStanding.display_name.
 	display_name: string | null;
 	user_id: string | null;
-	// Same claimed profile slug as SlotStanding.slug, and bare for the same
+	// Same profile slug as SlotStanding.slug, and bare for the same
 	// reason. buildSlotMaps unions this with the standings' copy — a
 	// championship-only slot has no standings row, so both loops must set it.
 	slug: string | null;
@@ -1967,9 +1967,9 @@ export interface TournamentMatchPartCaster {
 	user_id: string | null;
 	name: string | null;
 	display_name: string | null;
-	// The linked user's claimed profile slug, resolved server-side from user_id
+	// The linked user's profile slug, resolved server-side from user_id
 	// like display_name and avatar_url. Bare (a caster is user-shaped); null for
-	// free-text casters and for anyone who hasn't claimed one.
+	// free-text casters and for anyone without one.
 	slug: string | null;
 	avatar_url: string | null;
 }
@@ -2019,12 +2019,12 @@ export interface TournamentMatch {
 	slot_a_user_id: string | null;
 	slot_b_display_name: string | null;
 	slot_b_user_id: string | null;
-	// Claimed profile slug of each side's snapshot occupant, resolved from the
+	// Profile slug of each side's snapshot occupant, resolved from the
 	// same server-side identity batch as the names and avatars — so a link and
 	// the name beside it can't describe different people. Prefixed, like every
 	// slot_a/b_* field. Null for pending matches (no snapshot; renderers fall
 	// through to the live slot maps via matchSlotSlug), for unclaimed occupants,
-	// and for anyone who claimed no slug — all of which the id URL covers.
+	// and for anyone without one — all of which the id URL covers.
 	slot_a_slug: string | null;
 	slot_b_slug: string | null;
 	// Raw stored Discord handle of each side's LIVE slot occupant (not the
