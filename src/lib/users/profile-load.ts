@@ -53,7 +53,31 @@ export async function buildProfilePage(args: {
 	const targetUserId = profile.user_id;
 
 	const tabRaw = url.searchParams.get("tab");
-	let tab = tabRaw && TABS.has(tabRaw) ? tabRaw : "overview";
+
+	// Which tabs exist at all. Both are profile-level facts, so they also decide
+	// where a visitor lands, not just what renders — hence read before the tab.
+	const hasChannels = profile.channels.length > 0;
+	// The flag is "holds a match OR has cast", so a dedicated caster who never
+	// plays still gets the tab.
+	const isTournamentParticipant = profile.tournament_participant;
+
+	// A player whose tournament record is their whole presence here — every
+	// save of their matches was uploaded by the opponent — would otherwise land
+	// on an Overview built from a corpus they have none of. Their record is the
+	// only populated surface, so it's the one worth opening on. total_games is
+	// the profile's all-time count (public-only for a visitor), so this reads
+	// the same way the Games tab will.
+	const defaultTab =
+		isTournamentParticipant && profile.summary.total_games === 0
+			? "tournaments"
+			: "overview";
+	let tab = tabRaw && TABS.has(tabRaw) ? tabRaw : defaultTab;
+
+	// A stale link to a tab this profile doesn't have falls back to the same tab
+	// a bare URL opens on — never to a hidden one, since defaultTab is only
+	// "tournaments" when that tab exists.
+	if (tab === "videos" && !hasChannels) tab = defaultTab;
+	if (tab === "tournaments" && !isTournamentParticipant) tab = defaultTab;
 
 	// Games-tab filters (only meaningful when tab === "games").
 	const q = url.searchParams.get("q")?.trim() || "";
@@ -65,16 +89,6 @@ export async function buildProfilePage(args: {
 	const result: "win" | "loss" | null =
 		resultRaw === "win" || resultRaw === "loss" ? resultRaw : null;
 	const sort = url.searchParams.get("sort") ?? "date_desc";
-
-	// The Videos tab only exists when the user has linked channels; fall back
-	// to overview so a stale ?tab=videos link doesn't land on an empty tab.
-	const hasChannels = profile.channels.length > 0;
-	if (tab === "videos" && !hasChannels) tab = "overview";
-
-	// Same rule for Tournaments: the flag is "holds a slot OR has cast", so a
-	// dedicated caster who never plays still gets the tab.
-	const isTournamentParticipant = profile.tournament_participant;
-	if (tab === "tournaments" && !isTournamentParticipant) tab = "overview";
 
 	// Fetch recent videos only when the Videos tab is active.
 	const videos =
