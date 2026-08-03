@@ -1,5 +1,47 @@
 # Changelog
 
+## [2026-08-03-88707b2] - 2026-08-03
+
+### Features
+
+- (profile-links) route profile URLs through one helper — [d658834](https://github.com/becked/per-ankh/commit/d658834dbc2a0b7ef96853c6e62aca64af7b8f6f)
+- (tournament) ship slot_user_ids on the user-tournaments payload — [da22a86](https://github.com/becked/per-ankh/commit/da22a8656852d8686ef35dc4706466d7214c7c71)
+- (tournament) link every player surface to their profile — [605d66a](https://github.com/becked/per-ankh/commit/605d66a7baff32d6318c077cd4f05448a4571a6c)
+- (header) add a labeled Profile item to the signed-in menu — [c1d7ec4](https://github.com/becked/per-ankh/commit/c1d7ec41ab525dcc845ac73820d0e0b9be395441)
+- (users) add a public people-search endpoint — [b827d95](https://github.com/becked/per-ankh/commit/b827d95b7cc341a9b84205a5b15e067785325ac1)
+- (search) add an opt-in clear button to SearchInput — [7c9790e](https://github.com/becked/per-ankh/commit/7c9790eefa9390c3d45e9cc2a33645d175de9cb4)
+- (header) search players and games from one always-open box — [53dc28d](https://github.com/becked/per-ankh/commit/53dc28db5f3db1a38bec3b6d1fe2bdf5ecca21a0)
+- (users) claim a profile slug and serve the profile by it — [892923d](https://github.com/becked/per-ankh/commit/892923d659cd5b3c900287fc8e90de3b73487612)
+- (users) serve profiles at /u/<slug> behind a permanent id permalink — [890817b](https://github.com/becked/per-ankh/commit/890817b553b6e1dcbff81347aea70ae7082d55d6)
+- (account) claim a profile URL from settings — [6e9019f](https://github.com/becked/per-ankh/commit/6e9019ffb92727086a77dba6a0b8f55d35744043)
+- (admin) set and clear a user's profile URL — [65c93f6](https://github.com/becked/per-ankh/commit/65c93f6f6fcf84de5ecf41bb6f69f939faf268db)
+- (home) ship the uploader's profile slug on the public-recent feed — [d66fe17](https://github.com/becked/per-ankh/commit/d66fe1791a5078ca448e96ec8fcf0b9417527ea6)
+- (games) ship the uploader's profile slug on the game detail payload — [a55f32d](https://github.com/becked/per-ankh/commit/a55f32d9663d6927c4299057a43a780c923d2aca)
+- (videos) ship the creator's profile slug on the cross-creator feed — [5cc2c2b](https://github.com/becked/per-ankh/commit/5cc2c2b90dcb8714a2ccf0e1ac36d9e638d8e055)
+- (tournament) ship the uploader's profile slug on the playlist videos — [38cc466](https://github.com/becked/per-ankh/commit/38cc466c789d7ba0271f98da7d011421b19b38bc)
+- (tournament) ship each slot occupant's profile slug on standings rows — [334c478](https://github.com/becked/per-ankh/commit/334c4780789e56757db1c37ea68d348f8ca96fd0)
+- (tournament) ship each slot occupant's profile slug on bracket slots — [acdc85e](https://github.com/becked/per-ankh/commit/acdc85e0daba918a6c362416bbb9412d25bcec03)
+- (tournament) ship profile slugs on matches and the per-user tournaments read — [8f294f5](https://github.com/becked/per-ankh/commit/8f294f5dc14acd7b4637246447a1cd2a0c9670ee)
+- (search) make a claimed profile URL both findable and a search key — [99e7081](https://github.com/becked/per-ankh/commit/99e70811efaaeac02dfe3c93112d33e181f5ac54)
+- (tournament) ship each admin's profile slug on the admin roster — [0dee916](https://github.com/becked/per-ankh/commit/0dee916b4e994432c4dc0839d44148d23fabae04)
+- (users) open a games-less tournament player on their Tournaments tab — [56f674a](https://github.com/becked/per-ankh/commit/56f674ad5a775879c03e69b1ca57aa5f96c14cfd)
+- (users) derive profile slugs from display names, and let users rename — [ddf98ae](https://github.com/becked/per-ankh/commit/ddf98aec6881863eb09a25a3da186d4212dd7b93)
+
+### Fixes
+
+- (users) escape LIKE wildcards and bound profile-URL claim attempts — [534274e](https://github.com/becked/per-ankh/commit/534274ede160139c2ff536a1e327b10eab1cb359)
+- (users) redirect the profile permalink with 307, not 308 — [10c24d2](https://github.com/becked/per-ankh/commit/10c24d27e0f1aeb97a888d764d615625b7079f10)
+- (users) give an empty profile one empty-state message, in one voice — [fdc8bda](https://github.com/becked/per-ankh/commit/fdc8bdac3c9303d3f3bf754f2bd9d6c2c39cecce)
+- (users) refresh the header after a profile URL change — [6737061](https://github.com/becked/per-ankh/commit/6737061d63e714e92c5b2260164cd11b5c86bbfc)
+- (admin) report what backfill-slugs assigned, not what it planned — [d26eacf](https://github.com/becked/per-ankh/commit/d26eacf533ef9fd42d3da0552399e09a2b181293)
+
+### Other
+
+- (home) drop the stale "Go to library" note from the load comment — [7a3857c](https://github.com/becked/per-ankh/commit/7a3857cbbbf9110c1e5b4c7f32e7a3e5584e4378)
+- (users) pare the profile URL card down to link and form — [f8520c0](https://github.com/becked/per-ankh/commit/f8520c06b93b8fdb5100993d711522472e6e44ce)
+- (header) drop the Profile item from the menu — [41efb4a](https://github.com/becked/per-ankh/commit/41efb4a5620dc6da9210e50ba74702dd160badc2)
+- (users) a null slug is no longer "unclaimed" — [4f571b8](https://github.com/becked/per-ankh/commit/4f571b8650dd6e9342eb12bf8ec387d9865c2a6b)
+
 ## [2026-08-02-0725ea9] - 2026-08-02
 
 ### Features
