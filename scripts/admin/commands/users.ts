@@ -756,9 +756,7 @@ export async function runBackfillSlugs(
 		`SELECT slug FROM users WHERE slug IS NOT NULL`,
 	]);
 	const candidates = candidatesRaw as SlugBackfillRow[];
-	const taken = new Set(
-		(takenRaw as { slug: string }[]).map((r) => r.slug),
-	);
+	const taken = new Set((takenRaw as { slug: string }[]).map((r) => r.slug));
 
 	const planned: { user_id: string; display_name: string; slug: string }[] = [];
 	const skipped: { display_name: string; reason: string }[] = [];
@@ -793,9 +791,11 @@ export async function runBackfillSlugs(
 	// The plan, before anything is written — which is the whole value of the
 	// --dry-run flag and of printing it here: an operator sees every name that
 	// is about to become a public URL, and every name that won't.
-	if (opts.json) {
-		printJson({ dry_run: dryRun, planned, skipped });
-	} else {
+	//
+	// Human output only. --json emits one object at the END of the run instead,
+	// because the plan is not the outcome: the guards below can drop rows, so a
+	// payload printed here would report names as published that never were.
+	if (!opts.json) {
 		printCount(
 			candidates.length,
 			candidates.length === 1
@@ -824,12 +824,18 @@ export async function runBackfillSlugs(
 		}
 	}
 
+	// Every early return reports `assigned: 0` rather than its own shape, so a
+	// --json consumer reads one field to learn what landed and never has to
+	// infer it from `dry_run` or from the presence of a plan.
 	if (planned.length === 0) {
-		if (!opts.json) info("Nothing to assign.");
+		if (opts.json)
+			printJson({ dry_run: dryRun, planned, skipped, assigned: 0 });
+		else info("Nothing to assign.");
 		return;
 	}
 	if (dryRun) {
-		if (!opts.json) info("Dry run — nothing written. Drop --dry-run to apply.");
+		if (opts.json) printJson({ dry_run: true, planned, skipped, assigned: 0 });
+		else info("Dry run — nothing written. Drop --dry-run to apply.");
 		return;
 	}
 	// Prompts go to stderr, so --json output stays clean and this stays a gate
@@ -840,7 +846,9 @@ export async function runBackfillSlugs(
 			`About to publish ${planned.length} profile URL${planned.length === 1 ? "" : "s"}. Are you sure?`,
 		);
 		if (!yes) {
-			if (!opts.json) info("Cancelled.");
+			if (opts.json)
+				printJson({ dry_run: false, planned, skipped, assigned: 0 });
+			else info("Cancelled.");
 			return;
 		}
 	}
@@ -851,6 +859,13 @@ export async function runBackfillSlugs(
 	// anyone who has since acquired one; NOT EXISTS turns a name taken in the
 	// meantime into a no-op instead of a UNIQUE violation that would abort the
 	// rest of the chunk.
+	//
+	// Which is exactly why the chunk size can't be the count: those guards are
+	// built to no-op, and d1Exec reports nothing back. Read the end state
+	// instead — one query per chunk asking which of the pairs it just wrote
+	// actually hold. That counts a row a concurrent login happened to give the
+	// same derived name, which is right: the planned URL exists either way, and
+	// what an operator needs to know is which names are now public.
 	const CHUNK = 50;
 	let assigned = 0;
 	for (let i = 0; i < planned.length; i += CHUNK) {
@@ -865,13 +880,30 @@ export async function runBackfillSlugs(
 				)
 				.join("; "),
 		);
-		assigned += chunk.length;
+		const [landed] = await d1Query<{ n: number }>(
+			`SELECT COUNT(*) AS n FROM users WHERE ${chunk
+				.map(
+					(p) =>
+						`(user_id = ${sqlStr(p.user_id)} AND slug = ${sqlStr(p.slug)})`,
+				)
+				.join(" OR ")}`,
+		);
+		assigned += landed?.n ?? 0;
 		if (!opts.json && planned.length > CHUNK) {
 			info(`  ${assigned}/${planned.length}...`);
 		}
 	}
 
-	if (!opts.json) {
-		ok(`Assigned ${assigned} profile URL${assigned === 1 ? "" : "s"}.`);
+	if (opts.json) {
+		printJson({ dry_run: false, planned, skipped, assigned });
+		return;
 	}
+	if (assigned === planned.length) {
+		ok(`Assigned ${assigned} profile URL${assigned === 1 ? "" : "s"}.`);
+		return;
+	}
+	ok(`Assigned ${assigned} of ${planned.length} planned profile URLs.`);
+	info(
+		`${planned.length - assigned} were claimed or renamed between this run's read and its write, and were left as they are.`,
+	);
 }
