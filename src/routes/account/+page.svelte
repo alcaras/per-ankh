@@ -5,7 +5,6 @@
 	import { ApiError, cloudApi, type GameListItem } from "$lib/api-cloud";
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import BulkReparseModal from "$lib/BulkReparseModal.svelte";
-	import ProfileLink from "$lib/ProfileLink.svelte";
 	import ChannelSettings from "$lib/settings/ChannelSettings.svelte";
 	import CopyButton from "$lib/tournament/CopyButton.svelte";
 	import { PUBLIC_ORIGIN } from "$lib/page-meta";
@@ -57,12 +56,12 @@
 	// svelte-ignore state_referenced_locally
 	let editing = $state(data.user.slug === null);
 
+	// The static label beside the input, so what they type reads as the tail of
+	// the URL it becomes.
+	const SLUG_PREFIX = "per-ankh.app/u/";
 	// What the user shares — absolute, since the point of the card is a link
 	// that can be pasted into Discord.
 	const profileUrl = $derived(slug ? `${PUBLIC_ORIGIN}/u/${slug}` : "");
-	// The same origin as a prefix label on the input, so what they type reads
-	// as the tail of the URL it becomes.
-	const SLUG_PREFIX = `${PUBLIC_ORIGIN.replace(/^https?:\/\//, "")}/u/`;
 
 	// Already filtered to out-of-date games server-side (see +page.ts), so the
 	// count and modal list cover the user's entire library, not just a page.
@@ -254,9 +253,9 @@
 					     at signup and the user's to rename or remove. The link and
 					     the form are independent — a slug-holder can open the form
 					     and close it again — so the two blocks stack rather than
-					     alternating on whether a slug exists. What can't be undone
-					     alone is stated where it's decided: the old name goes back
-					     into the pool on both Save and Remove. -->
+					     alternating on whether a slug exists. The rules (format,
+					     cooldown, name reuse) aren't restated here; the worker's
+					     rejections carry them. -->
 					<div
 						class="mt-3 rounded-lg p-3"
 						style="background-color: rgb(var(--color-surface-raised));"
@@ -267,53 +266,39 @@
 								Your profile is at this link.
 							</p>
 							<div class="mt-2 flex items-center gap-2">
-								<span
-									class="min-w-0 flex-1 truncate font-mono text-sm text-bright"
+								<span class="min-w-0 truncate font-mono text-sm text-bright"
 									>{profileUrl}</span
 								>
 								<CopyButton
 									text={profileUrl}
-									label="Copy"
-									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
-								/>
-								<ProfileLink
-									userId={data.user.user_id}
-									{slug}
-									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+									label="Copy profile URL"
+									title="Copy your profile URL"
+									class="inline-flex shrink-0 items-center justify-center rounded border border-surface p-1 text-tan transition-colors hover:bg-surface-hover hover:text-orange"
 								>
-									View profile
-								</ProfileLink>
+									{#snippet children(copied)}
+										{#if copied}{@render iconCheck()}{:else}{@render iconCopy()}{/if}
+									{/snippet}
+								</CopyButton>
+								<div class="ml-auto flex shrink-0 items-center gap-2">
+									<button
+										type="button"
+										onclick={() => (editing = !editing)}
+										class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+									>
+										{editing ? "Cancel" : "Change"}
+									</button>
+									<button
+										type="button"
+										onclick={releaseSlug}
+										disabled={releasing}
+										class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
+									>
+										{releasing ? "Removing…" : "Remove"}
+									</button>
+								</div>
 							</div>
-							<div class="mt-2 flex items-center gap-2">
-								<button
-									type="button"
-									onclick={() => (editing = !editing)}
-									class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
-								>
-									{editing ? "Cancel" : "Change"}
-								</button>
-								<button
-									type="button"
-									onclick={releaseSlug}
-									disabled={releasing}
-									class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
-								>
-									{releasing ? "Removing…" : "Remove"}
-								</button>
-							</div>
-						{:else}
-							<p class="mt-1 text-xs text-gray-400">
-								You don't have a profile link. Your profile is at {PUBLIC_ORIGIN}/users/{data
-									.user.user_id} either way.
-							</p>
 						{/if}
 						{#if editing}
-							<p class="mt-2 text-xs text-gray-400">
-								Choose the name in your profile link: 3-30 characters, lowercase
-								letters, numbers and hyphens. You can change it again after a
-								week. Whatever name you leave behind goes back up for anyone to
-								take, and links to it will follow whoever takes it.
-							</p>
 							<form
 								class="mt-2 flex items-center gap-2"
 								onsubmit={(e) => {
@@ -321,20 +306,16 @@
 									saveSlug();
 								}}
 							>
-								<div
-									class="flex min-w-0 flex-1 items-center rounded border border-input bg-surface-sunken focus-within:border-orange"
+								<span class="shrink-0 font-mono text-sm text-gray-400"
+									>{SLUG_PREFIX}</span
 								>
-									<span class="shrink-0 pl-2 text-sm text-gray-400"
-										>{SLUG_PREFIX}</span
-									>
-									<input
-										type="text"
-										class="min-w-0 flex-1 bg-transparent py-1.5 pr-2 text-sm text-tan focus:outline-none"
-										aria-label="Profile URL"
-										bind:value={slugInput}
-										disabled={claiming}
-									/>
-								</div>
+								<input
+									type="text"
+									class="min-w-0 flex-1 rounded border border-input bg-surface-sunken px-2 py-1.5 text-sm text-tan focus:border-orange focus:outline-none"
+									aria-label="Profile URL"
+									bind:value={slugInput}
+									disabled={claiming}
+								/>
 								<button
 									type="submit"
 									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
@@ -537,3 +518,35 @@
 {#if reparseGames}
 	<BulkReparseModal games={reparseGames} onClose={onReparseClose} />
 {/if}
+
+<!-- Copy-button icons, same pair MatchPopover renders inside CopyButton. -->
+{#snippet iconCopy()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-3.5 w-3.5"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+		/>
+	</svg>
+{/snippet}
+{#snippet iconCheck()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-3.5 w-3.5"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+	</svg>
+{/snippet}
