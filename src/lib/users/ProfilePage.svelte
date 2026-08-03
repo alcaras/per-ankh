@@ -59,6 +59,12 @@
 		summary.win_rate != null ? Math.round(summary.win_rate * 100) : null,
 	);
 
+	// An empty library is a fact about the profile, not about the scope or about
+	// any one chart's inputs, so the three save-backed tabs say so once and in
+	// the same words. Their own empty states stay for what they're worded for —
+	// a non-empty corpus filtered or aggregated down to nothing.
+	const hasNoGames = $derived(summary.total_games === 0);
+
 	const triggerClass =
 		"cursor-pointer rounded px-3 py-1.5 text-sm font-bold text-tan transition-colors hover:bg-tan-hover data-[state=active]:bg-surface-raised data-[state=inactive]:bg-surface";
 
@@ -77,6 +83,15 @@
 		await goto(next, { keepFocus: true, noScroll: true });
 	}
 </script>
+
+<!-- Shared empty state for Overview / Games / Stats when the library is empty.
+     Same type as the tabs' own empty states (GamesTable's), so the Stats tab
+     stops being the odd one out in italic brown. -->
+{#snippet noGames()}
+	<p class="p-8 text-center text-sm text-tan opacity-60">
+		{profile.display_name} has not uploaded any games.
+	</p>
+{/snippet}
 
 <div class="flex flex-1 overflow-hidden">
 	<main class="isolate flex flex-1 flex-col overflow-hidden">
@@ -203,11 +218,17 @@
 						</Tabs.List>
 
 						<Tabs.Content value="overview">
-							<OverviewTab {bundle} />
+							{#if hasNoGames}
+								{@render noGames()}
+							{:else}
+								<OverviewTab {bundle} />
+							{/if}
 						</Tabs.Content>
 
 						<Tabs.Content value="games">
-							{#if data.tab === "games"}
+							{#if hasNoGames}
+								{@render noGames()}
+							{:else if data.tab === "games"}
 								<GamesTable
 									userId={profile.user_id}
 									initialGames={data.games}
@@ -240,7 +261,11 @@
 						{/if}
 
 						<Tabs.Content value="stats">
-							<StatsView {bundle} />
+							{#if hasNoGames}
+								{@render noGames()}
+							{:else}
+								<StatsView {bundle} />
+							{/if}
 						</Tabs.Content>
 					</div>
 				</Tabs.Root>
