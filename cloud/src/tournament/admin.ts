@@ -1949,6 +1949,72 @@ export async function handleStartTournament(
 // rationale.
 // ----------------------------------------------------------------------
 
+export async function handlePatchMatchMap(
+	tournamentId: string,
+	matchId: string,
+	request: Request,
+	env: TournamentAdminEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const a = await authedTournament(tournamentId, request, env);
+	if (!a.ok) return a.response;
+	const match = await loadMatch(env, matchId);
+	if (!match) {
+		return errorResponse("Match not found", 404, cors, "MATCH_NOT_FOUND");
+	}
+	// Scope the match to the URL's tournament before any other check —
+	// otherwise MATCH_NOT_PENDING would leak existence of a reported match
+	// in a different tournament to an admin of this one.
+	const round = await loadRound(env, match.round_id);
+	if (!round || round.tournament_id !== tournamentId) {
+		return errorResponse("Match not found", 404, cors, "MATCH_NOT_FOUND");
+	}
+	if (match.status !== "pending" && match.status !== "bye") {
+		return errorResponse(
+			"Can only edit map on a pending match",
+			409,
+			cors,
+			"MATCH_NOT_PENDING",
+		);
+	}
+	const body = await parseJsonBody(request, PatchMatchMapSchema, cors);
+	if (!body.ok) return body.response;
+	const patch = body.body;
+	if (patch.map_pool_id === undefined) {
+		return jsonResponse({ match }, 200, cors);
+	}
+	// Resolve the chosen instance from the tournament's pool and denormalize
+	// its script onto the match alongside the instance id.
+	const poolResult = parseMapPoolOrError(a.tournament, cors);
+	if (!poolResult.ok) return poolResult.response;
+	const entry = poolResult.pool.find((e) => e.id === patch.map_pool_id);
+	if (!entry) {
+		return errorResponse(
+			"map_pool_id is not in this tournament's map pool",
+			400,
+			cors,
+			"MAP_NOT_IN_POOL",
+		);
+	}
+	await env.SHARE_DB.prepare(
+		"UPDATE tournament_matches SET map_pool_id = ?, map_script = ? WHERE match_id = ?",
+	)
+		.bind(entry.id, entry.script, matchId)
+		.run();
+	await bumpTournamentUpdatedAt(env, tournamentId);
+	const updated = await loadMatch(env, matchId);
+	await logTournamentAdminAction(
+		env,
+		a.userId,
+		tournamentId,
+		"match_map_patched",
+		{
+			match_id: matchId,
+		},
+	);
+	return jsonResponse({ match: updated }, 200, cors);
+}
+
 // ----------------------------------------------------------------------
 // POST /v1/tournaments/:id/rounds/:round_id/matches — add a match to an
 // open Swiss round (a late pairing)
@@ -2067,6 +2133,10 @@ export async function handleAddRoundMatch(
 	if (!poolResult.ok) return poolResult.response;
 	// Same assignment engine as round generation. The seed includes the slot
 	// ids so a second added match in the same round draws independently.
+	// A single-pairing call has no round-batch context, so the secondary
+	// spread-scripts-across-the-round preference is a no-op here — only the
+	// primary per-player fresh-map rule applies, and that's the one that
+	// matters.
 	const seed = `${tournamentId}|swiss|${round.division}|r${round.round_number}|added|${slot_a_id}|${slot_b_id}`;
 	const [assigned] = assignMapsToPairings(
 		[{ slot_a_id, slot_b_id }],
@@ -2083,9 +2153,13 @@ export async function handleAddRoundMatch(
 	// Guarded write, not a plain INSERT: between the checks above and this
 	// statement, a concurrent report can close the round (generating the
 	// next one — which would then pair these very slots) or a concurrent
-	// add can pair one of the slots. The WHERE re-asserts both invariants
-	// atomically; meta.changes === 0 means we lost that race (same idiom as
-	// the claim-slot INSERT in player.ts).
+	// add can pair one of the slots. The WHERE re-checks both invariants at
+	// insert time; meta.changes === 0 means we lost that race (same idiom
+	// as the claim-slot INSERT in player.ts). A narrower window survives
+	// inside maybeAdvanceAfterMatchReport, which reads its pending set and
+	// then batches close + next-round generation — an INSERT landing there
+	// leaves this match pending in a complete round: recoverable (it still
+	// reports normally), it just doesn't feed the next round's pairing.
 	// Numbered parameters throughout: NEXT_MATCH_NUMBER_SQL carries a bare
 	// `?`, which SQLite assigns max-used-index + 1 — with ?1–?6 before it,
 	// it becomes ?7 (the tournament id). Pick order reuses ?4 (slot_b:
@@ -2143,72 +2217,6 @@ export async function handleAddRoundMatch(
 	});
 	const match = await loadMatch(env, matchId);
 	return jsonResponse({ match }, 201, cors);
-}
-
-export async function handlePatchMatchMap(
-	tournamentId: string,
-	matchId: string,
-	request: Request,
-	env: TournamentAdminEnv,
-): Promise<Response> {
-	const cors = cloudCorsHeaders(env, request);
-	const a = await authedTournament(tournamentId, request, env);
-	if (!a.ok) return a.response;
-	const match = await loadMatch(env, matchId);
-	if (!match) {
-		return errorResponse("Match not found", 404, cors, "MATCH_NOT_FOUND");
-	}
-	// Scope the match to the URL's tournament before any other check —
-	// otherwise MATCH_NOT_PENDING would leak existence of a reported match
-	// in a different tournament to an admin of this one.
-	const round = await loadRound(env, match.round_id);
-	if (!round || round.tournament_id !== tournamentId) {
-		return errorResponse("Match not found", 404, cors, "MATCH_NOT_FOUND");
-	}
-	if (match.status !== "pending" && match.status !== "bye") {
-		return errorResponse(
-			"Can only edit map on a pending match",
-			409,
-			cors,
-			"MATCH_NOT_PENDING",
-		);
-	}
-	const body = await parseJsonBody(request, PatchMatchMapSchema, cors);
-	if (!body.ok) return body.response;
-	const patch = body.body;
-	if (patch.map_pool_id === undefined) {
-		return jsonResponse({ match }, 200, cors);
-	}
-	// Resolve the chosen instance from the tournament's pool and denormalize
-	// its script onto the match alongside the instance id.
-	const poolResult = parseMapPoolOrError(a.tournament, cors);
-	if (!poolResult.ok) return poolResult.response;
-	const entry = poolResult.pool.find((e) => e.id === patch.map_pool_id);
-	if (!entry) {
-		return errorResponse(
-			"map_pool_id is not in this tournament's map pool",
-			400,
-			cors,
-			"MAP_NOT_IN_POOL",
-		);
-	}
-	await env.SHARE_DB.prepare(
-		"UPDATE tournament_matches SET map_pool_id = ?, map_script = ? WHERE match_id = ?",
-	)
-		.bind(entry.id, entry.script, matchId)
-		.run();
-	await bumpTournamentUpdatedAt(env, tournamentId);
-	const updated = await loadMatch(env, matchId);
-	await logTournamentAdminAction(
-		env,
-		a.userId,
-		tournamentId,
-		"match_map_patched",
-		{
-			match_id: matchId,
-		},
-	);
-	return jsonResponse({ match: updated }, 200, cors);
 }
 
 // ----------------------------------------------------------------------

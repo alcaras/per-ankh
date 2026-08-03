@@ -1,15 +1,3 @@
-<script lang="ts" module>
-	export interface SlotPickerCandidate {
-		slotId: string;
-		label: string;
-		seed: number | null;
-		// The candidate's current pending opponent, when the resulting matchup
-		// is the point of the pick (the swap flow). Null when the candidate has
-		// no pending match (e.g. reinstated mid-round).
-		opponentLabel: string | null;
-	}
-</script>
-
 <script lang="ts">
 	// Pick-a-player popover: a small trigger button in a Swiss standings row
 	// that opens a searchable list of same-division candidates. Backs both
@@ -37,6 +25,16 @@
 	import { Combobox } from "bits-ui";
 	import Popover from "$lib/ui/Popover.svelte";
 
+	interface SlotPickerCandidate {
+		slotId: string;
+		label: string;
+		seed: number | null;
+		// The candidate's current pending opponent, when the resulting matchup
+		// is the point of the pick (the swap flow). Null when the candidate has
+		// no pending match (e.g. reinstated mid-round).
+		opponentLabel: string | null;
+	}
+
 	let {
 		candidates,
 		eligible,
@@ -57,9 +55,10 @@
 		actionLabel: string;
 		ariaLabel: string;
 		// Trigger titles: eligible with candidates / this row ineligible / no
-		// eligible partners.
+		// eligible partners. titleIneligible may be omitted at a call site
+		// whose render branch already guarantees eligibility (Pair).
 		titleEnabled: string;
-		titleIneligible: string;
+		titleIneligible?: string;
 		titleEmpty: string;
 		// eslint-disable-next-line no-unused-vars -- param name documentary
 		onSelect: (otherSlotId: string) => void;
@@ -86,7 +85,7 @@
 	);
 	const triggerTitle = $derived(
 		!eligible
-			? titleIneligible
+			? (titleIneligible ?? "")
 			: candidates.length === 0
 				? titleEmpty
 				: titleEnabled,

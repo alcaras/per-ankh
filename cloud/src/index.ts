@@ -107,6 +107,7 @@ import {
 import type { ChannelsEnv } from "./channels";
 import type { TournamentPlayerEnv } from "./tournament/player";
 import {
+	handleAddRoundMatch,
 	handleBulkCreateSlots,
 	handleCreateTournament,
 	handleDeleteSlot,
@@ -117,7 +118,6 @@ import {
 	handlePatchMatchSchedule,
 	handlePatchSlot,
 	handlePatchTournament,
-	handleAddRoundMatch,
 	handleReinstateSlot,
 	handleReorderSlots,
 	handleSwapSlots,

@@ -148,14 +148,16 @@
 		}
 		const maxRound = Math.max(...div.map((m) => m.round_number ?? 0));
 		const inRound = div.filter((m) => m.round_number === maxRound);
-		// A closed round means the division's Swiss is finished (a follow-up
-		// round would otherwise exist) — nothing to pair into.
+		// No pending match in the highest round usually means the division's
+		// Swiss is finished. It can also be a rare still-open round whose
+		// matches all decided without a report (bye-only, mass-forfeit) —
+		// the client can't tell the two apart (no rounds list is loaded), so
+		// Pair hides in both. Fails safe: the server would accept a valid
+		// add we don't offer, never the reverse.
 		if (inRound.every((m) => m.status !== "pending")) {
 			return { roundId: null, roundNumber: null, unpaired: {} };
 		}
-		const paired = new Set(
-			inRound.flatMap((m) => [m.slot_a_id, m.slot_b_id]),
-		);
+		const paired = new Set(inRound.flatMap((m) => [m.slot_a_id, m.slot_b_id]));
 		const unpaired: Record<string, boolean> = {};
 		for (const s of data.standings.divisions[division].standings) {
 			if (!paired.has(s.slot_id)) unpaired[s.slot_id] = true;
@@ -648,7 +650,11 @@
 	// are pre-satisfied — but stay authoritative if data changed under us.
 	// Confirmed first: there is no un-add — a mistaken match blocks the
 	// round until it's reported.
-	async function addMatch(division: Division, slotId: string, otherSlotId: string) {
+	async function addMatch(
+		division: Division,
+		slotId: string,
+		otherSlotId: string,
+	) {
 		const info = openRoundByDivision[division];
 		if (!info.roundId) return;
 		const aLabel = slotLabelFor(slotId);
@@ -1237,8 +1243,7 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 										? (slotId, otherSlotId) =>
 												addMatch(division, slotId, otherSlotId)
 										: undefined}
-									unpairedInOpenRound={openRoundByDivision[division]
-										.unpaired}
+									unpairedInOpenRound={openRoundByDivision[division].unpaired}
 								/>
 							{:else}
 								<div class="mb-3">

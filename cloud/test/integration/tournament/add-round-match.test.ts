@@ -118,9 +118,9 @@ describe("add match to an open swiss round", () => {
 			}),
 		);
 		let rounds = (await t.rounds()) as RoundRow[];
-		expect(
-			rounds.find((r) => r.round_id === r2.round_id)!.status,
-		).toBe("in_progress");
+		expect(rounds.find((r) => r.round_id === r2.round_id)!.status).toBe(
+			"in_progress",
+		);
 
 		// Reporting the added match closes the round and its result feeds
 		// round 3's pairing: the winner (1-1) and loser (0-2) both pair on.
@@ -206,10 +206,14 @@ describe("add match to an open swiss round", () => {
 			await post(r2.round_id, { slot_a_id: subA, slot_b_id: subB }),
 			{ status: 409, code: "SLOT_WITHDRAWN" },
 		);
-		// Unknown round.
+		// Unknown round / unknown slot.
 		await expectErrorCode(
 			await post("x".repeat(21), { slot_a_id: subA, slot_b_id: subB }),
 			{ status: 404, code: "ROUND_NOT_FOUND" },
+		);
+		await expectErrorCode(
+			await post(r2.round_id, { slot_a_id: "y".repeat(21), slot_b_id: subA }),
+			{ status: 404, code: "SLOT_NOT_FOUND" },
 		);
 		// Non-admin and anonymous callers.
 		const outsider = await makeUser();
@@ -221,6 +225,82 @@ describe("add match to an open swiss round", () => {
 			await post(r2.round_id, { slot_a_id: subA, slot_b_id: subB }, null),
 			{ status: 401, code: "UNAUTHORIZED" },
 		);
+	});
+
+	it("rejects a slot that has already finished Swiss", async () => {
+		const { t, subA, subB, r2 } = await substitutionScenario();
+		// The substitutes carry a forfeit loss from round 1; tightening the
+		// elimination threshold to 1 makes computeRecord call them eliminated
+		// — the same active definition the pairing engine uses. No builder
+		// knob for Swiss config, so flip the column directly.
+		await env.SHARE_DB.prepare(
+			"UPDATE tournaments SET swiss_losses_to_eliminate = 1 WHERE tournament_id = ?",
+		)
+			.bind(t.tournamentId)
+			.run();
+		await expectErrorCode(
+			await request.post({
+				path: `/v1/tournaments/${t.tournamentId}/rounds/${r2.round_id}/matches`,
+				as: t.admin,
+				body: { slot_a_id: subA, slot_b_id: subB },
+			}),
+			{ status: 409, code: "SLOT_INACTIVE" },
+		);
+	});
+
+	it("supports a second added match in the same round", async () => {
+		// Eight slots → four round-1 matches; withdrawing every slot_a
+		// forfeits them all, so round 2 generates for the four winners and
+		// the four reinstated slots are all unpaired — two catch-up pairs.
+		const t = await makeTournament({
+			advanceTo: "swiss-round-1-generated",
+			slotsPerDivision: 8,
+		});
+		const aIds = new Set(t.slotsByDivision.A.map((s) => s.slotId));
+		const r1Matches = ((await t.matches()) as MatchRow[]).filter(
+			(m) => m.status === "pending" && aIds.has(m.slot_a_id),
+		);
+		expect(r1Matches).toHaveLength(4);
+		const subs = r1Matches.map((m) => m.slot_a_id);
+		// Withdraw ALL four before reinstating any: the last withdrawal's
+		// forfeit closes round 1 and generates round 2, and a slot
+		// reinstated before that moment would be paired into it normally.
+		for (const slotId of subs) {
+			await expectOk(
+				await request.post({
+					path: `/v1/tournaments/${t.tournamentId}/slots/${slotId}/withdraw`,
+					as: t.admin,
+				}),
+			);
+		}
+		for (const slotId of subs) {
+			await expectOk(
+				await request.delete({
+					path: `/v1/tournaments/${t.tournamentId}/slots/${slotId}/withdraw`,
+					as: t.admin,
+				}),
+			);
+		}
+		const r2 = ((await t.rounds()) as RoundRow[]).find(
+			(r) => r.phase === "swiss" && r.division === "A" && r.round_number === 2,
+		)!;
+		const adds: MatchRow[] = [];
+		for (const pair of [
+			[subs[0], subs[1]],
+			[subs[2], subs[3]],
+		]) {
+			const res = await request.post({
+				path: `/v1/tournaments/${t.tournamentId}/rounds/${r2.round_id}/matches`,
+				as: t.admin,
+				body: { slot_a_id: pair[0], slot_b_id: pair[1] },
+			});
+			expect(res.status).toBe(201);
+			adds.push(((await res.json()) as MatchBody).match);
+		}
+		// Round 2 generated two matches for the four winners; the added
+		// matches take the next two indexes and distinct match numbers.
+		expect(adds.map((m) => m.match_index)).toEqual([3, 4]);
+		expect(adds[0].match_number).not.toBe(adds[1].match_number);
 	});
 
 	it("locks once the tournament leaves the Swiss phase", async () => {
