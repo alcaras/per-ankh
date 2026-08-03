@@ -282,6 +282,15 @@ export const SwapSlotsSchema = v.object({
 	slot_b_id: v.pipe(v.string(), v.regex(nanoid21Regex)),
 });
 
+// POST /v1/tournaments/:id/rounds/:round_id/matches body. Adds a match to an
+// open Swiss round (a late pairing — see handleAddRoundMatch). Just the two
+// slots: the map is auto-assigned by the same engine as round generation, and
+// everything else about the match (index, number, pick order) is derived.
+export const AddRoundMatchSchema = v.object({
+	slot_a_id: v.pipe(v.string(), v.regex(nanoid21Regex)),
+	slot_b_id: v.pipe(v.string(), v.regex(nanoid21Regex)),
+});
+
 export const ReorderSlotsSchema = v.object({
 	divisions: v.object({
 		A: v.pipe(

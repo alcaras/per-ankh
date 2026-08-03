@@ -12,6 +12,7 @@
 import { nanoid } from "nanoid";
 import * as v from "valibot";
 import {
+	AddRoundMatchSchema,
 	BulkCreateSlotsSchema,
 	CreateTournamentSchema,
 	GrantAdminSchema,
@@ -48,7 +49,7 @@ import {
 } from "./bracket";
 import { assignMapsToPairings } from "./maps";
 import { pairSwissRound, type Pairing } from "./pairing";
-import { computeStandings, rankStandings } from "./standings";
+import { computeRecord, computeStandings, rankStandings } from "./standings";
 import { AuthzError, isTournamentBeta, requireTournamentAdmin } from "./authz";
 import {
 	bumpTournamentUpdatedAt,
@@ -1947,6 +1948,171 @@ export async function handleStartTournament(
 // see PatchMatchMapSchema in cloud/src/schemas/tournament.ts for the
 // rationale.
 // ----------------------------------------------------------------------
+
+// ----------------------------------------------------------------------
+// POST /v1/tournaments/:id/rounds/:round_id/matches — add a match to an
+// open Swiss round (a late pairing)
+// ----------------------------------------------------------------------
+//
+// Completes the substitution workflow (withdraw -> PATCH slot -> reinstate):
+// a slot reinstated after its division's current round was already paired
+// sits idle until the next round generates, a full round behind the field.
+// This lets an admin pair two such slots into the still-open round as a
+// catch-up game — the "make-up game" the slot-swap rejection note in
+// schemas/tournament.ts (PatchMatchMapSchema) says a displaced slot must
+// not be left without.
+//
+// Swiss only: the championship bracket's structure is derived from prior
+// results, never hand-edited (tournament.status === 'swiss' also means no
+// championship rounds exist yet, so no phase check on the round is needed).
+// The map is auto-assigned by the same engine as round generation (fresh-
+// map rule, deterministic seed), the match takes the round's next
+// match_index and the tournament's next match_number, and reporting flows
+// through the normal advance path — the round simply won't auto-close
+// until this match is reported too.
+export async function handleAddRoundMatch(
+	tournamentId: string,
+	roundId: string,
+	request: Request,
+	env: TournamentAdminEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const a = await authedTournament(tournamentId, request, env);
+	if (!a.ok) return a.response;
+	const { tournament } = a;
+	if (tournament.status !== "swiss") {
+		return errorResponse(
+			"Matches can only be added during the Swiss phase",
+			409,
+			cors,
+			"TOURNAMENT_LOCKED",
+		);
+	}
+	const round = await loadRound(env, roundId);
+	if (!round || round.tournament_id !== tournamentId) {
+		return errorResponse("Round not found", 404, cors, "ROUND_NOT_FOUND");
+	}
+	if (round.status !== "in_progress") {
+		return errorResponse(
+			"Round is already complete",
+			409,
+			cors,
+			"ROUND_CLOSED",
+		);
+	}
+	const body = await parseJsonBody(request, AddRoundMatchSchema, cors);
+	if (!body.ok) return body.response;
+	const { slot_a_id, slot_b_id } = body.body;
+	if (slot_a_id === slot_b_id) {
+		return errorResponse(
+			"Cannot pair a slot against itself",
+			400,
+			cors,
+			"SAME_SLOT",
+		);
+	}
+
+	const matches = await loadMatches(env, tournamentId);
+	const matchRefs = await matchRefsForTournament(env, tournamentId, matches);
+	const config = tournamentConfig(tournament);
+	for (const slotId of [slot_a_id, slot_b_id]) {
+		const slot = await loadSlotInTournament(env, slotId, tournamentId);
+		if (!slot) {
+			return errorResponse("Slot not found", 404, cors, "SLOT_NOT_FOUND");
+		}
+		if (slot.division !== round.division) {
+			return errorResponse(
+				"Slot is not in this round's division",
+				409,
+				cors,
+				"WRONG_DIVISION",
+			);
+		}
+		if (slot.withdrawn_at != null) {
+			return errorResponse(
+				"Cannot pair a withdrawn slot",
+				409,
+				cors,
+				"SLOT_WITHDRAWN",
+			);
+		}
+		// Advanced/eliminated slots are done playing Swiss — same "active"
+		// definition the pairing engine uses.
+		if (computeRecord(slotId, matchRefs, config).status !== "active") {
+			return errorResponse(
+				"Slot has already finished Swiss (advanced or eliminated)",
+				409,
+				cors,
+				"SLOT_INACTIVE",
+			);
+		}
+		// One match per slot per round, byes included — the invariant the
+		// whole bracket UI leans on.
+		const inRound = matches.some(
+			(m) =>
+				m.round_id === roundId &&
+				(m.slot_a_id === slotId || m.slot_b_id === slotId),
+		);
+		if (inRound) {
+			return errorResponse(
+				"Slot already has a match in this round",
+				409,
+				cors,
+				"ALREADY_PAIRED",
+			);
+		}
+	}
+
+	const poolResult = parseMapPoolOrError(tournament, cors);
+	if (!poolResult.ok) return poolResult.response;
+	// Same assignment engine as round generation. The seed includes the slot
+	// ids so a second added match in the same round draws independently.
+	const seed = `${tournamentId}|swiss|${round.division}|r${round.round_number}|added|${slot_a_id}|${slot_b_id}`;
+	const [assigned] = assignMapsToPairings(
+		[{ slot_a_id, slot_b_id }],
+		poolResult.pool,
+		matchRefs,
+		seed,
+	);
+
+	const matchId = nanoid(21);
+	// Column set mirrors buildSwissRoundStatements' pending-match INSERT:
+	// pick order defaults to slot_b (player listed second picks first),
+	// occupant snapshots stay NULL while pending and resolve live.
+	await env.SHARE_DB.prepare(
+		`INSERT INTO tournament_matches
+		   (match_id, round_id, slot_a_id, slot_b_id, map_pool_id, map_script,
+		    pick_order_winner_slot_id, status, winner_slot_id, match_index,
+		    match_number)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL,
+		         (SELECT COALESCE(MAX(m3.match_index), 0) + 1
+		          FROM tournament_matches m3 WHERE m3.round_id = ?),
+		         ${NEXT_MATCH_NUMBER_SQL})`,
+	)
+		.bind(
+			matchId,
+			roundId,
+			slot_a_id,
+			slot_b_id,
+			assigned.map_pool_id,
+			assigned.map_script,
+			slot_b_id,
+			roundId,
+			tournamentId,
+		)
+		.run();
+	await bumpTournamentUpdatedAt(env, tournamentId);
+	await logTournamentAdminAction(env, a.userId, tournamentId, "match_added", {
+		match_id: matchId,
+		round_id: roundId,
+		division: round.division,
+		slot_a_id,
+		slot_b_id,
+		map_pool_id: assigned.map_pool_id,
+	});
+	const match = await loadMatch(env, matchId);
+	return jsonResponse({ match }, 201, cors);
+}
 
 export async function handlePatchMatchMap(
 	tournamentId: string,
