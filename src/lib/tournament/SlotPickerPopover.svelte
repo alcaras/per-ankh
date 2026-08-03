@@ -1,13 +1,25 @@
+<script lang="ts" module>
+	export interface SlotPickerCandidate {
+		slotId: string;
+		label: string;
+		seed: number | null;
+		// The candidate's current pending opponent, when the resulting matchup
+		// is the point of the pick (the swap flow). Null when the candidate has
+		// no pending match (e.g. reinstated mid-round).
+		opponentLabel: string | null;
+	}
+</script>
+
 <script lang="ts">
-	// Occupant-swap picker: the "Swap" affordance in a Swiss standings row. The
-	// button is a Popover trigger; the popover holds a searchable bits-ui Combobox
-	// over the swap-eligible players in the same division. The admin picks the
-	// player to trade seats with, unblocking a stuck pending match by pairing the
-	// healthy player against someone from another pending match.
+	// Pick-a-player popover: a small trigger button in a Swiss standings row
+	// that opens a searchable list of same-division candidates. Backs both
+	// row actions that need a second player: Swap (trade seats) and Pair
+	// (add a catch-up match to the open round); the caller supplies the
+	// candidates, the button label, and the three trigger titles.
 	//
 	// Why Popover + Combobox (two bits-ui floating primitives nested):
 	//   * The Popover portals its content, so the dropdown escapes the standings
-	//     table's overflow (the original reason SwapPicker reached for Combobox at
+	//     table's overflow (the original reason this reached for Combobox at
 	//     all) and anchors to the button like the row's Withdraw/Reinstate siblings
 	//     don't need to — it floats free of the row.
 	//   * The Combobox stays for the searchable, keyboard-navigable candidate list
@@ -25,27 +37,30 @@
 	import { Combobox } from "bits-ui";
 	import Popover from "$lib/ui/Popover.svelte";
 
-	interface SwapCandidate {
-		slotId: string;
-		label: string;
-		seed: number | null;
-		// The candidate's current pending opponent — the admin is really choosing
-		// the resulting matchup, so we surface it. Null only for the rare eligible
-		// slot with no pending match (e.g. reinstated mid-round).
-		opponentLabel: string | null;
-	}
-
 	let {
 		candidates,
 		eligible,
 		disabled = false,
+		actionLabel,
+		ariaLabel,
+		titleEnabled,
+		titleIneligible,
+		titleEmpty,
 		onSelect,
 	}: {
-		candidates: SwapCandidate[];
-		// Whether this row's player may swap at all (no banked result this phase).
-		// Drives the disabled-trigger title; candidates is empty when ineligible.
+		candidates: SlotPickerCandidate[];
+		// Whether this row's player may act at all; drives the disabled-trigger
+		// title. candidates is empty when ineligible.
 		eligible: boolean;
 		disabled?: boolean;
+		// Trigger button text ("Swap", "Pair").
+		actionLabel: string;
+		ariaLabel: string;
+		// Trigger titles: eligible with candidates / this row ineligible / no
+		// eligible partners.
+		titleEnabled: string;
+		titleIneligible: string;
+		titleEmpty: string;
 		// eslint-disable-next-line no-unused-vars -- param name documentary
 		onSelect: (otherSlotId: string) => void;
 	} = $props();
@@ -63,24 +78,24 @@
 			: candidates,
 	);
 
-	// The trigger can't open when the player has already banked a result, when no
-	// eligible partners exist, or while another action is in flight — a disabled
+	// The trigger can't open when this row is ineligible, when no eligible
+	// partners exist, or while another action is in flight — a disabled
 	// Popover trigger can't open, so this gates the whole picker.
 	const triggerDisabled = $derived(
 		disabled || !eligible || candidates.length === 0,
 	);
 	const triggerTitle = $derived(
 		!eligible
-			? "Can't swap — already has a result this phase"
+			? titleIneligible
 			: candidates.length === 0
-				? "No swap-eligible players (others have results this round)"
-				: "Swap this player's seat with another same-division pending player",
+				? titleEmpty
+				: titleEnabled,
 	);
 </script>
 
 <Popover
 	bind:open
-	ariaLabel="Swap with player"
+	{ariaLabel}
 	contentClass="w-72"
 	frameClass="border border-surface bg-surface-sunken p-0 shadow-lg"
 >
@@ -92,7 +107,7 @@
 			class="rounded border border-black border-opacity-50 px-1.5 text-[10px] text-tan opacity-60 transition-opacity hover:opacity-100 disabled:opacity-30"
 			title={triggerTitle}
 		>
-			Swap
+			{actionLabel}
 		</button>
 	{/snippet}
 
@@ -112,7 +127,7 @@
 			<!-- No autofocus attribute: the Popover's focus scope focuses its first
 			     tabbable (this input) on open, so the admin can type immediately. -->
 			<Combobox.Input
-				aria-label="Swap with player"
+				aria-label={ariaLabel}
 				oninput={(e) => (search = e.currentTarget.value)}
 				class="w-full rounded bg-surface px-1.5 py-1 text-xs text-tan focus:outline-none"
 			/>

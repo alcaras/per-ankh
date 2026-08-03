@@ -3,7 +3,7 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import SlotUsernameCell from "$lib/tournament/SlotUsernameCell.svelte";
-	import SwapPicker from "$lib/tournament/SwapPicker.svelte";
+	import SlotPickerPopover from "$lib/tournament/SlotPickerPopover.svelte";
 
 	let {
 		divisionName,
@@ -15,6 +15,8 @@
 		onReinstate,
 		onSwap,
 		opponentBySlot = {},
+		onAddMatch,
+		unpairedInOpenRound = {},
 		onOpenInfo,
 	}: {
 		divisionName: string;
@@ -45,6 +47,19 @@
 		// pending swiss matches. Drives the swap picker's "vs <opponent>" labels
 		// and excludes a player's own opponent (that swap is a no-op).
 		opponentBySlot?: Record<string, string>;
+		// Late pairing: add a catch-up match to the division's open round
+		// between this row's player and a picked partner — the follow-through
+		// on a mid-round reinstate, which otherwise leaves the substitute
+		// idle until the next round generates.
+		onAddMatch?: (
+			// eslint-disable-next-line no-unused-vars -- param names documentary
+			slotId: string,
+			// eslint-disable-next-line no-unused-vars -- param names documentary
+			otherSlotId: string,
+		) => void;
+		// slot_id → true when the slot has no match (bye included) in the
+		// division's current open round — the "Pair" affordance's audience.
+		unpairedInOpenRound?: Record<string, boolean>;
 		onOpenInfo?: () => void;
 	} = $props();
 
@@ -80,6 +95,30 @@
 				label: slotLabel(c),
 				seed: c.swiss_seed,
 				opponentLabel: opponentLabelOf(c.slot_id),
+			}));
+	}
+
+	// Pair-eligible: still playing Swiss and without a match in the open
+	// round — the client mirror of the server's SLOT_WITHDRAWN /
+	// SLOT_INACTIVE / ALREADY_PAIRED gates.
+	function isPairEligible(s: SlotStanding): boolean {
+		return (
+			!s.withdrawn &&
+			s.status === "active" &&
+			unpairedInOpenRound[s.slot_id] === true
+		);
+	}
+
+	// Unpaired slots have no pending opponent by definition, so the picker's
+	// "vs" column stays empty.
+	function pairCandidatesFor(s: SlotStanding) {
+		return standings
+			.filter((c) => c.slot_id !== s.slot_id && isPairEligible(c))
+			.map((c) => ({
+				slotId: c.slot_id,
+				label: slotLabel(c),
+				seed: c.swiss_seed,
+				opponentLabel: null,
 			}));
 	}
 
@@ -207,16 +246,35 @@
 										{statusBadge(s.status)}
 									</span>
 								{/if}
-								{#if isViewerAdmin && ((onWithdraw && onReinstate) || onSwap)}
+								{#if isViewerAdmin && ((onWithdraw && onReinstate) || onSwap || onAddMatch)}
 									<span class="ml-auto inline-flex items-center gap-1">
 										{#if onSwap && !s.withdrawn}
 											{@const eligible = isSwapEligible(s)}
-											<SwapPicker
+											<SlotPickerPopover
 												candidates={eligible ? swapCandidatesFor(s) : []}
 												{eligible}
 												disabled={busy}
+												actionLabel="Swap"
+												ariaLabel="Swap with player"
+												titleEnabled="Swap this player's seat with another same-division pending player"
+												titleIneligible="Can't swap — already has a result this phase"
+												titleEmpty="No swap-eligible players (others have results this round)"
 												onSelect={(otherSlotId) =>
 													onSwap?.(s.slot_id, otherSlotId)}
+											/>
+										{/if}
+										{#if onAddMatch && isPairEligible(s)}
+											<SlotPickerPopover
+												candidates={pairCandidatesFor(s)}
+												eligible={true}
+												disabled={busy}
+												actionLabel="Pair"
+												ariaLabel="Pair against player"
+												titleEnabled="Add a match to the open round between this player and a picked partner"
+												titleIneligible=""
+												titleEmpty="No other unpaired active players in this division"
+												onSelect={(otherSlotId) =>
+													onAddMatch?.(s.slot_id, otherSlotId)}
 											/>
 										{/if}
 										{#if onWithdraw && onReinstate}

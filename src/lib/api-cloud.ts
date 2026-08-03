@@ -1455,6 +1455,27 @@ export const cloudApi = {
 		}>;
 	},
 
+	// Admin-only late pairing: add a match between two unpaired, active,
+	// same-division slots to the still-open Swiss round — the catch-up game a
+	// substitute needs when they were reinstated after the round was paired.
+	// The map is auto-assigned by the same engine as round generation, and
+	// the round won't auto-close until the added match is reported. Caller
+	// refreshes (invalidateAll) rather than reading the returned match back.
+	addRoundMatch: async (
+		tournamentId: string,
+		roundId: string,
+		slotAId: string,
+		slotBId: string,
+		opts?: CallOpts,
+	): Promise<void> => {
+		await request(`/tournaments/${tournamentId}/rounds/${roundId}/matches`, {
+			...opts,
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ slot_a_id: slotAId, slot_b_id: slotBId }),
+		});
+	},
+
 	patchMatchMap: async (
 		tournamentId: string,
 		matchId: string,
