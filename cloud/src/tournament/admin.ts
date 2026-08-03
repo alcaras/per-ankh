@@ -2152,18 +2152,27 @@ export async function handleAddRoundMatch(
 	//
 	// Guarded write, not a plain INSERT: between the checks above and this
 	// statement, a concurrent report can close the round (generating the
-	// next one — which would then pair these very slots) or a concurrent
-	// add can pair one of the slots. The WHERE re-checks both invariants at
-	// insert time; meta.changes === 0 means we lost that race (same idiom
-	// as the claim-slot INSERT in player.ts). A narrower window survives
-	// inside maybeAdvanceAfterMatchReport, which reads its pending set and
-	// then batches close + next-round generation — an INSERT landing there
-	// leaves this match pending in a complete round: recoverable (it still
-	// reports normally), it just doesn't feed the next round's pairing.
-	// Numbered parameters throughout: NEXT_MATCH_NUMBER_SQL carries a bare
-	// `?`, which SQLite assigns max-used-index + 1 — with ?1–?6 before it,
-	// it becomes ?7 (the tournament id). Pick order reuses ?4 (slot_b:
-	// player listed second picks first), and the guards reuse ?2–?4.
+	// next one — which would then pair these very slots), a concurrent add
+	// can pair one of the slots, or a concurrent withdraw can retire one.
+	// The WHERE re-checks those three at insert time; meta.changes === 0
+	// means we lost that race (same idiom as the claim-slot INSERT in
+	// player.ts). Withdrawal is the one that would otherwise strand state:
+	// withdraw forfeits the slot's pending matches as it goes, so a match
+	// inserted just after that sweep is a pending match nobody will ever
+	// sweep, blocking the round with no way to close it but a fabricated
+	// result. SLOT_INACTIVE has no SQL form (it's computed from match
+	// history by computeRecord) and division can't change mid-swiss
+	// (cross-division moves lock at start), so those two stay TS-only
+	// above. A narrower window survives inside maybeAdvanceAfterMatchReport,
+	// which reads its pending set and then batches close + next-round
+	// generation — an INSERT landing there leaves this match pending in a
+	// complete round: recoverable (it still reports normally), it just
+	// doesn't feed the next round's pairing.
+	//
+	// Numbered parameters throughout, so nextMatchNumberSql is handed its
+	// index explicitly (?7, the tournament id) rather than inheriting one
+	// from parse order. Pick order reuses ?4 (slot_b: player listed second
+	// picks first), and the guards reuse ?2–?4.
 	const write = await env.SHARE_DB.prepare(
 		`INSERT INTO tournament_matches
 		   (match_id, round_id, slot_a_id, slot_b_id, map_pool_id, map_script,
@@ -2172,12 +2181,15 @@ export async function handleAddRoundMatch(
 		 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?4, 'pending', NULL,
 		        (SELECT COALESCE(MAX(m3.match_index), 0) + 1
 		         FROM tournament_matches m3 WHERE m3.round_id = ?2),
-		        ${NEXT_MATCH_NUMBER_SQL}
+		        ${nextMatchNumberSql("?7")}
 		 WHERE EXISTS (SELECT 1 FROM tournament_rounds r3
 		               WHERE r3.round_id = ?2 AND r3.status = 'in_progress')
 		   AND NOT EXISTS (SELECT 1 FROM tournament_matches m4
 		                   WHERE m4.round_id = ?2
-		                     AND (m4.slot_a_id IN (?3, ?4) OR m4.slot_b_id IN (?3, ?4)))`,
+		                     AND (m4.slot_a_id IN (?3, ?4) OR m4.slot_b_id IN (?3, ?4)))
+		   AND NOT EXISTS (SELECT 1 FROM tournament_slots s3
+		                   WHERE s3.slot_id IN (?3, ?4)
+		                     AND s3.withdrawn_at IS NOT NULL)`,
 	)
 		.bind(
 			matchId,
@@ -2190,21 +2202,34 @@ export async function handleAddRoundMatch(
 		)
 		.run();
 	if ((write.meta?.changes ?? 0) === 0) {
-		// Rare: distinguish which invariant broke for an accurate code.
+		// Rare: distinguish which invariant broke for an accurate code. Same
+		// order as the WHERE, so a lost race never reports the wrong reason.
 		const nowRound = await loadRound(env, roundId);
-		return nowRound?.status !== "in_progress"
-			? errorResponse(
-					"Round closed while the request was in flight",
+		if (nowRound?.status !== "in_progress") {
+			return errorResponse(
+				"Round closed while the request was in flight",
+				409,
+				cors,
+				"ROUND_CLOSED",
+			);
+		}
+		for (const slotId of [slot_a_id, slot_b_id]) {
+			const nowSlot = await loadSlotInTournament(env, slotId, tournamentId);
+			if (nowSlot?.withdrawn_at != null) {
+				return errorResponse(
+					"Cannot pair a withdrawn slot",
 					409,
 					cors,
-					"ROUND_CLOSED",
-				)
-			: errorResponse(
-					"Slot already has a match in this round",
-					409,
-					cors,
-					"ALREADY_PAIRED",
+					"SLOT_WITHDRAWN",
 				);
+			}
+		}
+		return errorResponse(
+			"Slot already has a match in this round",
+			409,
+			cors,
+			"ALREADY_PAIRED",
+		);
 	}
 	await bumpTournamentUpdatedAt(env, tournamentId);
 	await logTournamentAdminAction(env, a.userId, tournamentId, "match_added", {
@@ -2696,17 +2721,21 @@ async function downstreamBlocked(
 // tournament: MAX(existing) + 1. Evaluated per-INSERT inside the
 // round-generation D1 batch, so each statement sees the rows the prior
 // statements in the batch inserted — dense and append-only by construction.
-// Binds one param: the tournament_id.
-const NEXT_MATCH_NUMBER_SQL = `(SELECT COALESCE(MAX(m2.match_number), 0) + 1
+// Takes the tournament_id's placeholder: positional `?` by default, or an
+// explicit `?N` for callers that number their parameters — a bare `?` mixed
+// into a numbered statement would silently take max-used-index + 1, so the
+// index has to be stated rather than inferred from where this lands.
+const nextMatchNumberSql = (tournamentIdParam = "?") =>
+	`(SELECT COALESCE(MAX(m2.match_number), 0) + 1
 	FROM tournament_matches m2
 	JOIN tournament_rounds r2 ON r2.round_id = m2.round_id
-	WHERE r2.tournament_id = ?)`;
+	WHERE r2.tournament_id = ${tournamentIdParam})`;
 
 // Swiss / championship-transition variant: byes are never numbered (NULL).
 // Championship rounds 2+ can't bye, so buildChampionshipRoundStatements uses
-// the bare NEXT_MATCH_NUMBER_SQL instead. Binds two params in order: the match
+// the bare nextMatchNumberSql() instead. Binds two params in order: the match
 // status, then the tournament_id.
-const NEXT_MATCH_NUMBER_OR_NULL_FOR_BYE_SQL = `CASE WHEN ? = 'bye' THEN NULL ELSE ${NEXT_MATCH_NUMBER_SQL} END`;
+const NEXT_MATCH_NUMBER_OR_NULL_FOR_BYE_SQL = `CASE WHEN ? = 'bye' THEN NULL ELSE ${nextMatchNumberSql()} END`;
 
 // ----------------------------------------------------------------------
 // POST /v1/tournaments/:id/transition-championship
@@ -3176,7 +3205,7 @@ function buildChampionshipRoundStatements(
 				    pick_order_winner_slot_id, status, winner_slot_id, match_index,
 				    match_number)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?,
-				         ${NEXT_MATCH_NUMBER_SQL})`,
+				         ${nextMatchNumberSql()})`,
 			).bind(
 				matchId,
 				roundId,

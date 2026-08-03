@@ -76,6 +76,13 @@ describe("add match to an open swiss round", () => {
 	it("pairs two reinstated slots into the open round and keeps it open until they report", async () => {
 		const { t, subA, subB, r1, r2, r1Matches } = await substitutionScenario();
 
+		// Captured before the add so match_number can be pinned to an exact
+		// value below, not just "non-null".
+		const maxNumberBefore = Math.max(
+			0,
+			...((await t.matches()) as MatchRow[]).map((m) => m.match_number ?? 0),
+		);
+
 		const res = await request.post({
 			path: `/v1/tournaments/${t.tournamentId}/rounds/${r2.round_id}/matches`,
 			as: t.admin,
@@ -89,7 +96,10 @@ describe("add match to an open swiss round", () => {
 		// Derived fields follow round generation's conventions: next index in
 		// the round, next global match number, pick order to slot_b.
 		expect(match.match_index).toBe(2);
-		expect(match.match_number).not.toBeNull();
+		// Exact, not merely non-null: nextMatchNumberSql is handed an explicit
+		// ?7, and a wrong index would scope its MAX() to no rows and restart
+		// the sequence at 1 rather than fail loudly.
+		expect(match.match_number).toBe(maxNumberBefore + 1);
 		expect(match.pick_order_winner_slot_id).toBe(subB);
 		// Map comes from the same engine as generation: an instance of the
 		// pool whose script neither substitute saw in their round-1 seat.
