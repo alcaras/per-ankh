@@ -14,12 +14,33 @@
 -- stance: discord_username is deliberately absent from every public payload, so
 -- the URL is never derived from an identity the user didn't publish.
 --
+-- Correction (0040): the value is no longer opt-in, and the PII argument above
+-- now rests on a different footing. A slug is derived from the user's effective
+-- display name (COALESCE(alias, display_name)) at first login and again for
+-- existing rows by `./per-ankh admin backfill-slugs`. That name is already
+-- rendered in every public payload, so nothing newly published — but a slug is
+-- now issued rather than consented to, and /u/<name> is an account-existence
+-- oracle keyed on display names, which is accepted. discord_username remains
+-- absent from every public payload and is never a derivation source. A name
+-- that doesn't survive slugification (empty, under 3 chars, over 30, reserved,
+-- already taken) yields no slug at all, so NULL stays a normal state.
+--
 -- Backfill: none, and there can be none — a slug is a consent decision, not a
 -- derivation from existing columns. NULL means unclaimed, which is every row
 -- today; those profiles keep being served at /users/<user_id>, which stays a
 -- permanent permalink either way. SQLite treats NULLs as distinct under UNIQUE,
 -- so any number of rows may sit unclaimed. Set-once in v1: the claim endpoint's
 -- UPDATE is conditional on `slug IS NULL`, and only the admin CLI clears it.
+--
+-- Correction (0040): backfill is exactly what a derived slug allows, and it
+-- runs from the admin CLI (`./per-ankh admin backfill-slugs [--dry-run]`) and
+-- not from a migration — slugification needs a regex, which SQLite has not got.
+-- Set-once is gone with it: users rename and unset through POST/DELETE
+-- /v1/users/me/slug, and the `slug IS NULL` predicate that bounded successes to
+-- one per account is replaced by a 7-day cooldown on users.slug_changed_at
+-- (0040), which keeps that bound race-safe and in the same statement. A
+-- released name returns to the pool for anyone to claim, so /u/<name> may
+-- retarget — the permalink at /users/<user_id> does not.
 --
 -- Index: UNIQUE *is* the uniqueness enforcement the claim's 409 SLUG_TAKEN
 -- rides on — a race-safe constraint, not a convenience over a pre-SELECT, since

@@ -2,21 +2,21 @@
 // as plain TypeScript, with no valibot import.
 //
 // It sits beside schemas/user.ts, which wraps it in a valibot pipe, rather than
-// inside it, because the claim endpoint is not the only writer of this column:
-// `./per-ankh admin set-slug` writes it too, and must accept exactly what the
-// endpoint accepts. An operator minting a name the endpoint would have refused
-// is permanent — the user can't change it — and the reserved list is an
-// impersonation control, so a drifted copy of it is the failure that matters.
-// valibot is a cloud/ dependency and scripts/ can't resolve it, so a rule
-// shared across that boundary has to be valibot-free. Sharing the rule and not
-// the wrapper is what keeps the regex, the reserved list, and the messages from
+// inside it, because the set endpoint is not the only writer of this column:
+// `./per-ankh admin set-slug` and `./per-ankh admin backfill-slugs` write it
+// too, and must accept exactly what the endpoint accepts. The reserved list is
+// an impersonation control and the backfill applies it unattended across every
+// existing row, so a drifted copy of it is the failure that matters. valibot is
+// a cloud/ dependency and scripts/ can't resolve it, so a rule shared across
+// that boundary has to be valibot-free. Sharing the rule and not the wrapper is
+// what keeps the regex, the reserved list, the slugifier, and the messages from
 // existing twice.
 
 // 3-30 chars: lowercase alphanumerics with internal hyphens. Its own regex
 // rather than the exported tournament `slugRegex` (schemas/tournament.ts): the
 // same shape by design, but 3-30 chars instead of 1-64 and no trailing hyphen,
-// because this one is a name a person picks once for themselves and then can't
-// change, not a machine-derivable label with a disambiguating suffix.
+// because this one is a person's name in a URL they hand to other people, not a
+// machine-derivable label with a disambiguating suffix.
 export const userSlugRegex = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 // Reserved for impersonation and brand reasons ONLY — not route safety. The
@@ -65,4 +65,34 @@ export function userSlugError(slug: string): string | null {
 	if (!userSlugRegex.test(slug)) return USER_SLUG_FORMAT_MESSAGE;
 	if (RESERVED_USER_SLUGS.has(slug)) return USER_SLUG_RESERVED_MESSAGE;
 	return null;
+}
+
+// A display name reduced to the shape a slug has to have — "Marcus Licinius" →
+// "marcus-licinius". This is what gives a new account a profile URL without
+// asking for one (cloud/src/auth.ts, on the first-login INSERT) and what fills
+// them in for existing rows (`./per-ankh admin backfill-slugs`). Both callers
+// run it through userSlugError afterwards and skip the assignment on any
+// complaint, so this function's only job is the character rewrite: it is
+// allowed to return "" or "ab" or a 40-char string, and never invents
+// characters to reach a valid one.
+//
+// Deliberately no numeric-suffix disambiguation, and no truncation to fit the
+// 30-char ceiling. Both would manufacture a name the user never wrote —
+// "marcus-licinius-crassu" or "marcus-4" is not what anyone would hand out —
+// and no slug is a fine outcome: /users/<user_id> serves every profile, and the
+// Settings card is there for a name that didn't survive this.
+//
+// Whitespace → hyphen happens BEFORE the charset strip, so word boundaries
+// survive as separators instead of collapsing ("Two Words" → "two-words", not
+// "twowords"). Everything outside [a-z0-9-] is then dropped rather than
+// transliterated — a name written in a non-Latin script yields "" and gets no
+// slug, which is the honest answer; romanizing it would put a name in a public
+// URL that its owner didn't write.
+export function slugifyDisplayName(displayName: string): string {
+	return displayName
+		.toLowerCase()
+		.replace(/\s+/g, "-")
+		.replace(/[^a-z0-9-]/g, "")
+		.replace(/-+/g, "-")
+		.replace(/^-+|-+$/g, "");
 }

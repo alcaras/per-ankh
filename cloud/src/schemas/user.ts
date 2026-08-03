@@ -1,5 +1,5 @@
 // Valibot schemas for the user's own account: the /v1/auth/settings
-// preferences and the /v1/users/me/slug profile-URL claim.
+// preferences and the /v1/users/me/slug profile URL.
 
 import * as v from "valibot";
 
@@ -27,12 +27,13 @@ export const UserSettingsSchema = v.object({
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
 // The user slug — the <slug> in per-ankh.app/u/<slug>. The rule itself lives
-// in ./user-slug, valibot-free, because the admin CLI writes this same column
-// and can't import valibot; this is only the pipe that puts it on the wire.
-// Normalization (trim → lowercase) runs BEFORE the rules, so a user may type
-// mixed case and still claim the name they meant, and the rules see the value
-// that would be stored. Two actions rather than one so each rejection carries
-// its own message — the claim endpoint shows them to the user verbatim.
+// in ./user-slug, valibot-free, because the admin CLI and the login path's
+// slugifier apply the same rule and can't import valibot; this is only the pipe
+// that puts it on the wire. Normalization (trim → lowercase) runs BEFORE the
+// rules, so a user may type mixed case and still claim the name they meant, and
+// the rules see the value that would be stored. Two actions rather than one so
+// each rejection carries its own message — the endpoint shows them to the user
+// verbatim.
 export const SlugSchema = v.pipe(
 	v.string(),
 	v.transform(normalizeUserSlug),
@@ -40,10 +41,10 @@ export const SlugSchema = v.pipe(
 	v.check((slug) => !RESERVED_USER_SLUGS.has(slug), USER_SLUG_RESERVED_MESSAGE),
 );
 
-// The claim request envelope. The field is a bare string here, validated
+// The set request envelope. The field is a bare string here, validated
 // against SlugSchema by the handler, so a malformed *body* (missing key, wrong
 // type) and an invalid *slug* stay distinguishable on the wire — see
-// handleClaimSlug in cloud/src/users.ts.
+// handleSetSlug in cloud/src/users.ts. The release path (DELETE) has no body.
 export const ClaimSlugSchema = v.object({
 	slug: v.string(),
 });

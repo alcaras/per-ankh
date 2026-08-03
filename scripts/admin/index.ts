@@ -34,6 +34,7 @@ function printHelp(): void {
 			"  clear-alias <user_id>            Remove a user's display alias",
 			"  set-slug <user_id> <slug>        Set a user's profile URL (per-ankh.app/u/<slug>)",
 			"  clear-slug <user_id>             Remove it, freeing the name for anyone to claim",
+			"  backfill-slugs [--dry-run]       Derive profile URLs for users who have none",
 			"  games [--limit N] [--user U]     List recent cloud games",
 			"  game <game_id>                   Show one game's detail",
 			"  delete-game <game_id>            Delete one game (D1 + R2); account stays",
@@ -143,6 +144,8 @@ export async function main(argv: string[]): Promise<void> {
 			return users.runSetSlug(subArgs, opts);
 		case "clear-slug":
 			return users.runClearSlug(subArgs, opts);
+		case "backfill-slugs":
+			return users.runBackfillSlugs(subArgs, opts);
 		case "add-channel":
 			return channels.runAddChannel(subArgs, opts);
 		case "remove-channel":

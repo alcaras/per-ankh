@@ -90,8 +90,9 @@ import {
 } from "./tournament/player";
 import { handleUserStats } from "./stats/handlers";
 import {
-	handleClaimSlug,
 	handlePublicUserSearch,
+	handleReleaseSlug,
+	handleSetSlug,
 	handleUserBySlug,
 	handleUserProfile,
 	handleUserSearch,
@@ -404,14 +405,22 @@ const ROUTES: RouteSpec[] = [
 		handler: (r, e, m) => handleRemoveOnlineId(decodeURIComponent(m![1]), r, e),
 	},
 
-	// Claim the caller's profile URL (/u/<slug>) — account self-service, so
-	// it sits with the other /v1/users/me/* account routes rather than with
-	// the public profile reads. Set-once; the handler owns the conflicts.
+	// Set or release the caller's profile URL (/u/<slug>) — account
+	// self-service, so it sits with the other /v1/users/me/* account routes
+	// rather than with the public profile reads. One path, two methods: POST
+	// claims or renames, DELETE releases. The handlers own the conflicts and
+	// the rename cooldown.
 	{
 		method: "POST",
 		match: { kind: "path", path: "/v1/users/me/slug" },
 		route: "POST /v1/users/me/slug",
-		handler: (r, e) => handleClaimSlug(r, e),
+		handler: (r, e) => handleSetSlug(r, e),
+	},
+	{
+		method: "DELETE",
+		match: { kind: "path", path: "/v1/users/me/slug" },
+		route: "DELETE /v1/users/me/slug",
+		handler: (r, e) => handleReleaseSlug(r, e),
 	},
 
 	// CSP violation reports — unauthenticated; the browser POSTs here

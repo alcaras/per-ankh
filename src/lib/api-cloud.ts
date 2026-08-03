@@ -33,10 +33,11 @@ export interface UserSearchResult {
 export interface PublicUserSearchResult {
 	user_id: string;
 	display_name: string;
-	// The claimed profile slug, null while unclaimed — the one identifier here
-	// that is safe to publish, being user-chosen and opt-in. Also a match key:
-	// a user is findable by their slug, and holding one makes them findable at
-	// all (it counts as public activity for the endpoint's scoping).
+	// The profile slug, null for a user who has none — the one identifier here
+	// that is safe to publish, being derived from the display name the row
+	// already carries. Also a match key: a user is findable by their slug, and
+	// holding one makes them findable at all (it counts as public activity for
+	// the endpoint's scoping).
 	slug: string | null;
 	avatar_url: string;
 }
@@ -98,10 +99,11 @@ export interface UserProfile {
 	user_id: string;
 	display_name: string;
 	avatar_url: string;
-	// The user's claimed profile URL (`/u/<slug>`), or null while unclaimed —
-	// which is the default, since claiming is opt-in. Pass the whole profile to
-	// `profileHref` rather than reading this directly: that helper is where the
-	// slug-vs-permalink choice lands (issue #186 B6).
+	// The user's profile URL (`/u/<slug>`), or null for one who has none —
+	// a display name that slugified to nothing or collided, or a slug the user
+	// released. Pass the whole profile to `profileHref` rather than reading this
+	// directly: that helper is where the slug-vs-permalink choice lands (issue
+	// #186 B6).
 	slug: string | null;
 	// All-time stats for the profile-header card — over ALL the user's
 	// saves (visibility-scoped to the viewer), independent of the scope
@@ -132,8 +134,9 @@ export interface UserMe {
 	// be entered under.
 	discord_username: string;
 	avatar_url: string;
-	// The caller's claimed profile URL (`/u/<slug>`), null until they claim
-	// one. Set-once, so a non-null value never changes under the client.
+	// The caller's profile URL (`/u/<slug>`), null when they have none. Derived
+	// at signup and renameable, so the account page treats this as the current
+	// value rather than a permanent one.
 	slug: string | null;
 	// True iff the user is on the tournament allowlist, i.e. may *create*
 	// tournaments. Drives the create-button visibility on /tournaments.
@@ -592,10 +595,11 @@ export const cloudApi = {
 		}
 	},
 
-	// The same profile, addressed by the user's claimed slug — what /u/<slug>
-	// loads. One builder serves both routes on the Worker, so the payload is
-	// identical to getUserProfile's; only the key differs. Unknown slugs 404,
-	// returned as null for the same reason as above.
+	// The same profile, addressed by the user's slug — what /u/<slug> loads. One
+	// builder serves both routes on the Worker, so the payload is identical to
+	// getUserProfile's; only the key differs. Unknown slugs 404, returned as
+	// null for the same reason as above — including a slug that was released
+	// since the link was made, which is a normal outcome and not an error.
 	getUserProfileBySlug: async (
 		slug: string,
 		opts?: CallOpts,
@@ -609,16 +613,27 @@ export const cloudApi = {
 		}
 	},
 
-	// Claim the caller's profile URL. Set-once — a user who already has one
-	// gets a 409, as does a name someone else took; a malformed or reserved
-	// name gets a 400. All three arrive as ApiError with a message written to
-	// be shown to the user verbatim.
+	// Set the caller's profile URL — claiming one for an account that has none,
+	// or renaming the one it has. A name someone else holds gets a 409, a
+	// malformed or reserved one a 400, and a rename inside the cooldown a 429.
+	// All arrive as ApiError with a message written to be shown to the user
+	// verbatim, the 429's naming how long is left.
 	//
 	// The Worker trims and lowercases before validating, so mixed-case input
 	// is legal; it returns the stored value, which is what callers should
 	// render rather than what was typed.
-	claimSlug: (slug: string, opts?: CallOpts): Promise<{ slug: string }> =>
+	setSlug: (slug: string, opts?: CallOpts): Promise<{ slug: string }> =>
 		postJson<{ slug: string }>("/users/me/slug", { slug }, opts),
+
+	// Release the caller's profile URL, leaving them on the /users/<user_id>
+	// permalink. Idempotent, and deliberately not subject to the rename
+	// cooldown — but it does start one, so the next claim waits.
+	//
+	// The released name goes back into the pool immediately, so anyone may take
+	// it and old /u/<name> links can end up pointing at someone else.
+	releaseSlug: async (opts?: CallOpts): Promise<void> => {
+		await request("/users/me/slug", { ...opts, method: "DELETE" });
+	},
 
 	// Recent videos merged across the target user's linked channels, newest
 	// first. Public read; feeds the profile "Videos" tab.

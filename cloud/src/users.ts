@@ -1,7 +1,7 @@
 // User-table-shaped endpoints: two searches — the tournament admin's
 // autocomplete and the header's people search — plus the public profile
 // (the /users/[user_id] page chrome), served by user_id or by slug, and the
-// slug claim behind it.
+// slug set/release pair behind it.
 //
 // Anything more user-table-shaped that grows beyond a few hundred lines
 // can split into its own subdir.
@@ -275,12 +275,22 @@ export async function handlePublicUserSearch(
 	// Scoped to users who made something public: a session-gated prefix index
 	// over the whole users table would be enumeration with a rate limiter on
 	// it, and the product rule is that people are discoverable through the
-	// things they chose to publish. Claiming a profile URL is itself such a
-	// choice — a deliberate, opt-in act of publishing a name — so `slug IS NOT
-	// NULL` leads the disjunction; a user who claimed one and has done nothing
-	// else must still be findable, or the claim buys them a URL nobody can
-	// reach. The other three legs each seek on a user_id index rather than
-	// scanning — idx_games_user (0002) filtered down to is_public,
+	// things they chose to publish. `slug IS NOT NULL` leads the disjunction so
+	// that a user whose profile URL is their only presence here is still
+	// findable — the URL is no use to them if nothing can reach it.
+	//
+	// That leg used to carry a second argument, that claiming a slug was itself
+	// the deliberate act of publishing a name. It isn't one any more: a slug is
+	// derived from the display name at first login, so this leg is true for
+	// nearly every account and the scoping above no longer narrows much. The
+	// practical reach of this endpoint is now "anyone whose display name
+	// slugified" — the same accepted consequence as /u/<slug> being an
+	// account-existence oracle, and it publishes nothing that a display-name
+	// prefix search over public games didn't already.
+	//
+	// The other three legs still matter — they carry the accounts no slug
+	// reached — and each seeks on a user_id index rather than
+	// scanning: idx_games_user (0002) filtered down to is_public,
 	// idx_slots_user (0006), and user_video_channels' (user_id, platform) PK
 	// (0031); verified with EXPLAIN QUERY PLAN against representative row
 	// counts. The outer scan over `users` is the same one handleUserSearch
@@ -325,9 +335,10 @@ export async function handlePublicUserSearch(
 			users: (rows.results ?? []).map((r) => ({
 				user_id: r.user_id,
 				display_name: r.display_name,
-				// The one identifier here that IS safe to publish: user-chosen and
-				// opt-in, unlike the Discord handle this endpoint refuses to expose.
-				// It lets the picked row navigate straight to /u/<slug>.
+				// The one identifier here that IS safe to publish: derived from the
+				// display name the row already carries, unlike the Discord handle
+				// this endpoint refuses to expose. It lets the picked row navigate
+				// straight to /u/<slug>.
 				slug: r.slug,
 				avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
 			})),
@@ -383,9 +394,14 @@ export async function handleUserProfile(
 }
 
 // GET /v1/users/by-slug/:slug — the same profile, resolved by the user's
-// claimed slug. Public, no auth, no rate limit, exactly like the id route
+// profile slug. Public, no auth, no rate limit, exactly like the id route
 // (the comment inside buildUserProfile explains why the hottest public read
-// takes no events INSERT).
+// takes no events INSERT). Since slugs are derived from display names, that
+// makes this an account-existence oracle keyed on names — accepted, and the
+// reason the route stays a plain read with nothing to enumerate beyond it.
+//
+// A slug is only ever the CURRENT holder's: releasing one frees it, so a stale
+// /u/<name> either 404s or resolves to whoever holds it now.
 //
 // A malformed slug never arrives: the route regex only admits the stored
 // lowercase shape, so anything else falls through the router to a 404 without
@@ -509,9 +525,10 @@ async function buildUserProfile(
 		user_id: row.user_id,
 		display_name: row.display_name,
 		avatar_url: buildAvatarUrl(row.discord_id, row.avatar_hash),
-		// The claimed profile URL, or null for the unclaimed majority. Carried
-		// on the payload so a link site that already holds the profile can emit
-		// /u/<slug> directly instead of the id URL plus a redirect hop.
+		// The profile URL, or null for a user whose display name yielded none and
+		// who hasn't set one. Carried on the payload so a link site that already
+		// holds the profile can emit /u/<slug> directly instead of the id URL
+		// plus a redirect hop.
 		slug: row.slug,
 		summary: {
 			total_games: countsRow?.total ?? 0,
@@ -524,31 +541,148 @@ async function buildUserProfile(
 	};
 }
 
-// POST /v1/users/me/slug — claim the caller's profile URL.
+// POST /v1/users/me/slug — set the caller's profile URL, claiming a name for an
+// account that has none or renaming the one it has. DELETE releases it.
 //
-// Set-once by design (issue #186 Decision 5): a self-service rename is a
-// support-burden tradeoff we're not taking in v1, and an operator can still
-// clear/re-set via the admin CLI. That makes the write a conditional UPDATE
-// rather than a plain one, and it makes the two conflicts genuinely different
-// answers — "you already have one" vs. "someone else has that one" — so they
-// get distinct codes for the Settings card to phrase differently.
+// Most accounts arrive here already holding a slug: one is derived from the
+// display name at first login (assignDerivedUserSlug, identity.ts). So this
+// endpoint's real job is the correction — a name that slugified into something
+// its owner doesn't want, collided with an existing one, or didn't survive at
+// all — plus renames afterwards. It has to work identically for a caller with a
+// slug and one without, which is why "you already have one" is no longer an
+// error condition and SLUG_ALREADY_SET is gone.
 //
-// Rate-limited on *attempts*, not successes. The conditional UPDATE bounds how
-// often this can succeed (once per account), but not how often it can be
-// called: until a user has claimed, every well-formed request runs a real D1
-// UPDATE that the unique index rejects, so failed claims are unbounded writes
-// and a name-availability oracle. Slugs are public by design, so the oracle is
-// cheap — the writes are the reason for the budget.
+// A released or overwritten name goes straight back into the pool, so
+// /u/<old-name> can later belong to someone else. Accepted, and the same trade
+// `admin clear-slug` already makes: /users/<user_id> is the permanent permalink
+// and every internal link resolves through it (profileHref).
+//
+// Rate-limited on *attempts*, not successes, and the two bounds are separate on
+// purpose. Every well-formed request is a real D1 write whether or not it
+// lands — a name-availability probe, cheap in itself since slugs are public,
+// but unbounded writes — so the hourly budget counts calls. How often the
+// column can actually CHANGE is bounded instead by the cooldown predicate
+// below, in the same statement as the write, which is where the set-once
+// `slug IS NULL` predicate used to sit. Successes stay bounded by a race-safe
+// property of the UPDATE rather than by a count someone could race.
 //
 // Hence its own counter (`slug_claim_attempt`, 24h retention) rather than
-// counting `slug_claim`: that row is the durable success record and there is at
-// most one, so it can't bound anything. Claiming is a once-per-account act, so
-// the ceiling only has to leave room for a few rejected names in a sitting.
+// counting `slug_claim` rows: those are the durable success record, at most one
+// a week, so they can't bound a per-hour budget. The ceiling only has to leave
+// room for a few rejected names in a sitting.
 export const SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR = 15;
+
+// How long after changing their profile URL a user waits before changing it
+// again. What's being priced is name-cycling: a released name is immediately
+// claimable by anyone, so a user who renames on a whim leaves a trail of live
+// /u/<name> links pointing at whoever picks each one up next, and a determined
+// one could park on a series of recognizable names. A week makes a rename a
+// decision without making it a commitment — long enough that the churn above is
+// not a usable pattern, short enough that a typo costs a wait rather than a
+// support ticket.
+//
+// The clock starts at the last *self-service* change, so the derived slug a new
+// account is handed costs nothing: users.slug_changed_at is NULL until this
+// endpoint writes it (migration 0040), which makes the first correction — the
+// case this endpoint mostly exists for — immediate. Operator writes
+// (`admin set-slug`/`clear-slug`) leave it alone for the same reason.
+export const SLUG_RENAME_COOLDOWN_DAYS = 7;
 
 export interface ClaimSlugEnv extends UserProfileEnv, EventsEnv {}
 
-export async function handleClaimSlug(
+// The cooldown as the pair of things every reader of it needs: the SQLite
+// modifier for the UPDATE predicate, and the JS milliseconds for the "try again
+// in …" message. One constant, so a changed window can't move one and not the
+// other.
+const COOLDOWN_MODIFIER = `-${SLUG_RENAME_COOLDOWN_DAYS} days`;
+const COOLDOWN_MS = SLUG_RENAME_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+interface SlugStateRow {
+	slug: string | null;
+	slug_changed_at: string | null;
+}
+
+// How much of the cooldown is left, phrased for a user. `changedAt` is D1's
+// datetime('now') text ("YYYY-MM-DD HH:MM:SS", always UTC) — reassembled into
+// an ISO instant rather than handed to the Date parser as-is, which would read
+// it as local time and shift the answer by the runtime's offset.
+function cooldownMessage(changedAt: string): string {
+	const readyAt = new Date(`${changedAt.replace(" ", "T")}Z`).getTime();
+	const msLeft = readyAt + COOLDOWN_MS - Date.now();
+	const hoursLeft = Math.ceil(msLeft / (60 * 60 * 1000));
+	const when =
+		hoursLeft > 48
+			? `${Math.ceil(hoursLeft / 24)} days`
+			: hoursLeft > 1
+				? `${hoursLeft} hours`
+				: "an hour";
+	return `You changed your profile URL recently — you can change it again in ${when}`;
+}
+
+// The attempts budget, shared by both writers of this column. Returns the 429
+// response when the caller is over it, or null to proceed — and spends one
+// attempt as it goes, since a rejected write is exactly the case the budget
+// exists for and spending it must not depend on the outcome.
+//
+// The counter row is metadata-free and fire-and-forget: which names a user
+// tried is not worth retaining, and the ones that landed are recorded by
+// slug_claim / slug_release below.
+async function spendSlugAttempt(
+	env: ClaimSlugEnv,
+	userId: string,
+	cors: Record<string, string>,
+): Promise<Response | null> {
+	const attempts = await countEventsSince(
+		env.EVENTS_DB,
+		"slug_claim_attempt",
+		"user_id",
+		userId,
+	);
+	if (attempts >= SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR) {
+		return errorResponse(
+			"Too many profile URL attempts — try again later",
+			429,
+			cors,
+			"RATE_LIMIT_SLUG_CLAIM",
+		);
+	}
+
+	env.EVENTS_DB.prepare(
+		`INSERT INTO events (event_type, user_id) VALUES ('slug_claim_attempt', ?)`,
+	)
+		.bind(userId)
+		.run()
+		.catch((e: unknown) => {
+			logError("slug_claim_attempt_audit_failed", e, { user_id: userId });
+		});
+
+	return null;
+}
+
+// The durable record of a change to this column, awaited rather than
+// fire-and-forget: an un-awaited write can be canceled by response teardown
+// (issue #75), and with renames in play this is the only trace of which names
+// have been held by whom — the users row shows the current value only, and a
+// name released here is claimable by anyone from the next request onward.
+//
+// The .catch keeps a failed audit from failing a change that has committed.
+async function auditSlugChange(
+	env: ClaimSlugEnv,
+	userId: string,
+	eventType: "slug_claim" | "slug_release",
+	metadata: Record<string, string | null>,
+): Promise<void> {
+	await env.EVENTS_DB.prepare(
+		`INSERT INTO events (event_type, user_id, metadata) VALUES (?, ?, ?)`,
+	)
+		.bind(eventType, userId, JSON.stringify(metadata))
+		.run()
+		.catch((e: unknown) => {
+			logError(`${eventType}_audit_failed`, e, { user_id: userId });
+		});
+}
+
+export async function handleSetSlug(
 	request: Request,
 	env: ClaimSlugEnv,
 ): Promise<Response> {
@@ -560,26 +694,14 @@ export async function handleClaimSlug(
 
 	// Budget first, same ordering as the two searches: a hammered account fails
 	// before any body parse, DB write, or counter insert.
-	const attempts = await countEventsSince(
-		env.EVENTS_DB,
-		"slug_claim_attempt",
-		"user_id",
-		session.data.user_id,
-	);
-	if (attempts >= SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR) {
-		return errorResponse(
-			"Too many profile URL attempts — try again later",
-			429,
-			cors,
-			"RATE_LIMIT_SLUG_CLAIM",
-		);
-	}
+	const overBudget = await spendSlugAttempt(env, session.data.user_id, cors);
+	if (overBudget) return overBudget;
 
 	// Shared parse for the envelope — it carries the Content-Type check that
 	// keeps a form-encoded cross-origin POST off this endpoint. The slug field
 	// is then validated on its own so a bad *name* answers INVALID_SLUG with
 	// the format rule, rather than the generic INVALID_BODY a schema failure
-	// inside parseJsonBody would produce; the claim UI renders the message
+	// inside parseJsonBody would produce; the Settings card renders the message
 	// verbatim, so it has to read as advice.
 	const body = await parseJsonBody(request, ClaimSlugSchema, cors);
 	if (!body.ok) return body.response;
@@ -595,34 +717,40 @@ export async function handleClaimSlug(
 	}
 	const slug = validated.output;
 
-	// Counter row, written before the write it bounds — a rejected claim is
-	// exactly the case the budget exists for, so spending it must not depend on
-	// the outcome. Fire-and-forget and metadata-free: which names a user tried
-	// is not worth retaining, and the successful one is recorded by slug_claim
-	// below.
-	env.EVENTS_DB.prepare(
-		`INSERT INTO events (event_type, user_id) VALUES ('slug_claim_attempt', ?)`,
-	)
-		.bind(session.data.user_id)
-		.run()
-		.catch((e: unknown) => {
-			logError("slug_claim_attempt_audit_failed", e, {
-				user_id: session.data.user_id,
-			});
-		});
-
-	// The `slug IS NULL` predicate is what makes this set-once: a user who
-	// already claimed one matches no row. Uniqueness is the index's job, not a
-	// pre-SELECT's — two concurrent claims of the same name would both pass a
-	// check-then-write.
+	// Read-then-write in one batch, which D1 runs as a transaction — so the
+	// pre-image is the state the UPDATE decided against, not a racing read of
+	// it. That pre-image is doing two jobs: it names the slug being released
+	// (for the audit row, the only place a released name is recorded) and it
+	// distinguishes the two reasons the UPDATE can match nothing, which the
+	// UPDATE itself can't tell apart.
+	//
+	// The predicates, in the order they retire:
+	//   * `slug IS NOT ?` — re-submitting the name you already hold changes
+	//     nothing, so it must not spend a week of cooldown on a no-op. NULL-safe
+	//     `IS NOT`, since the common caller has no slug at all.
+	//   * the cooldown pair — successor to the set-once `slug IS NULL`, and it
+	//     keeps that predicate's property: how often this can SUCCEED is a
+	//     race-safe fact about the statement rather than a count two concurrent
+	//     requests could both pass.
+	// Uniqueness stays the index's job for the same reason — two simultaneous
+	// claims of one name would both clear a pre-SELECT.
+	let before: SlugStateRow | undefined;
 	let changes: number;
 	try {
-		const result = await env.SHARE_DB.prepare(
-			`UPDATE users SET slug = ? WHERE user_id = ? AND slug IS NULL`,
-		)
-			.bind(slug, session.data.user_id)
-			.run();
-		changes = result.meta?.changes ?? 0;
+		const [read, write] = await env.SHARE_DB.batch<SlugStateRow>([
+			env.SHARE_DB.prepare(
+				`SELECT slug, slug_changed_at FROM users WHERE user_id = ?`,
+			).bind(session.data.user_id),
+			env.SHARE_DB.prepare(
+				`UPDATE users SET slug = ?, slug_changed_at = datetime('now')
+				 WHERE user_id = ?
+				   AND slug IS NOT ?
+				   AND (slug_changed_at IS NULL
+				        OR slug_changed_at <= datetime('now', ?))`,
+			).bind(slug, session.data.user_id, slug, COOLDOWN_MODIFIER),
+		]);
+		before = read.results[0];
+		changes = write.meta?.changes ?? 0;
 	} catch (e) {
 		if (isUniqueViolation(e, "users.slug")) {
 			return errorResponse(
@@ -635,31 +763,87 @@ export async function handleClaimSlug(
 		throw e;
 	}
 
+	// No row behind a live session: the account was deleted (admin nuke-user)
+	// while it was signed in. The session no longer identifies anyone, and 401
+	// is what the client already knows to bounce on.
+	if (!before) {
+		return errorResponse("Authentication required", 401, cors, "UNAUTHORIZED");
+	}
+
 	if (changes === 0) {
+		// Already yours — idempotent, so a double-submit reads as success rather
+		// than as a cooldown the user didn't spend.
+		if (before.slug === slug) return jsonResponse({ slug }, 200, cors);
+
+		// Which leaves the cooldown, and `slug_changed_at` is necessarily set:
+		// the row exists and the value would change, so a NULL there would have
+		// satisfied every predicate and matched. Asserted rather than branched
+		// on — a fallback message here would be for a state the transaction
+		// rules out.
 		return errorResponse(
-			"Your profile URL is already set and can't be changed — contact an admin",
-			409,
+			cooldownMessage(before.slug_changed_at!),
+			429,
 			cors,
-			"SLUG_ALREADY_SET",
+			"RATE_LIMIT_SLUG_RENAME",
 		);
 	}
 
-	// Awaited, unlike the searches' fire-and-forget audits above: this one is
-	// a durable record of a once-per-account, irreversible-to-the-user change,
-	// and an un-awaited write can be canceled by response teardown (issue #75).
-	// The .catch keeps a failed audit from failing a claim that has already
-	// committed.
-	await env.EVENTS_DB.prepare(
-		`INSERT INTO events (event_type, user_id, metadata)
-		 VALUES ('slug_claim', ?, ?)`,
-	)
-		.bind(session.data.user_id, JSON.stringify({ slug }))
-		.run()
-		.catch((e: unknown) => {
-			logError("slug_claim_audit_failed", e, {
-				user_id: session.data.user_id,
-			});
-		});
+	await auditSlugChange(env, session.data.user_id, "slug_claim", {
+		slug,
+		previous_slug: before.slug,
+	});
 
 	return jsonResponse({ slug }, 200, cors);
+}
+
+// DELETE /v1/users/me/slug — release the caller's profile URL, leaving them at
+// the /users/<user_id> permalink until they set another.
+//
+// Deliberately NOT gated by the rename cooldown, unlike the setter. The one
+// thing a user must always be able to do is take their name back out of a
+// public URL — a name they were handed at signup rather than chose, at that —
+// and making that wait a week to satisfy the symmetry would be the wrong side
+// of the trade. It still STAMPS the cooldown, which is what stops
+// release-then-claim from being the bypass that makes the setter's gate
+// decorative.
+//
+// 204 and idempotent, matching DELETE /v1/users/me/online-ids/:id: the new
+// state is "no slug" whether or not this call is the one that made it so, and
+// the account page has nothing to read back.
+export async function handleReleaseSlug(
+	request: Request,
+	env: ClaimSlugEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const session = await sessionFromRequest(env, request);
+	if (!session) {
+		return errorResponse("Authentication required", 401, cors, "UNAUTHORIZED");
+	}
+
+	// Same budget as the setter, and for the same reason: this is the column's
+	// other writer, and a hammered account shouldn't get unbounded writes here
+	// either.
+	const overBudget = await spendSlugAttempt(env, session.data.user_id, cors);
+	if (overBudget) return overBudget;
+
+	// Same read-then-write batch as the setter — the pre-image is what names the
+	// released slug for the audit row. `slug IS NOT NULL` keeps a repeat call
+	// from restamping the cooldown on a no-op.
+	const [read, write] = await env.SHARE_DB.batch<SlugStateRow>([
+		env.SHARE_DB.prepare(
+			`SELECT slug, slug_changed_at FROM users WHERE user_id = ?`,
+		).bind(session.data.user_id),
+		env.SHARE_DB.prepare(
+			`UPDATE users SET slug = NULL, slug_changed_at = datetime('now')
+			 WHERE user_id = ? AND slug IS NOT NULL`,
+		).bind(session.data.user_id),
+	]);
+
+	if ((write.meta?.changes ?? 0) > 0) {
+		await auditSlugChange(env, session.data.user_id, "slug_release", {
+			previous_slug: read.results[0]?.slug ?? null,
+		});
+	}
+
+	return new Response(null, { status: 204, headers: cors });
 }

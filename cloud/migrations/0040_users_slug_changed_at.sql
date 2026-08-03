@@ -1,0 +1,25 @@
+-- When the *user* last changed their own profile slug — the cooldown anchor for
+-- renaming and releasing per-ankh.app/u/<slug>, and the record of whether the
+-- name in that URL was chosen or issued.
+--
+-- Why a column and not an events read: the rename gate has to live in the same
+-- conditional UPDATE as the write it bounds. 0039's set-once rule rode on
+-- `WHERE slug IS NULL`, which made "at most one success per account" a race-safe
+-- property of the statement rather than of a check-then-write. Renaming removes
+-- that predicate, so something has to take its place or two concurrent renames
+-- both land. `events` can't: it's a different binding (EVENTS_DB, never a
+-- SHARE_DB replica session — see cloud/src/d1.ts), so a count there and the
+-- UPDATE here are not one atomic decision, and countEventsSince's window is
+-- fixed at one hour regardless.
+--
+-- NULL means "the user has never changed this themselves", which is a different
+-- statement from "no slug": a first-login auto-derived slug (cloud/src/auth.ts),
+-- a backfilled one (`./per-ankh admin backfill-slugs`), and an operator
+-- set-slug/clear-slug all leave this NULL on purpose. So an issued name costs
+-- its holder nothing — their first rename is immediate — and an operator fixing
+-- a name doesn't spend the user's window. Only POST/DELETE /v1/users/me/slug
+-- stamps it.
+--
+-- No index: the one reader holds the row already, by user_id (the PK).
+
+ALTER TABLE users ADD COLUMN slug_changed_at TEXT;

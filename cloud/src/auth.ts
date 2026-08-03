@@ -36,7 +36,7 @@ import {
 	sessionFromRequest,
 } from "./session";
 import type { SessionEnv } from "./session";
-import { displayNameSql } from "./identity";
+import { assignDerivedUserSlug, displayNameSql } from "./identity";
 import { logError, setSecurityReason } from "./log";
 import type { QueryableD1, EventsEnv } from "./d1";
 
@@ -109,8 +109,9 @@ interface UserRow {
 	discord_id: string;
 	display_name: string;
 	avatar_hash: string | null;
-	// Claimed profile URL (/u/<slug>), NULL until the user claims one. Every
-	// query typed as a UserRow must project it — including the two upserts
+	// Profile URL (/u/<slug>) — derived from the display name at first login,
+	// then the user's to rename or unset, and NULL whenever neither happened.
+	// Every query typed as a UserRow must project it, including the two upserts
 	// below, which spell their columns out in RETURNING.
 	slug: string | null;
 }
@@ -468,8 +469,10 @@ export async function handleDiscordCallback(
 		   last_login_at = datetime('now')
 		 -- alias (operator override) wins over the Discord display_name; bare
 		 -- column names because RETURNING can't be table-qualified. slug is
-		 -- never written here — it's user-claimed, and a login must not
-		 -- disturb it — but it's returned so the callback payload carries it.
+		 -- never written by this statement — a returning login must not disturb
+		 -- a name its owner renamed or unset — but it's returned so the callback
+		 -- payload carries it, and so the first-login branch below can see that
+		 -- the row has none yet.
 		 RETURNING user_id, discord_id, COALESCE(alias, display_name) AS display_name, avatar_hash, slug`,
 	)
 		.bind(
@@ -497,8 +500,19 @@ export async function handleDiscordCallback(
 	// ON CONFLICT, so equality here ⟺ first-ever signup. Signup is fully open
 	// (no invite gate), so new-account volume is the abuse signal Skiff watches.
 	// See cloud/src/security-events.ts and issue #71.
+	//
+	// That same equality is the first-login gate the derived profile URL hangs
+	// on: assignment belongs to the INSERT and never to the update path, or an
+	// unset slug would come back on the next login. Null for the row's whole
+	// life until then, so the assignment result IS the current value.
+	let slug = upsert.slug;
 	if (upsert.user_id === newUserId) {
 		setSecurityReason("signup");
+		slug = await assignDerivedUserSlug(
+			env.SHARE_DB,
+			upsert.user_id,
+			upsert.display_name,
+		);
 	}
 
 	// Idempotent Personal-collection seed. First login inserts; subsequent
@@ -589,7 +603,7 @@ export async function handleDiscordCallback(
 			discord_id: upsert.discord_id,
 			display_name: upsert.display_name,
 			avatar_url: buildAvatarUrl(upsert.discord_id, upsert.avatar_hash),
-			slug: upsert.slug,
+			slug,
 			next: postLoginNext,
 		}),
 		{ status: 200, headers },
@@ -676,8 +690,8 @@ export async function handleDevLogin(
 		   last_login_at = datetime('now')
 		 -- alias (operator override) wins over the Discord display_name; bare
 		 -- column names because RETURNING can't be table-qualified. slug rides
-		 -- along for the same reason as the real callback: never written on
-		 -- login, but part of the UserRow shape this projects into.
+		 -- along for the same reason as the real callback: never written by this
+		 -- statement, but part of the UserRow shape this projects into.
 		 RETURNING user_id, discord_id, COALESCE(alias, display_name) AS display_name, avatar_hash, slug`,
 	)
 		.bind(newUserId, discord_id, displayName, username)
@@ -688,6 +702,19 @@ export async function handleDevLogin(
 			500,
 			cors,
 			"UPSERT_FAILED",
+		);
+	}
+
+	// Derived profile URL on the first login only, same rule and same
+	// first-login test as the real callback — a dev user has to be able to
+	// reproduce what a real signup produces, including a name that slugifies to
+	// nothing. This flow redirects rather than returning a payload, so the
+	// assigned value is read back by /v1/auth/me like any other.
+	if (upsert.user_id === newUserId) {
+		await assignDerivedUserSlug(
+			env.SHARE_DB,
+			upsert.user_id,
+			upsert.display_name,
 		);
 	}
 

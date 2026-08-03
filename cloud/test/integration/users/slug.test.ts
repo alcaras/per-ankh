@@ -1,23 +1,32 @@
-// Behavior tests for the user-claimed profile URL (users.slug) — the claim
-// endpoint, the resolver that serves /u/<slug>, and the identity payloads the
-// slug rides along on.
+// Behavior tests for the profile URL (users.slug) — the endpoint that sets and
+// releases it, the resolver that serves /u/<slug>, and the identity payloads
+// the slug rides along on.
 //
 // Covers:
 //   * POST /v1/users/me/slug: happy path (and the lowercasing that lets a
 //     user type mixed case), anonymous → 401, bad format → 400, reserved
-//     name → 400, someone else's slug → 409, a second claim by the same
-//     user → 409
-//   * The claim's awaited audit row
+//     name → 400, someone else's slug → 409, renaming, and the cooldown that
+//     bounds renames
+//   * DELETE /v1/users/me/slug: releases the name back into the pool, is
+//     idempotent, isn't itself gated by the cooldown, and does start one
+//   * The awaited audit rows on both, and what each carries
 //   * GET /v1/users/by-slug/:slug: resolves to the same payload the id route
-//     serves, 404 for an unknown slug, 404 for a malformed one
+//     serves, 404 for an unknown slug, 404 for a malformed one, 404 for one
+//     that has been renamed away
 //   * Propagation onto the identity payloads whose links would otherwise take
 //     the /users/<id> → /u/<slug> redirect hop. Each case also asserts the
-//     un-claimed neighbour still reads null, because a payload that returned a
+//     slug-less neighbour still reads null, because a payload that returned a
 //     slug for everyone would pass a one-sided check.
+//
+// Derivation at first login is NOT here — it belongs to the login path, and its
+// test sits with the dev-login flow that exercises it.
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR } from "../../../src/users";
+import {
+	SLUG_CLAIM_ATTEMPTS_PER_USER_PER_HOUR,
+	SLUG_RENAME_COOLDOWN_DAYS,
+} from "../../../src/users";
 import {
 	expectErrorCode,
 	expectOk,
@@ -53,6 +62,41 @@ function claim(slug: string, as?: TestUser): Promise<Response> {
 	return request.post({ path: "/v1/users/me/slug", body: { slug }, as });
 }
 
+function release(as?: TestUser): Promise<Response> {
+	return request.delete({ path: "/v1/users/me/slug", as });
+}
+
+function readSlugState(userId: string) {
+	return env.SHARE_DB.prepare(
+		`SELECT slug, slug_changed_at FROM users WHERE user_id = ?`,
+	)
+		.bind(userId)
+		.first<{ slug: string | null; slug_changed_at: string | null }>();
+}
+
+// Backdate the cooldown clock so a test can rename again without waiting a
+// week. Writes the same column the endpoint writes, which is the point: it
+// exercises the real predicate rather than a test-only bypass.
+function ageOutCooldown(userId: string): Promise<unknown> {
+	return env.SHARE_DB.prepare(
+		`UPDATE users SET slug_changed_at = datetime('now', ?) WHERE user_id = ?`,
+	)
+		.bind(`-${SLUG_RENAME_COOLDOWN_DAYS + 1} days`, userId)
+		.run();
+}
+
+// The most recent audit row of a type, which is how each change is expected to
+// leave a trace: the users row shows the current value only.
+function lastEvent(userId: string, eventType: string) {
+	return env.SHARE_DB.prepare(
+		`SELECT metadata FROM events
+		 WHERE event_type = ? AND user_id = ?
+		 ORDER BY rowid DESC LIMIT 1`,
+	)
+		.bind(eventType, userId)
+		.first<{ metadata: string }>();
+}
+
 describe("POST /v1/users/me/slug", () => {
 	it("claims the slug and echoes the stored value", async () => {
 		const u = await makeUser();
@@ -80,20 +124,27 @@ describe("POST /v1/users/me/slug", () => {
 		expect(profile.user_id).toBe(u.userId);
 	});
 
-	it("writes a slug_claim audit row", async () => {
+	it("writes a slug_claim audit row naming both sides of the change", async () => {
 		const u = await makeUser();
 		await expectOk(await claim("audited-claim", u));
 
-		const ev = await env.SHARE_DB.prepare(
-			`SELECT event_type, user_id, metadata FROM events
-			 WHERE event_type = 'slug_claim' AND user_id = ?
-			 ORDER BY rowid DESC LIMIT 1`,
-		)
-			.bind(u.userId)
-			.first<{ event_type: string; user_id: string; metadata: string }>();
-		expect(ev).toBeTruthy();
-		const meta = JSON.parse(ev!.metadata) as { slug: string };
-		expect(meta.slug).toBe("audited-claim");
+		const first = await lastEvent(u.userId, "slug_claim");
+		expect(first).toBeTruthy();
+		expect(JSON.parse(first!.metadata)).toEqual({
+			slug: "audited-claim",
+			previous_slug: null,
+		});
+
+		// The rename's row carries the released name — the only record of it,
+		// since the users row now shows the new one and the old is claimable.
+		await ageOutCooldown(u.userId);
+		await expectOk(await claim("audited-rename", u));
+
+		const second = await lastEvent(u.userId, "slug_claim");
+		expect(JSON.parse(second!.metadata)).toEqual({
+			slug: "audited-rename",
+			previous_slug: "audited-claim",
+		});
 	});
 
 	it("requires a session", async () => {
@@ -177,25 +228,144 @@ describe("POST /v1/users/me/slug", () => {
 		expect(holder.userId).not.toBe(other.userId);
 	});
 
-	it("rejects a second claim by the same user with 409 SLUG_ALREADY_SET", async () => {
-		const u = await makeUser();
-		await expectOk(await claim("first-pick", u));
+	// A user's first change is free — the cooldown clock starts at their own
+	// first write, so a derived name (slug_changed_at NULL) can be corrected
+	// immediately, which is most of what this endpoint is for.
+	it("renames a slug the user already holds, and frees the old name", async () => {
+		const u = await makeUser({ slug: "first-pick" });
 
-		await expectErrorCode(await claim("second-pick", u), {
-			status: 409,
-			code: "SLUG_ALREADY_SET",
-		});
+		const body = await expectOk<ClaimResponse>(await claim("second-pick", u));
+		expect(body.slug).toBe("second-pick");
 
-		// Set-once means the first claim stands — the failed one didn't
-		// overwrite it, and didn't take the name it asked for either.
 		const profile = await expectOk<ProfileResponse>(
 			await request.get({ path: `/v1/users/${u.userId}` }),
 		);
-		expect(profile.slug).toBe("first-pick");
+		expect(profile.slug).toBe("second-pick");
+
+		// The old URL stops resolving, and the name is back in the pool: someone
+		// else can take it, which is the accepted cost of renaming.
 		await expectStatus(
-			await request.get({ path: "/v1/users/by-slug/second-pick" }),
+			await request.get({ path: "/v1/users/by-slug/first-pick" }),
 			404,
 		);
+		const other = await makeUser();
+		await expectOk(await claim("first-pick", other));
+	});
+
+	it("429s a second rename inside the cooldown, leaving the first standing", async () => {
+		const u = await makeUser({ slug: "derived-name" });
+		await expectOk(await claim("chosen-name", u));
+
+		await expectErrorCode(await claim("third-name", u), {
+			status: 429,
+			code: "RATE_LIMIT_SLUG_RENAME",
+		});
+
+		const profile = await expectOk<ProfileResponse>(
+			await request.get({ path: `/v1/users/${u.userId}` }),
+		);
+		expect(profile.slug).toBe("chosen-name");
+		// The refused rename didn't take the name it asked for either.
+		await expectStatus(
+			await request.get({ path: "/v1/users/by-slug/third-name" }),
+			404,
+		);
+	});
+
+	it("allows the next rename once the cooldown has elapsed", async () => {
+		const u = await makeUser();
+		await expectOk(await claim("earlier-name", u));
+		await ageOutCooldown(u.userId);
+
+		const body = await expectOk<ClaimResponse>(await claim("later-name", u));
+		expect(body.slug).toBe("later-name");
+	});
+
+	// Re-submitting the name you already hold is not a change, so it must not
+	// burn a week of cooldown on a no-op — a double-submitted form would
+	// otherwise lock the user out of the correction they just made.
+	it("treats re-submitting the caller's own slug as a no-op success", async () => {
+		const u = await makeUser({ slug: "same-name" });
+
+		const body = await expectOk<ClaimResponse>(await claim("same-name", u));
+		expect(body.slug).toBe("same-name");
+
+		// The clock never started. A derived slug leaves slug_changed_at NULL,
+		// and a no-op must not be what spends the user's first change — so the
+		// real rename behind it still lands.
+		expect((await readSlugState(u.userId))?.slug_changed_at).toBeNull();
+		await expectOk(await claim("other-name", u));
+	});
+});
+
+describe("DELETE /v1/users/me/slug", () => {
+	it("releases the slug and returns it to the pool", async () => {
+		const u = await makeUser({ slug: "released-name" });
+
+		await expectStatus(await release(u), 204);
+
+		const profile = await expectOk<ProfileResponse>(
+			await request.get({ path: `/v1/users/${u.userId}` }),
+		);
+		expect(profile.slug).toBeNull();
+		await expectStatus(
+			await request.get({ path: "/v1/users/by-slug/released-name" }),
+			404,
+		);
+
+		const other = await makeUser();
+		await expectOk(await claim("released-name", other));
+	});
+
+	it("writes a slug_release audit row naming what was given up", async () => {
+		const u = await makeUser({ slug: "audited-release" });
+		await expectStatus(await release(u), 204);
+
+		const ev = await lastEvent(u.userId, "slug_release");
+		expect(ev).toBeTruthy();
+		expect(JSON.parse(ev!.metadata)).toEqual({
+			previous_slug: "audited-release",
+		});
+	});
+
+	it("is idempotent for a user who has no slug", async () => {
+		const u = await makeUser();
+		await expectStatus(await release(u), 204);
+		await expectStatus(await release(u), 204);
+
+		const ev = await lastEvent(u.userId, "slug_release");
+		// Nothing was released, so nothing is recorded — the audit trail is of
+		// changes, not of calls.
+		expect(ev).toBeNull();
+	});
+
+	it("requires a session", async () => {
+		await expectErrorCode(await release(), {
+			status: 401,
+			code: "UNAUTHORIZED",
+		});
+	});
+
+	// Getting your name out of a public URL is the one thing that must always
+	// work, so the release is exempt from the cooldown the setter enforces.
+	it("releases even inside the rename cooldown", async () => {
+		const u = await makeUser();
+		await expectOk(await claim("just-renamed", u));
+
+		await expectStatus(await release(u), 204);
+		expect((await readSlugState(u.userId))?.slug).toBeNull();
+	});
+
+	// …but it stamps the clock, or release-then-claim would be the way around
+	// the gate and the cooldown would be decorative.
+	it("starts a cooldown, so release is not a way to rename freely", async () => {
+		const u = await makeUser({ slug: "starting-name" });
+
+		await expectStatus(await release(u), 204);
+		await expectErrorCode(await claim("bypass-name", u), {
+			status: 429,
+			code: "RATE_LIMIT_SLUG_RENAME",
+		});
 	});
 });
 

@@ -41,14 +41,21 @@
 	let streamUrl = $state(data.user.stream_url ?? "");
 	let savingStream = $state(false);
 
-	// Profile URL. Same save-on-submit shape as the stream link, but claimed
-	// once: the server refuses a second claim, so once `slug` is non-null the
-	// card shows the link instead of the form. The worker trims + lowercases
-	// before validating and returns what it stored, so we echo its value.
+	// Profile URL. Same save-on-submit shape as the stream link. Most accounts
+	// arrive here already holding one, derived from their display name at
+	// signup, so the card's job is the correction — renaming a derived name, or
+	// claiming one when derivation produced nothing — plus releasing it. The
+	// worker trims + lowercases before validating and returns what it stored, so
+	// we echo its value.
 	// svelte-ignore state_referenced_locally
 	let slug = $state(data.user.slug);
 	let slugInput = $state("");
 	let claiming = $state(false);
+	let releasing = $state(false);
+	// Whether the form is showing. Open by default only when there's no slug to
+	// show — a user who has one sees the link, and asks for the form.
+	// svelte-ignore state_referenced_locally
+	let editing = $state(data.user.slug === null);
 
 	// What the user shares — absolute, since the point of the card is a link
 	// that can be pasted into Discord.
@@ -136,26 +143,50 @@
 		}
 	}
 
-	async function claimSlug() {
+	async function saveSlug() {
 		const wanted = slugInput.trim();
 		if (claiming || !wanted) return;
 		claiming = true;
 		try {
-			const saved = await cloudApi.claimSlug(wanted);
+			const saved = await cloudApi.setSlug(wanted);
+			const renamed = slug !== null;
 			slug = saved.slug;
 			slugInput = "";
-			toast.info("Profile URL claimed");
+			editing = false;
+			toast.info(renamed ? "Profile URL updated" : "Profile URL claimed");
 		} catch (err) {
-			// The worker's rejections — bad format, reserved name, already
-			// taken, already claimed — carry user-safe messages; show them
+			// The worker's rejections — bad format, reserved name, already taken,
+			// still inside the cooldown — carry user-safe messages; show them
 			// verbatim rather than restating the rule in a second place.
 			toast.error(
 				err instanceof ApiError
 					? err.message
-					: `Couldn't claim that profile URL: ${err instanceof Error ? err.message : err}`,
+					: `Couldn't save that profile URL: ${err instanceof Error ? err.message : err}`,
 			);
 		} finally {
 			claiming = false;
+		}
+	}
+
+	async function releaseSlug() {
+		if (releasing) return;
+		releasing = true;
+		try {
+			await cloudApi.releaseSlug();
+			slug = null;
+			slugInput = "";
+			// Straight into the form: releasing is usually the long way round to
+			// a different name, and the alternative is a card with one button.
+			editing = true;
+			toast.info("Profile URL removed — your profile is at its permalink");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: `Couldn't remove that profile URL: ${err instanceof Error ? err.message : err}`,
+			);
+		} finally {
+			releasing = false;
 		}
 	}
 
@@ -219,9 +250,13 @@
 						</div>
 					</div>
 
-					<!-- Profile URL: claim once, then it's the link to share. The
-					     permanence is stated with the input, before the click —
-					     nothing after it can be undone by the user. -->
+					<!-- Profile URL: the link to share, derived from the display name
+					     at signup and the user's to rename or remove. The link and
+					     the form are independent — a slug-holder can open the form
+					     and close it again — so the two blocks stack rather than
+					     alternating on whether a slug exists. What can't be undone
+					     alone is stated where it's decided: the old name goes back
+					     into the pool on both Save and Remove. -->
 					<div
 						class="mt-3 rounded-lg p-3"
 						style="background-color: rgb(var(--color-surface-raised));"
@@ -249,17 +284,41 @@
 									View profile
 								</ProfileLink>
 							</div>
+							<div class="mt-2 flex items-center gap-2">
+								<button
+									type="button"
+									onclick={() => (editing = !editing)}
+									class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+								>
+									{editing ? "Cancel" : "Change"}
+								</button>
+								<button
+									type="button"
+									onclick={releaseSlug}
+									disabled={releasing}
+									class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
+								>
+									{releasing ? "Removing…" : "Remove"}
+								</button>
+							</div>
 						{:else}
 							<p class="mt-1 text-xs text-gray-400">
+								You don't have a profile link. Your profile is at {PUBLIC_ORIGIN}/users/{data
+									.user.user_id} either way.
+							</p>
+						{/if}
+						{#if editing}
+							<p class="mt-2 text-xs text-gray-400">
 								Choose the name in your profile link: 3-30 characters, lowercase
-								letters, numbers and hyphens. You can't change it afterwards —
-								ask an admin if you need it cleared.
+								letters, numbers and hyphens. You can change it again after a
+								week. Whatever name you leave behind goes back up for anyone to
+								take, and links to it will follow whoever takes it.
 							</p>
 							<form
 								class="mt-2 flex items-center gap-2"
 								onsubmit={(e) => {
 									e.preventDefault();
-									claimSlug();
+									saveSlug();
 								}}
 							>
 								<div
@@ -281,7 +340,7 @@
 									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
 									disabled={claiming || slugInput.trim() === ""}
 								>
-									Claim
+									Save
 								</button>
 							</form>
 						{/if}
