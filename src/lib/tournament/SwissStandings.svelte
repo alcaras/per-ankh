@@ -94,6 +94,9 @@
 				slotId: c.slot_id,
 				label: slotLabel(c),
 				seed: c.swiss_seed,
+				// Swap eligibility is wins+losses===0, so every candidate is
+				// 0-0 — the record would be a column of identical noise.
+				record: null,
 				opponentLabel: opponentLabelOf(c.slot_id),
 			}));
 	}
@@ -110,7 +113,9 @@
 	}
 
 	// Unpaired slots have no pending opponent by definition, so the picker's
-	// "vs" column stays empty.
+	// "vs" column stays empty. It carries the W-L instead: Swiss pairs within
+	// (wins, losses) buckets, so the record — not the seed — is what makes a
+	// late pairing look like one the engine would have generated.
 	function pairCandidatesFor(s: SlotStanding) {
 		return standings
 			.filter((c) => c.slot_id !== s.slot_id && isPairEligible(c))
@@ -118,6 +123,7 @@
 				slotId: c.slot_id,
 				label: slotLabel(c),
 				seed: c.swiss_seed,
+				record: `${c.wins}-${c.losses}`,
 				opponentLabel: null,
 			}));
 	}

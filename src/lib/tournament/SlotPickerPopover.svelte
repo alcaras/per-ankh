@@ -29,6 +29,11 @@
 		slotId: string;
 		label: string;
 		seed: number | null;
+		// The candidate's W-L, when the pick is a pairing decision (the pair
+		// flow) — Swiss pairs within (wins, losses) buckets, so the record is
+		// what the admin is really matching on. Null when it carries no
+		// signal: swap candidates are all 0-0 by eligibility.
+		record: string | null;
 		// The candidate's current pending opponent, when the resulting matchup
 		// is the point of the pick (the swap flow). Null when the candidate has
 		// no pending match (e.g. reinstated mid-round).
@@ -144,6 +149,7 @@
 						<span class="truncate">{c.label}</span>
 						<span class="ml-2 shrink-0 whitespace-nowrap opacity-60">
 							{#if c.seed != null}#{c.seed}{/if}
+							{#if c.record}· {c.record}{/if}
 							{#if c.opponentLabel}· vs {c.opponentLabel}{/if}
 						</span>
 					</Combobox.Item>
