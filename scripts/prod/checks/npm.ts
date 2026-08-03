@@ -73,7 +73,13 @@ interface AuditException {
 	ghsa: string;
 	reason: string;
 }
-const AUDIT_EXCEPTIONS: AuditException[] = [];
+const AUDIT_EXCEPTIONS: AuditException[] = [
+	{
+		ghsa: "GHSA-4cwx-7wf7-3272",
+		reason:
+			"undici <=7.28.0, reached only through miniflare, which pins it exactly (7.28.0) — no in-range fix exists. Dev tooling only: miniflare/wrangler's Node-side HTTP client, never shipped to workerd or the browser bundle. Patched in undici 7.29.0; retire when miniflare bumps its pin.",
+	},
+];
 
 async function npmAudit(cwd: string, resultName: string): Promise<CheckResult> {
 	const start = Date.now();
