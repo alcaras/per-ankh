@@ -22,7 +22,9 @@
 //
 // The handler writes this pairing straight into the round's matches when the
 // round is generated — there is no pairing-review/edit step and no endpoint to
-// re-pair a round or reassign a bye. Seeding and division assignment (both set
+// re-pair a round or reassign a bye. (handleAddRoundMatch can ADD a late
+// pairing for two unpaired slots to the open round — it never alters one
+// generated here.) Seeding and division assignment (both set
 // before the tournament starts) are the only levers that shape pairings.
 
 import { computeRecord } from "./standings";

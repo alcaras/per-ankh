@@ -107,6 +107,7 @@ import {
 import type { ChannelsEnv } from "./channels";
 import type { TournamentPlayerEnv } from "./tournament/player";
 import {
+	handleAddRoundMatch,
 	handleBulkCreateSlots,
 	handleCreateTournament,
 	handleDeleteSlot,
@@ -648,6 +649,18 @@ const ROUTES: RouteSpec[] = [
 		},
 		route: "DELETE /v1/tournaments/:id/slots/:slot_id/withdraw",
 		handler: (r, e, m) => handleReinstateSlot(m![1], m![2], r, e),
+	},
+	// Late pairing: add a match to an open Swiss round (admin). Completes
+	// the withdraw -> substitute -> reinstate workflow with a catch-up game.
+	{
+		method: "POST",
+		match: {
+			kind: "regex",
+			regex:
+				/^\/v1\/tournaments\/([A-Za-z0-9_-]{21})\/rounds\/([A-Za-z0-9_-]{21})\/matches$/,
+		},
+		route: "POST /v1/tournaments/:id/rounds/:round_id/matches",
+		handler: (r, e, m) => handleAddRoundMatch(m![1], m![2], r, e),
 	},
 	// Lifecycle — single admin gate (the second is /transition-championship).
 	// Round 1 for both Swiss divisions is generated in this same call;

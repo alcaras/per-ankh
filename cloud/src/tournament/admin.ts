@@ -12,6 +12,7 @@
 import { nanoid } from "nanoid";
 import * as v from "valibot";
 import {
+	AddRoundMatchSchema,
 	BulkCreateSlotsSchema,
 	CreateTournamentSchema,
 	GrantAdminSchema,
@@ -48,7 +49,7 @@ import {
 } from "./bracket";
 import { assignMapsToPairings } from "./maps";
 import { pairSwissRound, type Pairing } from "./pairing";
-import { computeStandings, rankStandings } from "./standings";
+import { computeRecord, computeStandings, rankStandings } from "./standings";
 import { AuthzError, isTournamentBeta, requireTournamentAdmin } from "./authz";
 import {
 	bumpTournamentUpdatedAt,
@@ -2015,6 +2016,235 @@ export async function handlePatchMatchMap(
 }
 
 // ----------------------------------------------------------------------
+// POST /v1/tournaments/:id/rounds/:round_id/matches — add a match to an
+// open Swiss round (a late pairing)
+// ----------------------------------------------------------------------
+//
+// Completes the substitution workflow (withdraw -> PATCH slot -> reinstate):
+// a slot reinstated after its division's current round was already paired
+// sits idle until the next round generates, a full round behind the field.
+// This lets an admin pair two such slots into the still-open round as a
+// catch-up game — the "make-up game" the slot-swap rejection note in
+// schemas/tournament.ts (PatchMatchMapSchema) says a displaced slot must
+// not be left without.
+//
+// Swiss only: the championship bracket's structure is derived from prior
+// results, never hand-edited (tournament.status === 'swiss' also means no
+// championship rounds exist yet, so no phase check on the round is needed).
+// The map is auto-assigned by the same engine as round generation (fresh-
+// map rule, deterministic seed), the match takes the round's next
+// match_index and the tournament's next match_number, and reporting flows
+// through the normal advance path — the round simply won't auto-close
+// until this match is reported too.
+export async function handleAddRoundMatch(
+	tournamentId: string,
+	roundId: string,
+	request: Request,
+	env: TournamentAdminEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const a = await authedTournament(tournamentId, request, env);
+	if (!a.ok) return a.response;
+	const { tournament } = a;
+	if (tournament.status !== "swiss") {
+		return errorResponse(
+			"Matches can only be added during the Swiss phase",
+			409,
+			cors,
+			"TOURNAMENT_LOCKED",
+		);
+	}
+	const round = await loadRound(env, roundId);
+	if (!round || round.tournament_id !== tournamentId) {
+		return errorResponse("Round not found", 404, cors, "ROUND_NOT_FOUND");
+	}
+	if (round.status !== "in_progress") {
+		return errorResponse(
+			"Round is already complete",
+			409,
+			cors,
+			"ROUND_CLOSED",
+		);
+	}
+	const body = await parseJsonBody(request, AddRoundMatchSchema, cors);
+	if (!body.ok) return body.response;
+	const { slot_a_id, slot_b_id } = body.body;
+	if (slot_a_id === slot_b_id) {
+		return errorResponse(
+			"Cannot pair a slot against itself",
+			400,
+			cors,
+			"SAME_SLOT",
+		);
+	}
+
+	const matches = await loadMatches(env, tournamentId);
+	const matchRefs = await matchRefsForTournament(env, tournamentId, matches);
+	const config = tournamentConfig(tournament);
+	for (const slotId of [slot_a_id, slot_b_id]) {
+		const slot = await loadSlotInTournament(env, slotId, tournamentId);
+		if (!slot) {
+			return errorResponse("Slot not found", 404, cors, "SLOT_NOT_FOUND");
+		}
+		if (slot.division !== round.division) {
+			return errorResponse(
+				"Slot is not in this round's division",
+				409,
+				cors,
+				"WRONG_DIVISION",
+			);
+		}
+		if (slot.withdrawn_at != null) {
+			return errorResponse(
+				"Cannot pair a withdrawn slot",
+				409,
+				cors,
+				"SLOT_WITHDRAWN",
+			);
+		}
+		// Advanced/eliminated slots are done playing Swiss — same "active"
+		// definition the pairing engine uses.
+		if (computeRecord(slotId, matchRefs, config).status !== "active") {
+			return errorResponse(
+				"Slot has already finished Swiss (advanced or eliminated)",
+				409,
+				cors,
+				"SLOT_INACTIVE",
+			);
+		}
+		// One match per slot per round, byes included — the invariant the
+		// whole bracket UI leans on.
+		const inRound = matches.some(
+			(m) =>
+				m.round_id === roundId &&
+				(m.slot_a_id === slotId || m.slot_b_id === slotId),
+		);
+		if (inRound) {
+			return errorResponse(
+				"Slot already has a match in this round",
+				409,
+				cors,
+				"ALREADY_PAIRED",
+			);
+		}
+	}
+
+	const poolResult = parseMapPoolOrError(tournament, cors);
+	if (!poolResult.ok) return poolResult.response;
+	// Same assignment engine as round generation. The seed includes the slot
+	// ids so a second added match in the same round draws independently.
+	// A single-pairing call has no round-batch context, so the secondary
+	// spread-scripts-across-the-round preference is a no-op here — only the
+	// primary per-player fresh-map rule applies, and that's the one that
+	// matters.
+	const seed = `${tournamentId}|swiss|${round.division}|r${round.round_number}|added|${slot_a_id}|${slot_b_id}`;
+	const [assigned] = assignMapsToPairings(
+		[{ slot_a_id, slot_b_id }],
+		poolResult.pool,
+		matchRefs,
+		seed,
+	);
+
+	const matchId = nanoid(21);
+	// Column set mirrors buildSwissRoundStatements' pending-match INSERT:
+	// pick order defaults to slot_b (player listed second picks first),
+	// occupant snapshots stay NULL while pending and resolve live.
+	//
+	// Guarded write, not a plain INSERT: between the checks above and this
+	// statement, a concurrent report can close the round (generating the
+	// next one — which would then pair these very slots), a concurrent add
+	// can pair one of the slots, or a concurrent withdraw can retire one.
+	// The WHERE re-checks those three at insert time; meta.changes === 0
+	// means we lost that race (same idiom as the claim-slot INSERT in
+	// player.ts). Withdrawal is the one that would otherwise strand state:
+	// withdraw forfeits the slot's pending matches as it goes, so a match
+	// inserted just after that sweep is a pending match nobody will ever
+	// sweep, blocking the round with no way to close it but a fabricated
+	// result. SLOT_INACTIVE has no SQL form (it's computed from match
+	// history by computeRecord) and division can't change mid-swiss
+	// (cross-division moves lock at start), so those two stay TS-only
+	// above. A narrower window survives inside maybeAdvanceAfterMatchReport,
+	// which reads its pending set and then batches close + next-round
+	// generation — an INSERT landing there leaves this match pending in a
+	// complete round: recoverable (it still reports normally), it just
+	// doesn't feed the next round's pairing.
+	//
+	// Numbered parameters throughout, so nextMatchNumberSql is handed its
+	// index explicitly (?7, the tournament id) rather than inheriting one
+	// from parse order. Pick order reuses ?4 (slot_b: player listed second
+	// picks first), and the guards reuse ?2–?4.
+	const write = await env.SHARE_DB.prepare(
+		`INSERT INTO tournament_matches
+		   (match_id, round_id, slot_a_id, slot_b_id, map_pool_id, map_script,
+		    pick_order_winner_slot_id, status, winner_slot_id, match_index,
+		    match_number)
+		 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?4, 'pending', NULL,
+		        (SELECT COALESCE(MAX(m3.match_index), 0) + 1
+		         FROM tournament_matches m3 WHERE m3.round_id = ?2),
+		        ${nextMatchNumberSql("?7")}
+		 WHERE EXISTS (SELECT 1 FROM tournament_rounds r3
+		               WHERE r3.round_id = ?2 AND r3.status = 'in_progress')
+		   AND NOT EXISTS (SELECT 1 FROM tournament_matches m4
+		                   WHERE m4.round_id = ?2
+		                     AND (m4.slot_a_id IN (?3, ?4) OR m4.slot_b_id IN (?3, ?4)))
+		   AND NOT EXISTS (SELECT 1 FROM tournament_slots s3
+		                   WHERE s3.slot_id IN (?3, ?4)
+		                     AND s3.withdrawn_at IS NOT NULL)`,
+	)
+		.bind(
+			matchId,
+			roundId,
+			slot_a_id,
+			slot_b_id,
+			assigned.map_pool_id,
+			assigned.map_script,
+			tournamentId,
+		)
+		.run();
+	if ((write.meta?.changes ?? 0) === 0) {
+		// Rare: distinguish which invariant broke for an accurate code. Same
+		// order as the WHERE, so a lost race never reports the wrong reason.
+		const nowRound = await loadRound(env, roundId);
+		if (nowRound?.status !== "in_progress") {
+			return errorResponse(
+				"Round closed while the request was in flight",
+				409,
+				cors,
+				"ROUND_CLOSED",
+			);
+		}
+		for (const slotId of [slot_a_id, slot_b_id]) {
+			const nowSlot = await loadSlotInTournament(env, slotId, tournamentId);
+			if (nowSlot?.withdrawn_at != null) {
+				return errorResponse(
+					"Cannot pair a withdrawn slot",
+					409,
+					cors,
+					"SLOT_WITHDRAWN",
+				);
+			}
+		}
+		return errorResponse(
+			"Slot already has a match in this round",
+			409,
+			cors,
+			"ALREADY_PAIRED",
+		);
+	}
+	await bumpTournamentUpdatedAt(env, tournamentId);
+	await logTournamentAdminAction(env, a.userId, tournamentId, "match_added", {
+		match_id: matchId,
+		round_id: roundId,
+		division: round.division,
+		slot_a_id,
+		slot_b_id,
+		map_pool_id: assigned.map_pool_id,
+	});
+	const match = await loadMatch(env, matchId);
+	return jsonResponse({ match }, 201, cors);
+}
+
+// ----------------------------------------------------------------------
 // PATCH /v1/tournaments/:id/matches/:match_id/schedule — replace the match's
 // scheduled parts (migration 0029): each part carries its own time, caster, and
 // stream links. Replace-all over the full parts list. Admin OR participant (see
@@ -2491,17 +2721,21 @@ async function downstreamBlocked(
 // tournament: MAX(existing) + 1. Evaluated per-INSERT inside the
 // round-generation D1 batch, so each statement sees the rows the prior
 // statements in the batch inserted — dense and append-only by construction.
-// Binds one param: the tournament_id.
-const NEXT_MATCH_NUMBER_SQL = `(SELECT COALESCE(MAX(m2.match_number), 0) + 1
+// Takes the tournament_id's placeholder: positional `?` by default, or an
+// explicit `?N` for callers that number their parameters — a bare `?` mixed
+// into a numbered statement would silently take max-used-index + 1, so the
+// index has to be stated rather than inferred from where this lands.
+const nextMatchNumberSql = (tournamentIdParam = "?") =>
+	`(SELECT COALESCE(MAX(m2.match_number), 0) + 1
 	FROM tournament_matches m2
 	JOIN tournament_rounds r2 ON r2.round_id = m2.round_id
-	WHERE r2.tournament_id = ?)`;
+	WHERE r2.tournament_id = ${tournamentIdParam})`;
 
 // Swiss / championship-transition variant: byes are never numbered (NULL).
 // Championship rounds 2+ can't bye, so buildChampionshipRoundStatements uses
-// the bare NEXT_MATCH_NUMBER_SQL instead. Binds two params in order: the match
+// the bare nextMatchNumberSql() instead. Binds two params in order: the match
 // status, then the tournament_id.
-const NEXT_MATCH_NUMBER_OR_NULL_FOR_BYE_SQL = `CASE WHEN ? = 'bye' THEN NULL ELSE ${NEXT_MATCH_NUMBER_SQL} END`;
+const NEXT_MATCH_NUMBER_OR_NULL_FOR_BYE_SQL = `CASE WHEN ? = 'bye' THEN NULL ELSE ${nextMatchNumberSql()} END`;
 
 // ----------------------------------------------------------------------
 // POST /v1/tournaments/:id/transition-championship
@@ -2971,7 +3205,7 @@ function buildChampionshipRoundStatements(
 				    pick_order_winner_slot_id, status, winner_slot_id, match_index,
 				    match_number)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?,
-				         ${NEXT_MATCH_NUMBER_SQL})`,
+				         ${nextMatchNumberSql()})`,
 			).bind(
 				matchId,
 				roundId,

@@ -132,6 +132,47 @@
 		return map;
 	});
 
+	// Late-pairing support: per division, the current open Swiss round (the
+	// highest-numbered one — earlier rounds are complete by construction) and
+	// which active slots have no match in it. Only a mid-round reinstate
+	// produces such slots, so for most tournaments these maps are empty and
+	// no Pair affordance renders.
+	function openRoundInfoFor(division: Division): {
+		roundId: string | null;
+		roundNumber: number | null;
+		unpaired: Record<string, boolean>;
+	} {
+		const div = matchesByDivision[division];
+		if (data.tournament.status !== "swiss" || div.length === 0) {
+			return { roundId: null, roundNumber: null, unpaired: {} };
+		}
+		const maxRound = Math.max(...div.map((m) => m.round_number ?? 0));
+		const inRound = div.filter((m) => m.round_number === maxRound);
+		// No pending match in the highest round usually means the division's
+		// Swiss is finished. It can also be a rare still-open round whose
+		// matches all decided without a report (bye-only, mass-forfeit) —
+		// the client can't tell the two apart (no rounds list is loaded), so
+		// Pair hides in both. Fails safe: the server would accept a valid
+		// add we don't offer, never the reverse.
+		if (inRound.every((m) => m.status !== "pending")) {
+			return { roundId: null, roundNumber: null, unpaired: {} };
+		}
+		const paired = new Set(inRound.flatMap((m) => [m.slot_a_id, m.slot_b_id]));
+		const unpaired: Record<string, boolean> = {};
+		for (const s of data.standings.divisions[division].standings) {
+			if (!paired.has(s.slot_id)) unpaired[s.slot_id] = true;
+		}
+		return {
+			roundId: inRound[0].round_id ?? null,
+			roundNumber: maxRound,
+			unpaired,
+		};
+	}
+	const openRoundByDivision = $derived({
+		A: openRoundInfoFor("A"),
+		B: openRoundInfoFor("B"),
+	});
+
 	const hasAnyStandings = $derived(
 		data.standings.divisions.A.standings.length > 0 ||
 			data.standings.divisions.B.standings.length > 0,
@@ -600,6 +641,42 @@
 			() =>
 				cloudApi.swapSlots(data.tournament.tournament_id, slotId, otherSlotId),
 			`Swapped ${aLabel} ⇄ ${bLabel}`,
+		);
+	}
+
+	// Late pairing: pair two unpaired active slots into the division's open
+	// round. The picker only surfaces eligible partners, so the server's
+	// gates (ALREADY_PAIRED, SLOT_WITHDRAWN, SLOT_INACTIVE, ROUND_CLOSED)
+	// are pre-satisfied — but stay authoritative if data changed under us.
+	// Confirmed first: there is no un-add — a mistaken match blocks the
+	// round until it's reported.
+	async function addMatch(
+		division: Division,
+		slotId: string,
+		otherSlotId: string,
+	) {
+		const info = openRoundByDivision[division];
+		if (!info.roundId) return;
+		const aLabel = slotLabelFor(slotId);
+		const bLabel = slotLabelFor(otherSlotId);
+		if (
+			!(await confirmDialog({
+				title: "Add match",
+				message: `Add ${aLabel} vs ${bLabel} to round ${info.roundNumber}? The map is auto-assigned. This can't be undone — the round stays open until the match is reported.`,
+				confirmLabel: "Add match",
+			}))
+		) {
+			return;
+		}
+		await withBusy(
+			() =>
+				cloudApi.addRoundMatch(
+					data.tournament.tournament_id,
+					info.roundId!,
+					slotId,
+					otherSlotId,
+				),
+			`Added ${aLabel} vs ${bLabel}`,
 		);
 	}
 
@@ -1162,6 +1239,11 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 										? swapSlots
 										: undefined}
 									opponentBySlot={swissOpponentBySlot}
+									onAddMatch={openRoundByDivision[division].roundId
+										? (slotId, otherSlotId) =>
+												addMatch(division, slotId, otherSlotId)
+										: undefined}
+									unpairedInOpenRound={openRoundByDivision[division].unpaired}
 								/>
 							{:else}
 								<div class="mb-3">

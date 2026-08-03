@@ -586,6 +586,14 @@ Reinstate a withdrawn slot.
 
 ## Tournaments — matches
 
+### `POST /v1/tournaments/:id/rounds/:round_id/matches`
+Add a match to an open Swiss round (late pairing) — the catch-up game for a substitute reinstated after the round was paired.
+
+- **Auth:** Tournament admin.
+- **Body:** `{ slot_a_id, slot_b_id }`.
+- **Response 201:** `{ match }` — pending, map auto-assigned by the round-generation engine (fresh-map rule), next `match_index`/`match_number`, pick order to `slot_b`. The round won't auto-close until this match is reported; there is no un-add.
+- **Errors:** `404 ROUND_NOT_FOUND`/`SLOT_NOT_FOUND`, `400 SAME_SLOT`, `409 TOURNAMENT_LOCKED` (not swiss) / `ROUND_CLOSED` / `WRONG_DIVISION` / `SLOT_WITHDRAWN` / `SLOT_INACTIVE` (already advanced or eliminated) / `ALREADY_PAIRED`.
+
 ### `PATCH /v1/tournaments/:id/matches/:match_id`
 Retroactively edit a match result.
 
