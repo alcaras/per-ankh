@@ -1,5 +1,28 @@
 # Changelog
 
+## [2026-08-03-33f6ac0] - 2026-08-03
+
+### Features
+
+- (tournament) add-match endpoint for open Swiss rounds (late pairing) — [63091c4](https://github.com/becked/per-ankh/commit/63091c4892ea4e3e2d48cc516c1359b3b15400ac)
+- (tournament) Pair action on Swiss standings rows — [efc8186](https://github.com/becked/per-ankh/commit/efc8186a2b3a168d18ae4073cea29e6a65f563a7)
+- (tournament) show each late-pairing candidate's Swiss record — [0c5f4a2](https://github.com/becked/per-ankh/commit/0c5f4a26b7e963a6754de0159c3a6eeb266d5ecd)
+
+### Fixes
+
+- (account) give the profile URL room and center the tab bar — [054b6bb](https://github.com/becked/per-ankh/commit/054b6bb45258e52a2c5add53374b9bab59ba3416)
+- (tournament) guard the add-match INSERT against round-close and double-add races — [763f511](https://github.com/becked/per-ankh/commit/763f5111b6353a9731004903ec1601a91a6113a4)
+- (tournament) say plainly that a late pairing can't be undone — [006a95d](https://github.com/becked/per-ankh/commit/006a95d2e801f2509de5e7c3bb2e26e8479838a3)
+- (tournament) harden the add-match INSERT — [9bdc853](https://github.com/becked/per-ankh/commit/9bdc85331c9dae4087b4be0ec13d580716ed4cd7)
+- (deps) bump brace-expansion to 5.0.9 for the DoS advisory — [d9b19a0](https://github.com/becked/per-ankh/commit/d9b19a05ef1f192ac02eb94a6c97d78467f9f433)
+
+### Other
+
+- (tournament) document late pairing (rules + API reference) — [886fd05](https://github.com/becked/per-ankh/commit/886fd053bdb9dfa92873bdfdd499c062d2a89b98)
+- apply becked's findings on late pairing — [cf76893](https://github.com/becked/per-ankh/commit/cf7689382b8316bb54d78b71a045a87056f99ef1)
+- (tournament) collapse the slot picker's eligibility props into one — [c822de2](https://github.com/becked/per-ankh/commit/c822de2f0bced166236367a065d78ae6a9df998d)
+- (preflight) allowlist the undici cache-directive advisory — [33f6ac0](https://github.com/becked/per-ankh/commit/33f6ac05fcdb7883404ea3880d47b3a170ceac39)
+
 ## [2026-08-03-88707b2] - 2026-08-03
 
 ### Features
