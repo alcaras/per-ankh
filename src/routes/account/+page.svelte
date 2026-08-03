@@ -146,12 +146,14 @@
 		const wanted = slugInput.trim();
 		if (claiming || !wanted) return;
 		claiming = true;
+		let changed = false;
 		try {
 			const saved = await cloudApi.setSlug(wanted);
 			const renamed = slug !== null;
 			slug = saved.slug;
 			slugInput = "";
 			editing = false;
+			changed = true;
 			toast.info(renamed ? "Profile URL updated" : "Profile URL claimed");
 		} catch (err) {
 			// The worker's rejections — bad format, reserved name, already taken,
@@ -165,11 +167,19 @@
 		} finally {
 			claiming = false;
 		}
+		// The header avatar is the only way into your own profile, and it links
+		// through the LAYOUT's copy of the user — which this write just made
+		// wrong. A rename leaves it pointing at a /u/<slug> that now 404s, or at
+		// whoever claims the freed name next; local `slug` state above fixes this
+		// card only. Refreshing outside the try is deliberate: a failed reload is
+		// not a failed save, and must not be reported as one.
+		if (changed) await invalidateAll();
 	}
 
 	async function releaseSlug() {
 		if (releasing) return;
 		releasing = true;
+		let changed = false;
 		try {
 			await cloudApi.releaseSlug();
 			slug = null;
@@ -177,6 +187,7 @@
 			// Straight into the form: releasing is usually the long way round to
 			// a different name, and the alternative is a card with one button.
 			editing = true;
+			changed = true;
 			toast.info("Profile URL removed — your profile is at its permalink");
 		} catch (err) {
 			toast.error(
@@ -187,6 +198,9 @@
 		} finally {
 			releasing = false;
 		}
+		// Same reason as saveSlug: the header still holds the released name until
+		// the layout reloads, and that name is claimable by someone else now.
+		if (changed) await invalidateAll();
 	}
 
 	async function onReparseClose(didReparse: boolean) {
