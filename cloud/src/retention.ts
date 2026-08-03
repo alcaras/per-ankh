@@ -26,6 +26,15 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			"anon_read",
 			"tournament_view",
 			"user_search",
+			// Header people search (users.ts): same counter role as
+			// user_search, its own budget. Metadata is q_length only.
+			"user_search_public",
+			// Profile-URL writes (users.ts): one row per request to either the
+			// setter or the release, not per success, because it's the rejected
+			// ones that need bounding. Metadata-free — which name was tried isn't
+			// worth keeping; the changes that landed are recorded by slug_claim /
+			// slug_release in the bucket below.
+			"slug_claim_attempt",
 			// Caster self-service ledger (player.ts): inserted per cast/uncast,
 			// read only by the 1h schedule budget. Metadata-free by design.
 			"tournament_schedule",
@@ -48,6 +57,20 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			"visibility_change",
 			"collection_change",
 			"name_change",
+			// Profile-URL changes (users.ts): slug_claim when a name is taken or
+			// renamed onto, slug_release when it's given up. Not once per account
+			// — users rename, bounded to one change a week by the cooldown — and
+			// between them they are the only record of who held a name, since the
+			// users row shows the current value only and a released name is
+			// immediately claimable by someone else. slug_claim carries
+			// { slug, previous_slug }, slug_release { previous_slug }, so either
+			// row names both sides of the transition.
+			//
+			// Derived slugs (first login, `admin backfill-slugs`) write neither:
+			// they're issued, not chosen, and reproducible from the display name
+			// they came from.
+			"slug_claim",
+			"slug_release",
 			"login",
 			"logout",
 			"login_denied",

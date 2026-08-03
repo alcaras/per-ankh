@@ -1,9 +1,19 @@
 // `./per-ankh admin users` — list users (recent login first by default).
 // `./per-ankh admin user <id>` — full detail for one user.
 // `./per-ankh admin find-user <query>` — search users by handle / display name
-//   / email, with their tournament-slot involvement.
+//   / slug / email, with their tournament-slot involvement.
+// `./per-ankh admin set-slug|clear-slug <id>` — operator control over the
+//   profile URL a user is otherwise handed at signup and free to rename.
+// `./per-ankh admin backfill-slugs [--dry-run]` — hand one to the accounts
+//   that predate derivation.
 
 import { d1Batch, d1Exec, d1Query, sqlStr } from "../wrangler";
+// The profile-URL rule and slugifier, shared with the Worker rather than
+// restated here — see cloud/src/schemas/user-slug.ts for why it's a module of
+// its own. cloud/ is a CJS package (no "type":"module") while scripts/ runs as
+// ESM, so its named exports surface only through the default-interop object.
+import userSlugRule from "../../../cloud/src/schemas/user-slug";
+import { confirmYesNo } from "../../lib/confirm";
 import {
 	bold,
 	type Column,
@@ -16,6 +26,7 @@ import {
 	printCount,
 	printDetail,
 	printTable,
+	trunc,
 } from "../../lib/format";
 import {
 	type CommandOpts,
@@ -24,6 +35,8 @@ import {
 	parseFlags,
 	printJson,
 } from "../../lib/cli";
+
+const { normalizeUserSlug, slugifyDisplayName, userSlugError } = userSlugRule;
 
 interface UserListRow {
 	user_id: string;
@@ -40,6 +53,7 @@ interface UserRow {
 	user_id: string;
 	display_name: string;
 	alias: string | null;
+	slug: string | null;
 	discord_id: string;
 	avatar_hash: string | null;
 	email: string | null;
@@ -89,6 +103,7 @@ interface UserMatchRow {
 	discord_username: string | null;
 	display_name: string;
 	alias: string | null;
+	slug: string | null;
 	discord_id: string;
 	email: string | null;
 	created_at: string;
@@ -239,6 +254,7 @@ export async function runDetail(
 		["User ID", user.user_id],
 		["Display name", emdash(user.display_name)],
 		["Alias", emdash(user.alias)],
+		["Slug", user.slug ? `/u/${user.slug}` : emdash(user.slug)],
 		["Discord ID", user.discord_id],
 		["Email", emdash(user.email)],
 		["Email verified", user.email_verified ? "yes" : "no"],
@@ -348,26 +364,29 @@ export async function runFind(
 	const query = positional[0];
 	if (!query) {
 		throw new Error(
-			"Usage: ./per-ankh admin find-user <query>  (matches discord handle, display name, or email)",
+			"Usage: ./per-ankh admin find-user <query>  (matches discord handle, display name, profile slug, or email)",
 		);
 	}
 	const limit = flagInt(flags, "limit", 25);
 
 	info(`Searching users matching "${query}"...`);
 
-	// Case-insensitive substring match. discord_username is stored lowercase
-	// (auth.ts), display_name/email are mixed-case, so we lower() both sides.
+	// Case-insensitive substring match. discord_username and slug are stored
+	// lowercase (auth.ts / the claim endpoint), display_name/email are
+	// mixed-case, so we lower() both sides throughout.
 	// Any `%` / `_` in the query stay live wildcards — useful for operators.
 	const like = sqlStr(`%${query.toLowerCase()}%`);
 	const userPredicate =
 		`lower(u.discord_username) LIKE ${like} ` +
 		`OR lower(u.display_name) LIKE ${like} ` +
 		`OR lower(u.alias) LIKE ${like} ` +
+		`OR lower(u.slug) LIKE ${like} ` +
 		`OR lower(u.email) LIKE ${like}`;
 
 	const batch = await d1Batch([
 		`SELECT
-		   u.user_id, u.discord_username, u.display_name, u.alias, u.discord_id, u.email,
+		   u.user_id, u.discord_username, u.display_name, u.alias, u.slug,
+		   u.discord_id, u.email,
 		   u.created_at, u.last_login_at,
 		   (SELECT COUNT(*) FROM games g WHERE g.user_id = u.user_id) AS game_count
 		 FROM users u
@@ -410,6 +429,7 @@ export async function runFind(
 				{ header: "HANDLE", width: 20 },
 				{ header: "NAME", width: 18 },
 				{ header: "ALIAS", width: 16 },
+				{ header: "SLUG", width: 16 },
 				{ header: "EMAIL", width: 26 },
 				{ header: "GAMES", width: 5, align: "right" },
 				{ header: "LAST LOGIN", width: 16 },
@@ -419,6 +439,7 @@ export async function runFind(
 				emdash(u.discord_username),
 				emdash(u.display_name),
 				emdash(u.alias),
+				emdash(u.slug),
 				emdash(u.email),
 				String(u.game_count),
 				formatDate(u.last_login_at),
@@ -565,4 +586,324 @@ export async function runClearAlias(
 		return;
 	}
 	ok(`Alias cleared: ${user.display_name} (${userId}) (was "${user.alias}")`);
+}
+
+interface SlugUserRow {
+	user_id: string;
+	display_name: string;
+	slug: string | null;
+}
+
+// `./per-ankh admin set-slug <user_id> <slug>` — set the profile URL
+// (per-ankh.app/u/<slug>) a user would otherwise set for themselves via
+// POST /v1/users/me/slug. Users can now rename, so this is no longer the only
+// way a mistaken name gets replaced; what it's for is the name a user must not
+// keep (impersonation, abuse) and the one they can't fix themselves because
+// they're inside the rename cooldown.
+//
+// It applies the endpoint's rule unchanged — the reserved list is an
+// impersonation control, and an operator minting a name past it defeats the
+// control — but it deliberately does NOT touch slug_changed_at: the cooldown
+// clock belongs to the user's own changes, so an operator fix neither spends
+// their week nor grants them a fresh one.
+export async function runSetSlug(
+	argv: string[],
+	opts: CommandOpts,
+): Promise<void> {
+	const { positional } = parseFlags(argv);
+	const userId = positional[0];
+	const rawSlug = positional[1];
+	if (!userId || rawSlug === undefined) {
+		throw new Error("Usage: ./per-ankh admin set-slug <user_id> <slug>");
+	}
+	const slug = normalizeUserSlug(rawSlug);
+	const problem = userSlugError(slug);
+	if (problem) {
+		throw new Error(`${problem}.`);
+	}
+
+	// Who the operator named, and who (if anyone) holds the name already —
+	// the unique index would reject the collision, but with a D1 constraint
+	// error instead of the holder's identity.
+	const batch = await d1Batch([
+		`SELECT user_id, display_name, slug FROM users WHERE user_id = ${sqlStr(userId)}`,
+		`SELECT user_id, display_name, slug FROM users WHERE slug = ${sqlStr(slug)}`,
+	]);
+	const user = (batch[0] as SlugUserRow[])[0];
+	const holder = (batch[1] as SlugUserRow[])[0];
+	if (!user) {
+		throw new Error(`User not found: ${userId}`);
+	}
+	if (holder && holder.user_id !== userId) {
+		throw new Error(
+			`Profile URL /u/${slug} is taken by ${holder.display_name} (${holder.user_id}).`,
+		);
+	}
+	if (user.slug === slug) {
+		info(`User ${user.display_name} (${userId}) already has /u/${slug}.`);
+		return;
+	}
+
+	await d1Exec(
+		`UPDATE users SET slug = ${sqlStr(slug)} WHERE user_id = ${sqlStr(userId)}`,
+	);
+
+	if (opts.json) {
+		printJson({
+			user_id: userId,
+			display_name: user.display_name,
+			slug,
+			previous_slug: user.slug,
+		});
+		return;
+	}
+	ok(`Profile URL set: ${user.display_name} (${userId}) → /u/${slug}`);
+	if (user.slug) {
+		info(`/u/${user.slug} now 404s and is free for anyone to claim.`);
+	}
+}
+
+// `./per-ankh admin clear-slug <user_id>` — release the profile URL, leaving
+// the user at their permalink until they set another. Same shape as the user's
+// own DELETE /v1/users/me/slug, minus the cooldown stamp (see set-slug above).
+//
+// No guard beyond "the row exists": clearing is allowed to break the old
+// /u/<slug> link. The user's profile is permanently reachable at
+// /users/<user_id> either way, and every internal link resolves through that
+// permalink. What the operator does need told is the part they can't undo
+// alone: the freed name is claimable by anyone, so releasing a recognizable one
+// hands over the chance to be mistaken for its previous holder.
+export async function runClearSlug(
+	argv: string[],
+	opts: CommandOpts,
+): Promise<void> {
+	const { positional } = parseFlags(argv);
+	const userId = positional[0];
+	if (!userId) {
+		throw new Error("Usage: ./per-ankh admin clear-slug <user_id>");
+	}
+
+	const rows = await d1Query<SlugUserRow>(
+		`SELECT user_id, display_name, slug FROM users WHERE user_id = ${sqlStr(userId)}`,
+	);
+	const user = rows[0];
+	if (!user) {
+		throw new Error(`User not found: ${userId}`);
+	}
+	if (user.slug === null) {
+		info(`User ${user.display_name} (${userId}) has no profile URL set.`);
+		return;
+	}
+
+	await d1Exec(
+		`UPDATE users SET slug = NULL WHERE user_id = ${sqlStr(userId)}`,
+	);
+
+	if (opts.json) {
+		printJson({
+			user_id: userId,
+			display_name: user.display_name,
+			slug: null,
+			previous_slug: user.slug,
+		});
+		return;
+	}
+	ok(
+		`Profile URL cleared: ${user.display_name} (${userId}) (was /u/${user.slug})`,
+	);
+	info(
+		`/u/${user.slug} now 404s and is free for anyone to claim; the profile stays at /users/${userId}.`,
+	);
+}
+
+// `./per-ankh admin backfill-slugs [--dry-run]` — give the accounts that
+// predate derivation the profile URL a signup would hand them today.
+//
+// A command and not a migration, which is the whole reason this exists: SQLite
+// has no regex, so the slugification in cloud/src/schemas/user-slug.ts can't be
+// expressed in SQL at all. Running it here also means the backfill and the
+// login path are the same function against the same reserved list, rather than
+// a SQL transliteration that drifts from it.
+//
+// Assigns nothing it isn't sure of. A name that doesn't survive slugification
+// and a name someone already holds are both skipped, reported, and left NULL —
+// no numeric suffixes, no truncation, matching the login path exactly. Within
+// one run the earliest account wins a contested name (ORDER BY created_at), so
+// re-running is stable and the older account isn't demoted by a newer one.
+//
+// slug_changed_at stays NULL, like every other derived assignment: these names
+// were issued, so the user's rename cooldown is untouched and their first
+// correction is immediate.
+interface SlugBackfillRow {
+	user_id: string;
+	display_name: string;
+	created_at: string;
+}
+
+export async function runBackfillSlugs(
+	argv: string[],
+	opts: CommandOpts,
+): Promise<void> {
+	const { flags } = parseFlags(argv);
+	const dryRun = flags["dry-run"] !== undefined;
+
+	// The effective display name, same COALESCE every public payload renders
+	// (cloud/src/identity.ts) — an operator alias is the name the site shows, so
+	// it's the name the URL derives from.
+	const [candidatesRaw, takenRaw] = await d1Batch([
+		`SELECT user_id, COALESCE(alias, display_name) AS display_name, created_at
+		   FROM users WHERE slug IS NULL ORDER BY created_at`,
+		`SELECT slug FROM users WHERE slug IS NOT NULL`,
+	]);
+	const candidates = candidatesRaw as SlugBackfillRow[];
+	const taken = new Set((takenRaw as { slug: string }[]).map((r) => r.slug));
+
+	const planned: { user_id: string; display_name: string; slug: string }[] = [];
+	const skipped: { display_name: string; reason: string }[] = [];
+	for (const row of candidates) {
+		const slug = slugifyDisplayName(row.display_name);
+		const problem = userSlugError(slug);
+		if (problem) {
+			skipped.push({
+				display_name: row.display_name,
+				// The rule's own message, which names the 3-30 rule or the reserved
+				// list; "" for a name that stripped down to nothing reads as the
+				// format complaint it is.
+				reason: slug === "" ? "name has no usable characters" : problem,
+			});
+			continue;
+		}
+		if (taken.has(slug)) {
+			skipped.push({
+				display_name: row.display_name,
+				reason: `/u/${slug} already taken`,
+			});
+			continue;
+		}
+		taken.add(slug);
+		planned.push({
+			user_id: row.user_id,
+			display_name: row.display_name,
+			slug,
+		});
+	}
+
+	// The plan, before anything is written — which is the whole value of the
+	// --dry-run flag and of printing it here: an operator sees every name that
+	// is about to become a public URL, and every name that won't.
+	//
+	// Human output only. --json emits one object at the END of the run instead,
+	// because the plan is not the outcome: the guards below can drop rows, so a
+	// payload printed here would report names as published that never were.
+	if (!opts.json) {
+		printCount(
+			candidates.length,
+			candidates.length === 1
+				? "user without a profile URL"
+				: "users without a profile URL",
+		);
+		if (planned.length > 0) {
+			printTable(
+				[
+					{ header: "USER", width: 28 },
+					{ header: "SLUG", width: 32 },
+					{ header: "USER_ID", width: 22 },
+				],
+				planned.map((p) => [
+					trunc(p.display_name, 28),
+					`/u/${p.slug}`,
+					p.user_id,
+				]),
+			);
+		}
+		if (skipped.length > 0) {
+			info(`Skipping ${skipped.length} (left at /users/<user_id>):`);
+			for (const s of skipped) {
+				info(`  ${trunc(s.display_name, 40)} — ${s.reason}`);
+			}
+		}
+	}
+
+	// Every early return reports `assigned: 0` rather than its own shape, so a
+	// --json consumer reads one field to learn what landed and never has to
+	// infer it from `dry_run` or from the presence of a plan.
+	if (planned.length === 0) {
+		if (opts.json)
+			printJson({ dry_run: dryRun, planned, skipped, assigned: 0 });
+		else info("Nothing to assign.");
+		return;
+	}
+	if (dryRun) {
+		if (opts.json) printJson({ dry_run: true, planned, skipped, assigned: 0 });
+		else info("Dry run — nothing written. Drop --dry-run to apply.");
+		return;
+	}
+	// Prompts go to stderr, so --json output stays clean and this stays a gate
+	// in both modes — publishing a URL for every account on the site is not
+	// something --json should quietly opt out of. --yes skips it as everywhere.
+	if (!opts.yes) {
+		const yes = await confirmYesNo(
+			`About to publish ${planned.length} profile URL${planned.length === 1 ? "" : "s"}. Are you sure?`,
+		);
+		if (!yes) {
+			if (opts.json)
+				printJson({ dry_run: false, planned, skipped, assigned: 0 });
+			else info("Cancelled.");
+			return;
+		}
+	}
+
+	// Both guards are the ones the login path uses, and they're here for the
+	// same reason: this run's read is minutes stale by the time it writes, so a
+	// user who logged in or renamed in between must win. `slug IS NULL` drops
+	// anyone who has since acquired one; NOT EXISTS turns a name taken in the
+	// meantime into a no-op instead of a UNIQUE violation that would abort the
+	// rest of the chunk.
+	//
+	// Which is exactly why the chunk size can't be the count: those guards are
+	// built to no-op, and d1Exec reports nothing back. Read the end state
+	// instead — one query per chunk asking which of the pairs it just wrote
+	// actually hold. That counts a row a concurrent login happened to give the
+	// same derived name, which is right: the planned URL exists either way, and
+	// what an operator needs to know is which names are now public.
+	const CHUNK = 50;
+	let assigned = 0;
+	for (let i = 0; i < planned.length; i += CHUNK) {
+		const chunk = planned.slice(i, i + CHUNK);
+		await d1Exec(
+			chunk
+				.map(
+					(p) =>
+						`UPDATE users SET slug = ${sqlStr(p.slug)}
+						  WHERE user_id = ${sqlStr(p.user_id)} AND slug IS NULL
+						    AND NOT EXISTS (SELECT 1 FROM users WHERE slug = ${sqlStr(p.slug)})`,
+				)
+				.join("; "),
+		);
+		const [landed] = await d1Query<{ n: number }>(
+			`SELECT COUNT(*) AS n FROM users WHERE ${chunk
+				.map(
+					(p) =>
+						`(user_id = ${sqlStr(p.user_id)} AND slug = ${sqlStr(p.slug)})`,
+				)
+				.join(" OR ")}`,
+		);
+		assigned += landed?.n ?? 0;
+		if (!opts.json && planned.length > CHUNK) {
+			info(`  ${assigned}/${planned.length}...`);
+		}
+	}
+
+	if (opts.json) {
+		printJson({ dry_run: false, planned, skipped, assigned });
+		return;
+	}
+	if (assigned === planned.length) {
+		ok(`Assigned ${assigned} profile URL${assigned === 1 ? "" : "s"}.`);
+		return;
+	}
+	ok(`Assigned ${assigned} of ${planned.length} planned profile URLs.`);
+	info(
+		`${planned.length - assigned} were claimed or renamed between this run's read and its write, and were left as they are.`,
+	);
 }

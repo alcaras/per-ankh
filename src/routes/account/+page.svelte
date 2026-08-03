@@ -2,10 +2,12 @@
 	import { Tabs } from "bits-ui";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { cloudApi, type GameListItem } from "$lib/api-cloud";
+	import { ApiError, cloudApi, type GameListItem } from "$lib/api-cloud";
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import BulkReparseModal from "$lib/BulkReparseModal.svelte";
 	import ChannelSettings from "$lib/settings/ChannelSettings.svelte";
+	import CopyButton from "$lib/tournament/CopyButton.svelte";
+	import { PUBLIC_ORIGIN } from "$lib/page-meta";
 	import { PARSER_VERSION } from "$lib/parser/types";
 	import { formatGameTitle } from "$lib/utils/formatting";
 	import { isNewer } from "$lib/utils/semver";
@@ -37,6 +39,29 @@
 	// svelte-ignore state_referenced_locally
 	let streamUrl = $state(data.user.stream_url ?? "");
 	let savingStream = $state(false);
+
+	// Profile URL. Same save-on-submit shape as the stream link. Most accounts
+	// arrive here already holding one, derived from their display name at
+	// signup, so the card's job is the correction — renaming a derived name, or
+	// claiming one when derivation produced nothing — plus releasing it. The
+	// worker trims + lowercases before validating and returns what it stored, so
+	// we echo its value.
+	// svelte-ignore state_referenced_locally
+	let slug = $state(data.user.slug);
+	let slugInput = $state("");
+	let claiming = $state(false);
+	let releasing = $state(false);
+	// Whether the form is showing. Open by default only when there's no slug to
+	// show — a user who has one sees the link, and asks for the form.
+	// svelte-ignore state_referenced_locally
+	let editing = $state(data.user.slug === null);
+
+	// The static label beside the input, so what they type reads as the tail of
+	// the URL it becomes.
+	const SLUG_PREFIX = "per-ankh.app/u/";
+	// What the user shares — absolute, since the point of the card is a link
+	// that can be pasted into Discord.
+	const profileUrl = $derived(slug ? `${PUBLIC_ORIGIN}/u/${slug}` : "");
 
 	// Already filtered to out-of-date games server-side (see +page.ts), so the
 	// count and modal list cover the user's entire library, not just a page.
@@ -117,6 +142,67 @@
 		}
 	}
 
+	async function saveSlug() {
+		const wanted = slugInput.trim();
+		if (claiming || !wanted) return;
+		claiming = true;
+		let changed = false;
+		try {
+			const saved = await cloudApi.setSlug(wanted);
+			const renamed = slug !== null;
+			slug = saved.slug;
+			slugInput = "";
+			editing = false;
+			changed = true;
+			toast.info(renamed ? "Profile URL updated" : "Profile URL claimed");
+		} catch (err) {
+			// The worker's rejections — bad format, reserved name, already taken,
+			// still inside the cooldown — carry user-safe messages; show them
+			// verbatim rather than restating the rule in a second place.
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: `Couldn't save that profile URL: ${err instanceof Error ? err.message : err}`,
+			);
+		} finally {
+			claiming = false;
+		}
+		// The header avatar is the only way into your own profile, and it links
+		// through the LAYOUT's copy of the user — which this write just made
+		// wrong. A rename leaves it pointing at a /u/<slug> that now 404s, or at
+		// whoever claims the freed name next; local `slug` state above fixes this
+		// card only. Refreshing outside the try is deliberate: a failed reload is
+		// not a failed save, and must not be reported as one.
+		if (changed) await invalidateAll();
+	}
+
+	async function releaseSlug() {
+		if (releasing) return;
+		releasing = true;
+		let changed = false;
+		try {
+			await cloudApi.releaseSlug();
+			slug = null;
+			slugInput = "";
+			// Straight into the form: releasing is usually the long way round to
+			// a different name, and the alternative is a card with one button.
+			editing = true;
+			changed = true;
+			toast.info("Profile URL removed — your profile is at its permalink");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: `Couldn't remove that profile URL: ${err instanceof Error ? err.message : err}`,
+			);
+		} finally {
+			releasing = false;
+		}
+		// Same reason as saveSlug: the header still holds the released name until
+		// the layout reloads, and that name is claimable by someone else now.
+		if (changed) await invalidateAll();
+	}
+
 	async function onReparseClose(didReparse: boolean) {
 		reparseGames = null;
 		if (didReparse) await invalidateAll();
@@ -175,6 +261,84 @@
 								>{data.user.discord_id}</span
 							>
 						</div>
+					</div>
+
+					<!-- Profile URL: the link to share, derived from the display name
+					     at signup and the user's to rename or remove. The link and
+					     the form are independent — a slug-holder can open the form
+					     and close it again — so the two blocks stack rather than
+					     alternating on whether a slug exists. The rules (format,
+					     cooldown, name reuse) aren't restated here; the worker's
+					     rejections carry them. -->
+					<div
+						class="mt-3 rounded-lg p-3"
+						style="background-color: rgb(var(--color-surface-raised));"
+					>
+						<div class="text-sm font-bold text-tan">Profile URL</div>
+						{#if slug}
+							<p class="mt-1 text-xs text-gray-400">
+								Your profile is at this link.
+							</p>
+							<div class="mt-2 flex items-center gap-2">
+								<span class="min-w-0 truncate font-mono text-sm text-bright"
+									>{profileUrl}</span
+								>
+								<CopyButton
+									text={profileUrl}
+									label="Copy profile URL"
+									title="Copy your profile URL"
+									class="inline-flex shrink-0 items-center justify-center rounded border border-surface p-1 text-tan transition-colors hover:bg-surface-hover hover:text-orange"
+								>
+									{#snippet children(copied)}
+										{#if copied}{@render iconCheck()}{:else}{@render iconCopy()}{/if}
+									{/snippet}
+								</CopyButton>
+								<div class="ml-auto flex shrink-0 items-center gap-2">
+									<button
+										type="button"
+										onclick={() => (editing = !editing)}
+										class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange"
+									>
+										{editing ? "Cancel" : "Change"}
+									</button>
+									<button
+										type="button"
+										onclick={releaseSlug}
+										disabled={releasing}
+										class="cursor-pointer rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
+									>
+										{releasing ? "Removing…" : "Remove"}
+									</button>
+								</div>
+							</div>
+						{/if}
+						{#if editing}
+							<form
+								class="mt-2 flex items-center gap-2"
+								onsubmit={(e) => {
+									e.preventDefault();
+									saveSlug();
+								}}
+							>
+								<span class="shrink-0 font-mono text-sm text-gray-400"
+									>{SLUG_PREFIX}</span
+								>
+								<input
+									type="text"
+									class="min-w-0 flex-1 rounded border border-input bg-surface-sunken px-2 py-1.5 text-sm text-tan focus:border-orange focus:outline-none"
+									aria-label="Profile URL"
+									bind:value={slugInput}
+									disabled={claiming}
+								/>
+								<button
+									type="submit"
+									class="shrink-0 rounded border border-input px-3 py-1.5 text-sm text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-50"
+									disabled={claiming || slugInput.trim() === ""}
+								>
+									Save
+								</button>
+							</form>
+						{/if}
 					</div>
 
 					<div class="mt-3">
@@ -368,3 +532,35 @@
 {#if reparseGames}
 	<BulkReparseModal games={reparseGames} onClose={onReparseClose} />
 {/if}
+
+<!-- Copy-button icons, same pair MatchPopover renders inside CopyButton. -->
+{#snippet iconCopy()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-3.5 w-3.5"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+		/>
+	</svg>
+{/snippet}
+{#snippet iconCheck()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-3.5 w-3.5"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+	</svg>
+{/snippet}

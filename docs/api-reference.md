@@ -13,7 +13,7 @@ This reference is drift-guarded: `cloud/src/routes-doc.test.ts` asserts it docum
 - [Games](#games----v1games) — `/v1/games/*`
 - [Collections](#collections----v1collections) — `/v1/collections`
 - [Users & profiles](#users--profiles) — `/v1/users/*` (public)
-- [Account](#account) — `/v1/users/me/online-ids`, settings
+- [Account](#account) — `/v1/users/me/online-ids`, profile URL, settings
 - [Tournaments — reads](#tournaments--reads)
 - [Tournaments — lifecycle & configuration](#tournaments--lifecycle--configuration)
 - [Tournaments — slots](#tournaments--slots)
@@ -73,6 +73,14 @@ Success bodies are endpoint-specific JSON (or a binary stream for downloads/expo
 - Tournament **slugs** match `^[a-z0-9][a-z0-9-]{0,63}$`. Note `GET /v1/tournaments/:slug` is the one read keyed by slug; every other per-tournament route uses the 21-char id.
 - Match **part** ids are `[A-Za-z0-9_-]{1,40}`.
 
+### Profile slugs
+
+A user's `slug` is the `<slug>` in `per-ankh.app/u/<slug>` — a separate namespace from tournament slugs, matching `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$` (3–30 chars), unique across users, and public on every payload that names a person.
+
+It is **derived, not claimed**: at first login the effective display name (`COALESCE(alias, display_name)`) is lowercased, whitespace becomes hyphens, anything outside `[a-z0-9-]` is dropped, hyphen runs collapse, and leading/trailing hyphens are trimmed. If the result fails the format rule, hits the reserved list, or is already taken, the user simply gets **no slug** — there is no numeric-suffix disambiguation and no truncation, and `null` stays a normal value on every payload that carries one. Existing rows are filled in by `./per-ankh admin backfill-slugs`, not by a migration (SQLite has no regex). Derivation runs on the first-login INSERT only, which is what makes a released slug stay released.
+
+From there it's the user's: [`POST /v1/users/me/slug`](#post-v1usersmeslug) renames it (7-day cooldown), [`DELETE`](#delete-v1usersmeslug) releases it. A released name is immediately claimable by anyone, so `/u/<name>` may retarget; `/users/<user_id>` is the permalink that never moves, and [`GET /v1/users/:user_id`](#get-v1usersuser_id) keeps serving every profile either way.
+
 ### Rate limiting
 
 Counters live in the D1 `events` table (or the Cache API for legacy downloads) and are keyed per-user, per-IP, or globally depending on the endpoint. Notable buckets:
@@ -86,6 +94,8 @@ Counters live in the D1 `events` table (or the Cache API for legacy downloads) a
 | `tournament_schedule` | 60 / hr per user | match schedule + caster self-service |
 | `tournament_create` | 5 / hr per user | `POST /v1/tournaments` |
 | user search | 60 / hr per user | `GET /v1/users/search` |
+| `user_search_public` | 300 / hr per user | `GET /v1/users/public-search` |
+| `slug_claim_attempt` | 15 / hr per user | `POST` + `DELETE /v1/users/me/slug` (counts attempts, not successes) |
 | upload / download | per-user + per-IP + global | game upload / download |
 
 Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents are exempt from the anonymous read/view limits (and their audit rows).
@@ -96,7 +106,7 @@ Cloud paths use **credentialed, echo-Origin** CORS (the request `Origin` is refl
 
 ### PII
 
-`online_id` (Steam/GOG/Epic) is stripped from game blobs for non-owner viewers via a deep walk (`stripOnlineIds`). The raw save ZIP retains it, which is why `GET /v1/games/:id/download` requires a session while the JSON `GET /v1/games/:id` serves public games anonymously. `discord_id` / `discord_username` appear only in admin-tier tournament responses, never in public payloads. PII is never logged.
+`online_id` (Steam/GOG/Epic) is stripped from game blobs for non-owner viewers via a deep walk (`stripOnlineIds`). The raw save ZIP retains it, which is why `GET /v1/games/:id/download` requires a session while the JSON `GET /v1/games/:id` serves public games anonymously. `discord_id` / `discord_username` appear only in admin-tier tournament responses, never in public payloads. A user's `slug` is public by design. It is derived from the effective display name (see [Profile slugs](#profile-slugs)) — never from `discord_username` or any other identity field the user hasn't already published — so the URL restates a name every public payload already renders. Since it is issued rather than chosen, `/u/<slug>` is an account-existence oracle keyed on display names; that is accepted, and users who don't want the URL can release it via [`DELETE /v1/users/me/slug`](#delete-v1usersmeslug). PII is never logged.
 
 ---
 
@@ -116,7 +126,7 @@ Exchange the OAuth code for a session.
 
 - **Auth:** Public (this call establishes the session).
 - **Body:** JSON `{ code: string, state: string, redirect_uri: string }` (all required); also requires the `oauth_pending` cookie. `state` and `redirect_uri` are checked against the pending KV entry (timing-safe).
-- **Response 200:** `{ user_id, discord_id, display_name, avatar_url, next }`; sets the session cookie and clears `oauth_pending`.
+- **Response 200:** `{ user_id, discord_id, display_name, avatar_url, slug: string|null, next }`; sets the session cookie and clears `oauth_pending`.
 - **Errors:** `400` (`INVALID_BODY`, `MISSING_FIELDS`, `MISSING_PENDING`, `PENDING_NOT_FOUND`, `STATE_MISMATCH`, `REDIRECT_URI_MISMATCH`), `500 CORRUPT_PENDING`, `502` (`TOKEN_EXCHANGE_FAILED`, `NO_ACCESS_TOKEN`, `USER_FETCH_FAILED`, `NO_USER_ID`), `500 UPSERT_FAILED`.
 - **Notes:** Pending entry is single-use (read-then-deleted). On first-ever login, seeds a `Personal` collection, pins beta status, and claims any pre-linked tournament slots. Writes a `login` audit event.
 
@@ -124,9 +134,9 @@ Exchange the OAuth code for a session.
 Current session's user profile.
 
 - **Auth:** Session.
-- **Response 200:** `{ user_id, discord_id, display_name, discord_username, avatar_url, is_beta: boolean, is_admin: boolean, default_game_public: boolean, stream_url: string|null }`.
+- **Response 200:** `{ user_id, discord_id, display_name, discord_username, avatar_url, slug: string|null, is_beta: boolean, is_admin: boolean, default_game_public: boolean, stream_url: string|null }`.
 - **Errors:** `401 UNAUTHORIZED` (also if the session points at a deleted user, which clears the cookie).
-- **Notes:** Re-claims pre-linked tournament slots on every call. `is_beta`/`is_admin` are advisory (frontend gating); the server re-checks per endpoint.
+- **Notes:** Re-claims pre-linked tournament slots on every call. `slug` is the caller's profile URL, null when they have none — carried here so the account page has it without a second fetch. `is_beta`/`is_admin` are advisory (frontend gating); the server re-checks per endpoint.
 
 ### `GET /v1/auth/dev/login`
 Local-only login bypass (no Discord).
@@ -199,7 +209,7 @@ List a user's games (search + filters + scope).
 Most-recent public games across all users (home-page feed).
 
 - **Auth:** Public. Serves `is_public=1` rows only.
-- **Response 200:** `PublicRecentGamesResponse` — `{ games: PublicRecentGame[] }` (≤20), each with uploader identity and per-player `vp_series` points.
+- **Response 200:** `PublicRecentGamesResponse` — `{ games: PublicRecentGame[] }` (≤20), each with uploader identity (`uploader_user_id`, `uploader_display_name`, `uploader_slug: string|null`, `uploader_avatar_url`) and per-player `vp_series` points.
 - **Errors:** `429 RATE_LIMIT`.
 - **Notes:** `anon_read` bucket (200/hr per IP; scraper UAs exempt). Only `display_name`/`player_name` exposed — no `online_id`/email. Cached `public, max-age=300, s-maxage=60`.
 
@@ -225,7 +235,7 @@ Fetch the parsed game blob (JSON).
 
 - **Auth:** Public (owner extras). Owner always allowed; non-owner only if `is_public=1`; anonymous on a private game → `401`, signed-in non-owner on a private game → `403`.
 - **Path:** `id` (21-char).
-- **Response 200:** the stored `FullGameData` JSON with injected top-level fields (`user_id`, `user_nation`, `uploader_nation`, `user_won`, `user_display_name`, `display_name`); owner additionally gets `is_public`.
+- **Response 200:** the stored `FullGameData` JSON with injected top-level fields (`user_id`, `user_nation`, `uploader_nation`, `user_won`, `user_display_name`, `user_slug`, `display_name`); owner additionally gets `is_public`.
 - **Errors:** `404` (`NOT_FOUND`, `BLOB_MISSING`), `401 UNAUTHORIZED`, `403 FORBIDDEN`, `429 RATE_LIMIT`.
 - **Notes:** Non-owner viewers get `online_id` stripped from the blob. Anonymous reads consume the `anon_read` bucket (200/hr per IP). Owner responses are `private, no-store`; public responses `public, max-age=3600, s-maxage=60` with `Vary: Cookie, Origin`.
 
@@ -290,14 +300,32 @@ Autocomplete users (for slot creation).
 - **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_USER_SEARCH` (60/hr per user), `400 VALIDATION_ERROR`.
 - **Notes:** Only these four identity fields — no email, avatar, or timestamps.
 
+### `GET /v1/users/public-search`
+Find players by name — the "Players" group in the header search.
+
+- **Auth:** Session (any logged-in user). Anonymous search stays gated to keep user enumeration behind a login.
+- **Query:** `q` (trimmed, lowercased, 1–32; results only when ≥2 chars), `limit` (1–20, default 10).
+- **Response 200:** `{ users: [{ user_id, display_name, slug: string|null, avatar_url }] }` (empty when `q<2`).
+- **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_USER_SEARCH_PUBLIC` (300/hr per user), `400 VALIDATION_ERROR`.
+- **Notes:** **No `discord_username` — neither returned nor matchable.** Matching is on `display_name` + `alias` + `slug` only, so the endpoint can't confirm a Discord-handle prefix, and no `discord_*` field appears in the response. (`avatar_url` is a `cdn.discordapp.com` URL, so it carries the user's `discord_id` in its path — as every public avatar payload does; that's the cost of rendering an avatar, and the handle is what the PII stance protects.) `q` is matched as a literal: `%` and `_` are escaped, so a wildcard query can't widen the prefix lookup into a directory sweep. Results are scoped to users who made something public — a profile slug, a public game, a tournament slot, or a linked video channel; a user with none of those is absent from every result. Because slugs are now derived at signup rather than claimed, that first leg is true for nearly every account, so in practice this reaches anyone whose display name slugified — the same accepted consequence as `/u/<slug>` being an account-existence oracle. It publishes nothing a display-name prefix match didn't already, and the other three legs still carry the accounts no slug reached. Distinct from `GET /v1/users/search`, which serves the admin autocomplete and returns the Discord fields the slot pre-link needs.
+
 ### `GET /v1/users/:user_id`
 Public profile + all-time summary.
 
 - **Auth:** Public (owner extras) — the owner's summary includes private games; others/anon see public-only.
 - **Path:** `user_id` (21-char).
-- **Response 200:** `{ user_id, display_name, avatar_url, summary: { total_games, win_rate: number|null, favorite_nation: string|null, favorite_day_of_week: number|null }, channels: { platform, channel_url }[], tournament_participant: boolean }`.
+- **Response 200:** `{ user_id, display_name, avatar_url, slug: string|null, summary: { total_games, win_rate: number|null, favorite_nation: string|null, favorite_day_of_week: number|null }, channels: { platform, channel_url }[], tournament_participant: boolean }`.
 - **Errors:** `404 NOT_FOUND`.
-- **Notes:** Summary is all-time over all saves (ignores any scope selector). `channels` are the user's linked video/stream channels (public) — drives whether the profile shows the "Videos" tab. `tournament_participant` plays the same role for the "Tournaments" tab: true when the user has a match attributable to them (same rule `GET /v1/users/:user_id/tournaments` uses — report-time snapshot for a decided match, live slot per side otherwise, byes excluded) **or** has cast a match sitting, so a dedicated caster who never plays still gets the tab. Holding a slot is deliberately not the test: a seat before round one renders nothing, and a substituted-out player holds no slot yet keeps every match they played. Both are flags only; the tabs' payloads load lazily from their own endpoints.
+- **Notes:** `slug` is the user's profile URL (`/u/<slug>`), null when they have none — see [Profile slugs](#profile-slugs). Summary is all-time over all saves (ignores any scope selector). `channels` are the user's linked video/stream channels (public) — drives whether the profile shows the "Videos" tab. `tournament_participant` plays the same role for the "Tournaments" tab: true when the user has a match attributable to them (same rule `GET /v1/users/:user_id/tournaments` uses — report-time snapshot for a decided match, live slot per side otherwise, byes excluded) **or** has cast a match sitting, so a dedicated caster who never plays still gets the tab. Holding a slot is deliberately not the test: a seat before round one renders nothing, and a substituted-out player holds no slot yet keeps every match they played. Both are flags only; the tabs' payloads load lazily from their own endpoints.
+
+### `GET /v1/users/by-slug/:slug`
+The same public profile, resolved by the user's slug — what `/u/<slug>` reads.
+
+- **Auth:** Public (owner extras) — identical to `GET /v1/users/:user_id`; no rate limit either, for the same reason.
+- **Path:** `slug` — 3–30 chars, `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`.
+- **Response 200:** the same payload as `GET /v1/users/:user_id`, field for field — one shared builder assembles both, so the two can't drift.
+- **Errors:** `404 NOT_FOUND` — unknown slug, and equally a malformed one (the route pattern admits only the stored lowercase shape, so anything else never matches a route).
+- **Notes:** No case folding: `/u/Foo` is a miss, not a redirect, so each user has exactly one canonical URL. `/users/<user_id>` remains a permanent permalink and keeps serving every profile, slug or not — and a slug that has been released or renamed away 404s here, since it is only ever the current holder's.
 
 ### `GET /v1/users/:user_id/stats`
 User-corpus aggregate stats bundle.
@@ -322,15 +350,15 @@ One player's whole tournament record — played + upcoming matches, and cast app
 
 - **Auth:** Public — tournament reads already are, tournament-linked saves are forced public, and casters are already credited publicly on the tournament stats page.
 - **Path:** `user_id` (21-char).
-- **Response 200:** `{ user_id, tournaments: [{ tournament_id, slug, name, status, signups_open, division_a_name, division_b_name, map_pool }], matches: TournamentMatch[], casts: (TournamentMatch & { part_id })[], slot_labels, slot_avatars }`.
+- **Response 200:** `{ user_id, tournaments: [{ tournament_id, slug, name, status, signups_open, division_a_name, division_b_name, map_pool }], matches: TournamentMatch[], casts: (TournamentMatch & { part_id })[], slot_labels, slot_user_ids, slot_slugs, slot_avatars }`.
 - **Errors:** `429 RATE_LIMIT_TOURNAMENT_VIEW` (shares the per-IP tournament-view budget).
-- **Notes:** Match attribution prefers the report-time occupant snapshot for decided matches, so a substitution never reassigns a played match to the substitute; it falls through to the live slot per side when the match is still pending **or** when that side's snapshot is null (the occupant hadn't claimed their slot at report time), matching the render layer's rule. `tournaments` is the index both sections group under, carrying only the per-tournament context the shared match table renders from — a tournament the player holds a seat in but has no match or cast for does not appear, so a setup-phase tournament (which has no rounds) never does. The setup gate still applies, same as every per-tournament read. `status` + `signups_open` are the pair every tournament surface renders its status chip from. Byes are excluded. The four admin-only `slot_a/b_discord_*` fields are **absent** from every match here, not null. `slot_labels`/`slot_avatars` carry live per-slot identity, which the pending (upcoming) rows render from.
+- **Notes:** Match attribution prefers the report-time occupant snapshot for decided matches, so a substitution never reassigns a played match to the substitute; it falls through to the live slot per side when the match is still pending **or** when that side's snapshot is null (the occupant hadn't claimed their slot at report time), matching the render layer's rule. `tournaments` is the index both sections group under, carrying only the per-tournament context the shared match table renders from — a tournament the player holds a seat in but has no match or cast for does not appear, so a setup-phase tournament (which has no rounds) never does. The setup gate still applies, same as every per-tournament read. `status` + `signups_open` are the pair every tournament surface renders its status chip from. Byes are excluded. The four admin-only `slot_a/b_discord_*` fields are **absent** from every match here, not null. `slot_labels`/`slot_user_ids`/`slot_slugs`/`slot_avatars` carry live per-slot identity, which the pending (upcoming) rows render — and link — from. `slot_user_ids` exposes nothing new: the same ids already ship on every row as `slot_a/b_user_id`; `slot_slugs` is what lets a pending row's link skip the `/users/<id>` redirect.
 
 ### `GET /v1/creator-videos`
 Cross-creator home feed — the newest uploads across all users' linked channels, merged newest-first for the home page's "Latest from creators" strip.
 
 - **Auth:** Public — channels and their videos are user-published; no PII, same for every viewer.
-- **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform, user_id, display_name, avatar_url }[] }` (each video carries its creator; empty only when no channel has recent uploads).
+- **Response 200:** `{ videos: { id, title, url, thumbnail_url: string|null, published_at, platform, user_id, display_name, slug: string|null, avatar_url }[] }` (each video carries its creator; empty only when no channel has recent uploads).
 - **Notes:** Cached as one pre-assembled KV entry, stale-while-revalidate (mirrors the per-channel cache): fresh served as-is, stale served instantly while a background task re-assembles it, cold miss built synchronously and cached so the first request already returns the feed. The cold build's per-channel fetches run in parallel over mostly-warm caches (at worst one RSS fetch per channel, plus one `videos.list` call where a key is configured). Capped at 8 (two rows of four). Underlying per-channel data is the same SWR cache as `GET /v1/users/:user_id/videos`, including its broadcast-date correction — so a cast is placed and labelled by when it aired.
 
 ---
@@ -352,6 +380,23 @@ Forget one online id.
 - **Response:** `204 No Content` (idempotent).
 - **Errors:** `401 UNAUTHORIZED`.
 - **Notes:** Scoped to the caller's own row; re-uploading a save re-links the id.
+
+### `POST /v1/users/me/slug`
+Set the caller's profile URL (`/u/<slug>`) — claiming one, or renaming the one they have.
+
+- **Auth:** Session.
+- **Body:** JSON `{ slug: string }`. Trimmed and lowercased before validation, so mixed-case input claims the lowercase name; must then match `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$` (3–30 chars) and not be reserved (`admin`, `staff`, `moderator`, `support`, `me`, `per-ankh`, `perankh` — impersonation/brand holds, not route safety).
+- **Response 200:** `{ slug }` — the normalized value as stored. Submitting the slug the caller already holds is a no-op success and does not start a cooldown.
+- **Errors:** `401 UNAUTHORIZED`, `400 INVALID_SLUG` (bad format **or** reserved; the message states the rule and is safe to show verbatim), `409 SLUG_TAKEN` (another user holds it), `429 RATE_LIMIT_SLUG_RENAME` (inside the 7-day rename cooldown; the message names the time left), `429 RATE_LIMIT_SLUG_CLAIM` (15/hr per user), `415 UNSUPPORTED_MEDIA_TYPE`, `400 INVALID_BODY`.
+- **Notes:** Most callers already hold a slug — one is derived from the display name at first login (see [Profile slugs](#profile-slugs)) — so this endpoint is mostly the correction of a derived name plus renames afterwards. Uniqueness is enforced by the `users.slug` unique index rather than a pre-check, so two simultaneous claims of the same name can't both win. How often the column can *change* is bounded by a **7-day cooldown** on `users.slug_changed_at`, as a predicate in the same conditional UPDATE (the successor to 0039's set-once `slug IS NULL`, and race-safe for the same reason); how often the endpoint can be *called* is bounded separately, since every well-formed request is a real D1 write and a name-availability probe, by the `slug_claim_attempt` bucket (24h retention, metadata-free, shared with the DELETE below). `slug_changed_at` records the user's **own** changes only: a derived or operator-set slug leaves it NULL, so a user's first correction is immediate. A change writes a `slug_claim` audit event with `{ slug, previous_slug }` (awaited; 90-day retention).
+
+### `DELETE /v1/users/me/slug`
+Release the caller's profile URL, leaving them on the `/users/<user_id>` permalink.
+
+- **Auth:** Session.
+- **Response:** `204 No Content` (idempotent).
+- **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_SLUG_CLAIM` (the same 15/hr attempts bucket as the POST).
+- **Notes:** Deliberately **not** gated by the rename cooldown — taking your name back out of a public URL always works — but it does *stamp* it, so release-then-claim isn't a way around the gate. The released name returns to the pool immediately and anyone may claim it, so an old `/u/<name>` link can end up resolving to a different person; `/users/<user_id>` is the permalink that doesn't move. Writes a `slug_release` audit event with `{ previous_slug }` (awaited; 90-day retention) only when a slug was actually held.
 
 _(Account settings live at [`POST /v1/auth/settings`](#post-v1authsettings).)_
 
@@ -379,13 +424,13 @@ Tournament detail (the only read keyed by **slug**).
 ### `GET /v1/tournaments/:id/standings`
 Swiss standings per division + combined qualifier ranking.
 
-- **Response 200:** `{ tournament_id, divisions: { A: { name, standings: RankedStanding[] }, B: {...} }, combined_qualifier_ranking?: [...] }`. Per-row fields include `slot_id, rank, wins, losses, status, h2h, buchholz_cut1, opponents_buchholz, cumulative, division, display_name, avatar_url, swiss_seed, withdrawn`; admins additionally see `signup_answer` and `discord_username` (null for public).
+- **Response 200:** `{ tournament_id, divisions: { A: { name, standings: RankedStanding[] }, B: {...} }, combined_qualifier_ranking?: [...] }`. Per-row fields include `slot_id, rank, wins, losses, status, h2h, buchholz_cut1, opponents_buchholz, cumulative, division, display_name, user_id, slug, avatar_url, swiss_seed, withdrawn`; admins additionally see `signup_answer` and `discord_username` (null for public).
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 
 ### `GET /v1/tournaments/:id/bracket`
 Championship bracket.
 
-- **Response 200:** `{ tournament_id, slots: [{ slot_id, championship_seed, display_name, user_id, avatar_url }], rounds: [{ round_id, round_number, status, matches: [<serializeMatch> & { total_turns }] }] }` (championship-phase only).
+- **Response 200:** `{ tournament_id, slots: [{ slot_id, championship_seed, display_name, user_id, slug, avatar_url }], rounds: [{ round_id, round_number, status, matches: [<serializeMatch> & { total_turns }] }] }` (championship-phase only).
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 - **Notes:** Admin-only `slot_*_discord_username` / `slot_*_discord_id` inside matches are null for public viewers.
 
@@ -413,7 +458,7 @@ Round structure.
 Matches, with optional filters — the source for upcoming/scheduled games.
 
 - **Query:** `round_id`, `phase`, `division`, `slot_id` (all optional, in-memory filters).
-- **Response 200:** `{ tournament_id, matches: [<serializeMatch> & { round_id, round_number, phase, division }] }`. Each match carries `status` (e.g. `pending`), `match_number`, both slots' display names/nations/avatars, `map_script`, `winner_slot_id`/`game_id`/`reported_at`, and a `parts[]` array of scheduled sittings — each part `{ id, scheduled_at, casters[], streams }`.
+- **Response 200:** `{ tournament_id, matches: [<serializeMatch> & { round_id, round_number, phase, division }] }`. Each match carries `status` (e.g. `pending`), `match_number`, both slots' display names/nations/avatars plus each occupant's `slot_a/b_user_id` and `slot_a/b_slug`, `map_script`, `winner_slot_id`/`game_id`/`reported_at`, and a `parts[]` array of scheduled sittings — each part `{ id, scheduled_at, casters[], streams }`, each caster `{ user_id, name, display_name, slug, avatar_url }`.
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 - **Notes:** "Upcoming" = `status: "pending"` and/or a future `parts[].scheduled_at`. Admin-only discord fields are null for public viewers.
 
@@ -427,7 +472,7 @@ Single match detail.
 ### `GET /v1/tournaments/:id/videos`
 Uploads from the tournament's admin-set YouTube playlist (`youtube_playlist_url`) — feeds the Videos tab, whose search filters the returned list client-side. KV-cached (stale-while-revalidate), same as the profile videos read. When `YOUTUBE_API_KEY` is configured the whole playlist is enumerated via the Data API (`playlistItems.list`, paged, capped at 500) so search can reach every video, and broadcasts are re-dated to when they aired (`videos.list`, one further unit per 50 videos — same correction as the profile videos read); without the key it falls back to the free RSS feed's ~15 most-recent entries, dated as the feed gave them.
 
-- **Response 200:** `{ videos: [{ id, title, url, thumbnail_url, published_at, platform, …uploader }] }`, newest first (on the keyed path, by air time for live content). Each video carries uploader attribution: a linked Per-Ankh uploader adds `{ user_id, display_name, avatar_url }` (Discord identity, like the creator feed); an unlinked YouTube uploader adds `{ uploader_name, uploader_url }`; a feed without an author adds neither. Empty when no playlist is configured or the stored value no longer parses.
+- **Response 200:** `{ videos: [{ id, title, url, thumbnail_url, published_at, platform, …uploader }] }`, newest first (on the keyed path, by air time for live content). Each video carries uploader attribution: a linked Per-Ankh uploader adds `{ user_id, display_name, slug, avatar_url }` (Discord identity, like the creator feed); an unlinked YouTube uploader adds `{ uploader_name, uploader_url }`; a feed without an author adds neither. Empty when no playlist is configured or the stored value no longer parses.
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 
 ---
@@ -599,7 +644,7 @@ List a tournament's admins.
 
 - **Auth:** Tournament admin (the read still requires admin and consumes the admin rate-limit budget).
 - **Path:** `id` (21-char).
-- **Response 200:** `{ admins: [{ user_id, display_name, avatar_url, is_creator: boolean }] }` (ordered by grant time).
+- **Response 200:** `{ admins: [{ user_id, display_name, slug: string|null, avatar_url, is_creator: boolean }] }` (ordered by grant time).
 - **Errors:** `401 UNAUTHORIZED`, `403 NOT_TOURNAMENT_ADMIN`, `429 RATE_LIMIT_TOURNAMENT_ADMIN`, `404 TOURNAMENT_NOT_FOUND`.
 - **Notes:** The only tournament endpoint that exposes admin `user_id`s (public detail hides them).
 
@@ -609,7 +654,7 @@ Grant co-admin.
 - **Auth:** Tournament admin.
 - **Path:** `id` (21-char).
 - **Body:** `GrantAdminSchema` — `{ user_id: string }` (21-char).
-- **Response 201:** `{ admin: { user_id, display_name, avatar_url, is_creator } }`.
+- **Response 201:** `{ admin: { user_id, display_name, slug, avatar_url, is_creator } }` — the same shape the list endpoint returns.
 - **Errors:** `404 USER_NOT_FOUND`, plus auth/body codes.
 - **Notes:** Idempotent (`INSERT OR IGNORE`). A granted admin can act regardless of beta status.
 

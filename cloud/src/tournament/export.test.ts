@@ -160,7 +160,7 @@ describe("buildMatchesCsv", () => {
 			}),
 		};
 		const identities = new Map([
-			["ua", { avatar_url: null, display_name: "Alice Display" }],
+			["ua", { avatar_url: null, display_name: "Alice Display", slug: null }],
 		]);
 		const rows = dataRows(
 			buildMatchesCsv([completed], slotNames, new Map(), identities),

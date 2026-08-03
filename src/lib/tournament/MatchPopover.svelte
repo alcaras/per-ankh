@@ -16,6 +16,7 @@
 	import type { FullGameData } from "$lib/parser/types";
 	import Chart from "$lib/Chart.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import { matchBracketLabel } from "$lib/tournament/bracket-label";
@@ -39,6 +40,8 @@
 		matchSlotNation,
 		matchSlotDisplayName,
 		matchSlotOutcome,
+		matchSlotSlug,
+		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
 	import { upcomingScheduledParts } from "$lib/tournament/parts";
 	import { seshMatchLine, seshVersus } from "$lib/tournament/sesh";
@@ -63,6 +66,9 @@
 		tournament: TournamentDetail;
 		slotLabels: Record<string, string>;
 		slotUserIds: Record<string, string | null>;
+		// Live slot → profile slug, resolved alongside slotUserIds so a
+		// link's two halves always describe the same person (see matchSlotSlug).
+		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		// Each slot's signup answer (timezone/availability), admin-only — drives
 		// the "Copy DM" scheduling template. Empty/null when unavailable.
@@ -88,6 +94,7 @@
 		tournament,
 		slotLabels,
 		slotUserIds,
+		slotSlugs,
 		slotAvatars,
 		slotSignupAnswers,
 		user,
@@ -295,6 +302,19 @@
 		loserSide !== null
 			? matchSlotAvatarUrl(match, loserSide, slotAvatars)
 			: null,
+	);
+	// Profile behind the winner, for the two winner cards below (the header
+	// matchup resolves its own per side inside nameWithEdit). Same snapshot-first
+	// rule as the label it sits next to, so name and destination agree.
+	const winnerUserId = $derived(
+		winnerSide !== null
+			? matchSlotUserId(match, winnerSide, slotUserIds)
+			: null,
+	);
+	// Resolved from the same side under the same rule, so the winner cards'
+	// link points at the account winnerUserId names.
+	const winnerSlug = $derived(
+		winnerSide !== null ? matchSlotSlug(match, winnerSide, slotSlugs) : null,
 	);
 
 	// The map_pool instance this match was assigned, resolved from its id.
@@ -648,8 +668,17 @@
 					alt={formatEnum(nation, "NATION_")}
 				/>
 			{/if}
-			<PlayerAvatar avatarUrl={avatar} size={14} />
-			<span class="truncate">{label}</span>
+			<!-- Avatar + name link to the occupant's profile; the crest (nation) and
+			     the substitute pencil stay outside, so the pencil keeps its own click
+			     target right beside the link. -->
+			<ProfileLink
+				userId={matchSlotUserId(match, side, slotUserIds)}
+				slug={matchSlotSlug(match, side, slotSlugs)}
+				class="inline-flex min-w-0 items-center gap-1 hover:underline"
+			>
+				<PlayerAvatar avatarUrl={avatar} size={14} />
+				<span class="truncate">{label}</span>
+			</ProfileLink>
 			{#if canSubstitute && slotId !== null && slotId !== ""}
 				<button
 					type="button"
@@ -896,10 +925,16 @@
 						<p
 							class="flex items-center justify-center gap-1 text-sm font-bold text-bright"
 						>
-							{#if winnerLabel}
-								<PlayerAvatar avatarUrl={winnerAvatar} size={14} />
-							{/if}
-							<span class="truncate">{winnerLabel ?? "—"}</span>
+							<ProfileLink
+								userId={winnerUserId}
+								slug={winnerSlug}
+								class="inline-flex min-w-0 items-center gap-1 hover:underline"
+							>
+								{#if winnerLabel}
+									<PlayerAvatar avatarUrl={winnerAvatar} size={14} />
+								{/if}
+								<span class="truncate">{winnerLabel ?? "—"}</span>
+							</ProfileLink>
 						</p>
 					</div>
 					<div>
@@ -959,8 +994,14 @@
 				Winner
 			</p>
 			<p class="flex items-center gap-1 text-sm font-bold text-bright">
-				<PlayerAvatar avatarUrl={winnerAvatar} size={14} />
-				<span class="truncate">{winnerLabel}</span>
+				<ProfileLink
+					userId={winnerUserId}
+					slug={winnerSlug}
+					class="inline-flex min-w-0 items-center gap-1 hover:underline"
+				>
+					<PlayerAvatar avatarUrl={winnerAvatar} size={14} />
+					<span class="truncate">{winnerLabel}</span>
+				</ProfileLink>
 			</p>
 		</div>
 	{/if}
@@ -1092,7 +1133,10 @@
 					<!-- Caster on the left, its stream link(s) to the right. -->
 					<div class="flex items-start gap-3">
 						{#if part.casters.length > 0}
-							<!-- Streamer first (with avatar), co-casters appended. -->
+							<!-- Streamer first (with avatar), co-casters appended. Each name
+							     is its own link, so the co-casters are rendered one at a time
+							     rather than joined into a single string; free-text casters
+							     carry a null user_id and stay unlinked. -->
 							<div
 								class="flex min-w-0 flex-1 items-center gap-1 text-xs text-tan"
 							>
@@ -1101,13 +1145,21 @@
 									size={14}
 								/>
 								<span class="truncate">
-									Cast by {part.casters[0]
-										.display_name}{#if part.casters.length > 1}
+									Cast by <ProfileLink
+										userId={part.casters[0].user_id}
+										slug={part.casters[0].slug}
+										class="hover:underline"
+										>{part.casters[0].display_name}</ProfileLink
+									>{#if part.casters.length > 1}
 										<span class="text-muted"
-											>&nbsp;with {part.casters
-												.slice(1)
-												.map((c) => c.display_name)
-												.join(", ")}</span
+											>&nbsp;with {#each part.casters.slice(1) as c, i (i)}{i >
+												0
+													? ", "
+													: ""}<ProfileLink
+													userId={c.user_id}
+													slug={c.slug}
+													class="hover:underline">{c.display_name}</ProfileLink
+												>{/each}</span
 										>{/if}
 								</span>
 							</div>

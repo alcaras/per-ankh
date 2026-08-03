@@ -8,6 +8,7 @@
 	} from "$lib/api-cloud";
 	import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import {
 		matchSlotAvatarUrl,
@@ -168,6 +169,30 @@
 		const out: Record<string, string | null> = {};
 		for (const s of standings) {
 			out[s.slot_id] = s.avatar_url;
+		}
+		return out;
+	});
+
+	// Slot → claiming account, for the advancing/eliminated gutter chips. Those
+	// name the CURRENT occupant (slotLabel reads labelOf, not a match snapshot),
+	// so the link resolves the same way. The match cells are each wrapped in an
+	// <a> to the match popover, which links its own players — nesting anchors
+	// there would be invalid HTML.
+	const userIdOf = $derived.by(() => {
+		const out: Record<string, string | null> = {};
+		for (const s of standings) {
+			out[s.slot_id] = s.user_id;
+		}
+		return out;
+	});
+
+	// The profile slug for those same accounts, so a chip links straight
+	// to /u/<slug> rather than through the id URL's redirect. Same source, same
+	// key — null both for an unclaimed slot and for an occupant without a slug.
+	const slugOf = $derived.by(() => {
+		const out: Record<string, string | null> = {};
+		for (const s of standings) {
+			out[s.slot_id] = s.slug;
 		}
 		return out;
 	});
@@ -505,8 +530,14 @@
 									onmouseenter={() => (highlightedSlot = a.slot_id)}
 									onmouseleave={() => (highlightedSlot = null)}
 								>
-									<PlayerAvatar avatarUrl={avatarOf[a.slot_id]} size={12} />
-									<span class="chip-name">{slotLabel(a.slot_id)}</span>
+									<ProfileLink
+										userId={userIdOf[a.slot_id] ?? null}
+										slug={slugOf[a.slot_id] ?? null}
+										class="flex min-w-0 flex-1 items-center gap-2 hover:underline"
+									>
+										<PlayerAvatar avatarUrl={avatarOf[a.slot_id]} size={12} />
+										<span class="chip-name">{slotLabel(a.slot_id)}</span>
+									</ProfileLink>
 									<span class="chip-record">{a.finalWins}-{a.finalLosses}</span>
 								</li>
 							{/each}
@@ -533,8 +564,14 @@
 									onmouseenter={() => (highlightedSlot = e.slot_id)}
 									onmouseleave={() => (highlightedSlot = null)}
 								>
-									<PlayerAvatar avatarUrl={avatarOf[e.slot_id]} size={12} />
-									<span class="chip-name">{slotLabel(e.slot_id)}</span>
+									<ProfileLink
+										userId={userIdOf[e.slot_id] ?? null}
+										slug={slugOf[e.slot_id] ?? null}
+										class="flex min-w-0 flex-1 items-center gap-2 hover:underline"
+									>
+										<PlayerAvatar avatarUrl={avatarOf[e.slot_id]} size={12} />
+										<span class="chip-name">{slotLabel(e.slot_id)}</span>
+									</ProfileLink>
 									<span class="chip-record">{e.finalWins}-{e.finalLosses}</span>
 								</li>
 							{/each}

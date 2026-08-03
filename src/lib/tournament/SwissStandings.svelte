@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { SlotStanding } from "$lib/api-cloud";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import SlotUsernameCell from "$lib/tournament/SlotUsernameCell.svelte";
 	import SwapPicker from "$lib/tournament/SwapPicker.svelte";
@@ -160,11 +161,19 @@
 					>
 						<td class="py-1 pr-2 font-mono">{s.rank}</td>
 						<td class="py-1 pr-2">
+							<!-- The name links to the claiming player's profile; the avatar
+							     doesn't. The admin row renders its name inside the substitute
+							     editor, which can't sit inside an anchor, so linking the avatar
+							     too would mean two adjacent links to one profile on that row
+							     and a different link target between admin and non-admin rows of
+							     the same table. -->
 							<span class="flex items-center gap-1">
 								<PlayerAvatar avatarUrl={s.avatar_url} size={15} />
 								{#if isViewerAdmin && onSubstitute}
 									<SlotUsernameCell
 										slotId={s.slot_id}
+										userId={s.user_id}
+										slug={s.slug}
 										username={s.display_name}
 										handle={s.discord_username}
 										disabled={busy}
@@ -172,7 +181,13 @@
 											onSubstitute(s.slot_id, u, userId)}
 									/>
 								{:else}
-									<span class:line-through={s.withdrawn}>{slotLabel(s)}</span>
+									<ProfileLink
+										userId={s.user_id}
+										slug={s.slug}
+										class="hover:underline"
+									>
+										<span class:line-through={s.withdrawn}>{slotLabel(s)}</span>
+									</ProfileLink>
 								{/if}
 								{#if s.withdrawn}
 									<!-- Withdrawn takes display precedence over the W/L-derived

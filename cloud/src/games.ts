@@ -23,6 +23,7 @@ import {
 	cloudCorsHeaders,
 	decompressWithLimit,
 	errorResponse,
+	escapeLikeValue,
 	getClientIp,
 	jsonResponse,
 	sha256Hex,
@@ -139,7 +140,9 @@ export type RateLimitedEventType =
 	| "tournament_create"
 	| "tournament_export"
 	| "tournament_schedule"
-	| "user_search";
+	| "user_search"
+	| "user_search_public"
+	| "slug_claim_attempt";
 
 // Upload rate limits cover both first-time uploads and re-imports — both
 // hit the same R2 puts + D1 batch, so they cost the same.
@@ -2024,8 +2027,7 @@ export async function handleGameList(
 		// search for "100%" doesn't match everything. ESCAPE '\\' opts the
 		// pattern into backslash-escaping. LOWER both sides for
 		// case-insensitive substring match without depending on D1 collation.
-		const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
-		const likePattern = `%${escaped.toLowerCase()}%`;
+		const likePattern = `%${escapeLikeValue(q).toLowerCase()}%`;
 		// Match the game title (game_name / owner rename) and the nation.
 		// user_nation is the raw enum (e.g. NATION_MAURYA), so a search for
 		// "maurya" matches via substring — searching by nation is the common
@@ -2153,6 +2155,7 @@ export async function handlePublicRecentGames(
 		        g.save_date, g.created_at,
 		        g.user_id AS uploader_user_id,
 		        ${displayNameSql("u")} AS uploader_display_name,
+		        u.slug AS uploader_slug,
 		        u.discord_id AS uploader_discord_id,
 		        u.avatar_hash AS uploader_avatar_hash
 		 FROM games g
@@ -2179,6 +2182,10 @@ export async function handlePublicRecentGames(
 			created_at: string;
 			uploader_user_id: string;
 			uploader_display_name: string;
+			// Prefixed like the other uploader columns: a game row is one of the
+			// flattened shapes Decision 1 (#186) names, so a bare `slug` here would
+			// read as the game's own.
+			uploader_slug: string | null;
 			uploader_discord_id: string;
 			uploader_avatar_hash: string | null;
 		}>();
@@ -2307,6 +2314,7 @@ export async function handlePublicRecentGames(
 		created_at: g.created_at,
 		uploader_user_id: g.uploader_user_id,
 		uploader_display_name: g.uploader_display_name,
+		uploader_slug: g.uploader_slug,
 		uploader_avatar_url: buildAvatarUrl(
 			g.uploader_discord_id,
 			g.uploader_avatar_hash,
@@ -2374,7 +2382,8 @@ export async function handleGameDetail(
 		            WHERE ps.game_id = g.game_id AND ps.is_human = 1
 		            ORDER BY ps.player_index ASC LIMIT 1
 		        )) AS user_nation,
-		        ${displayNameSql("u")} AS user_display_name
+		        ${displayNameSql("u")} AS user_display_name,
+		        u.slug AS user_slug
 		 FROM games g
 		 JOIN users u ON g.user_id = u.user_id
 		 WHERE g.game_id = ?`,
@@ -2393,6 +2402,9 @@ export async function handleGameDetail(
 			uploader_nation: string | null;
 			user_won: number | null;
 			user_display_name: string;
+			// Prefixed: these fields are spread onto the blob, which already
+			// carries the game's own identity (see the transform below).
+			user_slug: string | null;
 		}>();
 	if (!row) return errorResponse("Not found", 404, cors, "NOT_FOUND");
 
@@ -2490,6 +2502,7 @@ export async function handleGameDetail(
 		uploader_nation: row.uploader_nation,
 		user_won: coerceD1Bool(row.user_won),
 		user_display_name: row.user_display_name,
+		user_slug: row.user_slug,
 		display_name: row.display_name,
 	};
 	const bodyText = JSON.stringify(transformed);

@@ -220,6 +220,33 @@ describe("GET /v1/users/search — matching", () => {
 		});
 		await expectErrorCode(res, { status: 400, code: "VALIDATION_ERROR" });
 	});
+
+	// `%` and `_` are LIKE wildcards inside the bound value, so an unescaped
+	// query is a pattern rather than a literal — `%%` would match every row.
+	// Same guard as the public search; both go through escapeLikeValue.
+	it("treats LIKE wildcards in the query as literal characters", async () => {
+		const caller = await makeUser();
+		const target = await makeUser({ discordUsername: "pattern-test" });
+
+		for (const q of ["%%", "%p", "_attern"]) {
+			const body = await expectOk<SearchResponse>(
+				await request.get({
+					path: `/v1/users/search?q=${encodeURIComponent(q)}`,
+					as: caller,
+				}),
+			);
+			expect(body.users.map((u) => u.user_id)).not.toContain(target.userId);
+		}
+
+		// Sanity: the real prefix still matches, so escaping didn't over-reach.
+		const ok = await expectOk<SearchResponse>(
+			await request.get({
+				path: "/v1/users/search?q=pattern",
+				as: caller,
+			}),
+		);
+		expect(ok.users.map((u) => u.user_id)).toContain(target.userId);
+	});
 });
 
 describe("GET /v1/users/search — rate limit", () => {

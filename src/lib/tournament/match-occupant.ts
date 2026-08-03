@@ -19,6 +19,21 @@ interface MatchAvatarLike {
 	slot_b_avatar_url: string | null;
 }
 
+interface MatchUserIdLike {
+	status: "pending" | "complete" | "forfeit" | "bye";
+	slot_a_id: string | null;
+	slot_b_id: string | null;
+	slot_a_user_id: string | null;
+	slot_b_user_id: string | null;
+}
+
+// The slug helper needs the snapshot user_id as well as the snapshot slug —
+// see matchSlotSlug for why the two can't be resolved independently.
+interface MatchSlugLike extends MatchUserIdLike {
+	slot_a_slug: string | null;
+	slot_b_slug: string | null;
+}
+
 interface MatchNationLike {
 	slot_a_nation: string | null;
 	slot_b_nation: string | null;
@@ -94,6 +109,60 @@ export function matchSlotAvatarUrl(
 		const snap =
 			side === "a" ? match.slot_a_avatar_url : match.slot_b_avatar_url;
 		if (snap !== null && snap !== undefined) return snap;
+	}
+	return liveBySlotId[slotId] ?? null;
+}
+
+// The per-ankh account behind one side of a match, with the same snapshot-vs-
+// live rule as the name and avatar above — which is the whole point of it
+// living here rather than being read off `slot_a/b_user_id` at each link site.
+// A decided match shows the occupant pinned at report time, so its link must go
+// to that player; resolving the id from the live slot instead would point a
+// substituted-out player's name at whoever holds their seat now. Null when the
+// side has no slot, or when the occupant has no per-ankh account (an unclaimed
+// slot) — callers render exactly as before in that case rather than linking.
+export function matchSlotUserId(
+	match: MatchUserIdLike,
+	side: "a" | "b",
+	liveBySlotId: Record<string, string | null | undefined>,
+): string | null {
+	const slotId = side === "a" ? match.slot_a_id : match.slot_b_id;
+	if (slotId === null) return null;
+	if (match.status !== "pending") {
+		const snap = side === "a" ? match.slot_a_user_id : match.slot_b_user_id;
+		if (snap !== null && snap !== undefined) return snap;
+	}
+	return liveBySlotId[slotId] ?? null;
+}
+
+// The profile slug of that same occupant — the other half of the URL
+// matchSlotUserId names, which is why it lives here rather than being read off
+// `slot_a/b_slug` at each link site.
+//
+// Both halves must come from the SAME source, so this branches on the snapshot
+// *user_id* rather than on the snapshot slug: a decided match whose pinned
+// occupant simply has no slug carries a non-null snapshot id and a null
+// snapshot slug, and falling through to the live map on that null would pair
+// the historical player's id with the current occupant's slug — and profileHref
+// prefers the slug, so the link would quietly open the wrong player's profile
+// after a substitution. Committing to the snapshot's null instead just yields
+// the id URL, which redirects correctly.
+//
+// Null likewise when the side has no slot and when the resolved occupant has no
+// account at all — every case degrading to the permanent id permalink.
+export function matchSlotSlug(
+	match: MatchSlugLike,
+	side: "a" | "b",
+	liveBySlotId: Record<string, string | null | undefined>,
+): string | null {
+	const slotId = side === "a" ? match.slot_a_id : match.slot_b_id;
+	if (slotId === null) return null;
+	if (match.status !== "pending") {
+		const snapUserId =
+			side === "a" ? match.slot_a_user_id : match.slot_b_user_id;
+		if (snapUserId !== null && snapUserId !== undefined) {
+			return (side === "a" ? match.slot_a_slug : match.slot_b_slug) ?? null;
+		}
 	}
 	return liveBySlotId[slotId] ?? null;
 }

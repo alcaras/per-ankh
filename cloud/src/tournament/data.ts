@@ -84,6 +84,11 @@ export interface SlotRow {
 	// display_name of the claiming user, LEFT JOINed the same way. NULL when
 	// the slot is unclaimed. Feeds slotDisplayName().
 	user_display_name: string | null;
+	// Profile slug of the claiming user, LEFT JOINed the same way. NULL when
+	// the slot is unclaimed OR that user has no slug — a plain
+	// column with no fallback rule, so it gets no slotSlug() sibling to
+	// slotDisplayName()/slotAvatarUrl(); read it directly.
+	user_slug: string | null;
 	claim_banner_dismissed_at: string | null;
 	// The player's answer to the tournament's optional signup_question, captured
 	// at signup (migration 0023). NULL when unanswered or the slot predates the
@@ -218,7 +223,8 @@ export async function loadSlots(
 ): Promise<SlotRow[]> {
 	const res = await env.SHARE_DB.prepare(
 		`SELECT s.*, u.avatar_hash AS user_avatar_hash,
-		        ${displayNameSql("u")} AS user_display_name
+		        ${displayNameSql("u")} AS user_display_name,
+		        u.slug AS user_slug
 		 FROM tournament_slots s
 		 LEFT JOIN users u ON u.user_id = s.user_id
 		 WHERE s.tournament_id = ?
@@ -387,7 +393,8 @@ export async function loadSlot(
 ): Promise<SlotRow | null> {
 	return env.SHARE_DB.prepare(
 		`SELECT s.*, u.avatar_hash AS user_avatar_hash,
-		        ${displayNameSql("u")} AS user_display_name
+		        ${displayNameSql("u")} AS user_display_name,
+		        u.slug AS user_slug
 		 FROM tournament_slots s
 		 LEFT JOIN users u ON u.user_id = s.user_id
 		 WHERE s.slot_id = ?`,
@@ -407,7 +414,8 @@ export async function loadSlotInTournament(
 ): Promise<SlotRow | null> {
 	return env.SHARE_DB.prepare(
 		`SELECT s.*, u.avatar_hash AS user_avatar_hash,
-		        ${displayNameSql("u")} AS user_display_name
+		        ${displayNameSql("u")} AS user_display_name,
+		        u.slug AS user_slug
 		 FROM tournament_slots s
 		 LEFT JOIN users u ON u.user_id = s.user_id
 		 WHERE s.slot_id = ? AND s.tournament_id = ?`,

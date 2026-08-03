@@ -3,6 +3,7 @@
 	// ChampionshipBracketTree. Rows are the bracket seeds in seed order; the Round
 	// column reports where each participant currently stands in the knockout.
 	import type { BracketResponse } from "$lib/api-cloud";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { matchSlotOutcome } from "./match-occupant";
 	import PlayerAvatar from "./PlayerAvatar.svelte";
 
@@ -18,6 +19,10 @@
 		slot_id: string;
 		seed: number | null;
 		name: string;
+		// The account holding the seat, or null for an unclaimed slot.
+		userId: string | null;
+		// That account's profile slug; null when it has none.
+		slug: string | null;
 		avatarUrl: string | null;
 		round: string;
 		eliminated: boolean;
@@ -79,6 +84,8 @@
 					slot_id: s.slot_id,
 					seed: s.championship_seed,
 					name: s.display_name ?? `seed ${s.championship_seed ?? "?"}`,
+					userId: s.user_id,
+					slug: s.slug,
 					avatarUrl: s.avatar_url,
 					round: roundCell(p),
 					eliminated: p?.outcome === "lost",
@@ -113,8 +120,14 @@
 						<td class="px-4 py-1 text-center font-mono">{r.seed ?? "—"}</td>
 						<td class="px-4 py-1">
 							<span class="flex items-center gap-1">
-								<PlayerAvatar avatarUrl={r.avatarUrl} size={15} />
-								<span>{r.name}</span>
+								<ProfileLink
+									userId={r.userId}
+									slug={r.slug}
+									class="flex min-w-0 items-center gap-1 hover:underline"
+								>
+									<PlayerAvatar avatarUrl={r.avatarUrl} size={15} />
+									<span>{r.name}</span>
+								</ProfileLink>
 							</span>
 						</td>
 						<td

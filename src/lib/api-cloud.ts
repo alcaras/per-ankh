@@ -22,6 +22,26 @@ export interface UserSearchResult {
 	display_name: string;
 }
 
+// Result row returned by cloudApi.searchPublicUsers — the "Players" group
+// in the header search. The public-facing counterpart of UserSearchResult:
+// no discord_id or discord_username field, and — the part that matters —
+// discord_username is not a match key either, so this endpoint can't confirm
+// a Discord-handle prefix. (`avatar_url` is a cdn.discordapp.com URL and so
+// still carries the uploader's discord_id in its path, exactly as every other
+// public payload's avatar does; that's the cost of rendering the avatar at
+// all, and it's the handle, not the snowflake, that the PII stance protects.)
+export interface PublicUserSearchResult {
+	user_id: string;
+	display_name: string;
+	// The profile slug, null for a user who has none — the one identifier here
+	// that is safe to publish, being derived from the display name the row
+	// already carries. Also a match key: a user is findable by their slug, and
+	// holding one makes them findable at all (it counts as public activity for
+	// the endpoint's scoping).
+	slug: string | null;
+	avatar_url: string;
+}
+
 // A user-linked video/stream channel (public). `channel_id` is present on the
 // self-service CRUD responses; the profile payload carries only platform + URL
 // (all the tab gate and any "manage" link need).
@@ -48,6 +68,10 @@ export interface RecentVideo {
 export interface CreatorVideo extends RecentVideo {
 	user_id: string;
 	display_name: string;
+	// The creator's profile slug, null when they have none. Bare (not
+	// `uploader_slug`): these three fields are the creator themself, and nothing
+	// on a video row carries a competing slug. Feeds profileHref/ProfileLink.
+	slug: string | null;
 	avatar_url: string;
 }
 
@@ -75,6 +99,12 @@ export interface UserProfile {
 	user_id: string;
 	display_name: string;
 	avatar_url: string;
+	// The user's profile URL (`/u/<slug>`), or null for one who has none —
+	// a display name that slugified to nothing or collided, or a slug the user
+	// released. Pass the whole profile to `profileHref` rather than reading this
+	// directly: that helper is where the slug-vs-permalink choice lands (issue
+	// #186 B6).
+	slug: string | null;
 	// All-time stats for the profile-header card — over ALL the user's
 	// saves (visibility-scoped to the viewer), independent of the scope
 	// selector on the page.
@@ -104,6 +134,10 @@ export interface UserMe {
 	// be entered under.
 	discord_username: string;
 	avatar_url: string;
+	// The caller's profile URL (`/u/<slug>`), null when they have none. Derived
+	// at signup and renameable, so the account page treats this as the current
+	// value rather than a permanent one.
+	slug: string | null;
 	// True iff the user is on the tournament allowlist, i.e. may *create*
 	// tournaments. Drives the create-button visibility on /tournaments.
 	// (Reads, signup, and granted-admin actions are open to all users.)
@@ -258,6 +292,11 @@ export interface PublicRecentGame {
 	created_at: string;
 	uploader_user_id: string;
 	uploader_display_name: string;
+	// The uploader's profile slug, null when they have none. Prefixed
+	// because it sits on a game row rather than a user-shaped object — a bare
+	// `slug` would read as the game's. Feeds profileHref/ProfileLink alongside
+	// uploader_user_id; never render it directly.
+	uploader_slug: string | null;
 	uploader_avatar_url: string;
 	players: PublicRecentPlayer[];
 }
@@ -556,6 +595,46 @@ export const cloudApi = {
 		}
 	},
 
+	// The same profile, addressed by the user's slug — what /u/<slug> loads. One
+	// builder serves both routes on the Worker, so the payload is identical to
+	// getUserProfile's; only the key differs. Unknown slugs 404, returned as
+	// null for the same reason as above — including a slug that was released
+	// since the link was made, which is a normal outcome and not an error.
+	getUserProfileBySlug: async (
+		slug: string,
+		opts?: CallOpts,
+	): Promise<UserProfile | null> => {
+		try {
+			const res = await request(`/users/by-slug/${slug}`, opts);
+			return res.json() as Promise<UserProfile>;
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 404) return null;
+			throw err;
+		}
+	},
+
+	// Set the caller's profile URL — claiming one for an account that has none,
+	// or renaming the one it has. A name someone else holds gets a 409, a
+	// malformed or reserved one a 400, and a rename inside the cooldown a 429.
+	// All arrive as ApiError with a message written to be shown to the user
+	// verbatim, the 429's naming how long is left.
+	//
+	// The Worker trims and lowercases before validating, so mixed-case input
+	// is legal; it returns the stored value, which is what callers should
+	// render rather than what was typed.
+	setSlug: (slug: string, opts?: CallOpts): Promise<{ slug: string }> =>
+		postJson<{ slug: string }>("/users/me/slug", { slug }, opts),
+
+	// Release the caller's profile URL, leaving them on the /users/<user_id>
+	// permalink. Idempotent, and deliberately not subject to the rename
+	// cooldown — but it does start one, so the next claim waits.
+	//
+	// The released name goes back into the pool immediately, so anyone may take
+	// it and old /u/<name> links can end up pointing at someone else.
+	releaseSlug: async (opts?: CallOpts): Promise<void> => {
+		await request("/users/me/slug", { ...opts, method: "DELETE" });
+	},
+
 	// Recent videos merged across the target user's linked channels, newest
 	// first. Public read; feeds the profile "Videos" tab.
 	getUserVideos: async (
@@ -605,6 +684,11 @@ export const cloudApi = {
 			uploader_nation?: string | null;
 			user_won?: boolean | null;
 			user_display_name?: string | null;
+			// Uploader's profile slug, null when they have none. Prefixed
+			// (Decision 1, #186): these fields are spread onto the game blob, so a
+			// bare `slug` would read as the game's — and the detail page also holds
+			// its tournament's slug.
+			user_slug?: string | null;
 			display_name?: string | null;
 		}
 	> => {
@@ -617,6 +701,7 @@ export const cloudApi = {
 				uploader_nation?: string | null;
 				user_won?: boolean | null;
 				user_display_name?: string | null;
+				user_slug?: string | null;
 				display_name?: string | null;
 			}
 		>;
@@ -635,6 +720,7 @@ export const cloudApi = {
 			user_nation?: string | null;
 			user_won?: boolean | null;
 			user_display_name?: string | null;
+			user_slug?: string | null;
 			display_name?: string | null;
 		}
 	> => {
@@ -654,6 +740,7 @@ export const cloudApi = {
 				user_nation?: string | null;
 				user_won?: boolean | null;
 				user_display_name?: string | null;
+				user_slug?: string | null;
 				display_name?: string | null;
 			}
 		>;
@@ -1285,6 +1372,27 @@ export const cloudApi = {
 		return res.json() as Promise<{ users: UserSearchResult[] }>;
 	},
 
+	// People search for the header dropdown. Same session requirement and
+	// still-typing floor as searchUsers, but a public payload (no Discord
+	// fields) matched on display name / alias only, and narrowed to users
+	// with public activity — a public game, a tournament slot, or a linked
+	// video channel. Throws ApiError(429, RATE_LIMIT_USER_SEARCH_PUBLIC)
+	// past its own, larger, per-user ceiling.
+	searchPublicUsers: async (
+		q: string,
+		opts?: { limit?: number } & CallOpts,
+	): Promise<{ users: PublicUserSearchResult[] }> => {
+		const params = new URLSearchParams({ q });
+		if (opts?.limit !== undefined) {
+			params.set("limit", String(opts.limit));
+		}
+		const res = await request(`/users/public-search?${params.toString()}`, {
+			...opts,
+			method: "GET",
+		});
+		return res.json() as Promise<{ users: PublicUserSearchResult[] }>;
+	},
+
 	// Self-service tournament signup. The player picks a division and may
 	// answer the tournament's optional signup question; the server creates a
 	// tournament_slots row keyed to their session user. Gated server-side on
@@ -1673,6 +1781,9 @@ export interface PatchTournamentBody {
 export interface TournamentAdmin {
 	user_id: string;
 	display_name: string;
+	// The admin's profile slug, null when they have none. Bare — an admin
+	// row is user-shaped, and the tournament's own slug isn't on it.
+	slug: string | null;
 	avatar_url: string;
 	// The creator can't be removed from the admin list.
 	is_creator: boolean;
@@ -1717,6 +1828,12 @@ export interface SlotStanding {
 	// name the admin typed when adding the player).
 	display_name: string | null;
 	user_id: string | null;
+	// The claiming user's profile slug, null when the slot is unclaimed or the
+	// occupant has none. Bare (not `slot_slug`): a standings row is
+	// user-shaped and carries no tournament slug. Only ever paired with
+	// `user_id` through profileHref/ProfileLink — a slug never makes a
+	// null-`user_id` row linkable.
+	slug: string | null;
 	// Discord avatar URL of the claiming user, or null when the slot is
 	// unclaimed (render the EFFECTUNIT_ENLIST_ICON fallback in that case).
 	avatar_url: string | null;
@@ -1812,6 +1929,10 @@ export interface BracketSlot {
 	// Same server-resolved display label as SlotStanding.display_name.
 	display_name: string | null;
 	user_id: string | null;
+	// Same profile slug as SlotStanding.slug, and bare for the same
+	// reason. buildSlotMaps unions this with the standings' copy — a
+	// championship-only slot has no standings row, so both loops must set it.
+	slug: string | null;
 	avatar_url: string | null;
 }
 
@@ -1846,6 +1967,10 @@ export interface TournamentMatchPartCaster {
 	user_id: string | null;
 	name: string | null;
 	display_name: string | null;
+	// The linked user's profile slug, resolved server-side from user_id
+	// like display_name and avatar_url. Bare (a caster is user-shaped); null for
+	// free-text casters and for anyone without one.
+	slug: string | null;
 	avatar_url: string | null;
 }
 
@@ -1894,6 +2019,14 @@ export interface TournamentMatch {
 	slot_a_user_id: string | null;
 	slot_b_display_name: string | null;
 	slot_b_user_id: string | null;
+	// Profile slug of each side's snapshot occupant, resolved from the
+	// same server-side identity batch as the names and avatars — so a link and
+	// the name beside it can't describe different people. Prefixed, like every
+	// slot_a/b_* field. Null for pending matches (no snapshot; renderers fall
+	// through to the live slot maps via matchSlotSlug), for unclaimed occupants,
+	// and for anyone without one — all of which the id URL covers.
+	slot_a_slug: string | null;
+	slot_b_slug: string | null;
 	// Raw stored Discord handle of each side's LIVE slot occupant (not the
 	// snapshot). Only populated for admin viewers (null otherwise, and null for
 	// pending/bye sides). The substitute editor seeds and compares against this
@@ -2007,11 +2140,14 @@ export interface UserTournamentsResponse {
 	tournaments: UserTournamentEntry[];
 	matches: UserTournamentMatch[];
 	casts: UserTournamentCast[];
-	// Live slot occupant identity keyed by slot_id — the same two maps the
+	// Live slot occupant identity keyed by slot_id — the same maps the
 	// per-tournament pages build client-side from standings + bracket. Load-
-	// bearing for pending (upcoming) rows, whose display names the match payload
-	// deliberately leaves null.
+	// bearing for pending (upcoming) rows, whose display names, profile links and
+	// avatars the match payload deliberately leaves null.
 	slot_labels: Record<string, string>;
+	slot_user_ids: Record<string, string | null>;
+	// Prefixed: this payload's `tournaments[]` carry their own slugs.
+	slot_slugs: Record<string, string | null>;
 	slot_avatars: Record<string, string | null>;
 }
 

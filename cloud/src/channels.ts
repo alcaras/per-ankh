@@ -262,7 +262,7 @@ async function buildCreatorFeed(
 	const rows = await env.SHARE_DB.prepare(
 		`SELECT c.user_id, c.platform, c.channel_id,
 		        ${displayNameSql("u")} AS display_name,
-		        u.discord_id, u.avatar_hash
+		        u.slug, u.discord_id, u.avatar_hash
 		 FROM user_video_channels c
 		 JOIN users u ON u.user_id = c.user_id`,
 	).all<{
@@ -270,6 +270,7 @@ async function buildCreatorFeed(
 		platform: string;
 		channel_id: string;
 		display_name: string;
+		slug: string | null;
 		discord_id: string;
 		avatar_hash: string | null;
 	}>();
@@ -284,6 +285,7 @@ async function buildCreatorFeed(
 			const author = {
 				user_id: c.user_id,
 				display_name: c.display_name,
+				slug: c.slug,
 				avatar_url: buildAvatarUrl(c.discord_id, c.avatar_hash),
 			};
 			return getRecentVideosCached(env, provider, c.channel_id, ctx).then(

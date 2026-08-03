@@ -3,6 +3,7 @@
 	import { resolve } from "$app/paths";
 	import Chart from "$lib/Chart.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import StatTile from "$lib/StatTile.svelte";
 	import type { PublicRecentGame } from "$lib/api-cloud";
 	import {
@@ -165,8 +166,9 @@
 	     the amber treatment that the "Winner" badge previously used. -->
 	<div class="mb-2 flex items-center gap-2">
 		<div class="flex min-w-0 flex-1">
-			<a
-				href={resolve("/users/[user_id]", { user_id: game.uploader_user_id })}
+			<ProfileLink
+				userId={game.uploader_user_id}
+				slug={game.uploader_slug}
 				class="relative z-20 flex min-w-0 items-center gap-1 hover:underline"
 			>
 				<img
@@ -180,7 +182,7 @@
 				<span class="truncate text-lg font-bold text-white">
 					{game.uploader_display_name}
 				</span>
-			</a>
+			</ProfileLink>
 		</div>
 		<span
 			class="min-w-0 flex-1 truncate text-center text-lg font-bold text-tan"

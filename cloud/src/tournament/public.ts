@@ -644,6 +644,9 @@ export async function handleTournamentPlaylistVideos(
 interface PlaylistUploader {
 	user_id: string;
 	display_name: string;
+	// The uploader's profile slug, null when they have none. Bare, matching
+	// the home creator feed's author shape this one mirrors.
+	slug: string | null;
 	avatar_url: string;
 }
 
@@ -674,7 +677,7 @@ async function loadPlaylistUploaders(
 		const res = await env.SHARE_DB.prepare(
 			`SELECT c.channel_id, c.user_id,
 			        ${displayNameSql("u")} AS display_name,
-			        u.discord_id, u.avatar_hash
+			        u.slug, u.discord_id, u.avatar_hash
 			 FROM user_video_channels c
 			 JOIN users u ON u.user_id = c.user_id
 			 WHERE c.platform = 'youtube'
@@ -689,6 +692,7 @@ async function loadPlaylistUploaders(
 				channel_id: string;
 				user_id: string;
 				display_name: string;
+				slug: string | null;
 				discord_id: string;
 				avatar_hash: string | null;
 			}>();
@@ -698,6 +702,7 @@ async function loadPlaylistUploaders(
 			map.set(row.channel_id, {
 				user_id: row.user_id,
 				display_name: row.display_name,
+				slug: row.slug,
 				avatar_url: buildAvatarUrl(row.discord_id, row.avatar_hash),
 			});
 		}
@@ -809,6 +814,7 @@ export async function computeStandingsResponse(
 		{
 			display_name: string | null;
 			user_id: string | null;
+			slug: string | null;
 			avatar_url: string | null;
 			swiss_seed: number | null;
 			division: "A" | "B" | null;
@@ -820,6 +826,9 @@ export async function computeStandingsResponse(
 		slotIdentity.set(s.slot_id, {
 			display_name: slotDisplayName(s),
 			user_id: s.user_id,
+			// Bare `slug` — a standings row is user-shaped and carries no
+			// tournament slug of its own (Decision 1, #186).
+			slug: s.user_slug,
 			avatar_url: slotAvatarUrl(s),
 			swiss_seed: s.swiss_seed,
 			division: s.division,
@@ -840,6 +849,7 @@ export async function computeStandingsResponse(
 			RankedStanding & {
 				display_name: string | null;
 				user_id: string | null;
+				slug: string | null;
 				avatar_url: string | null;
 				swiss_seed: number | null;
 				signup_answer: string | null;
@@ -861,6 +871,7 @@ export async function computeStandingsResponse(
 			const id = slotIdentity.get(r.slot_id) ?? {
 				display_name: null,
 				user_id: null,
+				slug: null,
 				avatar_url: null,
 				swiss_seed: null,
 				division: null,
@@ -1147,6 +1158,9 @@ export async function handleTournamentBracket(
 			championship_seed: s.championship_seed,
 			display_name: slotDisplayName(s),
 			user_id: s.user_id,
+			// Bare `slug` — a bracket slot is user-shaped; the tournament's own
+			// slug is the URL that addressed this read (Decision 1, #186).
+			slug: s.user_slug,
 			avatar_url: slotAvatarUrl(s),
 		})),
 		rounds: champRounds.map((r) => ({
@@ -1371,9 +1385,9 @@ export async function handleTournamentMatchDetail(
 const USER_MATCHES_LIMIT = 400;
 const USER_CASTS_LIMIT = 400;
 
-// Live occupant identity (display label + avatar) per slot_id — the same two
-// maps the per-tournament pages build client-side via buildSlotMaps(standings,
-// bracket). serializeMatch deliberately leaves slot_a/b_display_name null for
+// Live occupant identity (display label, account, profile slug, avatar) per
+// slot_id — the same maps the per-tournament pages build client-side via
+// buildSlotMaps(standings, bracket). serializeMatch deliberately leaves slot_a/b_display_name null for
 // PENDING matches and lets the render layer fall through to exactly these, and
 // pending matches are precisely the tab's "upcoming" rows; a profile tab
 // spanning tournaments has no cheap way to fetch standings + bracket per
@@ -1386,17 +1400,31 @@ async function loadLiveSlotIdentities(
 	env: TournamentEnv,
 	slotIds: string[],
 ): Promise<
-	Map<string, { display_name: string | null; avatar_url: string | null }>
+	Map<
+		string,
+		{
+			display_name: string | null;
+			user_id: string | null;
+			slug: string | null;
+			avatar_url: string | null;
+		}
+	>
 > {
 	const out = new Map<
 		string,
-		{ display_name: string | null; avatar_url: string | null }
+		{
+			display_name: string | null;
+			user_id: string | null;
+			slug: string | null;
+			avatar_url: string | null;
+		}
 	>();
 	for (const ids of chunk(slotIds, CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
-			`SELECT s.slot_id, s.discord_id, s.discord_username,
+			`SELECT s.slot_id, s.user_id, s.discord_id, s.discord_username,
 			        u.avatar_hash AS user_avatar_hash,
-			        ${displayNameSql("u")} AS user_display_name
+			        ${displayNameSql("u")} AS user_display_name,
+			        u.slug AS user_slug
 			 FROM tournament_slots s
 			 LEFT JOIN users u ON u.user_id = s.user_id
 			 WHERE s.slot_id IN (${ids.map(() => "?").join(",")})`,
@@ -1406,15 +1434,19 @@ async function loadLiveSlotIdentities(
 				Pick<
 					SlotRow,
 					| "slot_id"
+					| "user_id"
 					| "discord_id"
 					| "discord_username"
 					| "user_avatar_hash"
 					| "user_display_name"
+					| "user_slug"
 				>
 			>();
 		for (const row of res.results ?? []) {
 			out.set(row.slot_id, {
 				display_name: slotDisplayName(row),
+				user_id: row.user_id,
+				slug: row.user_slug,
 				avatar_url: slotAvatarUrl(row),
 			});
 		}
@@ -1557,10 +1589,14 @@ export async function handleUserTournaments(
 	});
 
 	const slotLabels: Record<string, string> = {};
+	const slotUserIds: Record<string, string | null> = {};
+	const slotSlugs: Record<string, string | null> = {};
 	const slotAvatars: Record<string, string | null> = {};
 	for (const [slotId, identity] of liveBySlotId) {
 		if (identity.display_name !== null)
 			slotLabels[slotId] = identity.display_name;
+		slotUserIds[slotId] = identity.user_id;
+		slotSlugs[slotId] = identity.slug;
 		slotAvatars[slotId] = identity.avatar_url;
 	}
 
@@ -1589,6 +1625,15 @@ export async function handleUserTournaments(
 				part_id: partId,
 			})),
 			slot_labels: slotLabels,
+			// Exposure-neutral: the same ids already ship on every row here as
+			// matches[].slot_a/b_user_id. This map is what lets a PENDING row (whose
+			// snapshot columns are null by design) link its opponent's profile.
+			slot_user_ids: slotUserIds,
+			// Prefixed `slot_slugs`, not `slugs`: this payload's `tournaments[]`
+			// each carry a tournament slug, so a bare name would be ambiguous
+			// (Decision 1, #186). Same role as slot_user_ids — it's what lets a
+			// PENDING row link its opponent at /u/<slug> rather than the id URL.
+			slot_slugs: slotSlugs,
 			slot_avatars: slotAvatars,
 		},
 		200,
@@ -1725,6 +1770,9 @@ function serializeMatch(
 				user_id: c.user_id,
 				name: c.name,
 				display_name: identity?.display_name ?? c.name,
+				// Bare `slug` — a caster is a user-shaped object. Null for a
+				// free-text caster (no account) and for one with no slug.
+				slug: identity?.slug ?? null,
 				avatar_url: identity?.avatar_url ?? null,
 			};
 		}),
@@ -1762,10 +1810,19 @@ function serializeMatch(
 		// falls through to its live slot-identity maps, same shape as avatars.
 		slot_a_display_name: slotAIdentity?.display_name ?? m.slot_a_username,
 		slot_a_user_id: m.slot_a_user_id,
+		// Profile slug of the snapshot occupant, resolved from the same identity
+		// map the name and avatar are — so the link a renderer builds points at
+		// the player it just named. Prefixed, like every other slot_a/b_* field:
+		// a match row is flattened, and the tournament's slug rides alongside it
+		// on the per-user payload (Decision 1, #186). Null for pending matches,
+		// for unclaimed occupants, and for anyone without a slug — each of
+		// which the id-URL fallback covers.
+		slot_a_slug: slotAIdentity?.slug ?? null,
 		slot_a_avatar_url: slotAIdentity?.avatar_url ?? null,
 		slot_a_nation: slotANation,
 		slot_b_display_name: slotBIdentity?.display_name ?? m.slot_b_username,
 		slot_b_user_id: m.slot_b_user_id,
+		slot_b_slug: slotBIdentity?.slug ?? null,
 		slot_b_avatar_url: slotBIdentity?.avatar_url ?? null,
 		slot_b_nation: slotBNation,
 		// Admin-only — raw handle + numeric Discord id of each side's live slot
@@ -1864,6 +1921,11 @@ async function loadNationsForMatches(
 export interface UserIdentity {
 	avatar_url: string | null;
 	display_name: string | null;
+	// The user's profile URL slug, null when they have none. Sits here with
+	// the other two because it follows the same rule they do: the snapshot pins
+	// WHO played, and everything presentational about them — including the shape
+	// of the link to their profile — follows that user's profile as it is now.
+	slug: string | null;
 }
 
 // Resolve avatar URL + display name for every distinct snapshot user_id
@@ -1899,7 +1961,7 @@ export async function loadUserIdentitiesForMatches(
 	const map = new Map<string, UserIdentity>();
 	for (const ids of chunk([...userIds], CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
-			`SELECT user_id, discord_id, ${displayNameSql("users")} AS display_name, avatar_hash
+			`SELECT user_id, discord_id, ${displayNameSql("users")} AS display_name, slug, avatar_hash
 			 FROM users WHERE user_id IN (${ids.map(() => "?").join(",")})`,
 		)
 			.bind(...ids)
@@ -1907,6 +1969,7 @@ export async function loadUserIdentitiesForMatches(
 				user_id: string;
 				discord_id: string | null;
 				display_name: string | null;
+				slug: string | null;
 				avatar_hash: string | null;
 			}>();
 		for (const row of res.results ?? []) {
@@ -1915,6 +1978,7 @@ export async function loadUserIdentitiesForMatches(
 					? buildAvatarUrl(row.discord_id, row.avatar_hash)
 					: null,
 				display_name: row.display_name,
+				slug: row.slug,
 			});
 		}
 	}

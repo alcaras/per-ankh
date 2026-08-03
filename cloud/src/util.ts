@@ -188,6 +188,34 @@ export async function parseJsonBody<T>(
 	return { ok: true, body: result.output };
 }
 
+// Escape a user-supplied value for use inside a LIKE pattern.
+//
+// Binding a value as a parameter keeps it out of the SQL *text*, but LIKE
+// reads `%` (any run) and `_` (one char) as wildcards inside the value
+// itself — so an unescaped parameter is a pattern, not a literal, and a
+// caller can turn a prefix search into a full-table sweep by typing `%`.
+// Escape here and pair every use with `ESCAPE '\\'`, which is what opts the
+// pattern into backslash-escaping; without the clause the backslashes are
+// just characters and the wildcards stay live.
+export function escapeLikeValue(value: string): string {
+	return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// True when `e` is D1 reporting a violated UNIQUE index on `qualified`
+// (a `table.column`, e.g. "users.slug").
+//
+// Matching the message text is the only handle available: D1 surfaces the
+// SQLite constraint failure as an Error with no structured code to switch
+// on. Callers rely on this to turn the race-safe write — insert/update and
+// let the index arbitrate — into a 409, so the qualified name has to be
+// passed explicitly; a bare "UNIQUE constraint failed" check would also
+// swallow a collision on some *other* index in the same statement and
+// report it as the wrong conflict.
+export function isUniqueViolation(e: unknown, qualified: string): boolean {
+	const msg = e instanceof Error ? e.message : String(e);
+	return msg.includes("UNIQUE constraint failed") && msg.includes(qualified);
+}
+
 // True if the inbound request was made over HTTPS. Determines whether we
 // can set the Secure cookie attribute (browsers reject Secure cookies on
 // non-HTTPS, including localhost dev).

@@ -24,6 +24,7 @@
 		type CollectionInfo,
 	} from "$lib/api-cloud";
 	import { toast } from "$lib/ui/toast";
+	import { profileHref } from "$lib/utils/profile-href";
 
 	interface Props {
 		gameId: string;
@@ -212,9 +213,12 @@
 			await cloudApi.deleteGame(gameId);
 			// Owner-only action — page.data.user is set here. Redirect
 			// to their profile (the previous /dashboard equivalent).
-			const userId = page.data.user?.user_id;
-			if (userId) {
-				await goto(resolve(`/users/${userId}`), { replaceState: true });
+			// Pass the whole /auth/me row, not just its id: it carries the
+			// user's slug, so this lands on /u/<slug> without a redirect hop.
+			const me = page.data.user;
+			if (me) {
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- profileHref() returns a resolve() result; lint can't see through the call
+				await goto(profileHref(me), { replaceState: true });
 			} else {
 				await goto(resolve("/"), { replaceState: true });
 			}

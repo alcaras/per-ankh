@@ -1,13 +1,14 @@
 <script lang="ts">
-	// Persistent app chrome for cloud routes. Left-aligned hieroglyph
-	// wordmark; a right-aligned cluster of search (collapses to an icon),
-	// upload, avatar, and the hamburger menu (far right). Auth-aware via
-	// the `user` prop.
+	// Persistent app chrome for cloud routes. Three tracks: the hieroglyph
+	// wordmark on the left, the always-open search centered between them,
+	// and a right-aligned cluster of upload, avatar, and the hamburger menu
+	// (far right). Auth-aware via the `user` prop.
 
 	import { resolve } from "$app/paths";
 	import { page } from "$app/state";
 	import HeaderGameSearch from "$lib/users/HeaderGameSearch.svelte";
 	import AboutModal from "$lib/AboutModal.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { resolveLoginNext } from "$lib/utils/safe-next";
 	import { cloudApi, ApiError, type UserMe } from "$lib/api-cloud";
 
@@ -16,9 +17,6 @@
 	let isMenuOpen = $state(false);
 	let isAboutModalOpen = $state(false);
 	let signingOut = $state(false);
-	// Search collapses to a single icon; clicking it expands the input inline
-	// (to the left of Upload). Collapses again on Escape or blur-while-empty.
-	let searchExpanded = $state(false);
 
 	// Signed-out login. Mirrors the (removed) home-page sign-in card: kicks
 	// off the Discord OAuth round-trip, returning the viewer to the page they
@@ -101,13 +99,13 @@
 <svelte:window onclick={handleClickOutside} onkeydown={handleKeydown} />
 
 <header
-	class="relative flex w-full shrink-0 items-center justify-between border-b-[3px] border-black bg-blue-gray px-4 pb-2 pt-2"
+	class="relative flex w-full shrink-0 items-center gap-4 border-b-[3px] border-black bg-blue-gray px-4 pb-2 pt-2"
 >
 	<!--
 		Left: hieroglyph wordmark. Always routes to / — the home page is the
 		public discovery surface (recent saves, active tournaments) served to
 		signed-in and signed-out viewers alike. Signed-in users can still jump
-		to their personal dashboard via the hamburger menu.
+		to their own profile via the hamburger menu.
 	-->
 	<a
 		href={resolve("/")}
@@ -120,52 +118,27 @@
 	</a>
 
 	<!--
-		Right: search (collapses to an icon, expands inline to the left of
-		Upload), upload shortcut, avatar/login, then the hamburger menu on the
-		far right. Search and upload show only for signed-in users.
+		Center: the search — players plus the signed-in user's own games,
+		always open. It sits in a flex-1 track between the two fixed-width
+		clusters rather than absolutely positioned, so a narrow window shrinks
+		the gap instead of letting the box overlap the wordmark or the buttons.
+		The track renders even when signed out (the search inside it does not),
+		which is what keeps the right cluster pinned right for both states.
+	-->
+	<div class="flex flex-1 justify-center">
+		{#if user}
+			<!-- w-72 matches the results dropdown, so it lands flush under the
+			     input rather than offset from it. -->
+			<HeaderGameSearch {user} class="w-72" />
+		{/if}
+	</div>
+
+	<!--
+		Right: upload shortcut, avatar/login, then the hamburger menu on the
+		far right. Upload shows only for signed-in users.
 	-->
 	<div class="flex flex-shrink-0 items-center gap-2">
 		{#if user}
-			<!-- Navigational search over the signed-in user's own games. -->
-			{#if searchExpanded}
-				<HeaderGameSearch
-					{user}
-					class="w-48 flex-shrink-0"
-					autofocus
-					onCollapse={() => (searchExpanded = false)}
-				/>
-			{:else}
-				<button
-					type="button"
-					onclick={(e) => {
-						// Stop this click reaching the window listener that
-						// HeaderGameSearch registers when it mounts on the same
-						// synchronous flush — otherwise its click-outside check
-						// fires for this very click and collapses immediately.
-						e.stopPropagation();
-						searchExpanded = true;
-					}}
-					class="flex-shrink-0 rounded p-1 text-tan transition-colors hover:text-orange"
-					aria-label="Search your games"
-					title="Search your games"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-5 w-5"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
-				</button>
-			{/if}
 			<!-- uploadHref is built from resolve("/upload") with a sanitized ?from=
 			     query that resolve()'s branded types can't express. -->
 			<!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -193,11 +166,13 @@
 				<span>Upload</span>
 			</a>
 			<!-- eslint-enable svelte/no-navigation-without-resolve -->
-			<!-- Avatar (profile link). -->
-			<a
-				href={resolve(`/users/${user.user_id}`)}
+			<!-- Avatar (profile link) — the only way into your own profile from
+			     the header. -->
+			<ProfileLink
+				userId={user.user_id}
+				slug={user.slug}
 				class="flex-shrink-0"
-				aria-label="Your profile"
+				ariaLabel="Your profile"
 				title="Your profile"
 			>
 				<img
@@ -207,7 +182,7 @@
 					width="28"
 					height="28"
 				/>
-			</a>
+			</ProfileLink>
 		{:else}
 			<!-- Signed out: a plain login button stands in for the avatar. -->
 			<button
