@@ -662,7 +662,7 @@
 		if (
 			!(await confirmDialog({
 				title: "Add match",
-				message: `Add ${aLabel} vs ${bLabel} to round ${info.roundNumber}? The map is auto-assigned, and the round stays open until this match is reported.`,
+				message: `Add ${aLabel} vs ${bLabel} to round ${info.roundNumber}? The map is auto-assigned. This can't be undone — the round stays open until the match is reported.`,
 				confirmLabel: "Add match",
 			}))
 		) {
