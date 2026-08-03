@@ -142,7 +142,7 @@ export type ProfilePageData = Awaited<ReturnType<typeof buildProfilePage>>;
 // Shared failure mapping for both routes: an anonymous visitor hitting a
 // session-required sub-fetch bounces to login, a missing user is a 404, and
 // everything else — including SvelteKit's own redirect()/error() throws, which
-// is what carries the id route's 308 out — propagates untouched.
+// is what carries the id route's 307 out — propagates untouched.
 export function rethrowProfileLoadError(err: unknown, url: URL): never {
 	if (err instanceof UnauthorizedError) {
 		throw redirect(303, loginBounce(url));

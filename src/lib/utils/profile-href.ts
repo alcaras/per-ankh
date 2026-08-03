@@ -10,7 +10,7 @@ import { resolve } from "$app/paths";
 // Call sites pass whatever row they hold and never have to learn which applies.
 //
 // A payload that doesn't carry `slug` yet is not a bug — it emits the id URL,
-// which 308-redirects to `/u/<slug>` for a slug-holder (see
+// which 307-redirects to `/u/<slug>` for a slug-holder (see
 // src/routes/users/[user_id]/+page.ts). That fallback is what lets each payload
 // gain the field on its own schedule (issue #186 B5b) instead of all at once.
 export function profileHref(p: {

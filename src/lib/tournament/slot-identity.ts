@@ -9,7 +9,7 @@ export interface SlotMaps {
 	labels: Record<string, string>;
 	userIds: Record<string, string | null>;
 	// Each linked user's claimed profile slug — the companion to `userIds` that
-	// lets a link resolve straight to /u/<slug> instead of the id URL's 308.
+	// lets a link resolve straight to /u/<slug> instead of the id URL's 307.
 	// Null for an unclaimed slot and for an occupant who never claimed a slug;
 	// either way the pair still renders (ProfileLink falls back to the id).
 	slugs: Record<string, string | null>;

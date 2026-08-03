@@ -242,7 +242,7 @@ describe("GET /v1/users/by-slug/:slug", () => {
 // B5b — slug propagation onto the identity payloads
 //
 // Each surface below emits a profile link. Without the slug the link is the
-// /users/<id> permalink, which 308s; with it the link is already canonical.
+// /users/<id> permalink, which 307s; with it the link is already canonical.
 // Nothing breaks when a slug is absent, which is exactly why every case here
 // also pins the null.
 // ---------------------------------------------------------------------------

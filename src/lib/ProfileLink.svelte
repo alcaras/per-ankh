@@ -27,7 +27,7 @@
 		// carries one — it decides `/u/<slug>` vs. the id permalink. Two props
 		// rather than one identity object because most callers hold a bare id
 		// resolved from a map (slot → user_id) and not a row; omitting it is
-		// always safe (the id URL 308-redirects). It must describe the SAME
+		// always safe (the id URL 307-redirects). It must describe the SAME
 		// user as `userId`.
 		slug?: string | null;
 		// Applied to the anchor only (see above) — the unlinked branch renders

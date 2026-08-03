@@ -1,9 +1,15 @@
 // The profile permalink. Every user is permanently addressable here by id;
 // a user who claimed a slug is *canonically* at /u/<slug>, so this route
-// 308-redirects to it (the /dashboard precedent — see
-// src/routes/dashboard/+page.ts for why 308) and keeps the query string, so
-// ?tab= / ?scope= deep links survive the hop. Slug-less users — the default,
-// since claiming is opt-in — are served here exactly as before.
+// 307-redirects to it and keeps the query string, so ?tab= / ?scope= deep
+// links survive the hop. Slug-less users — the default, since claiming is
+// opt-in — are served here exactly as before.
+//
+// 307, not 308, because the id → slug mapping is revocable: `admin clear-slug`
+// frees a name and `set-slug` overwrites one, so a cached permanent redirect
+// would send this user's permalink to whoever claims the name next. 307 is not
+// cacheable by default and preserves the request method just as 308 does. This
+// is where the /dashboard precedent stops applying — that route redirects to an
+// immutable user_id, so its 308 is permanent in the strong sense.
 //
 // The page itself and everything downstream of the profile live in
 // $lib/users/profile-load + ProfilePage, shared with /u/[slug].
@@ -54,7 +60,7 @@ export const load: PageLoad = async ({ fetch, url, params, parent }) => {
 		}
 		if (profile.slug != null) {
 			throw redirect(
-				308,
+				307,
 				`${resolve("/u/[slug]", { slug: profile.slug })}${url.search}`,
 			);
 		}

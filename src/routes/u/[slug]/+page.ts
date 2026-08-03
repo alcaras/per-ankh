@@ -1,5 +1,5 @@
 // The profile at its claimed pretty URL — the canonical address for a user
-// who has one. /users/[user_id] stays the permanent permalink and 308s here.
+// who has one. /users/[user_id] stays the permanent permalink and 307s here.
 //
 // Name-first lookup costs one serialized round trip the id route doesn't pay:
 // the collections + stats fetches are keyed by user_id, which only the profile
