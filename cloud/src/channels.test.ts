@@ -75,20 +75,28 @@ describe("mergeCreatorFeed", () => {
 
 	it("matches the title case-insensitively, anywhere in the string", () => {
 		const a = [
-			vid({ id: "u", published_at: "2026-01-03T00:00:00Z", title: "OLD WORLD" }),
+			vid({
+				id: "u",
+				published_at: "2026-01-03T00:00:00Z",
+				title: "OLD WORLD",
+			}),
 			vid({
 				id: "m",
 				published_at: "2026-01-02T00:00:00Z",
 				title: "Ranking every old world nation",
 			}),
 			// "OW" shorthand is deliberately not matched — see titlesOldWorld.
-			vid({ id: "s", published_at: "2026-01-01T00:00:00Z", title: "OW MP #12" }),
+			vid({
+				id: "s",
+				published_at: "2026-01-01T00:00:00Z",
+				title: "OW MP #12",
+			}),
 		];
 		expect(mergeCreatorFeed([a]).map((v) => v.id)).toEqual(["u", "m"]);
 	});
 
 	it("fills the cap from later videos when newer ones are filtered out", () => {
-		// Ten uploads, newest first; the four newest are off-topic. The cap is
+		// Twelve uploads, newest first; the four newest are off-topic. The cap is
 		// applied after the filter, so the strip still fills with eight.
 		const many = Array.from({ length: 12 }, (_, i) =>
 			vid({
