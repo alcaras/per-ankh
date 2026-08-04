@@ -217,9 +217,11 @@ export async function handleUserVideos(
 
 // --- Cross-creator home feed ---------------------------------------------
 //
-// The home page shows the newest uploads ACROSS every user's linked channels
-// (multiple per creator allowed), merged newest-first and capped to fill a
-// two-row strip.
+// The home page shows the newest Old World uploads ACROSS every user's linked
+// channels (multiple per creator allowed), merged newest-first and capped to
+// fill a two-row strip. Channels are linked wholesale, so the uploads they
+// return cover whatever else their owner posts — mergeCreatorFeed narrows them
+// to Old World by title.
 //
 // Channel MEMBERSHIP is read from D1 on every request (mirroring the
 // per-profile read above), so adding or removing a channel is reflected
@@ -234,6 +236,17 @@ export async function handleUserVideos(
 // Display cap — two rows of four on the desktop strip.
 const MAX_CREATOR_FEED_VIDEOS = 8;
 
+// The home strip is an Old World feed, not a general creator feed: a linked
+// channel usually covers several games, so an upload only belongs here if it
+// names Old World in its title. Deliberately a strict case-insensitive
+// substring rather than a looser alias match ("OW", event names): what reaches
+// the home page stays predictable, at the cost of dropping Old World content
+// that never spells the game out. A creator's own profile Videos tab is
+// unfiltered — this applies to the cross-creator feed only.
+function titlesOldWorld(video: Video): boolean {
+	return video.title.toLowerCase().includes("old world");
+}
+
 // A home-feed video: the normalized Video plus the creator it belongs to, so
 // the strip can attribute each upload and link to the uploader's profile.
 export interface CreatorVideo extends Video {
@@ -243,13 +256,20 @@ export interface CreatorVideo extends Video {
 }
 
 // Merge per-channel lists (each already attributed to its creator) into the
-// home feed: newest-first across all creators, capped. Pure — the DB query and
+// home feed: Old World uploads only, newest-first across all creators, capped.
+// The filter runs before the cap — filtering downstream (in the component, or
+// after this slice) would let a creator's unrelated uploads consume the eight
+// slots and then vanish, leaving a half-empty strip. Pure — the DB query and
 // per-channel fetch live in buildCreatorFeed.
 export function mergeCreatorFeed(
 	perChannel: CreatorVideo[][],
 	cap = MAX_CREATOR_FEED_VIDEOS,
 ): CreatorVideo[] {
-	return perChannel.flat().sort(byPublishedDesc).slice(0, cap);
+	return perChannel
+		.flat()
+		.filter(titlesOldWorld)
+		.sort(byPublishedDesc)
+		.slice(0, cap);
 }
 
 // Assemble the feed: every linked channel joined to its owner, each channel's
