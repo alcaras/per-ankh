@@ -846,20 +846,19 @@
 	</div>
 {/if}
 
-<!-- Head-to-head build comparison (two-player matchups only). Each block
-     carries its own pair of class-composition donuts beneath it. -->
+<!-- Head-to-head build comparison (two-player matchups only). One panel per
+     block, side by side, each carrying its own pair of class-composition
+     donuts beneath it. -->
 {#if buildBlocks.length > 0 && matchup}
-	<div
-		class="mb-4 rounded-lg p-4"
-		style="background-color: rgb(var(--color-surface));"
-	>
-		<div class="grid gap-4 md:grid-cols-2 md:grid-rows-[auto_auto]">
-			{#each buildBlocks as block (block.title)}
-				<div
-					class="flex flex-col gap-3 md:row-span-2 md:grid md:grid-rows-subgrid"
-				>
+	<div class="mb-4 grid items-start gap-4 md:grid-cols-2">
+		{#each buildBlocks as block (block.title)}
+			<div
+				class="rounded-lg p-4"
+				style="background-color: rgb(var(--color-surface));"
+			>
+				<h3 class="mb-3 text-base font-bold text-tan">{block.title}</h3>
+				<div class="flex flex-col gap-3">
 					<BuildComparison
-						title={block.title}
 						statA={block.statA}
 						statB={block.statB}
 						a={block.a}
@@ -887,8 +886,8 @@
 						</div>
 					{/if}
 				</div>
-			{/each}
-		</div>
+			</div>
+		{/each}
 	</div>
 {/if}
 

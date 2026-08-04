@@ -122,8 +122,11 @@
 				<div class="truncate text-[10px] font-bold text-tan">{title}</div>
 			{/if}
 			{#if statA != null && statB != null}
+				<!-- ml-auto keeps the stat pair on the right edge when the caller
+				     titles the panel from outside and passes no `title` — with a
+				     title present justify-between already put it there. -->
 				<div
-					class="flex flex-none items-center gap-1 text-[10px] font-semibold text-muted"
+					class="ml-auto flex flex-none items-center gap-1 text-[10px] font-semibold text-muted"
 				>
 					<span class="font-mono" style="color:{ca}">{statA}</span>
 					<span class="text-white">v</span>
