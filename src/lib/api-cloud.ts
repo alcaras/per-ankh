@@ -664,6 +664,16 @@ export const cloudApi = {
 		return (await (res.json() as Promise<{ videos: CreatorVideo[] }>)).videos;
 	},
 
+	// Cross-tournament home feed: newest uploads across every visible
+	// tournament's admin-set playlist, merged newest-first. Public read; the home
+	// load interleaves these with the creator feed into one strip. Same
+	// three-way-attributed entries as a tournament's own Videos tab.
+	getTournamentVideos: async (opts?: CallOpts): Promise<TournamentVideo[]> => {
+		const res = await request("/tournament-videos", opts);
+		return (await (res.json() as Promise<{ videos: TournamentVideo[] }>))
+			.videos;
+	},
+
 	// Owner GET — returns the blob with `is_public` and the uploader-identity
 	// triple (`user_nation`, `user_won`, `user_display_name`) injected by the
 	// Worker. `is_public` drives the visibility toggle's initial state; the

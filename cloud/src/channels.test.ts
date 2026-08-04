@@ -52,9 +52,9 @@ describe("mergeCreatorFeed", () => {
 			}),
 		);
 		const merged = mergeCreatorFeed([many]);
-		expect(merged).toHaveLength(8);
+		expect(merged).toHaveLength(12);
 		expect(merged[0].id).toBe("v0");
-		expect(merged[7].id).toBe("v7");
+		expect(merged[11].id).toBe("v11");
 	});
 
 	it("drops uploads that don't name Old World in the title", () => {
@@ -96,17 +96,17 @@ describe("mergeCreatorFeed", () => {
 	});
 
 	it("fills the cap from later videos when newer ones are filtered out", () => {
-		// Twelve uploads, newest first; the four newest are off-topic. The cap is
-		// applied after the filter, so the strip still fills with eight.
-		const many = Array.from({ length: 12 }, (_, i) =>
+		// Sixteen uploads, newest first; the four newest are off-topic. The cap is
+		// applied after the filter, so the strip still fills with twelve.
+		const many = Array.from({ length: 16 }, (_, i) =>
 			vid({
 				id: `v${i}`,
-				published_at: `2026-01-${String(12 - i).padStart(2, "0")}T00:00:00Z`,
+				published_at: `2026-01-${String(16 - i).padStart(2, "0")}T00:00:00Z`,
 				title: i < 4 ? `Other game ${i}` : `Old World ${i}`,
 			}),
 		);
 		const merged = mergeCreatorFeed([many]);
-		expect(merged).toHaveLength(8);
+		expect(merged).toHaveLength(12);
 		expect(merged[0].id).toBe("v4");
 	});
 

@@ -62,11 +62,16 @@ import { resolveTournamentCorpus } from "../stats/resolve";
 import type { ChartBundleCore } from "../stats/types";
 import { getVideosCached } from "../video/cache";
 import {
+	dedupeById,
 	fetchYouTubePlaylistVideos,
 	fetchYouTubePlaylistVideosViaApi,
 	parseYouTubePlaylistUrl,
 } from "../video/youtube";
-import type { PlaylistVideo } from "../video/types";
+import {
+	byPublishedDesc,
+	type PlaylistVideo,
+	type Video,
+} from "../video/types";
 import type { EventsEnv } from "../d1";
 
 export interface TournamentPublicEnv
@@ -600,24 +605,57 @@ export async function handleTournamentPlaylistVideos(
 		? parseYouTubePlaylistUrl(tournament.youtube_playlist_url)
 		: null;
 	if (!parsed) return jsonResponse({ videos: [] }, 200, cors);
+	const videos = await getPlaylistVideosCached(env, parsed.playlistId, ctx);
+	const usersByChannel = await loadPlaylistUploaders(env, videos);
+	return jsonResponse(
+		{ videos: attributePlaylistVideos(videos, usersByChannel) },
+		200,
+		cors,
+	);
+}
+
+// One playlist's videos through the SWR cache, keyed `playlist:<id>` under the
+// youtube platform. The per-tournament tab and the cross-tournament home feed
+// both read through here, so they share one KV entry per playlist rather than
+// warming two — and can't drift on which source (Data API vs RSS) they use.
+function getPlaylistVideosCached(
+	env: TournamentPublicEnv,
+	playlistId: string,
+	ctx: ExecutionContext,
+): Promise<PlaylistVideo[]> {
 	const apiKey = env.YOUTUBE_API_KEY;
-	const videos = await getVideosCached(
+	return getVideosCached(
 		env,
 		"youtube",
-		`playlist:${parsed.playlistId}`,
+		`playlist:${playlistId}`,
 		() =>
 			apiKey
-				? fetchYouTubePlaylistVideosViaApi(parsed.playlistId, apiKey)
-				: fetchYouTubePlaylistVideos(parsed.playlistId),
+				? fetchYouTubePlaylistVideosViaApi(playlistId, apiKey)
+				: fetchYouTubePlaylistVideos(playlistId),
 		ctx,
 	);
-	// Attribute each video's uploader. A channel a Per-Ankh user has linked (via
-	// user_video_channels) renders with that user's Discord identity — the same
-	// shape as the home creator feed; unmatched uploaders fall back to the raw
-	// YouTube channel name + URL (no avatar, no profile link).
-	const usersByChannel = await loadPlaylistUploaders(env, videos);
-	const attributed = videos.map((v) => {
-		const base = {
+}
+
+// A playlist video as the videos reads return it: the normalized video plus
+// whichever uploader attribution resolved. Mirrors the frontend's
+// TournamentVideo union.
+type AttributedVideo =
+	| Video
+	| (Video & PlaylistUploader)
+	| (Video & { uploader_name: string; uploader_url: string });
+
+// Attribute each video's uploader. A channel a Per-Ankh user has linked (via
+// user_video_channels) renders with that user's Discord identity — the same
+// shape as the home creator feed; unmatched uploaders fall back to the raw
+// YouTube channel name + URL (no avatar, no profile link); a feed entry with no
+// author at all carries no attribution. Shared by both playlist reads so the
+// three-way discrimination has one definition.
+function attributePlaylistVideos(
+	videos: PlaylistVideo[],
+	usersByChannel: Map<string, PlaylistUploader>,
+): AttributedVideo[] {
+	return videos.map((v) => {
+		const base: Video = {
 			id: v.id,
 			title: v.title,
 			url: v.url,
@@ -638,7 +676,6 @@ export async function handleTournamentPlaylistVideos(
 		}
 		return base;
 	});
-	return jsonResponse({ videos: attributed }, 200, cors);
 }
 
 interface PlaylistUploader {
@@ -708,6 +745,126 @@ async function loadPlaylistUploaders(
 		}
 	}
 	return map;
+}
+
+// --- Cross-tournament home feed -------------------------------------------
+//
+// The home page's video strip is one merged list: the creator feed
+// (GET /v1/creator-videos — the newest uploads across every user's linked
+// channels) interleaved with this one, the newest uploads across every
+// tournament's admin-set playlist. Each endpoint owns its own half; the page,
+// the only consumer of both, does the interleave.
+//
+// Which tournaments contribute is read from D1 on every request (mirroring
+// buildCreatorFeed's channel read), so a newly-set playlist shows up without an
+// invalidation step. Only the expensive part is cached — each playlist's videos,
+// in the same KV entry that tournament's own Videos tab reads — so a home
+// request costs one D1 read plus a handful of mostly-warm KV reads, never a live
+// YouTube fetch per playlist.
+
+// Display cap — the home strip's twelve cards, matching the creator feed's
+// MAX_CREATOR_FEED_VIDEOS. Capping each source at the strip size is enough: the
+// newest twelve of the two merged are always among each source's own newest
+// twelve. Move this with the other two caps or the strip starves.
+const MAX_TOURNAMENT_FEED_VIDEOS = 12;
+
+// Merge per-playlist lists into the home feed: newest-first across every
+// tournament, one entry per video, capped. Pure — the D1 read and the playlist
+// fetches live in buildTournamentFeed.
+//
+// Deliberately unfiltered, where the creator feed drops uploads whose titles
+// don't name Old World (mergeCreatorFeed): a playlist is curated by that
+// tournament's own admins for that tournament, so every entry is on-topic by
+// construction — and a match VOD ("R3: Alice vs Bob") rarely spells the game
+// out, so that filter would empty this half of the strip.
+//
+// The dedupe is across playlists: two tournaments can list the same video (a
+// season recap sitting on both), and two entries sharing a platform+id crash the
+// strip's keyed {#each} with each_key_duplicate. Duplicates *within* one
+// playlist are already collapsed by the fetch.
+export function mergeTournamentFeed(
+	perPlaylist: PlaylistVideo[][],
+	cap = MAX_TOURNAMENT_FEED_VIDEOS,
+): PlaylistVideo[] {
+	return dedupeById(perPlaylist.flat().sort(byPublishedDesc)).slice(0, cap);
+}
+
+// Assemble the feed: every visible tournament's playlist, each playlist's videos
+// (per-playlist KV cache, SWR), merged/capped, then attributed. Runs on the
+// request path (see handleTournamentVideosFeed).
+async function buildTournamentFeed(
+	env: TournamentPublicEnv,
+	ctx: ExecutionContext,
+): Promise<AttributedVideo[]> {
+	// Viewer-independent visibility, deliberately narrower than the tournaments
+	// list's: there a setup-phase tournament is also visible to its own admins,
+	// but this response is shared-cacheable at the edge, so it may only carry
+	// what every viewer may see — anything past setup, plus setup tournaments
+	// whose signups are open.
+	const rows = await env.SHARE_DB.prepare(
+		`SELECT youtube_playlist_url FROM tournaments
+		 WHERE youtube_playlist_url IS NOT NULL
+		   AND (status != 'setup' OR signups_open = 1)`,
+	).all<{ youtube_playlist_url: string }>();
+
+	// Distinct playlist ids: two tournaments pointing at one playlist would
+	// otherwise fetch and merge it twice. A stored URL that no longer parses
+	// contributes nothing, exactly as on the per-tournament tab.
+	const playlistIds = [
+		...new Set(
+			(rows.results ?? [])
+				.map((r) => parseYouTubePlaylistUrl(r.youtube_playlist_url)?.playlistId)
+				.filter((id): id is string => id != null),
+		),
+	];
+
+	const perPlaylist = await Promise.all(
+		playlistIds.map((id) => getPlaylistVideosCached(env, id, ctx)),
+	);
+	// Merge first, attribute second: the uploader lookup then covers only the
+	// videos that ship rather than every video on every playlist.
+	const merged = mergeTournamentFeed(perPlaylist);
+	const usersByChannel = await loadPlaylistUploaders(env, merged);
+	return attributePlaylistVideos(merged, usersByChannel);
+}
+
+// GET /v1/tournament-videos — public. The cross-tournament home feed (see
+// above). No auth and no per-tournament view gate: it reads only publicly
+// visible tournaments' admin-set playlists — the same public YouTube data those
+// tournaments' Videos tabs already serve to anyone.
+//
+// Deliberately outside the tournament_view rate-limit budget, unlike the
+// per-tournament reads: every home page load would otherwise spend a slot (and
+// write an audit row) for a strip nobody navigated to. The edge cache below is
+// what bounds the load here, as it is for the creator feed.
+export async function handleTournamentVideosFeed(
+	request: Request,
+	env: TournamentPublicEnv,
+	ctx: ExecutionContext,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	// Best-effort, mirroring handleCreatorVideos and the home load's own catch: a
+	// D1 hiccup empties this half of the strip rather than 500-ing the page.
+	// Per-playlist fetch failures already swallow to [] (getVideosCached).
+	let videos: AttributedVideo[] = [];
+	try {
+		videos = await buildTournamentFeed(env, ctx);
+	} catch (e) {
+		logError("tournament_feed_fetch_failed", e);
+	}
+	// Same caching as the creator feed: 60s at the edge so repeated home hits
+	// don't re-run the D1 read + KV fan-out, no browser cache so an admin who
+	// just set a playlist sees it on reload. Vary: Origin because the CORS
+	// headers are origin-specific and the response is shared-cacheable.
+	return new Response(JSON.stringify({ videos }), {
+		status: 200,
+		headers: {
+			"Content-Type": "application/json",
+			"Cache-Control": "public, max-age=0, s-maxage=60",
+			...cors,
+			Vary: "Origin",
+		},
+	});
 }
 
 // Setup-phase tournaments are admin-only by default — every public read

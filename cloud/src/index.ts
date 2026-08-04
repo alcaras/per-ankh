@@ -75,6 +75,7 @@ import {
 	handleTournamentRounds,
 	handleTournamentStandings,
 	handleTournamentStats,
+	handleTournamentVideosFeed,
 	handleUserTournaments,
 } from "./tournament/public";
 import type { TournamentPublicEnv } from "./tournament/public";
@@ -860,6 +861,16 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "path", path: "/v1/creator-videos" },
 		route: "GET /v1/creator-videos",
 		handler: (r, e, _m, c) => handleCreatorVideos(r, e, c),
+	},
+	// The other half of that strip — newest uploads across every visible
+	// tournament's admin-set playlist, merged newest-first. Per-playlist KV
+	// entries (SWR), shared with each tournament's own Videos tab; passes ctx for
+	// background refresh.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/tournament-videos" },
+		route: "GET /v1/tournament-videos",
+		handler: (r, e, _m, c) => handleTournamentVideosFeed(r, e, c),
 	},
 	// User-facing tournament endpoints
 	{

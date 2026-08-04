@@ -462,7 +462,10 @@ async function fetchYouTubeRecent(
 // doesn't burn a slot, and so the tournament Videos read never emits two entries
 // with the same platform+id — which the page's keyed {#each} rejects with
 // each_key_duplicate. Order-preserving.
-function dedupeById<T extends { id: string }>(videos: T[]): T[] {
+//
+// Exported for the cross-tournament home feed, which merges several playlists
+// and so has the same collapse to make across them (mergeTournamentFeed).
+export function dedupeById<T extends { id: string }>(videos: T[]): T[] {
 	const seen = new Set<string>();
 	return videos.filter((v) => {
 		if (seen.has(v.id)) return false;

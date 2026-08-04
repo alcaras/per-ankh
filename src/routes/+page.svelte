@@ -51,10 +51,10 @@
 	// already surfaces the current tournament.
 	const hasRail = $derived(!!user);
 
-	// The creator-videos column only exists when a creator has recent uploads
-	// (empty on a cold feed cache). When present it sits between the games feed
-	// and the rail; the games column narrows to make room.
-	const hasVideos = $derived(data.creatorVideos.length > 0);
+	// The videos column only exists when a creator or a tournament playlist has
+	// recent uploads (empty on a cold feed cache). When present it sits between
+	// the games feed and the rail; the games column narrows to make room.
+	const hasVideos = $derived(data.videos.length > 0);
 
 	// Desktop column widths (12-col grid). The games feed dominates and gives up
 	// width to the videos column and/or the signed-in rail; with both absent it
@@ -212,8 +212,8 @@
 			{/if}
 
 			<!--
-			Discovery grid (desktop): recent saves (dominant, left) → creator
-			videos (middle) → right rail (tournament banner + active tournaments).
+			Discovery grid (desktop): recent saves (dominant, left) → videos
+			(middle) → right rail (tournament banner + active tournaments).
 			Columns that have no content drop out and their neighbours widen. No
 			wrapper panels — cards float directly on the page background, matching
 			the tournaments-listing pattern.
@@ -249,13 +249,14 @@
 				</section>
 
 				<!--
-				Creator videos: middle column on desktop, full-width strip on smaller
-				screens (the component handles the responsive grid). Omitted entirely
-				on a cold/empty feed rather than leaving a gap.
+				Videos: creator uploads and tournament-playlist uploads merged into one
+				strip — middle column on desktop, full-width on smaller screens (the
+				component handles the responsive grid). Omitted entirely on a cold/empty
+				feed rather than leaving a gap.
 			-->
 				{#if hasVideos}
 					<CreatorVideos
-						videos={data.creatorVideos}
+						videos={data.videos}
 						class={`order-2 lg:order-2 ${videosColClass}`}
 					/>
 				{/if}

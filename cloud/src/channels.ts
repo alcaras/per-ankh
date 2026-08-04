@@ -233,8 +233,10 @@ export async function handleUserVideos(
 // handleCreatorVideos) sheds repeated origin hits without holding stale
 // membership.
 
-// Display cap — two rows of four on the desktop strip.
-const MAX_CREATOR_FEED_VIDEOS = 8;
+// Display cap — the home strip's twelve cards. The strip merges this feed with
+// the tournament-playlist one (GET /v1/tournament-videos, capped to match), so
+// all three caps — both feeds' and the page's VIDEO_STRIP_SIZE — move together.
+const MAX_CREATOR_FEED_VIDEOS = 12;
 
 // The home strip is an Old World feed, not a general creator feed: a linked
 // channel usually covers several games, so an upload only belongs here if it
@@ -258,8 +260,8 @@ export interface CreatorVideo extends Video {
 // Merge per-channel lists (each already attributed to its creator) into the
 // home feed: Old World uploads only, newest-first across all creators, capped.
 // The filter runs before the cap — filtering downstream (in the component, or
-// after this slice) would let a creator's unrelated uploads consume the eight
-// slots and then vanish, leaving a half-empty strip. Pure — the DB query and
+// after this slice) would let a creator's unrelated uploads consume the strip's
+// slots and then vanish, leaving it half-empty. Pure — the DB query and
 // per-channel fetch live in buildCreatorFeed.
 export function mergeCreatorFeed(
 	perChannel: CreatorVideo[][],
