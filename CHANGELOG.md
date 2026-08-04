@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-08-03-454ca5e] - 2026-08-03
+
+### Features
+
+- (military) give non-duel games per-nation build cards — [98f901c](https://github.com/becked/per-ankh/commit/98f901ce6eee607c7d612838c7cbc7ab4a364f12)
+- (home) filter the creator video feed to Old World titles — [c6c57df](https://github.com/becked/per-ankh/commit/c6c57df802ee0c4acd500fcd16dc9c0eabf2b136)
+
+### Other
+
+- (military) split the build comparison into two titled panels — [1e67bc4](https://github.com/becked/per-ankh/commit/1e67bc4c3e5ea190d61a80f53301cee2afa77054)
+- (channels) prettier-format the creator-feed filter tests — [454ca5e](https://github.com/becked/per-ankh/commit/454ca5e1f0c5a5c48ae17d9920f04f267c72eae7)
+
 ## [2026-08-03-33f6ac0] - 2026-08-03
 
 ### Features
