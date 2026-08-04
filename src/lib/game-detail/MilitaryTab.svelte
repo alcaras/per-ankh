@@ -611,11 +611,12 @@
 
 	// ─── Army composition donuts ──────────────────────────────────────
 	// Build a class-composition donut (Infantry/Ranged/Mounted/Siege/Water)
-	// from a set of units, or null when there are no combat units. Used both
-	// for the standalone per-player donuts (FFA) and the per-block donuts under
-	// each H2H comparison.
+	// from a set of units, or null when there are no combat units. Used for the
+	// per-block donuts under each H2H comparison, and for the per-nation cards
+	// below — those head each column themselves, so they pass a null label and
+	// the donut drops its title and recenters on the space that frees.
 	function makeDonut(
-		label: string,
+		label: string | null,
 		color: string,
 		items: BuildItem[],
 	): ChartOption | null {
@@ -633,12 +634,16 @@
 		return {
 			backgroundColor: "transparent",
 			animation: false,
-			title: {
-				text: label,
-				left: "center",
-				top: 4,
-				textStyle: { color, fontSize: 12 },
-			},
+			...(label != null
+				? {
+						title: {
+							text: label,
+							left: "center",
+							top: 4,
+							textStyle: { color, fontSize: 12 },
+						},
+					}
+				: {}),
 			tooltip: {
 				trigger: "item",
 				formatter: (params: any) =>
@@ -648,7 +653,7 @@
 				{
 					type: "pie",
 					radius: ["34%", "62%"],
-					center: ["50%", "56%"],
+					center: ["50%", label != null ? "56%" : "50%"],
 					avoidLabelOverlap: false,
 					label: {
 						show: true,
@@ -673,22 +678,71 @@
 		};
 	}
 
-	// Standalone per-player donuts (units built), shown for FFA / non-matchup
-	// games where the per-block donuts below don't apply.
-	type ArmyPieData = { playerId: number; pieOption: ChartOption };
-	const armyPieCharts = $derived<ArmyPieData[]>(
-		players
+	// ─── Per-nation build cards (non-duel games) ──────────────────────
+	// The duel's paired panels don't generalize past two sides, so a game that
+	// isn't a duel gets one panel per nation instead: that nation's Military
+	// Built and Ending Army side by side, each column a ledger (one bar per
+	// row — there's no opposite number to split about) over its own
+	// class-composition donut.
+	type CardColumn = {
+		title: string;
+		items: BuildItem[];
+		donut: ChartOption | null;
+	};
+	type NationCard = {
+		player: DetailPlayer;
+		keys: string[];
+		columns: CardColumn[];
+	};
+
+	// The ending roster rides along with the blob. Without it the cards carry
+	// the built column alone, rather than an Ending Army column reading zero
+	// for every nation.
+	const hasEndingRoster = $derived(units.length > 0);
+
+	const nationCards = $derived.by<NationCard[]>(() => {
+		if (matchup) return [];
+		return orderedPlayers
 			.map((p) => {
-				const items = ownedByPlayer(
-					unitsProduced,
-					p,
-					(u) => u.player_id,
-					(u) => u.nation,
-				).map((u) => ({ key: u.unit_type, count: u.count }));
-				const opt = makeDonut(p.label, p.color, items);
-				return opt ? { playerId: p.playerId, pieOption: opt } : null;
+				const built = builtUnits(p);
+				const army = hasEndingRoster ? endingArmy(p).items : [];
+				// One row order for both of a nation's columns, so a unit sits at
+				// the same height in each — and, the two columns being the same
+				// number of rows tall, the donuts beneath them line up too. Same
+				// name ordering the duel's shared union uses.
+				const keys = comparisonRowKeys([built, army], (x, y) =>
+					formatEnum(x, "UNIT_").localeCompare(formatEnum(y, "UNIT_")),
+				);
+				const columns: CardColumn[] = [
+					{
+						title: "Military Built",
+						items: built,
+						donut: makeDonut(null, p.color, built),
+					},
+				];
+				if (hasEndingRoster) {
+					columns.push({
+						title: "Ending Army",
+						items: army,
+						donut: makeDonut(null, p.color, army),
+					});
+				}
+				return { player: p, keys, columns };
 			})
-			.filter((d): d is ArmyPieData => d != null),
+			.filter((c) => c.keys.length > 0);
+	});
+
+	// One bar scale across every card and both of its columns — the busiest
+	// single nation-and-unit cell in the game — so a bar length means the same
+	// thing everywhere, both between nations and between what a nation built
+	// and what it still had standing.
+	const nationCardMax = $derived(
+		Math.max(
+			1,
+			...nationCards.flatMap((c) =>
+				c.columns.flatMap((col) => col.items.map((it) => it.count)),
+			),
+		),
 	);
 
 	// ─── Units pivot table logic ──────────────────────────────────────
@@ -790,7 +844,7 @@
 	});
 </script>
 
-{#if militaryChartOption || armyPieCharts.length > 0}
+{#if militaryChartOption}
 	<div
 		class="mb-4 rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface));"
@@ -827,21 +881,6 @@
 					title="Military Power"
 				/>
 			{/if}
-		{/if}
-
-		<!-- Standalone army-composition donuts: only for FFA / non-matchup
-		     games (in a 1v1 the per-block donuts below take over). -->
-		{#if armyPieCharts.length > 0 && !matchup}
-			<div
-				class="{militaryChartOption ? 'mt-4 ' : ''}grid gap-4"
-				style="grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));"
-			>
-				{#each armyPieCharts as pie (pie.playerId)}
-					<div class="overflow-hidden rounded-lg">
-						<Chart option={pie.pieOption} height="200px" />
-					</div>
-				{/each}
-			</div>
 		{/if}
 	</div>
 {/if}
@@ -885,6 +924,77 @@
 							{/if}
 						</div>
 					{/if}
+				</div>
+			</div>
+		{/each}
+	</div>
+{/if}
+
+<!-- Per-nation build cards (everything that isn't a duel): one panel per
+     nation, Military Built beside Ending Army. -->
+{#if nationCards.length > 0}
+	<!-- Two cards abreast once there's width for it. Each card is itself two
+	     columns, so this puts four columns of bars across the page — pairing at
+	     md rather than lg would leave each of them near the 110px the label
+	     column alone takes.
+
+	     Column flow rather than a grid, for the reason the project ledgers use
+	     it too: grid rows are as tall as their tallest cell, so a nation with
+	     four unit types beside one with twelve holds the gap its neighbour's
+	     rows opened. Columns pack each card under the last instead.
+	     break-inside-avoid keeps a nation whole. -->
+	<div class="gap-4 lg:columns-2">
+		{#each nationCards as card (card.player.playerId)}
+			<div
+				class="mb-4 break-inside-avoid rounded-lg p-4"
+				style="background-color: rgb(var(--color-surface));"
+			>
+				<h3
+					class="mb-3 flex items-center gap-2 text-base font-bold"
+					style="color: {card.player.color};"
+				>
+					{#if card.player.nation}
+						<SpriteIcon
+							category="crests"
+							value={card.player.nation}
+							size={18}
+							alt={formatEnum(card.player.nation, "NATION_")}
+						/>
+					{/if}
+					{card.player.label}
+				</h3>
+				<!-- Subgrid over three rows — heading / bars / donut — so the two
+				     columns share them: the Ending Army heading sits on the same
+				     line as Military Built's, and both donuts land on the same row
+				     however tall the bars run. Below md the columns stack, each
+				     keeping its heading above its own charts. -->
+				<div
+					class="grid gap-x-4 gap-y-2 md:grid-rows-[auto_1fr_auto] {hasEndingRoster
+						? 'md:grid-cols-2'
+						: ''}"
+				>
+					{#each card.columns as column (column.title)}
+						<div
+							class="flex flex-col gap-2 md:row-span-3 md:grid md:grid-rows-subgrid"
+						>
+							<div class="text-xs font-bold uppercase tracking-wide text-tan">
+								{column.title}
+							</div>
+							<BuildComparison
+								a={column.items}
+								ca={card.player.color}
+								keys={card.keys}
+								max={nationCardMax}
+							/>
+							{#if column.donut}
+								<div
+									class="overflow-hidden rounded-md border border-border-subtle bg-surface-sunken"
+								>
+									<Chart option={column.donut} height="168px" />
+								</div>
+							{/if}
+						</div>
+					{/each}
 				</div>
 			</div>
 		{/each}
