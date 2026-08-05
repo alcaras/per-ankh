@@ -43,7 +43,10 @@
 		matchSlotSlug,
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
-	import { upcomingScheduledParts } from "$lib/tournament/parts";
+	import {
+		LIVE_WINDOW_MS,
+		upcomingScheduledParts,
+	} from "$lib/tournament/parts";
 	import { nowMs } from "$lib/stores/now.svelte";
 	import { seshMatchLine, seshVersus } from "$lib/tournament/sesh";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
@@ -375,46 +378,49 @@
 	const canSchedule = $derived(
 		!isPlaceholder && match.status !== "bye" && (isAdmin || isParticipant),
 	);
+	// Schedule rows, played-last-and-collapsed. A long split match
+	// accumulates played sessions that bury the one a viewer actually needs
+	// — the NEXT one — below the popover's fold (the report that prompted
+	// this was a match on session seven, whose only future time sat
+	// off-screen). A session counts as played once it has aged out of
+	// LIVE_WINDOW_MS — the same boundary liveAndUpcoming uses, so a session
+	// being streamed right now stays inline, in order, with the upcoming
+	// ones. Played sessions render behind a collapsed "N played sessions"
+	// toggle when there are two or more; with nothing else to show, the
+	// most recent played session stays inline so the panel never opens
+	// empty. Reads the shared clock, so a session slides into the played
+	// group as it ages out.
+	const numberedSessions = $derived(
+		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
+	);
+	const playedSessions = $derived(
+		numberedSessions.filter(({ part }) => {
+			if (part.scheduled_at == null) return false;
+			const t = Date.parse(part.scheduled_at);
+			return !Number.isNaN(t) && t <= nowMs() - LIVE_WINDOW_MS;
+		}),
+	);
+	const aheadSessions = $derived(
+		numberedSessions.filter((np) => !playedSessions.includes(np)),
+	);
+	const collapsedSessions = $derived(
+		playedSessions.length >= 2
+			? aheadSessions.length > 0
+				? playedSessions
+				: playedSessions.slice(0, -1)
+			: [],
+	);
+	const scheduleRows = $derived([
+		...playedSessions.filter((np) => !collapsedSessions.includes(np)),
+		...aheadSessions,
+	]);
+	let showPlayed = $state(false);
+
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
 	// castingParts keeps each part's original 1-based number so a split match
 	// labels "Part N" consistently in both panels, and drops parts with no
 	// broadcast info so the casting panel only lists sittings that have some.
-	// Schedule rows, upcoming-first. A long split match accumulates played
-	// sessions that bury the one a viewer actually needs — the NEXT one —
-	// below the popover's fold (the report that prompted this was a match on
-	// session seven, whose only future time sat off-screen). Sessions that
-	// have started render behind a collapsed "N played sessions" toggle when
-	// there are two or more of them; with nothing still ahead, the most
-	// recent played session stays inline so the panel never opens empty.
-	// Reads the shared clock, so a session moves into the played group as
-	// its time passes.
-	const numberedSessions = $derived(
-		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
-	);
-	const startedSessions = $derived(
-		numberedSessions.filter(({ part }) => {
-			if (part.scheduled_at == null) return false;
-			const t = Date.parse(part.scheduled_at);
-			return !Number.isNaN(t) && t <= nowMs();
-		}),
-	);
-	const aheadSessions = $derived(
-		numberedSessions.filter((np) => !startedSessions.includes(np)),
-	);
-	const collapsedSessions = $derived(
-		startedSessions.length >= 2
-			? aheadSessions.length > 0
-				? startedSessions
-				: startedSessions.slice(0, -1)
-			: [],
-	);
-	const scheduleRows = $derived([
-		...startedSessions.filter((np) => !collapsedSessions.includes(np)),
-		...aheadSessions,
-	]);
-	let showPlayed = $state(false);
-
 	const castingParts = $derived(
 		match.parts
 			.map((part, i) => ({ part, partNumber: i + 1 }))
