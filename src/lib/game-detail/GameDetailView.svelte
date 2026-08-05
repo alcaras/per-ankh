@@ -601,6 +601,7 @@
 			{characterTraits}
 			{currentLaws}
 			{playerGoals}
+			{storyEvents}
 		/>
 	</Tabs.Content>
 
