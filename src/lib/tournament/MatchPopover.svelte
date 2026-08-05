@@ -44,6 +44,7 @@
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
 	import { upcomingScheduledParts } from "$lib/tournament/parts";
+	import { nowMs } from "$lib/stores/now.svelte";
 	import { seshMatchLine, seshVersus } from "$lib/tournament/sesh";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import {
@@ -379,6 +380,41 @@
 	// castingParts keeps each part's original 1-based number so a split match
 	// labels "Part N" consistently in both panels, and drops parts with no
 	// broadcast info so the casting panel only lists sittings that have some.
+	// Schedule rows, upcoming-first. A long split match accumulates played
+	// sittings that bury the one a viewer actually needs — the NEXT one —
+	// below the popover's fold (the report that prompted this was a match on
+	// sitting seven, whose only future time sat off-screen). Sittings that
+	// have started render behind a collapsed "N played sittings" toggle when
+	// there are two or more of them; with nothing still ahead, the most
+	// recent played sitting stays inline so the panel never opens empty.
+	// Reads the shared clock, so a sitting moves into the played group as
+	// its time passes.
+	const numberedSittings = $derived(
+		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
+	);
+	const startedSittings = $derived(
+		numberedSittings.filter(({ part }) => {
+			if (part.scheduled_at == null) return false;
+			const t = Date.parse(part.scheduled_at);
+			return !Number.isNaN(t) && t <= nowMs();
+		}),
+	);
+	const aheadSittings = $derived(
+		numberedSittings.filter((np) => !startedSittings.includes(np)),
+	);
+	const collapsedSittings = $derived(
+		startedSittings.length >= 2
+			? aheadSittings.length > 0
+				? startedSittings
+				: startedSittings.slice(0, -1)
+			: [],
+	);
+	const scheduleRows = $derived([
+		...startedSittings.filter((np) => !collapsedSittings.includes(np)),
+		...aheadSittings,
+	]);
+	let showPlayed = $state(false);
+
 	const castingParts = $derived(
 		match.parts
 			.map((part, i) => ({ part, partNumber: i + 1 }))
@@ -1068,16 +1104,28 @@
 			class="flex flex-col gap-2 rounded-lg p-3"
 			style="background-color: rgb(var(--color-surface-raised));"
 		>
-			{#each match.parts as part, i (part.id)}
+			{#if collapsedSittings.length > 0}
+				<button
+					type="button"
+					class="flex items-center gap-1 self-start text-[10px] font-bold uppercase tracking-wider text-muted transition-colors hover:text-tan"
+					onclick={() => (showPlayed = !showPlayed)}
+					aria-expanded={showPlayed}
+				>
+					<span aria-hidden="true">{showPlayed ? "▾" : "▸"}</span>
+					{collapsedSittings.length} played
+					{collapsedSittings.length === 1 ? "sitting" : "sittings"}
+				</button>
+			{/if}
+			{#each showPlayed ? [...collapsedSittings, ...scheduleRows] : scheduleRows as { part, partNumber }, i (part.id)}
 				<div
-					class="flex items-center gap-2 {i > 0
+					class="flex items-center gap-2 {i > 0 || collapsedSittings.length > 0
 						? 'border-t border-border-subtle pt-2'
 						: ''}"
 				>
 					{#if match.parts.length > 1}
 						<span
 							class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted"
-							>Part {i + 1}</span
+							>Part {partNumber}</span
 						>
 					{/if}
 					{#if part.scheduled_at}
