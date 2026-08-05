@@ -17,10 +17,15 @@ export function matchParts(m: TournamentMatch): TournamentMatchPart[] {
 
 // A match's status for display, refining the raw match status with parts info:
 //   completed    — reported or forfeit.
-//   in_progress  — pending, but a scheduled part's time has already passed, so
-//                  play has started (single session underway, or split across
-//                  sittings) and a result is pending.
-//   scheduled    — pending with an upcoming (still-future) part and none started.
+//   in_progress  — pending with a session plausibly being played right now
+//                  (started within LIVE_WINDOW_MS), or every session played
+//                  and nothing further scheduled — a result (or the next
+//                  sitting) is owed.
+//   scheduled    — pending with an upcoming (still-future) session; a split
+//                  match between sessions reads by its NEXT sitting, not its
+//                  past ones — the bracket card's chip is often the only
+//                  signal a viewer gets, and "In progress" hid that a next
+//                  session was already on the calendar.
 //   unscheduled  — pending, no part scheduled at all.
 // Byes return null (auto-resolved, nothing to show).
 export type MatchDisplayStatus =
@@ -45,9 +50,23 @@ export function matchDisplayStatus(
 ): MatchDisplayStatus | null {
 	if (m.status === "complete" || m.status === "forfeit") return "completed";
 	if (m.status === "bye") return null;
-	if (hasStartedPart(m)) return "in_progress";
+	if (hasLivePart(m)) return "in_progress";
 	if (isMatchScheduled(m)) return "scheduled";
+	if (hasStartedPart(m)) return "in_progress";
 	return "unscheduled";
+}
+
+// True while a session is plausibly being played right now — started within
+// LIVE_WINDOW_MS, the same boundary liveAndUpcoming draws. Outranks a
+// future sitting in matchDisplayStatus: a match being streamed is "in
+// progress" even when its next session is already scheduled.
+export function hasLivePart(m: TournamentMatch): boolean {
+	const now = nowMs();
+	return matchParts(m).some((p) => {
+		if (p.scheduled_at == null) return false;
+		const t = Date.parse(p.scheduled_at);
+		return !Number.isNaN(t) && t <= now && t > now - LIVE_WINDOW_MS;
+	});
 }
 
 // True once any scheduled part's time has passed — the match is underway (or
