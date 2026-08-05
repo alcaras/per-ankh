@@ -381,37 +381,37 @@
 	// labels "Part N" consistently in both panels, and drops parts with no
 	// broadcast info so the casting panel only lists sittings that have some.
 	// Schedule rows, upcoming-first. A long split match accumulates played
-	// sittings that bury the one a viewer actually needs — the NEXT one —
+	// sessions that bury the one a viewer actually needs — the NEXT one —
 	// below the popover's fold (the report that prompted this was a match on
-	// sitting seven, whose only future time sat off-screen). Sittings that
-	// have started render behind a collapsed "N played sittings" toggle when
+	// session seven, whose only future time sat off-screen). Sessions that
+	// have started render behind a collapsed "N played sessions" toggle when
 	// there are two or more of them; with nothing still ahead, the most
-	// recent played sitting stays inline so the panel never opens empty.
-	// Reads the shared clock, so a sitting moves into the played group as
+	// recent played session stays inline so the panel never opens empty.
+	// Reads the shared clock, so a session moves into the played group as
 	// its time passes.
-	const numberedSittings = $derived(
+	const numberedSessions = $derived(
 		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
 	);
-	const startedSittings = $derived(
-		numberedSittings.filter(({ part }) => {
+	const startedSessions = $derived(
+		numberedSessions.filter(({ part }) => {
 			if (part.scheduled_at == null) return false;
 			const t = Date.parse(part.scheduled_at);
 			return !Number.isNaN(t) && t <= nowMs();
 		}),
 	);
-	const aheadSittings = $derived(
-		numberedSittings.filter((np) => !startedSittings.includes(np)),
+	const aheadSessions = $derived(
+		numberedSessions.filter((np) => !startedSessions.includes(np)),
 	);
-	const collapsedSittings = $derived(
-		startedSittings.length >= 2
-			? aheadSittings.length > 0
-				? startedSittings
-				: startedSittings.slice(0, -1)
+	const collapsedSessions = $derived(
+		startedSessions.length >= 2
+			? aheadSessions.length > 0
+				? startedSessions
+				: startedSessions.slice(0, -1)
 			: [],
 	);
 	const scheduleRows = $derived([
-		...startedSittings.filter((np) => !collapsedSittings.includes(np)),
-		...aheadSittings,
+		...startedSessions.filter((np) => !collapsedSessions.includes(np)),
+		...aheadSessions,
 	]);
 	let showPlayed = $state(false);
 
@@ -1104,7 +1104,7 @@
 			class="flex flex-col gap-2 rounded-lg p-3"
 			style="background-color: rgb(var(--color-surface-raised));"
 		>
-			{#if collapsedSittings.length > 0}
+			{#if collapsedSessions.length > 0}
 				<button
 					type="button"
 					class="flex items-center gap-1 self-start text-[10px] font-bold uppercase tracking-wider text-muted transition-colors hover:text-tan"
@@ -1112,13 +1112,13 @@
 					aria-expanded={showPlayed}
 				>
 					<span aria-hidden="true">{showPlayed ? "▾" : "▸"}</span>
-					{collapsedSittings.length} played
-					{collapsedSittings.length === 1 ? "sitting" : "sittings"}
+					{collapsedSessions.length} played
+					{collapsedSessions.length === 1 ? "session" : "sessions"}
 				</button>
 			{/if}
-			{#each showPlayed ? [...collapsedSittings, ...scheduleRows] : scheduleRows as { part, partNumber }, i (part.id)}
+			{#each showPlayed ? [...collapsedSessions, ...scheduleRows] : scheduleRows as { part, partNumber }, i (part.id)}
 				<div
-					class="flex items-center gap-2 {i > 0 || collapsedSittings.length > 0
+					class="flex items-center gap-2 {i > 0 || collapsedSessions.length > 0
 						? 'border-t border-border-subtle pt-2'
 						: ''}"
 				>
