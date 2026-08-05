@@ -419,12 +419,18 @@
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
 	// castingParts keeps each part's original 1-based number so a split match
-	// labels "Part N" consistently in both panels, and drops parts with no
-	// broadcast info so the casting panel only lists sittings that have some.
+	// labels "Part N" consistently in both panels. Played sessions appear only
+	// when they have broadcast info to archive; a session still ahead (or
+	// live) appears regardless — an upcoming sitting with nobody signed up is
+	// exactly the one the panel should be advertising, and hiding it made a
+	// split match's next session vanish from the card entirely.
 	const castingParts = $derived(
-		match.parts
-			.map((part, i) => ({ part, partNumber: i + 1 }))
-			.filter(({ part }) => part.casters.length > 0 || part.streams.length > 0),
+		numberedSessions.filter(
+			(np) =>
+				np.part.casters.length > 0 ||
+				np.part.streams.length > 0 ||
+				(match.status === "pending" && !playedSessions.includes(np)),
+		),
 	);
 	const hasSecondaryActions = $derived(
 		canSchedule ||
@@ -1186,6 +1192,11 @@
 					{/if}
 					<!-- Caster on the left, its stream link(s) to the right. -->
 					<div class="flex items-start gap-3">
+						{#if part.casters.length === 0}
+							<!-- An upcoming session with nobody signed up — the reason it's
+							     listed at all is to advertise the seat. -->
+							<span class="text-xs italic text-muted">Needs a caster</span>
+						{/if}
 						{#if part.casters.length > 0}
 							<!-- Streamer first (with avatar), co-casters appended. Each name
 							     is its own link, so the co-casters are rendered one at a time
