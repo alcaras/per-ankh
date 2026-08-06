@@ -44,7 +44,7 @@ import {
 	type TournamentEnv,
 	type TournamentRow,
 } from "./data";
-import { TOURNAMENT_LINK_VIEW_PER_HOUR, tournamentViewPerHour } from "./limits";
+import { tournamentLinkViewPerHour, tournamentViewPerHour } from "./limits";
 import {
 	computeStandings,
 	rankStandings,
@@ -77,12 +77,13 @@ import type { EventsEnv } from "../d1";
 export interface TournamentPublicEnv
 	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
-	// Per-IP hourly ceiling on tournament reads. Optional: unset falls back to
-	// the TOURNAMENT_VIEW_PER_HOUR constant (see tournamentViewPerHour). A var
-	// rather than a bare const so it can be retuned mid-event without a
-	// redeploy.
+	// Per-IP hourly ceilings on the two read budgets. Optional: unset falls back
+	// to the constant of the same name (see tournamentViewPerHour /
+	// tournamentLinkViewPerHour). Vars rather than bare consts so either can be
+	// retuned mid-event without a redeploy.
 	TOURNAMENT_VIEW_PER_HOUR?: string;
 	// Optional YouTube Data API key. When set, the Videos tab enumerates the
+	TOURNAMENT_LINK_VIEW_PER_HOUR?: string;
 	// whole playlist (so its search can reach every video); when unset, it falls
 	// back to the free RSS feed's most-recent entries. Same secret the channel
 	// resolver uses.
@@ -177,7 +178,8 @@ function enforceTournamentViewRateLimit(
 
 // The game→tournament link read's own budget. Separate from the one above
 // because /games/[id] traffic is a different population from /tournaments/*
-// traffic — see TOURNAMENT_LINK_VIEW_PER_HOUR.
+// traffic — see TOURNAMENT_LINK_VIEW_PER_HOUR. Retunable mid-event via its own
+// env var, on the same lever as the view ceiling.
 function enforceTournamentLinkRateLimit(
 	env: TournamentPublicEnv,
 	request: Request,
@@ -188,7 +190,7 @@ function enforceTournamentLinkRateLimit(
 		request,
 		cors,
 		LINK_BUDGET,
-		TOURNAMENT_LINK_VIEW_PER_HOUR,
+		tournamentLinkViewPerHour(env),
 	);
 }
 

@@ -1,7 +1,8 @@
-// Tournament rate-limit ceilings. Hardcoded, except the per-IP view ceiling
-// (see tournamentViewPerHour below) — the "operators need to retune during a
-// live event" case this file anticipated actually happened, so that one is now
-// a wrangler var with the constant as its default.
+// Tournament rate-limit ceilings. Hardcoded, except the two per-IP read
+// ceilings (tournamentViewPerHour / tournamentLinkViewPerHour below) — the
+// "operators need to retune during a live event" case this file anticipated
+// actually happened, so those are wrangler vars with the constants as their
+// defaults.
 
 // Per-user admin mutation budget. Spec said 30/hour/tournament; we
 // simplified to per-user because the threat model (stolen admin
@@ -21,27 +22,31 @@ export const TOURNAMENT_SCHEDULE_ACTIONS_PER_HOUR = 60;
 // The default only — read the effective ceiling with tournamentViewPerHour().
 export const TOURNAMENT_VIEW_PER_HOUR = 600;
 
-// Effective per-IP tournament view ceiling: the TOURNAMENT_VIEW_PER_HOUR var
-// when it parses, the constant above otherwise.
-//
-// The var exists so an operator can retune mid-event without a redeploy —
-// `npx wrangler secret put TOURNAMENT_VIEW_PER_HOUR` shadows the wrangler.toml
-// value and takes effect immediately, the same lever UPLOADS_ENABLED
-// documents. Unset behaves exactly as the constant did when it was the only
-// source.
+// A ceiling read off an env var, falling back to the compiled-in default.
+// Shared by both read budgets so the two can't drift in how they parse.
 //
 // Number(), not parseInt(): parseInt("600 per hour") is 600, which would let a
 // mangled value silently pass as a deliberate one. Non-positive is treated as
 // unset rather than "refuse everything" — a fat-fingered 0 during an incident
-// would 429 the whole tournament surface, which is the outage this knob exists
-// to shorten.
+// would 429 the whole surface, which is the outage these knobs exist to
+// shorten.
+function ceilingFrom(raw: string | undefined, fallback: number): number {
+	const parsed = Number(raw);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Effective per-IP tournament view ceiling: the TOURNAMENT_VIEW_PER_HOUR var
+// when it parses, the constant above otherwise.
+//
+// The var exists so an operator can retune mid-event without a redeploy —
+// `npx wrangler secret put TOURNAMENT_VIEW_PER_HOUR` takes effect immediately,
+// the same lever UPLOADS_ENABLED documents. It lasts until the next deploy,
+// which puts the wrangler.toml value back — the caveat is on the vars there.
+// Unset behaves exactly as the constant did when it was the only source.
 export function tournamentViewPerHour(env: {
 	TOURNAMENT_VIEW_PER_HOUR?: string;
 }): number {
-	const parsed = Number(env.TOURNAMENT_VIEW_PER_HOUR);
-	return Number.isFinite(parsed) && parsed > 0
-		? parsed
-		: TOURNAMENT_VIEW_PER_HOUR;
+	return ceilingFrom(env.TOURNAMENT_VIEW_PER_HOUR, TOURNAMENT_VIEW_PER_HOUR);
 }
 
 // Per-IP budget for the game→tournament link read
@@ -56,7 +61,24 @@ export function tournamentViewPerHour(env: {
 // it is a backstop on an endpoint that would otherwise be unmetered, not a
 // constraint on browsing. When it does fire, the game page's loader already
 // swallows the failure and hides the tournament banner.
+//
+// The default only — read the effective ceiling with tournamentLinkViewPerHour().
 export const TOURNAMENT_LINK_VIEW_PER_HOUR = 600;
+
+// Effective per-IP link ceiling, tunable on the same lever as the view one
+// above. Splitting the budgets is what keeps a game-page crawl off the
+// tournament pages; it doesn't stop the crawl from draining *this* budget, and
+// then every server-rendered game page loses its tournament banner until the
+// hour rolls. That's the case where an operator wants this number moved, and
+// it's the same incident — so the knob has to be here too, not a redeploy away.
+export function tournamentLinkViewPerHour(env: {
+	TOURNAMENT_LINK_VIEW_PER_HOUR?: string;
+}): number {
+	return ceilingFrom(
+		env.TOURNAMENT_LINK_VIEW_PER_HOUR,
+		TOURNAMENT_LINK_VIEW_PER_HOUR,
+	);
+}
 
 // Per-user budget for tournament creation. Tighter than admin mutations:
 // creating a tournament adds rows + an admin row + squats a slug, and

@@ -88,8 +88,8 @@ Counters live in the D1 `events` table (or the Cache API for legacy downloads) a
 | Bucket | Limit | Applies to |
 | --- | --- | --- |
 | `anon_read` | 200 / hr per IP | anonymous game reads (`GET /v1/games/:id`, `public-recent`) |
-| `tournament_view` | 600 / hr per IP | anonymous tournament reads. The ceiling is the `TOURNAMENT_VIEW_PER_HOUR` var (600 by default), so it can be retuned mid-event with `wrangler secret put` instead of a redeploy |
-| `tournament_link_view` | 600 / hr per IP | `GET /v1/games/:id/tournament-link`. Its own budget, not `tournament_view`'s: every game-page render calls it, so sharing let a `/games/*` crawl 429 the tournament pages |
+| `tournament_view` | 600 / hr per IP | anonymous tournament reads. The ceiling is the `TOURNAMENT_VIEW_PER_HOUR` var (600 by default), so it can be retuned mid-event with `wrangler secret put` instead of a redeploy — until the next deploy restores the `wrangler.toml` value |
+| `tournament_link_view` | 600 / hr per IP | `GET /v1/games/:id/tournament-link`. Its own budget, not `tournament_view`'s: every game-page render calls it, so sharing let a `/games/*` crawl 429 the tournament pages. Own ceiling var too (`TOURNAMENT_LINK_VIEW_PER_HOUR`), retuned the same way |
 | `tournament_export` | 30 / hr per user | `GET /v1/tournaments/:id/export` |
 | `tournament_admin` | 30 / hr per user | tournament admin mutations |
 | `tournament_schedule` | 60 / hr per user | match schedule + caster self-service |

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { TOURNAMENT_VIEW_PER_HOUR, tournamentViewPerHour } from "./limits";
+import {
+	TOURNAMENT_LINK_VIEW_PER_HOUR,
+	TOURNAMENT_VIEW_PER_HOUR,
+	tournamentLinkViewPerHour,
+	tournamentViewPerHour,
+} from "./limits";
 
-// The tournament view ceiling is read off env so an operator can retune it
-// mid-event (`wrangler secret put TOURNAMENT_VIEW_PER_HOUR`) without a
+// Both read ceilings are read off env so an operator can retune one mid-event
+// (`wrangler secret put TOURNAMENT_VIEW_PER_HOUR`) without a
 // redeploy. Every way that var can be wrong resolves to the constant, because
 // the failure mode this knob exists to shorten is the tournament pages being
 // down — a value that parses to 0 or NaN must not be the thing that keeps them
@@ -47,5 +52,38 @@ describe("tournamentViewPerHour", () => {
 		expect(
 			tournamentViewPerHour({ TOURNAMENT_VIEW_PER_HOUR: "Infinity" }),
 		).toBe(TOURNAMENT_VIEW_PER_HOUR);
+	});
+});
+
+// The link ceiling shares the parse rules above (one helper, so they can't
+// drift). What's worth pinning here is the wiring: that it reads its *own*
+// var and falls back to its own constant, since the whole point of the split
+// is that the two budgets move independently.
+describe("tournamentLinkViewPerHour", () => {
+	it("uses a parseable positive value", () => {
+		expect(
+			tournamentLinkViewPerHour({ TOURNAMENT_LINK_VIEW_PER_HOUR: "50" }),
+		).toBe(50);
+	});
+
+	it("falls back to the constant when the var is absent or unparseable", () => {
+		expect(tournamentLinkViewPerHour({})).toBe(TOURNAMENT_LINK_VIEW_PER_HOUR);
+		expect(
+			tournamentLinkViewPerHour({ TOURNAMENT_LINK_VIEW_PER_HOUR: "0" }),
+		).toBe(TOURNAMENT_LINK_VIEW_PER_HOUR);
+		expect(
+			tournamentLinkViewPerHour({
+				TOURNAMENT_LINK_VIEW_PER_HOUR: "600 per hour",
+			}),
+		).toBe(TOURNAMENT_LINK_VIEW_PER_HOUR);
+	});
+
+	it("ignores the view var — the two knobs are independent", () => {
+		const env = {
+			TOURNAMENT_VIEW_PER_HOUR: "5",
+			TOURNAMENT_LINK_VIEW_PER_HOUR: "50",
+		};
+		expect(tournamentLinkViewPerHour(env)).toBe(50);
+		expect(tournamentViewPerHour(env)).toBe(5);
 	});
 });

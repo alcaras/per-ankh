@@ -251,4 +251,35 @@ describe("game tournament-link rate limit", () => {
 
 		await expectOk(await get(linkPath(), { ip, ua: "Twitterbot/1.0" }));
 	});
+
+	// Its own knob, not the view one: the incident that drains this budget is
+	// the incident an operator is retuning during, and the two must move
+	// independently or the split they're built on is undone by the fix.
+	describe("ceiling is env-tunable", () => {
+		const configured = env.TOURNAMENT_LINK_VIEW_PER_HOUR;
+		afterEach(() => {
+			env.TOURNAMENT_LINK_VIEW_PER_HOUR = configured;
+		});
+
+		it("gates at its own env value, leaving the view ceiling alone", async () => {
+			env.TOURNAMENT_LINK_VIEW_PER_HOUR = "5";
+
+			const ip = "203.0.113.45";
+			await seedEvents("tournament_link_view", ip, 5);
+			await expectErrorCode(await get(linkPath(), { ip }), {
+				status: 429,
+				code: "RATE_LIMIT_TOURNAMENT_LINK",
+			});
+
+			// Same IP, same moment: the tournament pages are gated by the other
+			// var, which this override didn't touch.
+			await expectOk(await get("/v1/tournaments", { ip }));
+		});
+
+		it("wrangler.toml's configured value is what the gate uses by default", async () => {
+			expect(env.TOURNAMENT_LINK_VIEW_PER_HOUR).toBe(
+				String(TOURNAMENT_LINK_VIEW_PER_HOUR),
+			);
+		});
+	});
 });

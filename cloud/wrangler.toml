@@ -170,13 +170,26 @@ PER_IP_UPLOADS_PER_HOUR = "200"
 GLOBAL_UPLOADS_PER_HOUR = "5000"
 
 # === Tournament read limits ===
-# Per-IP hourly ceiling on the tournament read endpoints
-# (cloud/src/tournament/limits.ts). A var, not just a code const, so the
-# ceiling can be retuned during a live event without a redeploy — same lever
-# as UPLOADS_ENABLED: `npx wrangler secret put TOURNAMENT_VIEW_PER_HOUR`
-# shadows this value and takes effect immediately. Unset or unparseable falls
-# back to the code default, which is this number.
+# Per-IP hourly ceilings on the two tournament read budgets
+# (cloud/src/tournament/limits.ts). Vars, not just code consts, so either can
+# be retuned during a live event without a redeploy — same lever as
+# UPLOADS_ENABLED: `npx wrangler secret put TOURNAMENT_VIEW_PER_HOUR` takes
+# effect immediately. Unset or unparseable falls back to the code default,
+# which is this number.
+#
+# The override is temporary. A secret and a var of the same name collide, and
+# the var wins: the next `wrangler deploy` warns "Configuration values (…)
+# conflict with existing remote secrets. This deployment will replace these
+# remote secrets with the configuration values" and puts this number back. So
+# an incident-time secret survives only until the next deploy — to keep a new
+# ceiling, change it here and ship it.
+#
+# TOURNAMENT_VIEW_PER_HOUR gates the tournament pages; _LINK_ gates
+# GET /v1/games/:id/tournament-link, which every game-page render calls.
+# Separate budgets so a /games/* crawl can't spend the tournament pages'
+# allowance (the 2026-08-05 outage) — keep them separate when retuning.
 TOURNAMENT_VIEW_PER_HOUR = "600"
+TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 
 # === Cloud rewrite (/v1/auth/*, /v1/games/*) ===
 # CORS allowlist for new routes — comma-separated origins. Cookie-based
@@ -288,6 +301,7 @@ PER_USER_UPLOADS_PER_HOUR = "100"
 PER_IP_UPLOADS_PER_HOUR = "200"
 GLOBAL_UPLOADS_PER_HOUR = "5000"
 TOURNAMENT_VIEW_PER_HOUR = "600"
+TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 ALLOWED_ORIGINS = "https://staging.per-ankh.app"
 # Separate staging Discord OAuth app — paste its client ID:
 DISCORD_CLIENT_ID = "1512545079493922927"
