@@ -262,11 +262,24 @@ export function getClientIp(request: Request): string | null {
 // tournament pages' hourly allowance and 429'd them.
 //
 // The frontend Worker fixes the attribution at the source: it forwards the
-// visitor's edge address and User-Agent and proves it is us with a shared key
-// (`handleFetch` in src/hooks.server.ts). This is the only place that key is
-// checked and the only place those headers are believed — every reader
-// downstream keeps calling getClientIp (or reads User-Agent) and gets the
-// right answer.
+// visitor's edge address and proves it is us with a shared key (`handleFetch`
+// in src/hooks.server.ts). This is the only place that key is checked and the
+// only place the forwarded address is believed — every reader downstream keeps
+// calling getClientIp and gets the right answer.
+//
+// The address is *all* that's forwarded, deliberately. The visitor's
+// User-Agent doesn't survive the hop either, and carrying it would switch on
+// the scraper exemption in games.ts (isScraperUA) for site traffic — an
+// exemption keyed on a string the caller picks, granted before both the gate
+// and the audit INSERT. Anyone sending `User-Agent: Discordbot/2.0` to
+// per-ankh.app would then be unmetered *and* absent from the `events` table
+// the bucket query in docs/cloudflare-waf.md reads during an incident. The
+// exemption has never applied to an unfurl in the first place — every unfurl
+// arrives as a page fetch that this Worker only ever sees as an SSR
+// subrequest, so isScraperUA has seen `null` for the whole SSR era and
+// preview cards have worked regardless. With the address forwarded, a
+// link-preview crawler is now metered against its own IP rather than pooled
+// on the egress, which is strictly better than what it had.
 //
 // Both sides must have the key for any of it to take effect, so the two
 // Workers can be deployed in either order: until both are set, forwarding is
@@ -275,13 +288,6 @@ export function getClientIp(request: Request): string | null {
 // Presented by the caller.
 export const SSR_KEY_HEADER = "X-SSR-Key";
 export const SSR_CLIENT_IP_HEADER = "X-SSR-Client-IP";
-// The visitor's User-Agent, which doesn't survive the SSR hop either:
-// SvelteKit's server-side fetch copies cookie/origin/authorization/accept onto
-// a subrequest and nothing else, so without this the read limiters see no UA at
-// all. They exempt link-preview scrapers by UA (isScraperUA in games.ts), and a
-// Discord or Slack unfurl is *always* a server-rendered load — so the exemption
-// applies to nothing at all unless the UA is carried across with the address.
-export const SSR_CLIENT_UA_HEADER = "X-SSR-Client-UA";
 // Our own verdict, never believed from the wire: adoptTrustedFrontend strips
 // this off every inbound request and re-adds it only after the key checks out,
 // so a handler reading it is reading this module's conclusion and not the
@@ -298,10 +304,6 @@ export interface TrustedFrontendEnv {
 // A forwarded address becomes a rate-limit bucket key and an `events` row, so
 // it gets a shape check before either. Deliberately loose — IPv4, IPv6, and
 // nothing else long enough to be a payload.
-//
-// The forwarded User-Agent gets no equivalent check: it is never stored and
-// never a key, only prefix-compared against the scraper list, so there is
-// nothing for a malformed one to corrupt.
 const FORWARDED_IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
 
 // Whether this isolate has already reported each of the two ways forwarding
@@ -311,23 +313,16 @@ let rejectionLogged = false;
 let missingIpLogged = false;
 
 // Resolve the trust question once, at the top of `fetch`, and hand the rest of
-// the Worker a request whose CF-Connecting-IP and User-Agent are the visitor's.
-// Returns the request untouched when no SSR headers are in play (all browser
-// traffic).
+// the Worker a request whose CF-Connecting-IP is the visitor's. Returns the
+// request untouched when no SSR headers are in play (all browser traffic).
 export function adoptTrustedFrontend(
 	request: Request,
 	env: TrustedFrontendEnv,
 ): Request {
 	const presented = request.headers.get(SSR_KEY_HEADER);
 	const forwarded = request.headers.get(SSR_CLIENT_IP_HEADER);
-	const forwardedUa = request.headers.get(SSR_CLIENT_UA_HEADER);
 	const claimed = request.headers.get(SSR_TRUSTED_HEADER);
-	if (
-		presented === null &&
-		forwarded === null &&
-		forwardedUa === null &&
-		claimed === null
-	) {
+	if (presented === null && forwarded === null && claimed === null) {
 		return request;
 	}
 
@@ -351,7 +346,6 @@ export function adoptTrustedFrontend(
 	const headers = new Headers(request.headers);
 	headers.delete(SSR_KEY_HEADER);
 	headers.delete(SSR_CLIENT_IP_HEADER);
-	headers.delete(SSR_CLIENT_UA_HEADER);
 	headers.delete(SSR_TRUSTED_HEADER);
 
 	if (trusted) {
@@ -368,7 +362,6 @@ export function adoptTrustedFrontend(
 			missingIpLogged = true;
 			logWarn("ssr_forward_no_client_ip");
 		}
-		if (forwardedUa !== null) headers.set("User-Agent", forwardedUa);
 	} else if (key !== undefined && !rejectionLogged) {
 		// A key is configured and this one didn't match: a botched rotation, or
 		// someone probing the header. Worth a line either way.
@@ -387,7 +380,17 @@ export function adoptTrustedFrontend(
 		logWarn("ssr_forward_rejected");
 	}
 
-	return new Request(request, { headers });
+	// `cf` is carried across explicitly: the Request constructor does not
+	// inherit it from the request being copied, and the rewrite above happens
+	// for *any* caller that presents an SSR header — including a junk one. So
+	// without this, `X-SSR-Key: anything` is a one-header way for a caller to
+	// delete its own edge metadata (country, ASN, bot score) before a handler
+	// can read it. Nothing downstream reads `request.cf` today — log.ts builds
+	// its context from the inbound request, before this runs — which is exactly
+	// why it has to be preserved now rather than after something starts.
+	// Pinned by "preserves the edge cf metadata" in test/integration/
+	// ssr-trust.test.ts.
+	return new Request(request, { headers, cf: request.cf });
 }
 
 // Whether this request is our SSR Worker's subrequest, as decided above.

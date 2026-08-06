@@ -1123,9 +1123,9 @@ export default {
 		return runWithLogContext(request, async () => {
 			// Settle who the caller is before anything reads the request: on an
 			// SSR subrequest that proves it came from our frontend Worker, this
-			// swaps in the visitor's address and User-Agent so every per-IP
-			// counter downstream is keyed on a person rather than on
-			// Cloudflare's SSR egress. See util.ts.
+			// swaps in the visitor's address so every per-IP counter
+			// downstream is keyed on a person rather than on Cloudflare's SSR
+			// egress. See util.ts.
 			//
 			// Inside the log context, because the one line this can emit
 			// (`ssr_forward_rejected`) is what an operator greps during a

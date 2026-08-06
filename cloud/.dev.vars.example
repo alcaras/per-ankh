@@ -11,8 +11,8 @@
 # in docs/dev-login.md.
 DEV_LOGIN=1
 
-# Shared key that lets this Worker believe the visitor IP and User-Agent the
-# frontend Worker forwards on server-rendered requests (cloud/src/util.ts
+# Shared key that lets this Worker believe the visitor IP the frontend Worker
+# forwards on server-rendered requests (cloud/src/util.ts
 # adoptTrustedFrontend). The value below matches SSR_TRUSTED_KEY in the
 # committed `.env.development`, so copying this file as-is exercises the same
 # path locally that prod uses; leaving it out just means SSR requests count

@@ -1,19 +1,24 @@
-// Per-IP read limits on the tournament surface. Two independent budgets:
+// Per-IP read limits on the tournament surface. Three independent budgets:
 //
-//   tournament_view       — the tournament read endpoints (list, detail,
-//                           standings, bracket, rounds, matches, stats).
+//   tournament_view       — a tournament page load: the detail read plus
+//                           standings, bracket, rounds, matches and stats.
 //                           Ceiling from the TOURNAMENT_VIEW_PER_HOUR var,
 //                           defaulting to the constant of the same name.
+//   tournament_list_view  — GET /v1/tournaments, which the *home page* fetches
+//                           on every render as well as /tournaments.
 //   tournament_link_view  — GET /v1/games/:id/tournament-link, called on every
 //                           /games/[id] render.
 //
-// The split is the fix for the 2026-08-05 outage (#196): the link read used to
-// charge the tournament budget, so a crawl of ~270 game pages a minute spent
-// the tournament pages' whole hourly allowance and 429'd them. The tests below
-// pin both halves — that each budget is enforced *and recorded* on its own
-// path, and that draining one leaves the other alone.
+// The splits are the fix for the 2026-08-05 outage (#196) and its sibling: a
+// read that a high-traffic page makes on every render must not share a budget
+// with the pages it can take down. The link read charged the tournament budget,
+// so a crawl of ~270 game pages a minute spent the tournament pages' whole
+// hourly allowance and 429'd them; the list read had the same relationship to
+// the home page. The tests below pin all three — that each budget is enforced
+// *and recorded* on its own path, and that draining one leaves the others
+// alone.
 //
-// Both limits apply to every caller — anonymous and signed-in alike. Scraper
+// Every limit applies to every caller — anonymous and signed-in alike. Scraper
 // User-Agents (Discord/Slack/Twitter previewers) are exempt so link unfurls
 // always resolve.
 
@@ -24,6 +29,7 @@ import { expectErrorCode, expectOk } from "../../helpers/assertions";
 import { makeTournament } from "../../helpers/builders";
 import {
 	TOURNAMENT_LINK_VIEW_PER_HOUR,
+	TOURNAMENT_LIST_VIEW_PER_HOUR,
 	TOURNAMENT_VIEW_PER_HOUR,
 	tournamentViewPerHour,
 } from "../../../src/tournament/limits";
@@ -32,7 +38,10 @@ beforeAll(async () => {
 	await applyD1Migrations(env.SHARE_DB, env.TEST_MIGRATIONS);
 });
 
-type ReadEventType = "tournament_view" | "tournament_link_view";
+type ReadEventType =
+	| "tournament_view"
+	| "tournament_list_view"
+	| "tournament_link_view";
 
 // Fill an IP's hourly bucket for one event type without firing N real reads.
 //
@@ -134,13 +143,20 @@ describe("tournament view rate limit", () => {
 		);
 	});
 
-	it("limit applies to GET /v1/tournaments (list) too", async () => {
+	it("limit applies to the sub-resource reads behind a page load too", async () => {
+		const t = await makeTournament({
+			slug: "rl-view-test-c",
+			advanceTo: "swiss-round-1-generated",
+		});
 		const ip = "203.0.113.12";
 		await seedEvents("tournament_view", ip, TOURNAMENT_VIEW_PER_HOUR);
-		await expectErrorCode(await get("/v1/tournaments", { ip }), {
-			status: 429,
-			code: "RATE_LIMIT_TOURNAMENT_VIEW",
-		});
+
+		// Riders are gated for anyone who isn't our SSR Worker, so a spent budget
+		// is met the same way whichever read of the page arrives first.
+		await expectErrorCode(
+			await get(`/v1/tournaments/${t.tournamentId}/standings`, { ip }),
+			{ status: 429, code: "RATE_LIMIT_TOURNAMENT_VIEW" },
+		);
 	});
 });
 
@@ -154,16 +170,20 @@ describe("tournament view ceiling is env-tunable", () => {
 	});
 
 	it("gates at the env value rather than the compiled-in default", async () => {
+		const t = await makeTournament({
+			slug: "rl-view-tune-a",
+			advanceTo: "swiss-round-1-generated",
+		});
 		env.TOURNAMENT_VIEW_PER_HOUR = "5";
 
 		// One below the override — far below the constant either way.
 		const under = "203.0.113.30";
 		await seedEvents("tournament_view", under, 4);
-		await expectOk(await get("/v1/tournaments", { ip: under }));
+		await expectOk(await get(`/v1/tournaments/${t.slug}`, { ip: under }));
 
 		const at = "203.0.113.31";
 		await seedEvents("tournament_view", at, 5);
-		await expectErrorCode(await get("/v1/tournaments", { ip: at }), {
+		await expectErrorCode(await get(`/v1/tournaments/${t.slug}`, { ip: at }), {
 			status: 429,
 			code: "RATE_LIMIT_TOURNAMENT_VIEW",
 		});
@@ -173,15 +193,19 @@ describe("tournament view ceiling is env-tunable", () => {
 		// Neither open (a NaN ceiling that never fires) nor shut (a 0 ceiling
 		// that 429s everyone) — a mangled value must land exactly where the
 		// unset var does.
+		const t = await makeTournament({
+			slug: "rl-view-tune-b",
+			advanceTo: "swiss-round-1-generated",
+		});
 		env.TOURNAMENT_VIEW_PER_HOUR = "600 per hour";
 
 		const under = "203.0.113.32";
 		await seedEvents("tournament_view", under, TOURNAMENT_VIEW_PER_HOUR - 1);
-		await expectOk(await get("/v1/tournaments", { ip: under }));
+		await expectOk(await get(`/v1/tournaments/${t.slug}`, { ip: under }));
 
 		const at = "203.0.113.33";
 		await seedEvents("tournament_view", at, TOURNAMENT_VIEW_PER_HOUR);
-		await expectErrorCode(await get("/v1/tournaments", { ip: at }), {
+		await expectErrorCode(await get(`/v1/tournaments/${t.slug}`, { ip: at }), {
 			status: 429,
 			code: "RATE_LIMIT_TOURNAMENT_VIEW",
 		});
@@ -199,6 +223,92 @@ describe("tournament view ceiling is env-tunable", () => {
 		// budget's below.
 		expect(env.TOURNAMENT_VIEW_PER_HOUR).toBe(String(TOURNAMENT_VIEW_PER_HOUR));
 		expect(tournamentViewPerHour(env)).toBe(TOURNAMENT_VIEW_PER_HOUR);
+	});
+});
+
+describe("tournament list rate limit", () => {
+	it("records a tournament_list_view for a served read", async () => {
+		const ip = "203.0.113.50";
+
+		await expectOk(await get("/v1/tournaments", { ip }));
+
+		await expectEventsToReach("tournament_list_view", ip, 1);
+		// And nothing of the tournament pages' budget — the whole point of the
+		// split, since the home page makes this read on every render.
+		expect(await countEvents("tournament_view", ip)).toBe(0);
+	});
+
+	it("429s once its own per-IP limit is reached", async () => {
+		const ip = "203.0.113.51";
+		await seedEvents("tournament_list_view", ip, TOURNAMENT_LIST_VIEW_PER_HOUR);
+
+		await expectErrorCode(await get("/v1/tournaments", { ip }), {
+			status: 429,
+			code: "RATE_LIMIT_TOURNAMENT_LIST",
+		});
+	});
+
+	it("leaves the tournament pages up when the list budget is drained", async () => {
+		const t = await makeTournament({
+			slug: "rl-list-test",
+			advanceTo: "swiss-round-1-generated",
+		});
+		const ip = "203.0.113.52";
+		await seedEvents("tournament_list_view", ip, TOURNAMENT_LIST_VIEW_PER_HOUR);
+
+		// A visitor who has exhausted the home page's read...
+		await expectErrorCode(await get("/v1/tournaments", { ip }), {
+			status: 429,
+			code: "RATE_LIMIT_TOURNAMENT_LIST",
+		});
+		// ...can still open a tournament.
+		await expectOk(await get(`/v1/tournaments/${t.slug}`, { ip }));
+	});
+
+	it("serves the list read on an IP whose tournament budget is spent", async () => {
+		const ip = "203.0.113.53";
+		await seedEvents("tournament_view", ip, TOURNAMENT_VIEW_PER_HOUR);
+
+		await expectOk(await get("/v1/tournaments", { ip }));
+	});
+
+	it("scraper User-Agent is exempt from the limit", async () => {
+		const ip = "203.0.113.54";
+		await seedEvents("tournament_list_view", ip, TOURNAMENT_LIST_VIEW_PER_HOUR);
+
+		await expectOk(await get("/v1/tournaments", { ip, ua: "Twitterbot/1.0" }));
+	});
+
+	describe("ceiling is env-tunable", () => {
+		const configured = env.TOURNAMENT_LIST_VIEW_PER_HOUR;
+		afterEach(() => {
+			env.TOURNAMENT_LIST_VIEW_PER_HOUR = configured;
+		});
+
+		it("gates at its own env value, leaving the view ceiling alone", async () => {
+			const t = await makeTournament({
+				slug: "rl-list-tune",
+				advanceTo: "swiss-round-1-generated",
+			});
+			env.TOURNAMENT_LIST_VIEW_PER_HOUR = "5";
+
+			const ip = "203.0.113.55";
+			await seedEvents("tournament_list_view", ip, 5);
+			await expectErrorCode(await get("/v1/tournaments", { ip }), {
+				status: 429,
+				code: "RATE_LIMIT_TOURNAMENT_LIST",
+			});
+
+			// Same IP, same moment: the tournament pages are gated by the other
+			// var, which this override didn't touch.
+			await expectOk(await get(`/v1/tournaments/${t.slug}`, { ip }));
+		});
+
+		it("wrangler.toml's configured value is what the gate uses by default", async () => {
+			expect(env.TOURNAMENT_LIST_VIEW_PER_HOUR).toBe(
+				String(TOURNAMENT_LIST_VIEW_PER_HOUR),
+			);
+		});
 	});
 });
 
@@ -278,9 +388,13 @@ describe("game tournament-link rate limit", () => {
 				code: "RATE_LIMIT_TOURNAMENT_LINK",
 			});
 
-			// Same IP, same moment: the tournament pages are gated by the other
+			// Same IP, same moment: the tournament pages are gated by another
 			// var, which this override didn't touch.
-			await expectOk(await get("/v1/tournaments", { ip }));
+			const t = await makeTournament({
+				slug: "rl-link-tune",
+				advanceTo: "swiss-round-1-generated",
+			});
+			await expectOk(await get(`/v1/tournaments/${t.slug}`, { ip }));
 		});
 
 		it("wrangler.toml's configured value is what the gate uses by default", async () => {

@@ -7,21 +7,24 @@
 // site into one bucket, which is how a crawl of /games/* spent the tournament
 // pages' hourly allowance on 2026-08-05.
 //
-// The frontend forwards the visitor's address and User-Agent and proves it's
-// ours with SSR_TRUSTED_KEY (src/hooks.server.ts → adoptTrustedFrontend in
-// cloud/src/util.ts). Three properties follow, and this file pins all three:
+// The frontend forwards the visitor's address and proves it's ours with
+// SSR_TRUSTED_KEY (src/hooks.server.ts → adoptTrustedFrontend in
+// cloud/src/util.ts). Four properties follow, and this file pins all four:
 //
 //   1. A trusted request is counted against the visitor, never the egress —
 //      and an untrusted one can't claim an address it doesn't have.
-//   2. A trusted page load spends one slot, not one per read: the entry read
-//      charges and the sub-resources ride along. A browser making the same
-//      reads directly pays for each, so no endpoint is free.
-//   3. The visitor's UA arrives too, which is what makes the scraper exemption
-//      reach the traffic it was written for — a link-preview unfurl is a
-//      server-rendered load and never anything else.
+//   2. That is the *only* thing the key buys. Every read is gated and charged
+//      the same for every caller, so a page load costs the same whether it was
+//      server-rendered or navigated to in a hydrated client.
+//   3. The address is all that's forwarded. The visitor's UA is not, because
+//      the scraper exemption it would switch on is keyed on a string the
+//      caller picks and skips the audit row as well as the gate.
+//   4. The rewrite preserves everything else about the request — body, and the
+//      edge `cf` metadata.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { adoptTrustedFrontend } from "../../src/util";
 import { expectErrorCode, expectOk } from "../helpers/assertions";
 import { makeTournament } from "../helpers/builders";
 import { SSR_TRUSTED_TEST_KEY, ssrHeaders } from "../helpers/ssr-identity";
@@ -77,8 +80,8 @@ describe("forwarded visitor IP", () => {
 			await get("/v1/tournaments", ssrHeaders({ clientIp: visitor })),
 		);
 
-		await expectEventsToReach("tournament_view", visitor, 1);
-		expect(await countEvents("tournament_view", EGRESS_IP)).toBe(0);
+		await expectEventsToReach("tournament_list_view", visitor, 1);
+		expect(await countEvents("tournament_list_view", EGRESS_IP)).toBe(0);
 	});
 
 	it("applies to every per-IP budget, not just the tournament one", async () => {
@@ -109,8 +112,8 @@ describe("forwarded visitor IP", () => {
 			}),
 		);
 
-		await expectEventsToReach("tournament_view", spoofer, 1);
-		expect(await countEvents("tournament_view", victim)).toBe(0);
+		await expectEventsToReach("tournament_list_view", spoofer, 1);
+		expect(await countEvents("tournament_list_view", victim)).toBe(0);
 	});
 
 	it("ignores forwarding entirely when this Worker has no key", async () => {
@@ -128,8 +131,8 @@ describe("forwarded visitor IP", () => {
 				await get("/v1/tournaments", ssrHeaders({ clientIp: visitor })),
 			);
 
-			await expectEventsToReach("tournament_view", EGRESS_IP, 1);
-			expect(await countEvents("tournament_view", visitor)).toBe(0);
+			await expectEventsToReach("tournament_list_view", EGRESS_IP, 1);
+			expect(await countEvents("tournament_list_view", visitor)).toBe(0);
 		} finally {
 			env.SSR_TRUSTED_KEY = configured;
 		}
@@ -154,8 +157,8 @@ describe("forwarded visitor IP", () => {
 				}),
 			);
 
-			await expectEventsToReach("tournament_view", caller, 1);
-			expect(await countEvents("tournament_view", victim)).toBe(0);
+			await expectEventsToReach("tournament_list_view", caller, 1);
+			expect(await countEvents("tournament_list_view", victim)).toBe(0);
 		} finally {
 			env.SSR_TRUSTED_KEY = configured;
 		}
@@ -178,7 +181,7 @@ describe("forwarded visitor IP", () => {
 			}),
 		);
 
-		await expectEventsToReach("tournament_view", egress, 1);
+		await expectEventsToReach("tournament_list_view", egress, 1);
 	});
 
 	it("attributes a trusted read without CF-RAY, and an untrusted one to nobody", async () => {
@@ -192,15 +195,15 @@ describe("forwarded visitor IP", () => {
 				ssrHeaders({ clientIp: visitor, omitCfRay: true }),
 			),
 		);
-		await expectEventsToReach("tournament_view", visitor, 1);
+		await expectEventsToReach("tournament_list_view", visitor, 1);
 
 		// ...while a caller with no key and no CF-RAY still can't name itself:
 		// it goes to the shared "untrusted" bucket, exactly as before.
 		await expectOk(
 			await get("/v1/tournaments", { "CF-Connecting-IP": "203.0.113.67" }),
 		);
-		await expectEventsToReach("tournament_view", "untrusted", 1);
-		expect(await countEvents("tournament_view", "203.0.113.67")).toBe(0);
+		await expectEventsToReach("tournament_list_view", "untrusted", 1);
+		expect(await countEvents("tournament_list_view", "203.0.113.67")).toBe(0);
 	});
 
 	it("carries the request body through the rewrite", async () => {
@@ -222,8 +225,8 @@ describe("forwarded visitor IP", () => {
 	});
 });
 
-describe("one page load, one slot", () => {
-	it("charges a trusted page load once across its four reads", async () => {
+describe("what a page load costs", () => {
+	it("charges a trusted page load for every read it makes", async () => {
 		const t = await makeTournament({
 			slug: "ssr-page-load",
 			advanceTo: "swiss-round-1-generated",
@@ -244,16 +247,16 @@ describe("one page load, one slot", () => {
 			await get(`/v1/tournaments/${t.tournamentId}/matches`, headers),
 		);
 
-		// One visitor action, one slot — the entry read's. Before this, the same
-		// page load spent four, so ~150 cold loads exhausted the hourly budget
-		// for the whole site.
-		await expectEventsToReach("tournament_view", visitor, 1);
+		// Four reads, four slots. The trust marker settles which visitor the
+		// rows belong to and nothing about what they cost — a page load is the
+		// same price however the reads arrived.
+		await expectEventsToReach("tournament_view", visitor, 4);
 	});
 
-	it("charges a browser for every read it makes directly", async () => {
-		// The same four reads without the trust marker — a hydrated navigation,
-		// or anyone hitting the API by hand. Riding along is a property of a
-		// server-rendered page load, not of the endpoints.
+	it("charges a browser exactly the same for the same four reads", async () => {
+		// The identical sequence without the trust marker — a hydrated
+		// navigation, or anyone hitting the API by hand. The two must agree, or
+		// the ceiling means page loads on one path and reads on the other.
 		const t = await makeTournament({
 			slug: "ssr-page-load-direct",
 			advanceTo: "swiss-round-1-generated",
@@ -278,7 +281,8 @@ describe("one page load, one slot", () => {
 	it("does not let a caller declare itself trusted", async () => {
 		// X-SSR-Trusted is this Worker's own verdict; adoptTrustedFrontend strips
 		// it off every inbound request before deciding. A caller setting it must
-		// gain nothing — so this read is still charged.
+		// gain nothing — including nothing it could gain here, now that trust
+		// buys no discount at all.
 		const t = await makeTournament({
 			slug: "ssr-self-declared",
 			advanceTo: "swiss-round-1-generated",
@@ -302,10 +306,7 @@ describe("the ceiling is what an over-budget visitor meets", () => {
 		env.TOURNAMENT_VIEW_PER_HOUR = configured;
 	});
 
-	it("429s the entry read, which is the one the page can't render without", async () => {
-		// Riding along means a rider is neither charged nor counted, so what
-		// stops an over-budget visitor is the entry read — and it has to, since
-		// nothing downstream of it re-checks.
+	it("429s a server-rendered read once the budget is spent", async () => {
 		env.TOURNAMENT_VIEW_PER_HOUR = "1";
 		const t = await makeTournament({
 			slug: "ssr-entry-gate",
@@ -314,131 +315,131 @@ describe("the ceiling is what an over-budget visitor meets", () => {
 		const visitor = "203.0.113.73";
 		const headers = ssrHeaders({ clientIp: visitor });
 
-		// The first page load spends the only slot...
 		await expectOk(await get(`/v1/tournaments/${t.slug}`, headers));
 		await expectEventsToReach("tournament_view", visitor, 1);
 
-		// ...and the next one is refused before it renders anything.
 		await expectErrorCode(await get(`/v1/tournaments/${t.slug}`, headers), {
 			status: 429,
 			code: "RATE_LIMIT_TOURNAMENT_VIEW",
 		});
 	});
 
-	it("still gates a rider read that isn't riding on anything", async () => {
-		// Untrusted callers get no short-circuit: /standings on its own is a
-		// read like any other, gated and charged, however many the caller has
-		// already spent.
+	it("gates a sub-resource read on its own, trusted or not", async () => {
+		// /standings reached directly is a read like any other. It was briefly
+		// exempt for our own SSR Worker; the pair below is what pins that the
+		// two callers now meet the ceiling identically.
 		env.TOURNAMENT_VIEW_PER_HOUR = "1";
 		const t = await makeTournament({
-			slug: "ssr-rider-direct-gate",
+			slug: "ssr-subresource-gate",
 			advanceTo: "swiss-round-1-generated",
 		});
-		const visitor = "203.0.113.74";
-		const headers = directHeaders(visitor);
 
+		const direct = "203.0.113.74";
+		await expectOk(
+			await get(`/v1/tournaments/${t.slug}`, directHeaders(direct)),
+		);
+		await expectEventsToReach("tournament_view", direct, 1);
+		await expectErrorCode(
+			await get(
+				`/v1/tournaments/${t.tournamentId}/standings`,
+				directHeaders(direct),
+			),
+			{ status: 429, code: "RATE_LIMIT_TOURNAMENT_VIEW" },
+		);
+
+		const trusted = "203.0.113.75";
+		const headers = ssrHeaders({ clientIp: trusted });
 		await expectOk(await get(`/v1/tournaments/${t.slug}`, headers));
-		await expectEventsToReach("tournament_view", visitor, 1);
-
+		await expectEventsToReach("tournament_view", trusted, 1);
 		await expectErrorCode(
 			await get(`/v1/tournaments/${t.tournamentId}/standings`, headers),
 			{ status: 429, code: "RATE_LIMIT_TOURNAMENT_VIEW" },
 		);
 	});
-
-	it("charges a trusted rider nothing, even with the budget wide open", async () => {
-		// The counter side of riding along: the sub-resource reads leave no
-		// rows at all, so the visitor's bucket holds page loads and not reads.
-		const t = await makeTournament({
-			slug: "ssr-rider-uncharged",
-			advanceTo: "swiss-round-1-generated",
-		});
-		const visitor = "203.0.113.75";
-		const headers = ssrHeaders({ clientIp: visitor });
-
-		await expectOk(
-			await get(`/v1/tournaments/${t.tournamentId}/standings`, headers),
-		);
-		await expectOk(
-			await get(`/v1/tournaments/${t.tournamentId}/bracket`, headers),
-		);
-
-		// Followed by an entry read, so the assertion is on a settled count
-		// rather than on a row that simply hasn't been written yet: exactly one
-		// row exists, and it's the entry read's.
-		await expectOk(await get(`/v1/tournaments/${t.slug}`, headers));
-		await expectEventsToReach("tournament_view", visitor, 1);
-	});
 });
 
-describe("forwarded visitor User-Agent", () => {
-	// The scraper exemption exists for link-preview crawlers, and an unfurl is
-	// always a server-rendered load — so it only ever applies to a request that
-	// arrived through forwarding. Without the UA riding along with the address,
-	// the exemption covers nothing that actually happens in production.
-	it("exempts a scraper whose UA arrived over the SSR hop", async () => {
+describe("the visitor's User-Agent is not forwarded", () => {
+	// The address is forwarded; the UA deliberately isn't. Carrying it would
+	// switch on the scraper exemption in games.ts for site traffic, and that
+	// exemption is keyed on a string the caller picks and is granted before
+	// both the gate and the audit INSERT — so `User-Agent: Discordbot/2.0`
+	// would be an unmetered *and* unlogged path through every read budget. The
+	// tests below are the regression guard on that decision: a request may not
+	// buy the exemption by claiming a UA, keyed or not.
+	it("does not honour a scraper UA claimed over the SSR hop", async () => {
 		const crawler = "203.0.113.80";
-		const headers = ssrHeaders({ clientIp: crawler });
 
 		await expectOk(
 			await get("/v1/tournaments", {
-				...headers,
+				...ssrHeaders({ clientIp: crawler }),
 				"X-SSR-Client-UA": "Twitterbot/1.0",
 			}),
 		);
 
-		// An ordinary read from the same address afterwards, so the count this
-		// settles on is one that has actually been written: if the crawler's
-		// read had been charged, this would find two rows.
-		await expectOk(await get("/v1/tournaments", headers));
-		await expectEventsToReach("tournament_view", crawler, 1);
+		// Charged like any other visitor. A row here is also what proves the
+		// read stayed *visible*: the exemption skips the INSERT, so an exempted
+		// read leaves nothing for the incident query in docs/cloudflare-waf.md.
+		await expectEventsToReach("tournament_list_view", crawler, 1);
 	});
 
-	it("applies to every budget that reads the UA, not just the tournament one", async () => {
+	it("does not honour one on a budget with its own limiter either", async () => {
+		// Same rule wherever the exemption is read — the adoption happens once at
+		// the Worker's entry, so anon_read on the game endpoints must not see a
+		// forwarded UA any more than the tournament budgets do.
 		const crawler = "203.0.113.81";
-		const headers = ssrHeaders({ clientIp: crawler });
 
 		await expectOk(
 			await get("/v1/games/public-recent", {
-				...headers,
+				...ssrHeaders({ clientIp: crawler }),
 				"X-SSR-Client-UA": "Discordbot/2.0 (+https://discordapp.com)",
 			}),
 		);
 
-		await expectOk(await get("/v1/games/public-recent", headers));
 		await expectEventsToReach("anon_read", crawler, 1);
 	});
 
-	it("counts a forwarded browser UA like any other visitor", async () => {
-		// The other half: forwarding a UA must not exempt anything by itself.
-		const visitor = "203.0.113.82";
-
-		await expectOk(
-			await get(
-				"/v1/tournaments",
-				ssrHeaders({ clientIp: visitor, clientUa: "Mozilla/5.0" }),
-			),
-		);
-
-		await expectEventsToReach("tournament_view", visitor, 1);
-	});
-
-	it("ignores a claimed UA from a caller without the key", async () => {
-		// Same spoofing rule as the address: worth nothing unkeyed, so a
-		// scraper UA can't be borrowed to skip the counter.
-		const spoofer = "203.0.113.83";
-
-		await expectOk(
-			await get("/v1/tournaments", {
-				...ssrHeaders({
-					clientIp: spoofer,
-					clientUa: "Slackbot/1.0",
-					key: "not-the-key",
-				}),
-				"CF-Connecting-IP": spoofer,
+	it("leaves the real User-Agent alone on a trusted request", async () => {
+		// Adoption swaps the address and nothing else. Whatever UA a handler
+		// reads is the one that arrived on the wire — there is no header a caller
+		// can send that replaces it, which is what keeps the scraper exemption
+		// out of reach of the SSR path.
+		const adopted = adoptTrustedFrontend(
+			new Request("http://test/v1/tournaments", {
+				headers: {
+					...ssrHeaders({ clientIp: "203.0.113.82" }),
+					"User-Agent": "SvelteKit-SSR",
+					"X-SSR-Client-UA": "Slackbot/1.0",
+				},
 			}),
+			{ SSR_TRUSTED_KEY: SSR_TRUSTED_TEST_KEY },
 		);
 
-		await expectEventsToReach("tournament_view", spoofer, 1);
+		expect(adopted.headers.get("User-Agent")).toBe("SvelteKit-SSR");
+	});
+});
+
+describe("edge metadata", () => {
+	it("preserves the edge cf metadata across the rewrite", async () => {
+		// Adopting a forwarded address hands the rest of the Worker a rebuilt
+		// Request, and `cf` is not inherited by the constructor. The rewrite runs
+		// for anyone presenting an SSR header — including a junk one — so a
+		// dropped `cf` would let `X-SSR-Key: anything` delete a caller's own
+		// country/ASN/bot-score before a handler could read it.
+		//
+		// Asserted on the request object rather than through SELF.fetch: the
+		// access log builds its context from the *inbound* request (log.ts), so
+		// nothing downstream can witness the rewrite today. That's the point —
+		// this pins the property before something starts depending on it.
+		const inbound = new Request("http://test/v1/tournaments", {
+			headers: ssrHeaders({ clientIp: "203.0.113.85" }),
+			cf: { colo: "LHR", asOrganization: "Example ISP" },
+		} as RequestInit);
+
+		const adopted = adoptTrustedFrontend(inbound, {
+			SSR_TRUSTED_KEY: SSR_TRUSTED_TEST_KEY,
+		});
+
+		expect(adopted.headers.get("CF-Connecting-IP")).toBe("203.0.113.85");
+		expect(adopted.cf?.colo).toBe("LHR");
 	});
 });

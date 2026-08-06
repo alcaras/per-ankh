@@ -137,6 +137,7 @@ export type RateLimitedEventType =
 	| "anon_read"
 	| "tournament_admin"
 	| "tournament_view"
+	| "tournament_list_view"
 	| "tournament_link_view"
 	| "tournament_create"
 	| "tournament_export"

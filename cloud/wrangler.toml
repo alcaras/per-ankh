@@ -184,11 +184,21 @@ GLOBAL_UPLOADS_PER_HOUR = "5000"
 # an incident-time secret survives only until the next deploy — to keep a new
 # ceiling, change it here and ship it.
 #
-# TOURNAMENT_VIEW_PER_HOUR gates the tournament pages; _LINK_ gates
-# GET /v1/games/:id/tournament-link, which every game-page render calls.
-# Separate budgets so a /games/* crawl can't spend the tournament pages'
-# allowance (the 2026-08-05 outage) — keep them separate when retuning.
-TOURNAMENT_VIEW_PER_HOUR = "600"
+# Three budgets, by the surface that spends them, not by feature:
+#   _VIEW_ — the tournament pages (detail + standings/bracket/matches/stats)
+#   _LIST_ — GET /v1/tournaments, which the *home page* fetches every render
+#   _LINK_ — GET /v1/games/:id/tournament-link, every game-page render
+# Separate so the busiest surface can't decide when the others start refusing
+# — that coupling is what took the tournament pages down on 2026-08-05, with
+# /games/* as the busy surface. Keep them separate when retuning.
+#
+# All three count *reads*, not page loads, and the numbers differ because the
+# fan-out does: _VIEW_ is ~4 reads per tournament page (6 on stats), the other
+# two are one read each. So all three are about 600 page loads an hour per
+# visitor. Retuning one is deciding how much *browsing* to allow — convert
+# through the fan-out, don't copy a number across.
+TOURNAMENT_VIEW_PER_HOUR = "2400"
+TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
 TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 
 # === Cloud rewrite (/v1/auth/*, /v1/games/*) ===
@@ -300,7 +310,8 @@ UPLOADS_ENABLED = "true"
 PER_USER_UPLOADS_PER_HOUR = "100"
 PER_IP_UPLOADS_PER_HOUR = "200"
 GLOBAL_UPLOADS_PER_HOUR = "5000"
-TOURNAMENT_VIEW_PER_HOUR = "600"
+TOURNAMENT_VIEW_PER_HOUR = "2400"
+TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
 TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 ALLOWED_ORIGINS = "https://staging.per-ankh.app"
 # Separate staging Discord OAuth app — paste its client ID:

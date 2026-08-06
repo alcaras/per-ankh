@@ -14,7 +14,6 @@ import {
 	cloudCorsHeaders,
 	errorResponse,
 	getClientIp,
-	isTrustedFrontend,
 	jsonResponse,
 } from "../util";
 import { countEventsSince, isScraperUA } from "../games";
@@ -45,7 +44,11 @@ import {
 	type TournamentEnv,
 	type TournamentRow,
 } from "./data";
-import { tournamentLinkViewPerHour, tournamentViewPerHour } from "./limits";
+import {
+	tournamentLinkViewPerHour,
+	tournamentListViewPerHour,
+	tournamentViewPerHour,
+} from "./limits";
 import {
 	computeStandings,
 	rankStandings,
@@ -78,11 +81,12 @@ import type { EventsEnv } from "../d1";
 export interface TournamentPublicEnv
 	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
-	// Per-IP hourly ceilings on the two read budgets. Optional: unset falls back
-	// to the constant of the same name (see tournamentViewPerHour /
-	// tournamentLinkViewPerHour). Vars rather than bare consts so either can be
-	// retuned mid-event without a redeploy.
+	// Per-IP hourly ceilings on the three read budgets. Optional: unset falls
+	// back to the constant of the same name (see tournamentViewPerHour /
+	// tournamentListViewPerHour / tournamentLinkViewPerHour). Vars rather than
+	// bare consts so any of them can be retuned mid-event without a redeploy.
 	TOURNAMENT_VIEW_PER_HOUR?: string;
+	TOURNAMENT_LIST_VIEW_PER_HOUR?: string;
 	TOURNAMENT_LINK_VIEW_PER_HOUR?: string;
 	// Optional YouTube Data API key. When set, the Videos tab enumerates the
 	// whole playlist (so its search can reach every video); when unset, it falls
@@ -95,9 +99,13 @@ const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 20;
 
 // A per-IP read budget: which events rows count toward it, and how it answers
-// once it's spent. One shape, two instances — see the two below.
+// once it's spent. One shape, three instances — see the three below, and
+// limits.ts for why they aren't one.
 interface ReadBudget {
-	eventType: "tournament_view" | "tournament_link_view";
+	eventType:
+		| "tournament_view"
+		| "tournament_list_view"
+		| "tournament_link_view";
 	message: string;
 	code: string;
 }
@@ -108,44 +116,37 @@ const VIEW_BUDGET: ReadBudget = {
 	code: "RATE_LIMIT_TOURNAMENT_VIEW",
 };
 
+const LIST_BUDGET: ReadBudget = {
+	eventType: "tournament_list_view",
+	message: "Tournament list rate limit exceeded",
+	code: "RATE_LIMIT_TOURNAMENT_LIST",
+};
+
 const LINK_BUDGET: ReadBudget = {
 	eventType: "tournament_link_view",
 	message: "Tournament link rate limit exceeded",
 	code: "RATE_LIMIT_TOURNAMENT_LINK",
 };
 
-// What a read is to the page it belongs to. One tournament page load makes
-// four of these calls — the tournament itself, then standings, bracket and
-// matches — and the visitor did one thing, so it should cost one slot, not
-// four. "entry" is the read a page load starts with and the one that charges;
-// "rider" is a sub-resource that only ever follows an entry read in the same
-// render (everything behind loadViewableTournament).
-//
-// The distinction is only honoured for our own SSR Worker, which is the one
-// caller we can be sure fetched the entry read first. Anyone calling
-// /standings directly is charged for it, so no path here is free — see
-// isTrustedFrontend in util.ts for how that's established.
-//
-// What the ceiling therefore bounds on server-rendered traffic is page loads,
-// not backend reads: 600 loads of the stats page is ~3,600 reads behind it.
-// That is the intended reading of the number — an operator retuning it
-// mid-event is deciding how many times a visitor may load a page — and it's
-// why the two figures are stated separately in docs/api-reference.md.
-type ReadRole = "entry" | "rider";
-
 // Per-IP rate limit on a public read. Scraper User-Agents (Discord/Slack/
 // Twitter link previews) bypass both the gate and the audit-log insert — they
 // fan out load that's not meaningful to count. Applies to everyone else,
 // including signed-in users.
 //
-// A rider on a trusted page load skips both, and skips them before the count:
-// the entry read of that same render already gated this IP and charged it
-// milliseconds ago, so counting again is a cross-region COUNT(*) per
-// sub-resource — three on a tournament page, five on the stats page — for a
-// verdict that is already known. An over-budget visitor still meets the
-// ceiling on the entry read, which is the one the page cannot render without,
-// so what it sees is unchanged. Every other caller — a hydrated navigation,
-// anything hitting the API by hand — is gated and charged per read.
+// Every read is gated and charged, on every caller. There is no cheaper class
+// of read and no caller who pays less: a tournament page load costs one slot
+// per backend read it makes, whether it was server-rendered or navigated to in
+// a hydrated client. The ceilings are set in reads to match — see
+// TOURNAMENT_VIEW_PER_HOUR for what that works out to per page.
+//
+// This was briefly a per-*page-load* charge, where a sub-resource behind
+// loadViewableTournament skipped both the gate and the count if the caller
+// proved it was our SSR Worker. That saved three to five COUNT(*) per render,
+// and cost more than it saved: the same page charged 1 via SSR and 4–6 via a
+// hydrated navigation, the ceiling meant reads on one path and page loads on
+// the other, and the rate limiter had a branch on who you are. The shared key
+// now settles exactly one question — which visitor is this — and nothing about
+// what a read costs.
 //
 // `eventType` is interpolated into the INSERT rather than bound: event_type
 // is part of the statement's structure, not a value. The literal union closes
@@ -156,11 +157,9 @@ async function enforceReadRateLimit(
 	cors: Record<string, string>,
 	budget: ReadBudget,
 	limit: number,
-	role: ReadRole,
 ): Promise<Response | null> {
 	const ua = request.headers.get("User-Agent");
 	if (isScraperUA(ua)) return null;
-	if (role === "rider" && isTrustedFrontend(request)) return null;
 	const ip = getClientIp(request) ?? "untrusted";
 	const count = await countEventsSince(
 		env.EVENTS_DB,
@@ -186,15 +185,12 @@ async function enforceReadRateLimit(
 	return null;
 }
 
-// The tournament pages' budget: list/detail/standings/bracket/rounds/matches/
-// match-detail and both stats reads. Retunable mid-event via the env var, and
-// spent once per server-rendered page load rather than once per read — see
-// ReadRole for which call sites pass which.
+// The tournament pages' budget: detail/standings/bracket/rounds/matches/
+// match-detail and both stats reads. Retunable mid-event via the env var.
 function enforceTournamentViewRateLimit(
 	env: TournamentPublicEnv,
 	request: Request,
 	cors: Record<string, string>,
-	role: ReadRole,
 ): Promise<Response | null> {
 	return enforceReadRateLimit(
 		env,
@@ -202,11 +198,28 @@ function enforceTournamentViewRateLimit(
 		cors,
 		VIEW_BUDGET,
 		tournamentViewPerHour(env),
-		role,
 	);
 }
 
-// The game→tournament link read's own budget. Separate from the one above
+// The tournament list read's own budget. Separate from the pages' one because
+// the home page fetches the list on every render — see
+// TOURNAMENT_LIST_VIEW_PER_HOUR — so on a shared budget the landing page
+// decides when /tournaments/[slug] starts refusing.
+function enforceTournamentListRateLimit(
+	env: TournamentPublicEnv,
+	request: Request,
+	cors: Record<string, string>,
+): Promise<Response | null> {
+	return enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		LIST_BUDGET,
+		tournamentListViewPerHour(env),
+	);
+}
+
+// The game→tournament link read's own budget. Separate from the pages' one
 // because /games/[id] traffic is a different population from /tournaments/*
 // traffic — see TOURNAMENT_LINK_VIEW_PER_HOUR. Retunable mid-event via its own
 // env var, on the same lever as the view ceiling.
@@ -215,15 +228,12 @@ function enforceTournamentLinkRateLimit(
 	request: Request,
 	cors: Record<string, string>,
 ): Promise<Response | null> {
-	// Always an entry read: the game page fetches it on its own, with no
-	// tournament read ahead of it to have paid.
 	return enforceReadRateLimit(
 		env,
 		request,
 		cors,
 		LINK_BUDGET,
 		tournamentLinkViewPerHour(env),
-		"entry",
 	);
 }
 
@@ -249,7 +259,7 @@ export async function handleTournamentList(
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 	const session = await sessionFromRequest(env, request);
-	const rl = await enforceTournamentViewRateLimit(env, request, cors, "entry");
+	const rl = await enforceTournamentListRateLimit(env, request, cors);
 	if (rl) return rl;
 	const url = new URL(request.url);
 	const status = url.searchParams.get("status");
@@ -508,7 +518,7 @@ export async function handleTournamentDetail(
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 	const session = await sessionFromRequest(env, request);
-	const rl = await enforceTournamentViewRateLimit(env, request, cors, "entry");
+	const rl = await enforceTournamentViewRateLimit(env, request, cors);
 	if (rl) return rl;
 	const tournament = await loadTournamentBySlug(env, slug);
 	if (!tournament) {
@@ -1003,13 +1013,6 @@ async function setupGateHides(
 // public-read gating (visibility rule, 404 shape, rate limit) lands here once
 // and covers standings, bracket, rounds, matches, match detail, and both stats
 // endpoints alike.
-//
-// Every read behind this preamble is a "rider": each one is reached from a
-// page whose entry read (the tournament detail, or the list) already charged
-// the budget in the same render. That's what makes a page load cost one slot
-// instead of four — and it holds because this is the only way to these
-// endpoints. A handler that charges its own entry read must not be routed
-// through here.
 async function loadViewableTournament(
 	env: TournamentPublicEnv,
 	request: Request,
@@ -1017,7 +1020,7 @@ async function loadViewableTournament(
 	cors: Record<string, string>,
 	session: { token: string; data: SessionData } | null,
 ): Promise<TournamentRow | Response> {
-	const rl = await enforceTournamentViewRateLimit(env, request, cors, "rider");
+	const rl = await enforceTournamentViewRateLimit(env, request, cors);
 	if (rl) return rl;
 	const tournament = await loadTournamentById(env, tournamentId);
 	if (!tournament || (await setupGateHides(env, session, tournament))) {
@@ -1725,10 +1728,9 @@ export async function handleUserTournaments(
 	env: TournamentPublicEnv,
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
-	// An entry read despite being a sub-resource: the profile page's Tournaments
-	// tab fetches this on its own, with no tournament read ahead of it. Making
-	// it a rider would leave a crawl of /u/*?tab=tournaments unmetered.
-	const rl = await enforceTournamentViewRateLimit(env, request, cors, "entry");
+	// Charged against the tournament pages' budget: this is the profile page's
+	// Tournaments tab, which draws on the same data and the same D1 tables.
+	const rl = await enforceTournamentViewRateLimit(env, request, cors);
 	if (rl) return rl;
 	const session = await sessionFromRequest(env, request);
 

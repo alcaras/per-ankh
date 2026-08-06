@@ -98,12 +98,14 @@ const reportToHeader = JSON.stringify({
 // either side means no forwarding, which is exactly the old behaviour, so the
 // two Workers can be deployed in either order.
 //
-// The User-Agent rides along for the same reason, and it is the *only* way the
-// API can see one: SvelteKit copies cookie/origin/authorization/accept onto a
-// server-side fetch and nothing else. The read limiters exempt link-preview
-// scrapers by UA, and an unfurl is always a server-rendered load — so without
-// this the exemption covers nothing and Discord's crawler is metered as an
-// ordinary visitor until it 429s and every preview card breaks.
+// The address is all we forward. The visitor's User-Agent doesn't survive the
+// hop either, and sending it would switch on the API's scraper exemption
+// (isScraperUA in cloud/src/games.ts) for ordinary site traffic — an exemption
+// keyed on a string the caller types, granted before both the rate-limit gate
+// and its audit row. Anyone sending `User-Agent: Discordbot/2.0` here would
+// become unmetered and invisible at once. Forwarding the address alone already
+// leaves link-preview crawlers better off than they were: metered against
+// their own IP instead of pooled onto the egress with everyone else.
 //
 // Header names are duplicated from cloud/src/util.ts — separate builds, no
 // shared module between them.
@@ -121,9 +123,13 @@ export const handleFetch: HandleFetch = ({ event, request, fetch }) => {
 			const clientIp =
 				event.request.headers.get("CF-Connecting-IP") ??
 				event.getClientAddress();
+			// Deleted, not just conditionally set: the key goes out unconditionally
+			// above, so a request that reached this subrequest carrying an address
+			// we didn't put there would go out keyed and believed. Nothing copies
+			// visitor headers onto a cross-origin server fetch today — this is what
+			// keeps that from being load-bearing.
+			request.headers.delete("X-SSR-Client-IP");
 			if (clientIp) request.headers.set("X-SSR-Client-IP", clientIp);
-			const clientUa = event.request.headers.get("User-Agent");
-			if (clientUa) request.headers.set("X-SSR-Client-UA", clientUa);
 		}
 	}
 	return fetch(request);

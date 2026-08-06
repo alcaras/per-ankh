@@ -9,16 +9,17 @@
 export const SSR_TRUSTED_TEST_KEY = "test-ssr-trusted-key";
 
 // Headers a server-rendered page load arrives with: the frontend Worker's key
-// plus the visitor's address and User-Agent, which is the whole point — the
-// request itself comes from Cloudflare's SSR egress (`CF-Connecting-IP` below)
-// and carries no UA of its own, and what the API must count and inspect is the
-// visitor's.
+// plus the visitor's address, which is the whole point — the request itself
+// comes from Cloudflare's SSR egress (`CF-Connecting-IP` below) and what the
+// API must count is the visitor.
+//
+// The visitor's User-Agent is deliberately not among them. It doesn't survive
+// the hop either, and forwarding it would hand the scraper exemption in
+// games.ts to anyone who types `Discordbot/2.0` — see the SSR block in
+// cloud/src/util.ts. So an SSR request carries no UA at all, which is the
+// shape these tests are written against.
 export function ssrHeaders(opts: {
 	clientIp: string;
-	// The visitor's User-Agent. Omitted by default because SvelteKit's server
-	// fetch sends none unless the frontend forwards it — the shape every test
-	// here should be written against unless it's the forwarding under test.
-	clientUa?: string;
 	// The address the subrequest itself arrives from — one shared egress in
 	// production, so it defaults to a single fixed value here for the same
 	// reason: any test that leaks it into a counter should collide loudly.
@@ -34,7 +35,6 @@ export function ssrHeaders(opts: {
 		"X-SSR-Key": opts.key ?? SSR_TRUSTED_TEST_KEY,
 		"X-SSR-Client-IP": opts.clientIp,
 	};
-	if (opts.clientUa) headers["X-SSR-Client-UA"] = opts.clientUa;
 	if (!opts.omitCfRay) headers["CF-RAY"] = "test-ray";
 	return headers;
 }

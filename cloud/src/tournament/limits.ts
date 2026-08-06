@@ -1,8 +1,18 @@
-// Tournament rate-limit ceilings. Hardcoded, except the two per-IP read
-// ceilings (tournamentViewPerHour / tournamentLinkViewPerHour below) — the
-// "operators need to retune during a live event" case this file anticipated
-// actually happened, so those are wrangler vars with the constants as their
-// defaults.
+// Tournament rate-limit ceilings. Hardcoded, except the three per-IP read
+// ceilings (tournamentViewPerHour / tournamentListViewPerHour /
+// tournamentLinkViewPerHour below) — the "operators need to retune during a
+// live event" case this file anticipated actually happened, so those are
+// wrangler vars with the constants as their defaults.
+//
+// Those three are separate budgets because they are drawn on by three
+// different populations. A shared budget means the busiest surface decides
+// when the others start refusing, and the surface with the most traffic is
+// never the one you meant to protect: /games/* crawling took the tournament
+// pages down on 2026-08-05, and the home page's tournament strip is a larger
+// caller than /tournaments itself. When adding a public read, give it the
+// budget of the page it is fetched by, not of the feature it belongs to.
+
+import { logWarn } from "../log";
 
 // Per-user admin mutation budget. Spec said 30/hour/tournament; we
 // simplified to per-user because the threat model (stolen admin
@@ -16,14 +26,33 @@ export const TOURNAMENT_ADMIN_ACTIONS_PER_HOUR = 30;
 // handful of edits per match per player.
 export const TOURNAMENT_SCHEDULE_ACTIONS_PER_HOUR = 60;
 
-// Per-IP budget for anonymous tournament reads (list/detail/standings/
-// bracket/rounds/matches/match-detail). Scraper User-Agents bypass.
+// Per-IP budget for the tournament page reads: detail, standings, bracket,
+// rounds, matches, match detail, both stats endpoints, and the profile
+// Tournaments tab. Scraper User-Agents bypass.
+//
+// Counted in *reads*, and every read charges — there is no cheaper class of
+// read and no caller who pays less (see enforceReadRateLimit). A cold
+// /tournaments/[slug] makes four; the stats page makes six. So this number is
+// roughly 600 tournament page loads an hour, or 400 of the stats page, and it
+// means the same thing whether the visitor arrived by a server-rendered load
+// or by clicking through a hydrated one.
+//
+// 2400 rather than the 600 it was through #196: at 600 reads a visitor met the
+// ceiling after ~150 page loads, which is reachable by browsing and is the
+// reason the number needed rethinking at all. The alternative was to charge a
+// page load once and let its sub-resources ride along free on our own SSR
+// Worker — same headroom, but the ceiling then meant reads to one caller and
+// page loads to another, and the rate limiter had to know who was asking.
+// Multiplying the number gets the headroom without either.
+//
+// Deliberately *not* the tournament list read — see
+// TOURNAMENT_LIST_VIEW_PER_HOUR.
 //
 // The default only — read the effective ceiling with tournamentViewPerHour().
-export const TOURNAMENT_VIEW_PER_HOUR = 600;
+export const TOURNAMENT_VIEW_PER_HOUR = 2400;
 
 // A ceiling read off an env var, falling back to the compiled-in default.
-// Shared by both read budgets so the two can't drift in how they parse.
+// Shared by all three read budgets so they can't drift in how they parse.
 //
 // Number(), not parseInt(): parseInt("600 per hour") is 600, which would let a
 // mangled value silently pass as a deliberate one. Anything below one whole
@@ -33,9 +62,26 @@ export const TOURNAMENT_VIEW_PER_HOUR = 600;
 // `count >= limit`, so 0.5 refuses every read after the first exactly as 0
 // refuses every read at all. Integers only, for the same reason — a ceiling of
 // 1.5 is 2 to the gate and 1.5 to whoever reads it back.
-function ceilingFrom(raw: string | undefined, fallback: number): number {
+//
+// Discarding a value is logged, once per isolate per var. Falling back is the
+// safe behaviour, but doing it silently means an operator who mistypes a
+// ceiling mid-incident sees the deploy succeed, the traffic unchanged, and no
+// reason why — and the value they most plausibly reach for under load, 0, is
+// one of the discarded ones. `name` is only carried for this line.
+const unparseableLogged = new Set<string>();
+
+function ceilingFrom(
+	raw: string | undefined,
+	fallback: number,
+	name: string,
+): number {
 	const parsed = Number(raw);
-	return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
+	if (Number.isInteger(parsed) && parsed >= 1) return parsed;
+	if (raw !== undefined && !unparseableLogged.has(name)) {
+		unparseableLogged.add(name);
+		logWarn("read_ceiling_unparseable", { var: name, value: raw, fallback });
+	}
+	return fallback;
 }
 
 // Effective per-IP tournament view ceiling: the TOURNAMENT_VIEW_PER_HOUR var
@@ -49,7 +95,44 @@ function ceilingFrom(raw: string | undefined, fallback: number): number {
 export function tournamentViewPerHour(env: {
 	TOURNAMENT_VIEW_PER_HOUR?: string;
 }): number {
-	return ceilingFrom(env.TOURNAMENT_VIEW_PER_HOUR, TOURNAMENT_VIEW_PER_HOUR);
+	return ceilingFrom(
+		env.TOURNAMENT_VIEW_PER_HOUR,
+		TOURNAMENT_VIEW_PER_HOUR,
+		"TOURNAMENT_VIEW_PER_HOUR",
+	);
+}
+
+// Per-IP budget for the tournament list read (GET /v1/tournaments). Its own
+// budget, deliberately not the tournament pages' one: the list is fetched by
+// the home page on every render (src/routes/+page.ts) as well as by
+// /tournaments, and the home page is the busiest surface on the site. Sharing
+// means ordinary landing-page traffic decides when /tournaments/[slug] starts
+// refusing — the same coupling that took the tournament pages down on
+// 2026-08-05 with /games/* as the busy surface instead.
+//
+// Not folded into anon_read either, for the reason the link read isn't: the
+// home page calls both, so sharing would spend one visitor's landing-page
+// budget twice over.
+//
+// Stays at 600 where the view ceiling is 2400, because the arithmetic differs,
+// not the generosity: this is one read per page load, so 600 is 600 loads —
+// the same headroom the view budget needs four reads each to reach.
+//
+// The default only — read the effective ceiling with tournamentListViewPerHour().
+export const TOURNAMENT_LIST_VIEW_PER_HOUR = 600;
+
+// Effective per-IP list ceiling, on the same lever as the other two. This is
+// the one whose exhaustion is most visible to an ordinary visitor — it empties
+// the home page's tournament strip — so it is also the one most likely to want
+// moving mid-event.
+export function tournamentListViewPerHour(env: {
+	TOURNAMENT_LIST_VIEW_PER_HOUR?: string;
+}): number {
+	return ceilingFrom(
+		env.TOURNAMENT_LIST_VIEW_PER_HOUR,
+		TOURNAMENT_LIST_VIEW_PER_HOUR,
+		"TOURNAMENT_LIST_VIEW_PER_HOUR",
+	);
 }
 
 // Per-IP budget for the game→tournament link read
@@ -80,6 +163,7 @@ export function tournamentLinkViewPerHour(env: {
 	return ceilingFrom(
 		env.TOURNAMENT_LINK_VIEW_PER_HOUR,
 		TOURNAMENT_LINK_VIEW_PER_HOUR,
+		"TOURNAMENT_LINK_VIEW_PER_HOUR",
 	);
 }
 
