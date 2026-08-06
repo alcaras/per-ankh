@@ -8,6 +8,9 @@
 //                       the top level (wrangler does not inherit vars or
 //                       bindings into named envs, so drift is silent)
 //   secrets.leak     — regex pass over tracked files for common token shapes
+//   secrets.ssr_trust — SSR_TRUSTED_KEY is on BOTH Workers (API + frontend).
+//                       Non-blocking: unset on both is a working state, and
+//                       the only one whose failure mode is otherwise silent
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -35,40 +38,53 @@ interface SecretEntry {
 	type: string;
 }
 
-async function checkRequiredSecrets(env: CloudEnv): Promise<CheckResult> {
+// The names of the secrets set on one Worker, or why we couldn't find out.
+// Both secret checks below go through this — `secrets.ssr_trust` has to ask
+// the same question of a second Worker, and two copies of the banner-slicing
+// and parse handling would be two places to fix when wrangler's output shifts.
+type SecretListing =
+	| { ok: true; names: Set<string> }
+	| { ok: false; reason: string };
+
+async function listSecrets(env: CloudEnv, cwd: string): Promise<SecretListing> {
 	const r = await runCaptured(
 		"npx",
 		["wrangler", "secret", "list", ...env.wranglerEnvFlag],
-		{
-			cwd: CLOUD_DIR,
-		},
+		{ cwd },
 	);
 	if (r.code !== 0) {
 		return {
-			name: "secrets.required",
-			status: "fail",
-			blocking: true,
-			details: `wrangler secret list failed: ${r.stderr.trim() || r.stdout.trim()}`,
+			ok: false,
+			reason: `wrangler secret list failed: ${r.stderr.trim() || r.stdout.trim()}`,
 		};
 	}
 	// `wrangler secret list` may print non-JSON banner lines before the
 	// JSON array. Slice from first '['.
 	const idx = r.stdout.indexOf("[");
-	let parsed: SecretEntry[];
 	try {
-		parsed = JSON.parse(
+		const parsed = JSON.parse(
 			idx >= 0 ? r.stdout.slice(idx) : r.stdout,
 		) as SecretEntry[];
+		return { ok: true, names: new Set(parsed.map((s) => s.name)) };
 	} catch {
+		return {
+			ok: false,
+			reason: `Could not parse secret list:\n${r.stdout.slice(0, 300)}`,
+		};
+	}
+}
+
+async function checkRequiredSecrets(env: CloudEnv): Promise<CheckResult> {
+	const listing = await listSecrets(env, CLOUD_DIR);
+	if (!listing.ok) {
 		return {
 			name: "secrets.required",
 			status: "fail",
 			blocking: true,
-			details: `Could not parse secret list:\n${r.stdout.slice(0, 300)}`,
+			details: listing.reason,
 		};
 	}
-	const present = new Set(parsed.map((s) => s.name));
-	const missing = REQUIRED_SECRETS.filter((s) => !present.has(s));
+	const missing = REQUIRED_SECRETS.filter((s) => !listing.names.has(s));
 	if (missing.length > 0) {
 		const envFlag = env.wranglerEnvFlag.length
 			? ` ${env.wranglerEnvFlag.join(" ")}`
@@ -369,11 +385,99 @@ async function checkLeakScan(): Promise<CheckResult> {
 	};
 }
 
+// ─── secrets.ssr_trust ──────────────────────────────────────────────────────
+// SSR_TRUSTED_KEY is the one secret that has to be the same value on *both*
+// Workers, and the only one whose absence is invisible at runtime. The API
+// believes the visitor address the frontend forwards only when both hold it;
+// with either side missing, nothing is forwarded and every per-IP budget
+// silently counts every server-rendered visitor into one bucket again — the
+// 2026-08-05 outage. The logs say nothing, because a Worker with no key has
+// nothing to reject (`ssr_forward_rejected` fires on a *mismatch*).
+//
+// So this is the check that stands in for the missing runtime signal, and it
+// grades the three states differently:
+//
+//   both set      → pass.
+//   neither set   → warn. This is the documented deploy window (§3.2 of
+//                   docs/cloud-deploy-plan.md) and a working state, so it must
+//                   not block. It is also how the window silently becomes
+//                   permanent, so it must not be silent.
+//   exactly one   → fail. Never an intentional state: somebody did half a
+//                   rollout or half a rotation. Non-blocking, because the
+//                   deploy in front of it is probably unrelated and refusing
+//                   to ship is worse than shipping the state we already have.
+//
+// Values aren't compared — `wrangler secret list` returns names only. A
+// mismatch between two set values is the case `ssr_forward_rejected` does
+// cover.
+const SSR_TRUST_SECRET = "SSR_TRUSTED_KEY";
+
+export async function checkSsrTrustKey(env: CloudEnv): Promise<CheckResult> {
+	const [api, frontend] = await Promise.all([
+		listSecrets(env, CLOUD_DIR),
+		listSecrets(env, REPO_ROOT),
+	]);
+	if (!api.ok || !frontend.ok) {
+		return {
+			name: "secrets.ssr_trust",
+			status: "warn",
+			blocking: false,
+			details:
+				`${SSR_TRUST_SECRET} must be set, with the same value, on the API ` +
+				"Worker (cloud/) and the frontend Worker (repo root). Could not " +
+				`check: ${(api.ok ? frontend : api).reason}`,
+		};
+	}
+
+	const onApi = api.names.has(SSR_TRUST_SECRET);
+	const onFrontend = frontend.names.has(SSR_TRUST_SECRET);
+	if (onApi && onFrontend) {
+		return { name: "secrets.ssr_trust", status: "pass", blocking: false };
+	}
+
+	const envFlag = env.wranglerEnvFlag.length
+		? ` ${env.wranglerEnvFlag.join(" ")}`
+		: "";
+	const howTo =
+		`Set the same value on both:\n` +
+		`  cd cloud && npx wrangler secret put ${SSR_TRUST_SECRET}${envFlag}\n` +
+		`  npx wrangler secret put ${SSR_TRUST_SECRET}${envFlag}   # repo root`;
+
+	if (!onApi && !onFrontend) {
+		return {
+			name: "secrets.ssr_trust",
+			status: "warn",
+			blocking: false,
+			details:
+				`${SSR_TRUST_SECRET} is set on neither Worker, so SSR visitor ` +
+				"forwarding is off: every server-rendered request counts against " +
+				"Cloudflare's egress address instead of the visitor, and one " +
+				"crawler can spend the whole site's per-IP budget.\n" +
+				howTo,
+		};
+	}
+
+	const missing = onApi
+		? "the frontend Worker (repo root)"
+		: "the API Worker (cloud/)";
+	return {
+		name: "secrets.ssr_trust",
+		status: "fail",
+		blocking: false,
+		details:
+			`${SSR_TRUST_SECRET} is set on only one of the two Workers — missing ` +
+			`on ${missing}. Forwarding needs both, so it is currently off and ` +
+			"every server-rendered visitor shares one rate-limit bucket.\n" +
+			howTo,
+	};
+}
+
 export async function runSecretChecks(env: CloudEnv): Promise<CheckResult[]> {
 	return [
 		await checkVarsHygiene(),
 		await checkVarsParity(),
 		await checkLeakScan(),
 		await checkRequiredSecrets(env),
+		await checkSsrTrustKey(env),
 	];
 }
