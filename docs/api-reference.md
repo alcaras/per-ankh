@@ -88,7 +88,8 @@ Counters live in the D1 `events` table (or the Cache API for legacy downloads) a
 | Bucket | Limit | Applies to |
 | --- | --- | --- |
 | `anon_read` | 200 / hr per IP | anonymous game reads (`GET /v1/games/:id`, `public-recent`) |
-| `tournament_view` | 600 / hr per IP | anonymous tournament reads |
+| `tournament_view` | 600 / hr per IP | anonymous tournament reads. The ceiling is the `TOURNAMENT_VIEW_PER_HOUR` var (600 by default), so it can be retuned mid-event with `wrangler secret put` instead of a redeploy |
+| `tournament_link_view` | 600 / hr per IP | `GET /v1/games/:id/tournament-link`. Its own budget, not `tournament_view`'s: every game-page render calls it, so sharing let a `/games/*` crawl 429 the tournament pages |
 | `tournament_export` | 30 / hr per user | `GET /v1/tournaments/:id/export` |
 | `tournament_admin` | 30 / hr per user | tournament admin mutations |
 | `tournament_schedule` | 60 / hr per user | match schedule + caster self-service |
@@ -245,8 +246,8 @@ Whether a game is linked to a tournament match.
 - **Auth:** Public (IP rate-limited).
 - **Path:** `id` (21-char).
 - **Response 200:** `{ link: GameTournamentLink | null }` — `link.tournament` `{ tournament_id, slug, name, status }` + `link.match` `{ match_id, phase, division, round_number, map_script, status, slot_a_id, slot_b_id, winner_slot_id, slot_a_display_name, slot_b_display_name }`; `{ link: null }` when unlinked.
-- **Errors:** `429 RATE_LIMIT_TOURNAMENT_VIEW`.
-- **Notes:** `tournament_view` bucket (600/hr per IP; scraper UAs exempt).
+- **Errors:** `429 RATE_LIMIT_TOURNAMENT_LINK`.
+- **Notes:** `tournament_link_view` bucket (600/hr per IP; scraper UAs exempt) — its own, deliberately not the `tournament_view` one the tournament pages draw on. The budget is charged before the link is looked up, so an unlinked game costs a slot too.
 
 ### `PATCH /v1/games/:id`
 Update a game's visibility, collection, or display name.
