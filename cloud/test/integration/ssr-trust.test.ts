@@ -1,4 +1,5 @@
-// Trusted server-rendered requests: who a read is counted against.
+// Trusted server-rendered requests: who a read is counted against, and how
+// many slots a page load spends.
 //
 // per-ankh.app renders its pages in a Worker, and that Worker's subrequests
 // reach this API from Cloudflare's SSR egress — one address standing in for
@@ -8,13 +9,18 @@
 //
 // The frontend forwards the visitor's address and proves it's ours with
 // SSR_TRUSTED_KEY (src/hooks.server.ts → adoptTrustedFrontend in
-// cloud/src/util.ts), so a trusted request is counted against the visitor and
-// never against the egress — and an untrusted one can't claim an address it
-// doesn't have.
+// cloud/src/util.ts). Two properties follow, and this file pins both:
+//
+//   1. A trusted request is counted against the visitor, never the egress —
+//      and an untrusted one can't claim an address it doesn't have.
+//   2. A trusted page load spends one slot, not one per read: the entry read
+//      charges and the sub-resources ride along. A browser making the same
+//      reads directly pays for each, so no endpoint is free.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
-import { beforeAll, describe, expect, it } from "vitest";
-import { expectOk } from "../helpers/assertions";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { expectErrorCode, expectOk } from "../helpers/assertions";
+import { makeTournament } from "../helpers/builders";
 import { ssrHeaders } from "../helpers/ssr-identity";
 
 beforeAll(async () => {
@@ -52,6 +58,12 @@ async function expectEventsToReach(
 
 function get(path: string, headers: Record<string, string>): Promise<Response> {
 	return SELF.fetch(`http://test${path}`, { headers });
+}
+
+// A browser's own request: no forwarding involved, the address on the wire is
+// the visitor's.
+function directHeaders(ip: string): Record<string, string> {
+	return { "CF-Connecting-IP": ip, "CF-RAY": "test-ray" };
 }
 
 describe("forwarded visitor IP", () => {
@@ -158,5 +170,109 @@ describe("forwarded visitor IP", () => {
 		});
 
 		expect(res.status).toBe(400);
+	});
+});
+
+describe("one page load, one slot", () => {
+	it("charges a trusted page load once across its four reads", async () => {
+		const t = await makeTournament({
+			slug: "ssr-page-load",
+			advanceTo: "swiss-round-1-generated",
+		});
+		const visitor = "203.0.113.70";
+		const headers = ssrHeaders({ clientIp: visitor });
+
+		// What /tournaments/[slug] fetches on a cold load: the tournament, then
+		// standings + bracket + matches (src/routes/tournaments/[slug]/+layout.ts).
+		await expectOk(await get(`/v1/tournaments/${t.slug}`, headers));
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/standings`, headers),
+		);
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/bracket`, headers),
+		);
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/matches`, headers),
+		);
+
+		// One visitor action, one slot — the entry read's. Before this, the same
+		// page load spent four, so ~150 cold loads exhausted the hourly budget
+		// for the whole site.
+		await expectEventsToReach("tournament_view", visitor, 1);
+	});
+
+	it("charges a browser for every read it makes directly", async () => {
+		// The same four reads without the trust marker — a hydrated navigation,
+		// or anyone hitting the API by hand. Riding along is a property of a
+		// server-rendered page load, not of the endpoints.
+		const t = await makeTournament({
+			slug: "ssr-page-load-direct",
+			advanceTo: "swiss-round-1-generated",
+		});
+		const visitor = "203.0.113.71";
+		const headers = directHeaders(visitor);
+
+		await expectOk(await get(`/v1/tournaments/${t.slug}`, headers));
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/standings`, headers),
+		);
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/bracket`, headers),
+		);
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/matches`, headers),
+		);
+
+		await expectEventsToReach("tournament_view", visitor, 4);
+	});
+
+	it("does not let a caller declare itself trusted", async () => {
+		// X-SSR-Trusted is this Worker's own verdict; adoptTrustedFrontend strips
+		// it off every inbound request before deciding. A caller setting it must
+		// gain nothing — so this read is still charged.
+		const t = await makeTournament({
+			slug: "ssr-self-declared",
+			advanceTo: "swiss-round-1-generated",
+		});
+		const caller = "203.0.113.72";
+
+		await expectOk(
+			await get(`/v1/tournaments/${t.tournamentId}/standings`, {
+				...directHeaders(caller),
+				"X-SSR-Trusted": "1",
+			}),
+		);
+
+		await expectEventsToReach("tournament_view", caller, 1);
+	});
+});
+
+describe("riders are gated, not exempt", () => {
+	const configured = env.TOURNAMENT_VIEW_PER_HOUR;
+	afterEach(() => {
+		env.TOURNAMENT_VIEW_PER_HOUR = configured;
+	});
+
+	it("429s a rider read on an IP whose budget is spent", async () => {
+		// Not charging a rider must not mean not stopping one: an over-budget
+		// visitor has to meet the ceiling whichever read of the page arrives
+		// first, or the page renders half-broken instead of saying why.
+		env.TOURNAMENT_VIEW_PER_HOUR = "1";
+		const t = await makeTournament({
+			slug: "ssr-rider-gate",
+			advanceTo: "swiss-round-1-generated",
+		});
+		const visitor = "203.0.113.73";
+		const headers = ssrHeaders({ clientIp: visitor });
+
+		// The entry read spends the only slot...
+		await expectOk(await get(`/v1/tournaments/${t.slug}`, headers));
+		await expectEventsToReach("tournament_view", visitor, 1);
+
+		// ...and the rider that follows it is refused, same as any other read.
+		await expectErrorCode(
+			await get(`/v1/tournaments/${t.tournamentId}/standings`, headers),
+			{ status: 429, code: "RATE_LIMIT_TOURNAMENT_VIEW" },
+		);
 	});
 });
