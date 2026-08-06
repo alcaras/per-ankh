@@ -1120,15 +1120,20 @@ export default {
 		env: RawBindings,
 		ctx: ExecutionContext,
 	): Promise<Response> {
-		// Settle who the caller is before anything reads the request: on an SSR
-		// subrequest that proves it came from our frontend Worker, this swaps in
-		// the visitor's address so every per-IP counter downstream is keyed on a
-		// person rather than on Cloudflare's SSR egress. See util.ts.
-		//
-		// The log context still gets the original — `cf` (colo) lives on the
-		// inbound request object and nothing downstream reads it.
-		const req = adoptTrustedFrontend(request, env);
 		return runWithLogContext(request, async () => {
+			// Settle who the caller is before anything reads the request: on an
+			// SSR subrequest that proves it came from our frontend Worker, this
+			// swaps in the visitor's address and User-Agent so every per-IP
+			// counter downstream is keyed on a person rather than on
+			// Cloudflare's SSR egress. See util.ts.
+			//
+			// Inside the log context, because the one line this can emit
+			// (`ssr_forward_rejected`) is what an operator greps during a
+			// botched key rotation, and outside the context it carries no
+			// request_id or path to join it to anything. The context itself is
+			// still built from the inbound request — `cf` (colo) lives on that
+			// object and doesn't survive the rewrite.
+			const req = adoptTrustedFrontend(request, env);
 			const url = new URL(request.url);
 			let response: Response;
 

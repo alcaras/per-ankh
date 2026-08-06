@@ -98,6 +98,13 @@ const reportToHeader = JSON.stringify({
 // either side means no forwarding, which is exactly the old behaviour, so the
 // two Workers can be deployed in either order.
 //
+// The User-Agent rides along for the same reason, and it is the *only* way the
+// API can see one: SvelteKit copies cookie/origin/authorization/accept onto a
+// server-side fetch and nothing else. The read limiters exempt link-preview
+// scrapers by UA, and an unfurl is always a server-rendered load — so without
+// this the exemption covers nothing and Discord's crawler is metered as an
+// ordinary visitor until it 429s and every preview card breaks.
+//
 // Header names are duplicated from cloud/src/util.ts — separate builds, no
 // shared module between them.
 export const handleFetch: HandleFetch = ({ event, request, fetch }) => {
@@ -115,6 +122,8 @@ export const handleFetch: HandleFetch = ({ event, request, fetch }) => {
 				event.request.headers.get("CF-Connecting-IP") ??
 				event.getClientAddress();
 			if (clientIp) request.headers.set("X-SSR-Client-IP", clientIp);
+			const clientUa = event.request.headers.get("User-Agent");
+			if (clientUa) request.headers.set("X-SSR-Client-UA", clientUa);
 		}
 	}
 	return fetch(request);

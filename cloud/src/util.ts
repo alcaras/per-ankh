@@ -262,10 +262,11 @@ export function getClientIp(request: Request): string | null {
 // tournament pages' hourly allowance and 429'd them.
 //
 // The frontend Worker fixes the attribution at the source: it forwards the
-// visitor's edge address and proves it is us with a shared key
+// visitor's edge address and User-Agent and proves it is us with a shared key
 // (`handleFetch` in src/hooks.server.ts). This is the only place that key is
 // checked and the only place those headers are believed — every reader
-// downstream keeps calling getClientIp and gets the right answer.
+// downstream keeps calling getClientIp (or reads User-Agent) and gets the
+// right answer.
 //
 // Both sides must have the key for any of it to take effect, so the two
 // Workers can be deployed in either order: until both are set, forwarding is
@@ -274,6 +275,13 @@ export function getClientIp(request: Request): string | null {
 // Presented by the caller.
 export const SSR_KEY_HEADER = "X-SSR-Key";
 export const SSR_CLIENT_IP_HEADER = "X-SSR-Client-IP";
+// The visitor's User-Agent, which doesn't survive the SSR hop either:
+// SvelteKit's server-side fetch copies cookie/origin/authorization/accept onto
+// a subrequest and nothing else, so without this the read limiters see no UA at
+// all. They exempt link-preview scrapers by UA (isScraperUA in games.ts), and a
+// Discord or Slack unfurl is *always* a server-rendered load — so the exemption
+// applies to nothing at all unless the UA is carried across with the address.
+export const SSR_CLIENT_UA_HEADER = "X-SSR-Client-UA";
 // Our own verdict, never believed from the wire: adoptTrustedFrontend strips
 // this off every inbound request and re-adds it only after the key checks out,
 // so a handler reading it is reading this module's conclusion and not the
@@ -290,23 +298,50 @@ export interface TrustedFrontendEnv {
 // A forwarded address becomes a rate-limit bucket key and an `events` row, so
 // it gets a shape check before either. Deliberately loose — IPv4, IPv6, and
 // nothing else long enough to be a payload.
+//
+// The forwarded User-Agent gets no equivalent check: it is never stored and
+// never a key, only prefix-compared against the scraper list, so there is
+// nothing for a malformed one to corrupt.
 const FORWARDED_IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
 
+// Whether this isolate has already reported each of the two ways forwarding
+// can be misconfigured — see the warns below for why one line is the whole
+// signal, and why a second state needs a second flag rather than sharing one.
+let rejectionLogged = false;
+let missingIpLogged = false;
+
 // Resolve the trust question once, at the top of `fetch`, and hand the rest of
-// the Worker a request whose CF-Connecting-IP is the visitor's. Returns the
-// request untouched when no SSR headers are in play (all browser traffic).
+// the Worker a request whose CF-Connecting-IP and User-Agent are the visitor's.
+// Returns the request untouched when no SSR headers are in play (all browser
+// traffic).
 export function adoptTrustedFrontend(
 	request: Request,
 	env: TrustedFrontendEnv,
 ): Request {
 	const presented = request.headers.get(SSR_KEY_HEADER);
 	const forwarded = request.headers.get(SSR_CLIENT_IP_HEADER);
+	const forwardedUa = request.headers.get(SSR_CLIENT_UA_HEADER);
 	const claimed = request.headers.get(SSR_TRUSTED_HEADER);
-	if (presented === null && forwarded === null && claimed === null) {
+	if (
+		presented === null &&
+		forwarded === null &&
+		forwardedUa === null &&
+		claimed === null
+	) {
 		return request;
 	}
 
-	const key = env.SSR_TRUSTED_KEY;
+	// A blank secret is an unset secret, and normalising it here is what keeps
+	// every `key !== undefined` test below honest. Empty is how a secret gets
+	// half-set — a `wrangler secret put` with nothing pasted, a `.dev.vars` line
+	// left as `SSR_TRUSTED_KEY=` — and treating it as configured would make
+	// timingSafeEqual("", "") true for anyone sending a bare `X-SSR-Key:`, so
+	// the empty value that means "off" would instead trust the whole internet.
+	// The frontend already reads it this way (`if (ssrKey)` in
+	// src/hooks.server.ts); this is what makes the two sides agree on what
+	// "configured" means.
+	const configured = env.SSR_TRUSTED_KEY;
+	const key = configured === "" ? undefined : configured;
 	const trusted =
 		key !== undefined && presented !== null && timingSafeEqual(key, presented);
 
@@ -316,20 +351,39 @@ export function adoptTrustedFrontend(
 	const headers = new Headers(request.headers);
 	headers.delete(SSR_KEY_HEADER);
 	headers.delete(SSR_CLIENT_IP_HEADER);
+	headers.delete(SSR_CLIENT_UA_HEADER);
 	headers.delete(SSR_TRUSTED_HEADER);
 
 	if (trusted) {
 		headers.set(SSR_TRUSTED_HEADER, "1");
 		if (forwarded !== null && FORWARDED_IP_RE.test(forwarded)) {
 			headers.set("CF-Connecting-IP", forwarded);
+		} else if (!missingIpLogged) {
+			// Keyed, but carrying no address we can use: CF-Connecting-IP stays
+			// the SSR egress, so every server-rendered visitor pools into one
+			// bucket again — the 2026-08-05 outage, and previously it arrived
+			// with no line at all because the warn below only fires on a
+			// mismatch. Only a holder of the key reaches this branch, so what
+			// it reports is our own frontend, not a caller.
+			missingIpLogged = true;
+			logWarn("ssr_forward_no_client_ip");
 		}
-	} else if (key !== undefined) {
+		if (forwardedUa !== null) headers.set("User-Agent", forwardedUa);
+	} else if (key !== undefined && !rejectionLogged) {
 		// A key is configured and this one didn't match: a botched rotation, or
 		// someone probing the header. Worth a line either way.
+		//
+		// Once per isolate, not once per request: every header that reaches this
+		// branch is caller-supplied, so a per-request line is a log-flood lever
+		// for anyone who notices it — and it would bury the rotation case in
+		// noise at the moment an operator is grepping for exactly that. What
+		// this reports is a configuration state rather than an event, so the
+		// first line says everything the thousandth would.
 		//
 		// No line when the key is unset — that's the feature switched off, and
 		// it's also the window where the frontend has shipped forwarding and this
 		// Worker hasn't yet, which is a supported deploy order and not an event.
+		rejectionLogged = true;
 		logWarn("ssr_forward_rejected");
 	}
 

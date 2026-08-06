@@ -125,6 +125,12 @@ const LINK_BUDGET: ReadBudget = {
 // caller we can be sure fetched the entry read first. Anyone calling
 // /standings directly is charged for it, so no path here is free — see
 // isTrustedFrontend in util.ts for how that's established.
+//
+// What the ceiling therefore bounds on server-rendered traffic is page loads,
+// not backend reads: 600 loads of the stats page is ~3,600 reads behind it.
+// That is the intended reading of the number — an operator retuning it
+// mid-event is deciding how many times a visitor may load a page — and it's
+// why the two figures are stated separately in docs/api-reference.md.
 type ReadRole = "entry" | "rider";
 
 // Per-IP rate limit on a public read. Scraper User-Agents (Discord/Slack/
@@ -132,9 +138,14 @@ type ReadRole = "entry" | "rider";
 // fan out load that's not meaningful to count. Applies to everyone else,
 // including signed-in users.
 //
-// Every read is *gated*, riders included: the ceiling is what an over-budget
-// IP meets, and it has to answer the same way whichever read of the page it
-// hits first. Only the charging differs.
+// A rider on a trusted page load skips both, and skips them before the count:
+// the entry read of that same render already gated this IP and charged it
+// milliseconds ago, so counting again is a cross-region COUNT(*) per
+// sub-resource — three on a tournament page, five on the stats page — for a
+// verdict that is already known. An over-budget visitor still meets the
+// ceiling on the entry read, which is the one the page cannot render without,
+// so what it sees is unchanged. Every other caller — a hydrated navigation,
+// anything hitting the API by hand — is gated and charged per read.
 //
 // `eventType` is interpolated into the INSERT rather than bound: event_type
 // is part of the statement's structure, not a value. The literal union closes
@@ -149,6 +160,7 @@ async function enforceReadRateLimit(
 ): Promise<Response | null> {
 	const ua = request.headers.get("User-Agent");
 	if (isScraperUA(ua)) return null;
+	if (role === "rider" && isTrustedFrontend(request)) return null;
 	const ip = getClientIp(request) ?? "untrusted";
 	const count = await countEventsSince(
 		env.EVENTS_DB,
@@ -159,7 +171,6 @@ async function enforceReadRateLimit(
 	if (count >= limit) {
 		return errorResponse(budget.message, 429, cors, budget.code);
 	}
-	if (role === "rider" && isTrustedFrontend(request)) return null;
 	env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, ip_address)
 		 VALUES ('${budget.eventType}', ?)`,
