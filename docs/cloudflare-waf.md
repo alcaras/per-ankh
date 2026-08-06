@@ -24,28 +24,43 @@ An IP-keyed rate limit or block on `api.per-ankh.app` does not throttle an abuse
 
 Client-side navigations *are* different: once a page has hydrated, the browser calls the API directly and `ip.src` there is the real visitor. So API traffic is a mix of real visitor IPs and one shared egress address, which is precisely why it is not a safe thing to key rules on.
 
+The application layer is no longer in the same position, and the distinction matters when reading the counters below. The frontend Worker now forwards the visitor's address on its subrequests and authenticates itself with a shared secret, so the API's own per-IP budgets are keyed on the visitor even for server-rendered traffic (`adoptTrustedFrontend` in `cloud/src/util.ts`). **A WAF rule still cannot see that** — `ip.src` at the API hostname is the network peer, which for SSR is still the egress, and no forwarded header changes it. So: application counters attribute correctly; WAF rules keyed on the client still belong at `per-ankh.app`.
+
 ## Worked example: the 2026-08-05 tournament outage
 
 `/tournaments/2026-community-tournament` began returning 500. The cause was not the tournament:
 
 1. Something crawled roughly 270 `/games/[id]` pages a minute at 17:07 and again at 17:09.
-2. Every game page render calls `GET /v1/games/:id/tournament-link`, and that handler charges the **tournament** view budget (`TOURNAMENT_VIEW_PER_HOUR`, 600/hour) before checking whether the game is even linked to a tournament.
+2. Every game page render calls `GET /v1/games/:id/tournament-link`, and that handler charged the **tournament** view budget (`TOURNAMENT_VIEW_PER_HOUR`, 600/hour) before checking whether the game was even linked to a tournament.
 3. All those renders were server-side, so all 536 requests landed on the single SSR egress address, which hit exactly 600 in the rolling hour and started returning 429.
 4. The tournament page loader had no 429 branch, so the 429 surfaced as a 500.
 
-It self-healed an hour later when the burst aged out of the window. The application-layer fixes are tracked separately; the point here is that **a WAF rate limit on `/games/*` at `per-ankh.app` would have stopped it at step 1**, keyed on the crawler's real IP, with no deploy.
+It self-healed an hour later when the burst aged out of the window.
 
-Confirm the application-layer symptom with a read-only query before reaching for a rule:
+Steps 2, 3 and 4 have since been fixed in code:
+
+- **2** — the link read has its own budget (`tournament_link_view`, `TOURNAMENT_LINK_VIEW_PER_HOUR`), so game-page traffic no longer spends the tournament pages' allowance.
+- **3** — the frontend forwards each visitor's address on its SSR subrequests, so the burst would now land in the crawler's own bucket instead of pooling with every other visitor on the egress address. A tournament page load also charges one slot now rather than four.
+- **4** — every rate-limited loader answers a spent budget with a 429 page (`rethrowRateLimit` in `src/lib/utils/load-errors.ts`) rather than a 500.
+
+Step 1 is the part no code fix reaches: a crawler with its own bucket can still drain that bucket, and 270 page renders a minute is load we are simply serving. **A WAF rate limit on `/games/*` at `per-ankh.app` stops it there**, keyed on the crawler's real IP, with no deploy.
+
+Confirm the application-layer symptom with a read-only query before reaching for a rule. Both read budgets at once, because which one is draining tells you which surface is degraded — `tournament_view` means the tournament pages are 429ing, `tournament_link_view` means game pages are quietly losing their tournament banner:
 
 ```bash
 cd cloud && npx wrangler d1 execute per-ankh-share-index --remote --command \
-"SELECT ip_address, COUNT(*) AS n FROM events \
- WHERE event_type = 'tournament_view' \
+"SELECT event_type, ip_address, COUNT(*) AS n FROM events \
+ WHERE event_type IN ('tournament_view','tournament_link_view','anon_read') \
    AND created_at > datetime('now','-1 hour') \
- GROUP BY ip_address ORDER BY n DESC LIMIT 10;"
+ GROUP BY event_type, ip_address ORDER BY n DESC LIMIT 10;"
 ```
 
-A bucket at 600 or above is currently rejecting. If the top bucket is a Cloudflare egress address rather than a real visitor, the load is arriving through SSR and the rule you want belongs at `per-ankh.app`.
+A bucket at its ceiling is currently rejecting: 600 for either tournament budget (`cloud/src/tournament/limits.ts`, or whatever the matching var is set to), 200 for `anon_read` — which is the tightest of the three and gates the game reads themselves, so a `/games/*` crawl hits it first.
+
+The top bucket is the address to write a rule for: since forwarding shipped, a server-rendered page load is counted against the visitor, so a single abuser shows up as itself rather than pooling into the egress address. Two readings worth knowing:
+
+- **A Cloudflare egress address at the top** now means forwarding is *not* working — the shared secret is missing or mismatched on one of the two Workers (grep the API's logs for `ssr_forward_rejected`). Every SSR visitor is sharing one bucket again, so treat the number as site-wide load, not as one abuser, and fix the secret.
+- **A real address at the top** is the crawler, and `per-ankh.app` is still where the rule goes — the API hostname sees the egress as `ip.src` no matter what the counters say.
 
 ## Where the controls live
 

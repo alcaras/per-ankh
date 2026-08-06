@@ -85,6 +85,11 @@ From there it's the user's: [`POST /v1/users/me/slug`](#post-v1usersmeslug) rena
 
 Counters live in the D1 `events` table (or the Cache API for legacy downloads) and are keyed per-user, per-IP, or globally depending on the endpoint. Notable buckets:
 
+Two things shape what "per IP" means for traffic that arrives through `per-ankh.app`'s server-side rendering, since those subrequests leave Cloudflare's SSR egress rather than the visitor's connection:
+
+- **The visitor is the bucket.** The frontend Worker forwards the visitor's edge address and authenticates itself with the `SSR_TRUSTED_KEY` shared secret; `adoptTrustedFrontend` (`cloud/src/util.ts`) verifies it once at the Worker's entry and swaps the address in before any handler reads it. Without a valid key those headers are stripped, so a caller can't claim an address it doesn't have — and with the secret unset on either Worker, nothing is forwarded and every counter behaves as it did before.
+- **A server-rendered page load spends one slot, not one per read.** `/tournaments/[slug]` fetches the tournament, then standings, bracket and matches; on a trusted page load only the first charges `tournament_view` (`ReadRole` in `cloud/src/tournament/public.ts`). Sub-resource reads made directly — a hydrated navigation, or anything hitting the API by hand — are charged individually, and every read is still *gated* whether or not it charges.
+
 | Bucket | Limit | Applies to |
 | --- | --- | --- |
 | `anon_read` | 200 / hr per IP | anonymous game reads (`GET /v1/games/:id`, `public-recent`) |
