@@ -5,6 +5,7 @@
 import { redirect } from "@sveltejs/kit";
 import { cloudApi } from "$lib/api-cloud";
 import type { CreatorVideo, TournamentVideo } from "$lib/api-cloud";
+import { rethrowRateLimit } from "$lib/utils/load-errors";
 import { safeNext } from "$lib/utils/safe-next";
 import type { PageLoad } from "./$types";
 
@@ -61,14 +62,34 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 	// All fetches are best-effort: a transient worker hiccup shouldn't
 	// blank the home page. Failures fall through to empty — the section
 	// just shows its empty-state copy.
+	//
+	// A spent read budget is the exception, on every one of them. The empty
+	// state reads as "there are no tournaments and nothing has been shared
+	// lately", which is a different and wrong answer to "you've made too many
+	// requests" — and it hides the thing an operator most needs to see, since
+	// this page is the busiest reader of both the tournament_list_view and
+	// anon_read budgets. Same rule as every sibling loader, via
+	// rethrowRateLimit.
 	const [recentRes, tournamentsRes, creatorVideos, tournamentVideos] =
 		await Promise.all([
-			cloudApi.listPublicRecent({ fetch }).catch(() => ({ games: [] })),
+			cloudApi.listPublicRecent({ fetch }).catch((err: unknown) => {
+				rethrowRateLimit(err);
+				return { games: [] };
+			}),
 			cloudApi
 				.listTournaments({ limit: 50 }, { fetch })
-				.catch(() => ({ tournaments: [], limit: 0, offset: 0 })),
-			cloudApi.getCreatorVideos({ fetch }).catch(() => []),
-			cloudApi.getTournamentVideos({ fetch }).catch(() => []),
+				.catch((err: unknown) => {
+					rethrowRateLimit(err);
+					return { tournaments: [], limit: 0, offset: 0 };
+				}),
+			cloudApi.getCreatorVideos({ fetch }).catch((err: unknown) => {
+				rethrowRateLimit(err);
+				return [];
+			}),
+			cloudApi.getTournamentVideos({ fetch }).catch((err: unknown) => {
+				rethrowRateLimit(err);
+				return [];
+			}),
 		]);
 
 	return {
