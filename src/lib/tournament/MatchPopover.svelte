@@ -45,7 +45,7 @@
 		matchSlotSlug,
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
-	import { upcomingScheduledParts } from "$lib/tournament/parts";
+	import { partPlayed, upcomingScheduledParts } from "$lib/tournament/parts";
 	import { seshMatchLine, seshVersus } from "$lib/tournament/sesh";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import {
@@ -382,15 +382,52 @@
 			match.status !== "bye" &&
 			(isAdmin || (isParticipant && match.status === "pending")),
 	);
+	// Schedule rows, played-last-and-collapsed. A long split match
+	// accumulates played sessions that push the one a viewer actually needs
+	// — the NEXT one — below the popover frame's max-h-[85vh] fold, where on
+	// a short laptop screen it clips around the sixth row and the overlay
+	// scrollbar gives no hint there's more (the report that prompted this was
+	// a match on session seven whose only future time sat off-screen).
+	// Collapsing keeps the panel short at any viewport height. A session
+	// counts as played once partPlayed says so — aged out of LIVE_WINDOW_MS,
+	// the same boundary the live/upcoming surfaces draw — so a session being
+	// streamed right now stays inline, in order, with the upcoming ones.
+	// Played sessions render behind a collapsed "N played sessions" toggle
+	// when there are two or more; with nothing else to show, the most recent
+	// played session stays inline so the panel never opens empty. partPlayed
+	// reads the shared clock, so a session slides into the played group as it
+	// ages out.
+	const numberedSessions = $derived(
+		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
+	);
+	const playedSessions = $derived(
+		numberedSessions.filter(({ part }) => partPlayed(part)),
+	);
+	const aheadSessions = $derived(
+		numberedSessions.filter((np) => !playedSessions.includes(np)),
+	);
+	const collapsedSessions = $derived(
+		playedSessions.length >= 2
+			? aheadSessions.length > 0
+				? playedSessions
+				: playedSessions.slice(0, -1)
+			: [],
+	);
+	const scheduleRows = $derived([
+		...playedSessions.filter((np) => !collapsedSessions.includes(np)),
+		...aheadSessions,
+	]);
+	let showPlayed = $state(false);
+
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
 	// castingParts keeps each part's original 1-based number so a split match
 	// labels "Part N" consistently in both panels, and drops parts with no
-	// broadcast info so the casting panel only lists sittings that have some.
+	// broadcast info so the casting panel only lists sessions that have some.
 	const castingParts = $derived(
-		match.parts
-			.map((part, i) => ({ part, partNumber: i + 1 }))
-			.filter(({ part }) => part.casters.length > 0 || part.streams.length > 0),
+		numberedSessions.filter(
+			({ part }) => part.casters.length > 0 || part.streams.length > 0,
+		),
 	);
 	const hasSecondaryActions = $derived(
 		canSchedule ||
@@ -1076,16 +1113,28 @@
 			class="flex flex-col gap-2 rounded-lg p-3"
 			style="background-color: rgb(var(--color-surface-raised));"
 		>
-			{#each match.parts as part, i (part.id)}
+			{#if collapsedSessions.length > 0}
+				<button
+					type="button"
+					class="flex items-center gap-1 self-start text-[10px] font-bold uppercase tracking-wider text-muted transition-colors hover:text-tan"
+					onclick={() => (showPlayed = !showPlayed)}
+					aria-expanded={showPlayed}
+				>
+					<span aria-hidden="true">{showPlayed ? "▾" : "▸"}</span>
+					{collapsedSessions.length} played
+					{collapsedSessions.length === 1 ? "session" : "sessions"}
+				</button>
+			{/if}
+			{#each showPlayed ? [...collapsedSessions, ...scheduleRows] : scheduleRows as { part, partNumber }, i (part.id)}
 				<div
-					class="flex items-center gap-2 {i > 0
+					class="flex items-center gap-2 {i > 0 || collapsedSessions.length > 0
 						? 'border-t border-border-subtle pt-2'
 						: ''}"
 				>
 					{#if match.parts.length > 1}
 						<span
 							class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted"
-							>Part {i + 1}</span
+							>Part {partNumber}</span
 						>
 					{/if}
 					{#if part.scheduled_at}
