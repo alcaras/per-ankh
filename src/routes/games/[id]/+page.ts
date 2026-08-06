@@ -7,6 +7,7 @@ import {
 } from "$lib/api-cloud";
 import type { PageMeta } from "$lib/page-meta";
 import { formatEnum, formatGameTitle } from "$lib/utils/formatting";
+import { rethrowRateLimit } from "$lib/utils/load-errors";
 import { loginBounce } from "$lib/utils/safe-next";
 import type { PageLoad } from "./$types";
 
@@ -67,12 +68,9 @@ function mapApiErrorToPage(err: unknown): never {
 	if (err instanceof ApiError && err.status === 403) {
 		throw error(403, "You don't have access to this game");
 	}
-	if (err instanceof ApiError && err.status === 429) {
-		// Per-IP read limiter exhausted. Surface as 429 (not 500) so re-load
-		// is the user's only remedy and CDNs respect the limit instead of
-		// caching a 500.
-		throw error(429, "Too many requests. Try again in a few minutes.");
-	}
+	// Per-IP read limiter exhausted — one shared rule across every
+	// rate-limited loader.
+	rethrowRateLimit(err);
 	throw err;
 }
 
