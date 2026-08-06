@@ -21,6 +21,7 @@
 	import SchedulePopover from "$lib/tournament/SchedulePopover.svelte";
 	import { matchBracketLabel } from "$lib/tournament/bracket-label";
 	import {
+		matchSlotArchetype,
 		matchSlotAvatarUrl,
 		matchSlotDisplayName,
 		matchSlotNation,
@@ -54,10 +55,13 @@
 	} from "$lib/tournament/matches-table";
 	import type { ScheduleZone } from "$lib/tournament/schedule";
 	import {
+		archetypeSpriteKey,
+		formatArchetype,
 		formatEnum,
 		formatRelativeToNow,
 		formatScheduledInZone,
 	} from "$lib/utils/formatting";
+	import { resolve } from "$app/paths";
 
 	let {
 		columns,
@@ -170,6 +174,7 @@
 		>
 	{:else}
 		{@const nation = matchSlotNation(m, side)}
+		{@const archetype = matchSlotArchetype(m, side)}
 		{@const name = matchSlotDisplayName(m, side, slotLabels) ?? "—"}
 		{@const outcome = matchSlotOutcome(m, side)}
 		<span
@@ -182,6 +187,17 @@
 					value={nation}
 					size={16}
 					alt={formatEnum(nation, "NATION_")}
+				/>
+			{/if}
+			<!-- Starting-ruler archetype glyph beside the crest — the game facts
+			     of the side (what nation, what leader roll), from the same
+			     player_summaries row, ahead of who played it. -->
+			{#if archetype}
+				<SpriteIcon
+					category="traits-trimmed"
+					value={archetypeSpriteKey(archetype)}
+					size={16}
+					alt={formatArchetype(archetype)}
 				/>
 			{/if}
 			<ProfileLink
@@ -270,7 +286,13 @@
 				>
 					{#each columns as column (column.key)}
 						<td class={MATCH_TABLE_TD_CLASS}>
-							{#if column.key === "matchup"}
+							{#if column.key === "number"}
+								{#if m.match_number != null}
+									<span class="opacity-75"
+										>{padMatchNumber(m.match_number)}</span
+									>
+								{/if}
+							{:else if column.key === "matchup"}
 								{@const bracketLabel = matchBracketLabel(tournament, m)}
 								{@const entry = poolEntryById(
 									tournament.map_pool,
@@ -278,7 +300,9 @@
 								)}
 								<div class="flex flex-col gap-0.5">
 									<span class="inline-flex items-center gap-2">
-										{#if m.match_number != null}
+										<!-- Inline handle only when the surface doesn't already
+										     show it as its own # column. -->
+										{#if m.match_number != null && !columns.some((c) => c.key === "number")}
 											<span class="shrink-0 opacity-75">
 												{padMatchNumber(m.match_number)}
 											</span>
@@ -459,6 +483,36 @@
 										<span>—</span>
 									{/if}
 								</div>
+							{:else if column.key === "game"}
+								<!-- The uploaded save's game page — the row's clickable access
+								     to the game itself. "—" when no save is linked (pending, or
+								     a forfeit/bye reported without one). -->
+								{#if m.game_id != null}
+									<a
+										href={resolve("/games/[id]", { id: m.game_id })}
+										class="inline-flex items-center gap-1 text-tan hover:text-orange hover:underline"
+										onclick={(e) => e.stopPropagation()}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											class="h-3.5 w-3.5"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+											stroke-width="2"
+											aria-hidden="true"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M9 5l7 7-7 7"
+											/>
+										</svg>
+										View game
+									</a>
+								{:else}
+									<span class="opacity-60">—</span>
+								{/if}
 							{:else if column.key === "actions"}
 								<!-- Trailing header-less column, right-aligned so the buttons line
 								     up across rows. Two branches split on whether the row has a time
