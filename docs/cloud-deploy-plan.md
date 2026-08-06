@@ -79,10 +79,12 @@ npx wrangler secret put DISCORD_CLIENT_SECRET   # from Discord developer portal
 production Worker (it's the only entry in the preflight's required-secrets list).
 
 **`SSR_TRUSTED_KEY` goes on both Workers, with the same value.** It's what lets
-the API believe the visitor address the frontend forwards on server-rendered
-requests; without it every SSR visitor is counted into one bucket and a single
-crawler can spend the whole site's per-IP budget (`adoptTrustedFrontend` in
-`cloud/src/util.ts`, and the 2026-08-05 outage in `docs/cloudflare-waf.md`).
+the API believe the visitor address and User-Agent the frontend forwards on
+server-rendered requests; without it every SSR visitor is counted into one
+bucket, a single crawler can spend the whole site's per-IP budget, and the
+scraper exemption stops applying to the link-preview crawlers it exists for
+(`adoptTrustedFrontend` in `cloud/src/util.ts`, and the 2026-08-05 outage in
+`docs/cloudflare-waf.md`).
 
 ```bash
 # Generate one value and give it to both:
@@ -94,9 +96,12 @@ npx wrangler secret put SSR_TRUSTED_KEY                 # frontend Worker (repo 
 
 Not in the preflight's required list, because unset is a working state — both
 sides check it, so forwarding stays off until both have it and the two Workers
-can be deployed in either order. The cost of leaving it unset is silent: the
-counters go back to pooling SSR traffic. `ssr_forward_rejected` in the API's
-logs means one side has a value the other doesn't.
+can be deployed in either order. The cost of leaving it unset is silent, and
+silent in the logs too: `ssr_forward_rejected` means a key was presented and
+didn't match (a half-finished rotation), and a Worker with no key at all has
+nothing to reject, so it says nothing. What surfaces the unset case is the
+counters — a Cloudflare egress address at the top of the per-IP bucket query in
+`docs/cloudflare-waf.md` means SSR traffic is pooling again.
 
 ### 3.3. Discord OAuth app
 

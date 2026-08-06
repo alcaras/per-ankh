@@ -87,8 +87,8 @@ Counters live in the D1 `events` table (or the Cache API for legacy downloads) a
 
 Two things shape what "per IP" means for traffic that arrives through `per-ankh.app`'s server-side rendering, since those subrequests leave Cloudflare's SSR egress rather than the visitor's connection:
 
-- **The visitor is the bucket.** The frontend Worker forwards the visitor's edge address and authenticates itself with the `SSR_TRUSTED_KEY` shared secret; `adoptTrustedFrontend` (`cloud/src/util.ts`) verifies it once at the Worker's entry and swaps the address in before any handler reads it. Without a valid key those headers are stripped, so a caller can't claim an address it doesn't have — and with the secret unset on either Worker, nothing is forwarded and every counter behaves as it did before.
-- **A server-rendered page load spends one slot, not one per read.** `/tournaments/[slug]` fetches the tournament, then standings, bracket and matches; on a trusted page load only the first charges `tournament_view` (`ReadRole` in `cloud/src/tournament/public.ts`). Sub-resource reads made directly — a hydrated navigation, or anything hitting the API by hand — are charged individually, and every read is still *gated* whether or not it charges.
+- **The visitor is the bucket.** The frontend Worker forwards the visitor's edge address and User-Agent and authenticates itself with the `SSR_TRUSTED_KEY` shared secret; `adoptTrustedFrontend` (`cloud/src/util.ts`) verifies it once at the Worker's entry and swaps both in before any handler reads them. Without a valid key those headers are stripped, so a caller can't claim an address it doesn't have — and with the secret unset on either Worker, nothing is forwarded and every counter behaves as it did before. The UA travels for the sake of the scraper exemption below: SvelteKit's server fetch sends none of its own, and a link-preview unfurl is always a server-rendered load, so without forwarding the exemption would apply to nothing.
+- **A server-rendered page load spends one slot, not one per read.** `/tournaments/[slug]` fetches the tournament, then standings, bracket and matches; on a trusted page load only the first is gated and charged, and the sub-resources ride along uncounted (`ReadRole` in `cloud/src/tournament/public.ts`). So on server-rendered traffic `tournament_view` bounds **page loads**, and the reads behind them are a multiple of that — six per load on the stats page. Sub-resource reads made directly — a hydrated navigation, or anything hitting the API by hand — are gated and charged individually, so no endpoint is free.
 
 | Bucket | Limit | Applies to |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ Two things shape what "per IP" means for traffic that arrives through `per-ankh.
 | `slug_claim_attempt` | 15 / hr per user | `POST` + `DELETE /v1/users/me/slug` (counts attempts, not successes) |
 | upload / download | per-user + per-IP + global | game upload / download |
 
-Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents are exempt from the anonymous read/view limits (and their audit rows).
+Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents are exempt from the anonymous read/view limits (and their audit rows) — on server-rendered traffic that turns on the forwarded UA above.
 
 ### CORS
 

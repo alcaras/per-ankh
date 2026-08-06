@@ -59,7 +59,7 @@ A bucket at its ceiling is currently rejecting: 600 for either tournament budget
 
 The top bucket is the address to write a rule for: since forwarding shipped, a server-rendered page load is counted against the visitor, so a single abuser shows up as itself rather than pooling into the egress address. Two readings worth knowing:
 
-- **A Cloudflare egress address at the top** now means forwarding is *not* working — the shared secret is missing or mismatched on one of the two Workers (grep the API's logs for `ssr_forward_rejected`). Every SSR visitor is sharing one bucket again, so treat the number as site-wide load, not as one abuser, and fix the secret.
+- **A Cloudflare egress address at the top** now means forwarding is *not* working — the shared secret is missing or mismatched on one of the two Workers. This query is the diagnostic: an egress address topping it is the symptom, and the logs may say nothing at all, since `ssr_forward_rejected` fires on a *mismatched* key and there is nothing to reject when one side simply has no key. Check that both Workers carry `SSR_TRUSTED_KEY` (§3.2 of `docs/cloud-deploy-plan.md`). Meanwhile every SSR visitor is sharing one bucket, so treat the number as site-wide load rather than as one abuser.
 - **A real address at the top** is the crawler, and `per-ankh.app` is still where the rule goes — the API hostname sees the egress as `ip.src` no matter what the counters say.
 
 ## Where the controls live

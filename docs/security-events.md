@@ -70,9 +70,11 @@ no declared pattern, so the tee synthesizes a coarse one (`<METHOD> /v1/admin/*`
 
 ## `actor_ip`
 
-Populated from `CF-Connecting-IP` only when the request traversed Cloudflare's
-edge (`CF-RAY` present) — the same distrust rule as `getClientIp`. `NULL`
-otherwise, which is why local-dev rows have a null `actor_ip` (no edge).
+Populated from `CF-Connecting-IP` when the request traversed Cloudflare's edge (`CF-RAY` present) **or** proved it came from our SSR Worker with `SSR_TRUSTED_KEY` — the same trust rule as `getClientIp`. `NULL` otherwise.
+
+On a trusted server-rendered request the address is the **visitor's**, forwarded by the frontend Worker and swapped in before dispatch (`adoptTrustedFrontend`, `cloud/src/util.ts`) — which is the point: an event names the person rather than Cloudflare's SSR egress, where every server-rendered visitor would otherwise appear as one address. It is an assertion by a caller holding the shared secret rather than a peer address this Worker observed, and the column doesn't distinguish the two, so it is exactly as good as that secret.
+
+Local-dev rows are null for the browser's own API calls (no edge, nothing forwarded). Requests that came through SSR carry the dev machine's address, since `cloud/.dev.vars.example` ships the same key as the committed `.env.development` so the forwarding path is exercised locally.
 
 ## Schema
 
