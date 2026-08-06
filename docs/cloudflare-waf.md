@@ -26,6 +26,8 @@ Client-side navigations *are* different: once a page has hydrated, the browser c
 
 The application layer is no longer in the same position, and the distinction matters when reading the counters below. The frontend Worker now forwards the visitor's address on its subrequests and authenticates itself with a shared secret, so the API's own per-IP budgets are keyed on the visitor even for server-rendered traffic (`adoptTrustedFrontend` in `cloud/src/util.ts`). **A WAF rule still cannot see that** — `ip.src` at the API hostname is the network peer, which for SSR is still the egress, and no forwarded header changes it. So: application counters attribute correctly; WAF rules keyed on the client still belong at `per-ankh.app`.
 
+One thing the application layer deliberately cannot see is the visitor's User-Agent. It doesn't survive the SSR hop and isn't forwarded, because the Worker's scraper exemption (`isScraperUA`) is keyed on a self-declared string and skips the audit row as well as the gate — forwarding it would make `User-Agent: Discordbot/2.0` an unmetered and unlogged path through every read budget. **UA-based rules therefore belong at the edge**, where Cloudflare can also tell you whether the bot is verified. Recipe 2 below is that rule.
+
 ## Worked example: the 2026-08-05 tournament outage
 
 `/tournaments/2026-community-tournament` began returning 500. The cause was not the tournament:
@@ -39,27 +41,29 @@ It self-healed an hour later when the burst aged out of the window.
 
 Steps 2, 3 and 4 have since been fixed in code:
 
-- **2** — the link read has its own budget (`tournament_link_view`, `TOURNAMENT_LINK_VIEW_PER_HOUR`), so game-page traffic no longer spends the tournament pages' allowance.
-- **3** — the frontend forwards each visitor's address on its SSR subrequests, so the burst would now land in the crawler's own bucket instead of pooling with every other visitor on the egress address. A tournament page load also charges one slot now rather than four.
+- **2** — the link read has its own budget (`tournament_link_view`, `TOURNAMENT_LINK_VIEW_PER_HOUR`), so game-page traffic no longer spends the tournament pages' allowance. The tournament *list* read was split out the same way (`tournament_list_view`), because the home page fetches it on every render and had the identical relationship to the pages.
+- **3** — the frontend forwards each visitor's address on its SSR subrequests, so the burst would now land in the crawler's own bucket instead of pooling with every other visitor on the egress address.
 - **4** — every rate-limited loader answers a spent budget with a 429 page (`rethrowRateLimit` in `src/lib/utils/load-errors.ts`) rather than a 500.
 
 Step 1 is the part no code fix reaches: a crawler with its own bucket can still drain that bucket, and 270 page renders a minute is load we are simply serving. **A WAF rate limit on `/games/*` at `per-ankh.app` stops it there**, keyed on the crawler's real IP, with no deploy.
 
-Confirm the application-layer symptom with a read-only query before reaching for a rule. Both read budgets at once, because which one is draining tells you which surface is degraded — `tournament_view` means the tournament pages are 429ing, `tournament_link_view` means game pages are quietly losing their tournament banner:
+Confirm the application-layer symptom with a read-only query before reaching for a rule. All the read budgets at once, because which one is draining tells you which surface is degraded — `tournament_view` means the tournament pages are 429ing, `tournament_list_view` means the home page's tournament strip is emptying, `tournament_link_view` means game pages are quietly losing their tournament banner:
 
 ```bash
 cd cloud && npx wrangler d1 execute per-ankh-share-index --remote --command \
 "SELECT event_type, ip_address, COUNT(*) AS n FROM events \
- WHERE event_type IN ('tournament_view','tournament_link_view','anon_read') \
+ WHERE event_type IN ('tournament_view','tournament_list_view','tournament_link_view','anon_read') \
    AND created_at > datetime('now','-1 hour') \
  GROUP BY event_type, ip_address ORDER BY n DESC LIMIT 10;"
 ```
 
-A bucket at its ceiling is currently rejecting: 600 for either tournament budget (`cloud/src/tournament/limits.ts`, or whatever the matching var is set to), 200 for `anon_read` — which is the tightest of the three and gates the game reads themselves, so a `/games/*` crawl hits it first.
+A bucket at its ceiling is currently rejecting: 2400 for `tournament_view`, 600 for the list and link budgets (`cloud/src/tournament/limits.ts`, or whatever the matching var is set to), 200 for `anon_read` — which is the tightest and gates the game reads themselves, so a `/games/*` crawl hits it first. These count reads, not page loads: `tournament_view` is ~4 reads per tournament page, which is why its number is the larger one for the same amount of browsing.
+
+Read a *quiet* result with suspicion. A scraper-UA caller is exempt from the audit row as well as the gate, so traffic claiming to be a link-preview crawler leaves nothing here at all. If the site is visibly under load and this query looks calm, that's the case to check at the edge (**Security → Events**), not a sign that nothing is happening.
 
 The top bucket is the address to write a rule for: since forwarding shipped, a server-rendered page load is counted against the visitor, so a single abuser shows up as itself rather than pooling into the egress address. Two readings worth knowing:
 
-- **A Cloudflare egress address at the top** now means forwarding is *not* working — the shared secret is missing or mismatched on one of the two Workers. This query is the diagnostic: an egress address topping it is the symptom, and the logs may say nothing at all, since `ssr_forward_rejected` fires on a *mismatched* key and there is nothing to reject when one side simply has no key. Check that both Workers carry `SSR_TRUSTED_KEY` (§3.2 of `docs/cloud-deploy-plan.md`). Meanwhile every SSR visitor is sharing one bucket, so treat the number as site-wide load rather than as one abuser.
+- **A Cloudflare egress address at the top** now means forwarding is *not* working — the shared secret is missing or mismatched on one of the two Workers. This query is the diagnostic: an egress address topping it is the symptom, and the logs may say nothing at all, since `ssr_forward_rejected` fires on a *mismatched* key and there is nothing to reject when one side simply has no key. The `secrets.ssr_trust` preflight check (`./per-ankh prod preflight`) answers the same question without waiting for an incident; §3.2 of `docs/cloud-deploy-plan.md` covers setting the key on both Workers. Meanwhile every SSR visitor is sharing one bucket, so treat the number as site-wide load rather than as one abuser.
 - **A real address at the top** is the crawler, and `per-ankh.app` is still where the rule goes — the API hostname sees the egress as `ip.src` no matter what the counters say.
 
 ## Where the controls live
@@ -98,7 +102,9 @@ When a single misbehaving agent is identifiable by User-Agent. **Security rules 
 
 Action: Managed Challenge, or Block if it is unambiguously hostile. Prefer this over a rate limit when the agent is known, because it costs nothing to evaluate and does not risk catching real users.
 
-To find the agent string, use **Security → Events**, filter to the affected path and time window, and read the User-Agent column. Note this is the only place you can see it: the `events` table in D1 records `ip_address` but not User-Agent, and for SSR traffic it would show the frontend Worker's subrequest anyway, not the visitor's.
+To find the agent string, use **Security → Events**, filter to the affected path and time window, and read the User-Agent column. Note this is the only place you can see it: the `events` table in D1 records `ip_address` but not User-Agent, and the visitor's UA is deliberately not carried across the SSR hop, so the API never sees one for server-rendered traffic either.
+
+This is also the rule to reach for when a crawler is claiming a link-preview UA to stay under the application limits — the exemption is a self-declared header the Worker can't verify, and this is the layer that can.
 
 ## Recipe 3 — emergency brake on a path
 
