@@ -40,6 +40,33 @@ describe("tournamentViewPerHour", () => {
 		);
 	});
 
+	it("falls back below one whole read, which refuses as surely as 0", () => {
+		// The gate is `count >= limit`, so a slipped decimal point is the same
+		// outage as a fat-fingered 0 — 0.5 refuses everything after the first
+		// read, .5 and 1e-3 refuse from the first.
+		expect(tournamentViewPerHour({ TOURNAMENT_VIEW_PER_HOUR: "0.5" })).toBe(
+			TOURNAMENT_VIEW_PER_HOUR,
+		);
+		expect(tournamentViewPerHour({ TOURNAMENT_VIEW_PER_HOUR: ".5" })).toBe(
+			TOURNAMENT_VIEW_PER_HOUR,
+		);
+		expect(tournamentViewPerHour({ TOURNAMENT_VIEW_PER_HOUR: "1e-3" })).toBe(
+			TOURNAMENT_VIEW_PER_HOUR,
+		);
+	});
+
+	it("falls back on a fractional ceiling rather than rounding one", () => {
+		// 1.5 is 2 to the gate and 1.5 to whoever reads the var back. An
+		// operator retuning mid-event should see the number they set take
+		// effect or not at all.
+		expect(tournamentViewPerHour({ TOURNAMENT_VIEW_PER_HOUR: "1.5" })).toBe(
+			TOURNAMENT_VIEW_PER_HOUR,
+		);
+		expect(tournamentViewPerHour({ TOURNAMENT_VIEW_PER_HOUR: "750.5" })).toBe(
+			TOURNAMENT_VIEW_PER_HOUR,
+		);
+	});
+
 	it("falls back on a value that only half-parses", () => {
 		// parseInt("600 per hour") is 600 — a mangled value would pass as a
 		// deliberate one. Number() rejects the whole string.

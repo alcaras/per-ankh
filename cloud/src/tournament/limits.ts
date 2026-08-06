@@ -26,13 +26,16 @@ export const TOURNAMENT_VIEW_PER_HOUR = 600;
 // Shared by both read budgets so the two can't drift in how they parse.
 //
 // Number(), not parseInt(): parseInt("600 per hour") is 600, which would let a
-// mangled value silently pass as a deliberate one. Non-positive is treated as
-// unset rather than "refuse everything" — a fat-fingered 0 during an incident
-// would 429 the whole surface, which is the outage these knobs exist to
-// shorten.
+// mangled value silently pass as a deliberate one. Anything below one whole
+// read is treated as unset rather than "refuse everything" — a fat-fingered 0
+// during an incident would 429 the whole surface, which is the outage these
+// knobs exist to shorten, and so would a slipped decimal point: the gate is
+// `count >= limit`, so 0.5 refuses every read after the first exactly as 0
+// refuses every read at all. Integers only, for the same reason — a ceiling of
+// 1.5 is 2 to the gate and 1.5 to whoever reads it back.
 function ceilingFrom(raw: string | undefined, fallback: number): number {
 	const parsed = Number(raw);
-	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+	return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
 }
 
 // Effective per-IP tournament view ceiling: the TOURNAMENT_VIEW_PER_HOUR var

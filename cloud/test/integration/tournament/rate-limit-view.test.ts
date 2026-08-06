@@ -191,6 +191,13 @@ describe("tournament view ceiling is env-tunable", () => {
 		// The var ships set in both [vars] blocks, so the deployed ceiling is
 		// that number, not the constant. They agree today; this fails if the two
 		// are ever changed apart.
+		//
+		// Asserted on the binding, not through tournamentViewPerHour(): every
+		// way the var can be missing or mangled resolves to the constant, so
+		// routing this through the fallback would pass with no var at all —
+		// which is the one thing it exists to catch. Same shape as the link
+		// budget's below.
+		expect(env.TOURNAMENT_VIEW_PER_HOUR).toBe(String(TOURNAMENT_VIEW_PER_HOUR));
 		expect(tournamentViewPerHour(env)).toBe(TOURNAMENT_VIEW_PER_HOUR);
 	});
 });
