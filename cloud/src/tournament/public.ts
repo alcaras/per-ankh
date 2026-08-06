@@ -150,7 +150,10 @@ async function enforceReadRateLimit(
 		.bind(ip)
 		.run()
 		.catch((e: unknown) => {
-			logError(`${budget.eventType}_audit_failed`, e, { ip });
+			logError("audit_event_log_failed", e, {
+				event_type: budget.eventType,
+				ip,
+			});
 		});
 	return null;
 }
