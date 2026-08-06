@@ -229,12 +229,116 @@ export function isSecureRequest(request: Request): boolean {
 // in a misconfigured topology. Rate-limit callers should fall back to
 // global/per-user limits when this returns null and treat the warn line
 // as a misconfiguration signal.
+//
+// For a server-rendered page load this reads the visitor's address rather than
+// the frontend Worker's, because `adoptTrustedFrontend` has already replaced
+// CF-Connecting-IP on requests that proved they came from our SSR Worker. Call
+// sites need no branch for it — see the block below for why.
+//
+// A trusted request skips the CF-RAY test rather than failing it. That test
+// asks "did this reach us through the edge, or is someone calling the Worker
+// directly and setting whatever address they like" — a question the shared key
+// already answers, and answers better. Keeping the test would leave the whole
+// of forwarding hostage to a header on Worker-to-Worker subrequests that we
+// don't control and can't assert here.
 export function getClientIp(request: Request): string | null {
-	if (!request.headers.get("CF-RAY")) {
+	if (!isTrustedFrontend(request) && !request.headers.get("CF-RAY")) {
 		logWarn("cf_ray_missing");
 		return null;
 	}
 	return request.headers.get("CF-Connecting-IP");
+}
+
+// === Trusted frontend (SSR) requests ===
+//
+// per-ankh.app is server-rendered by our own Worker, and its subrequests to
+// this API don't carry the visitor: SvelteKit's server-side fetch is a fresh
+// request out of Cloudflare's egress, so CF-Connecting-IP on it is one address
+// standing in for every SSR visitor at once (on 2026-08-05, every
+// server-rendered request in production arrived from 2a06:98c0:3600::103).
+// Every per-IP budget here — anon_read, the tournament budgets, uploads,
+// downloads, search — was therefore counting the whole site into a single
+// bucket for that traffic, which is how a crawl of /games/* spent the
+// tournament pages' hourly allowance and 429'd them.
+//
+// The frontend Worker fixes the attribution at the source: it forwards the
+// visitor's edge address and proves it is us with a shared key
+// (`handleFetch` in src/hooks.server.ts). This is the only place that key is
+// checked and the only place those headers are believed — every reader
+// downstream keeps calling getClientIp and gets the right answer.
+//
+// Both sides must have the key for any of it to take effect, so the two
+// Workers can be deployed in either order: until both are set, forwarding is
+// ignored and every counter behaves exactly as it did before.
+
+// Presented by the caller.
+export const SSR_KEY_HEADER = "X-SSR-Key";
+export const SSR_CLIENT_IP_HEADER = "X-SSR-Client-IP";
+// Our own verdict, never believed from the wire: adoptTrustedFrontend strips
+// this off every inbound request and re-adds it only after the key checks out,
+// so a handler reading it is reading this module's conclusion and not the
+// caller's claim.
+const SSR_TRUSTED_HEADER = "X-SSR-Trusted";
+
+export interface TrustedFrontendEnv {
+	// Shared key proving a request is our SSR Worker's subrequest. Set with
+	// `wrangler secret put SSR_TRUSTED_KEY` on both Workers; unset disables
+	// forwarding rather than failing anything.
+	SSR_TRUSTED_KEY?: string;
+}
+
+// A forwarded address becomes a rate-limit bucket key and an `events` row, so
+// it gets a shape check before either. Deliberately loose — IPv4, IPv6, and
+// nothing else long enough to be a payload.
+const FORWARDED_IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
+
+// Resolve the trust question once, at the top of `fetch`, and hand the rest of
+// the Worker a request whose CF-Connecting-IP is the visitor's. Returns the
+// request untouched when no SSR headers are in play (all browser traffic).
+export function adoptTrustedFrontend(
+	request: Request,
+	env: TrustedFrontendEnv,
+): Request {
+	const presented = request.headers.get(SSR_KEY_HEADER);
+	const forwarded = request.headers.get(SSR_CLIENT_IP_HEADER);
+	const claimed = request.headers.get(SSR_TRUSTED_HEADER);
+	if (presented === null && forwarded === null && claimed === null) {
+		return request;
+	}
+
+	const key = env.SSR_TRUSTED_KEY;
+	const trusted =
+		key !== undefined && presented !== null && timingSafeEqual(key, presented);
+
+	// Strip first, unconditionally: a request that arrives claiming to be
+	// trusted must lose that claim before any handler can read it, whatever the
+	// key check then decides.
+	const headers = new Headers(request.headers);
+	headers.delete(SSR_KEY_HEADER);
+	headers.delete(SSR_CLIENT_IP_HEADER);
+	headers.delete(SSR_TRUSTED_HEADER);
+
+	if (trusted) {
+		headers.set(SSR_TRUSTED_HEADER, "1");
+		if (forwarded !== null && FORWARDED_IP_RE.test(forwarded)) {
+			headers.set("CF-Connecting-IP", forwarded);
+		}
+	} else if (key !== undefined) {
+		// A key is configured and this one didn't match: a botched rotation, or
+		// someone probing the header. Worth a line either way.
+		//
+		// No line when the key is unset — that's the feature switched off, and
+		// it's also the window where the frontend has shipped forwarding and this
+		// Worker hasn't yet, which is a supported deploy order and not an event.
+		logWarn("ssr_forward_rejected");
+	}
+
+	return new Request(request, { headers });
+}
+
+// Whether this request is our SSR Worker's subrequest, as decided above.
+export function isTrustedFrontend(request: Request): boolean {
+	return request.headers.get(SSR_TRUSTED_HEADER) === "1";
 }
 
 // base64url encoding of an ArrayBuffer or Uint8Array, no padding.

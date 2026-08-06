@@ -5,6 +5,7 @@ import {
 } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 import { SITE_ADMIN_DISCORD_ID } from "./test/helpers/admin-identity";
+import { SSR_TRUSTED_TEST_KEY } from "./test/helpers/ssr-identity";
 
 const MIGRATIONS_PATH = path.resolve(import.meta.dirname, "./migrations");
 const SECURITY_MIGRATIONS_PATH = path.resolve(
@@ -56,6 +57,13 @@ export default defineConfig({
 								// endpoints are reachable via makeSiteAdmin(). No
 								// makeUser-generated id can collide with it.
 								ADMIN_DISCORD_ID: SITE_ADMIN_DISCORD_ID,
+								// The frontend Worker's shared key, so tests can send a
+								// server-rendered request the way per-ankh.app does and
+								// assert what the API believes about the visitor
+								// (adoptTrustedFrontend in src/util.ts). Bound here rather
+								// than read from .dev.vars — that file is gitignored, and
+								// these tests must pass on a fresh checkout.
+								SSR_TRUSTED_KEY: SSR_TRUSTED_TEST_KEY,
 							},
 						},
 					})),

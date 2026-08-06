@@ -16,7 +16,12 @@
 // Besides `fetch`, the Worker exports a `scheduled` handler: the nightly
 // events-retention sweep (cron in wrangler.toml, policy in retention.ts).
 
-import { cloudCorsHeaders, legacyCorsHeaders } from "./util";
+import {
+	adoptTrustedFrontend,
+	cloudCorsHeaders,
+	legacyCorsHeaders,
+	type TrustedFrontendEnv,
+} from "./util";
 import { instrumentD1, staleTolerantSession } from "./d1";
 import type { QueryableD1 } from "./d1";
 import {
@@ -144,7 +149,8 @@ interface Env
 		TournamentAdminEnv,
 		ShareLegacyEnv,
 		ChannelsEnv,
-		SecurityEventsEnv {
+		SecurityEventsEnv,
+		TrustedFrontendEnv {
 	SHARE_BUCKET: R2Bucket;
 	SHARE_DB: QueryableD1;
 	EVENTS_DB: D1Database;
@@ -1114,6 +1120,14 @@ export default {
 		env: RawBindings,
 		ctx: ExecutionContext,
 	): Promise<Response> {
+		// Settle who the caller is before anything reads the request: on an SSR
+		// subrequest that proves it came from our frontend Worker, this swaps in
+		// the visitor's address so every per-IP counter downstream is keyed on a
+		// person rather than on Cloudflare's SSR egress. See util.ts.
+		//
+		// The log context still gets the original — `cf` (colo) lives on the
+		// inbound request object and nothing downstream reads it.
+		const req = adoptTrustedFrontend(request, env);
 		return runWithLogContext(request, async () => {
 			const url = new URL(request.url);
 			let response: Response;
@@ -1125,7 +1139,7 @@ export default {
 						: legacyCorsHeaders(env);
 					response = new Response(null, { status: 204, headers });
 				} else {
-					response = await dispatch(request, env, ctx);
+					response = await dispatch(req, env, ctx);
 				}
 			} catch (err) {
 				// Top-level safety net. Any uncaught throw becomes a 500 with
@@ -1158,7 +1172,7 @@ export default {
 			// writes to the dedicated SECURITY_DB via ctx.waitUntil. Fully
 			// wrapped — runs on the safety-net 500 path too, and can never alter
 			// or fail the response above.
-			emitSecurityEvent(request, response, env, ctx);
+			emitSecurityEvent(req, response, env, ctx);
 			return response;
 		});
 	},

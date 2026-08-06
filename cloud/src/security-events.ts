@@ -13,6 +13,7 @@
 // fail the response.
 
 import { getLogContext, logError } from "./log";
+import { isTrustedFrontend } from "./util";
 
 export interface SecurityEventsEnv {
 	SECURITY_DB: D1Database;
@@ -179,10 +180,16 @@ export function emitSecurityEvent(
 		);
 		if (!resolved) return;
 
-		// Trust CF-Connecting-IP only when the request traversed the edge
-		// (CF-RAY present) — mirrors getClientIp's distrust rule, but without its
-		// duplicate cf_ray_missing warn since the access log already emitted one.
-		const actorIp = log.cf_ray ? request.headers.get("CF-Connecting-IP") : null;
+		// Trust CF-Connecting-IP when the request traversed the edge (CF-RAY
+		// present) or proved it came from our SSR Worker — mirrors getClientIp's
+		// distrust rule, but without its duplicate cf_ray_missing warn since the
+		// access log already emitted one. On a server-rendered request that
+		// address is the visitor's: adoptTrustedFrontend swapped it in before
+		// dispatch, so a security event names the person and not our egress.
+		const actorIp =
+			log.cf_ray || isTrustedFrontend(request)
+				? request.headers.get("CF-Connecting-IP")
+				: null;
 
 		const meta = resolved.rawPath
 			? JSON.stringify({ raw_path: resolved.rawPath })
