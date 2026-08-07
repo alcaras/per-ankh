@@ -34,6 +34,11 @@
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		user: UserMe | null;
+		// Passed through to the table's actions column. Every row here is a
+		// scheduled sitting, so it changes nothing on this panel today — but the
+		// column decides Schedule-vs-cast from it, and a surface that withheld it
+		// would be the one place the rule reads differently.
+		isAdmin?: boolean;
 		// Admin substitute, threaded into the match card; undefined for non-admins.
 		onSubstitute?: (
 			// eslint-disable-next-line no-unused-vars -- documentary param names
@@ -54,6 +59,7 @@
 		slotSlugs,
 		slotAvatars,
 		user,
+		isAdmin = false,
 		onSubstitute,
 	}: Props = $props();
 
@@ -131,6 +137,7 @@
 		{slotUserIds}
 		{slotSlugs}
 		{slotAvatars}
+		{isAdmin}
 		onRowClick={pick}
 		isLive={(row) => liveSet.has(row)}
 		emptyMessage="No live or upcoming matches."

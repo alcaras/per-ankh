@@ -599,6 +599,7 @@
 					slotUserIds={slotMaps.userIds}
 					slotSlugs={slotMaps.slugs}
 					slotAvatars={slotMaps.avatars}
+					{isAdmin}
 					isLive={(row) => liveSet.has(row)}
 					onRowClick={(m, e) => pick(m.match_id, e)}
 					stickyHeader
@@ -624,6 +625,7 @@
 					slotUserIds={slotMaps.userIds}
 					slotSlugs={slotMaps.slugs}
 					slotAvatars={slotMaps.avatars}
+					{isAdmin}
 					sortColumn={tableState.sortColumn}
 					sortDirection={tableState.sortDirection}
 					onSort={(key) => toggleMatchSort(tableState, key)}
@@ -640,6 +642,7 @@
 					slotUserIds={slotMaps.userIds}
 					slotSlugs={slotMaps.slugs}
 					slotAvatars={slotMaps.avatars}
+					{isAdmin}
 					search={searchTerm}
 					onOpenMatch={(m, e) => pick(m.match_id, e)}
 				/>

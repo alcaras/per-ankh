@@ -152,7 +152,7 @@ export function rowStreams(row: MatchRow): TournamentMatchPartStream[] {
 // concrete scheduled sitting to act on. Backs the "needs a caster" flag and the
 // inline cast controls (CastControls), so they surface on the same rows across
 // every match surface — the buttons additionally excluding the viewer's own
-// match (rowIsOwnPendingMatch). The flag stays on it either way: the match
+// match (rowIsCastableByViewer). The flag stays on it either way: the match
 // genuinely does need a caster, just not that player.
 export function rowIsPendingSitting(row: MatchRow): boolean {
 	return (
@@ -162,28 +162,46 @@ export function rowIsPendingSitting(row: MatchRow): boolean {
 	);
 }
 
-// Whether this row is the viewer's OWN still-pending match — the one row shape
-// that gets the inline Schedule button in the actions column, and the exact
-// complement of the cast buttons beside it (you don't get to cast a match
-// you're playing in; the worker rejects it with PARTICIPANT_CANNOT_CAST). One
-// predicate for both branches, so they can't overlap or leave a gap.
-//
-// Deliberately admin-blind: an admin who got Schedule on every row would never
-// see the cast buttons, which is the whole point of the Cast view. An admin
-// acting on someone else's match still schedules it from the match card, where
-// canSchedule grants them. Placeholder cells have no match row to PATCH, and a
-// bye has no second player, so both are excluded (as `pending` already excludes
-// every decided status).
-export function rowIsOwnPendingMatch(
+// The two branches of the actions column. They split on whether the row has a
+// time yet, so they can never both match: a match awaiting one gets Schedule,
+// a scheduled sitting gets the cast buttons. Casting an unscheduled match is
+// meaningless — there's nothing to turn up for — which is why the schedule side
+// is the one that owns the no-time-yet row.
+
+// Whether the viewer may set this row's time: a pending, non-bye match with no
+// scheduled sitting at all, acted on by one of its two players or by a
+// tournament admin (who schedules the whole field, not just their own game).
+// Placeholder cells have no match row to PATCH, and a bye has no second player,
+// so both are excluded (as `pending` already excludes every decided status).
+export function rowCanSchedule(
 	row: MatchRow,
 	slotUserIds: Record<string, string | null>,
 	user: UserMe | null,
+	isAdmin: boolean,
 ): boolean {
 	return (
 		row.match.is_placeholder !== true &&
 		row.match.status === "pending" &&
 		row.match.slot_b_id != null &&
-		isMatchParticipant(row.match, slotUserIds, user)
+		rowPart(row) == null &&
+		(isAdmin || isMatchParticipant(row.match, slotUserIds, user))
+	);
+}
+
+// Whether the viewer may cast this row's sitting: a still-castable sitting they
+// aren't playing in. Casting is third-party — a player can't cast their own
+// game, and the worker rejects it with 403 PARTICIPANT_CANNOT_CAST — so the
+// buttons come off your own match while the "needs a caster" flag stays on it.
+// Admins are not excluded: an admin who isn't playing casts like anyone else,
+// which is what keeps the Cast view usable for the people who run it.
+export function rowIsCastableByViewer(
+	row: MatchRow,
+	slotUserIds: Record<string, string | null>,
+	user: UserMe | null,
+): boolean {
+	return (
+		rowIsPendingSitting(row) &&
+		!isMatchParticipant(row.match, slotUserIds, user)
 	);
 }
 

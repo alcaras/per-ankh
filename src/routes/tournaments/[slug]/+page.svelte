@@ -889,6 +889,7 @@ for anonymous viewers, non-participants, and once you're out. -->
 	{slotSlugs}
 	{slotAvatars}
 	{user}
+	{isAdmin}
 	onSubstitute={isAdmin ? substituteSlot : undefined}
 />
 
@@ -905,6 +906,7 @@ setup (no matches) and complete (bracket/standings tell that story). -->
 		{slotSlugs}
 		{slotAvatars}
 		{user}
+		{isAdmin}
 		onSubstitute={isAdmin ? substituteSlot : undefined}
 	/>
 {/if}

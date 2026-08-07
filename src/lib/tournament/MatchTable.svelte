@@ -5,8 +5,8 @@
 	// this owns all the cell markup, so a match row and a part row render
 	// identically. It reports header clicks (when sortable) and row clicks (when
 	// clickable), and composes the trailing actions column: the schedule editor
-	// (SchedulePopover) on the viewer's own pending match, the cast buttons
-	// (CastControls) on anyone else's castable sitting.
+	// (SchedulePopover) on a match still awaiting a time, the cast buttons
+	// (CastControls) on a scheduled sitting the viewer isn't playing in.
 	//
 	// Columns are keyed off the shared registry (matches-table.ts).
 	import type {
@@ -41,7 +41,8 @@
 		matchSortInstant,
 		rowCasters,
 		rowStreams,
-		rowIsOwnPendingMatch,
+		rowCanSchedule,
+		rowIsCastableByViewer,
 		rowIsPendingSitting,
 		MATCH_TABLE_FRAME_CLASS,
 		MATCH_TABLE_ROW_CLASS,
@@ -68,6 +69,7 @@
 		slotUserIds,
 		slotSlugs,
 		slotAvatars,
+		isAdmin = false,
 		sortColumn = null,
 		sortDirection = "asc",
 		onSort,
@@ -83,10 +85,11 @@
 		// not a whole TournamentDetail, so a cross-tournament surface can group
 		// rows and hand each group its own compact context.
 		tournament: MatchTableTournament;
-		// The signed-in viewer (null when anonymous), for the actions column: which
-		// of the two branches a row gets turns on whether this is their own match
-		// (resolved against slotUserIds). Anonymous viewers still see the "needs a
-		// caster" flag but no action buttons.
+		// The signed-in viewer (null when anonymous), for the actions column: a row
+		// awaiting a time offers Schedule to its own two players, and a scheduled
+		// one offers the cast buttons to everyone else (resolved against
+		// slotUserIds). Anonymous viewers still see the "needs a caster" flag but no
+		// action buttons.
 		user: UserMe | null;
 		slotLabels: Record<string, string>;
 		// Live slot → per-ankh account, the fallback half of the same snapshot-
@@ -98,6 +101,13 @@
 		// again. Only the player cells read it (casters carry their own slug).
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
+		// Whether the viewer administers THIS tournament — the actions column's only
+		// other input: an admin gets Schedule on every match still awaiting a time,
+		// not just their own. A separate prop rather than a field on
+		// MatchTableTournament, because that type is satisfied structurally by the
+		// profile tab's cross-tournament context, which has no admin notion. Defaults
+		// off, which is the honest answer for every surface that doesn't know.
+		isAdmin?: boolean;
 		// The active sort column/direction, for the header arrow. Only meaningful
 		// alongside onSort (a sortable surface).
 		sortColumn?: string | null;
@@ -451,18 +461,19 @@
 								</div>
 							{:else if column.key === "actions"}
 								<!-- Trailing header-less column, right-aligned so the buttons line
-								     up across rows. Two mutually exclusive branches off the same
-								     predicate: your own pending match gets Schedule (the required
-								     participant action, reachable without opening the card), and
-								     anyone else's castable sitting gets the cast buttons. -->
-								{#if rowIsOwnPendingMatch(row, slotUserIds, user)}
+								     up across rows. Two branches split on whether the row has a time
+								     yet: a match awaiting one gets Schedule (its two players, or an
+								     admin), a scheduled sitting gets the cast buttons (anyone not
+								     playing in it). Disjoint by construction, so the {:else} is
+								     readability, not arbitration. -->
+								{#if rowCanSchedule(row, slotUserIds, user, isAdmin)}
 									<!-- Right-aligned to match CastControls' own justify-end. Its
 									     trigger stops the click itself (like every other control in a
 									     row) so opening the editor doesn't also open the match card. -->
 									<div class="flex justify-end">
 										<SchedulePopover match={m} {tournament} />
 									</div>
-								{:else if rowIsPendingSitting(row)}
+								{:else if rowIsCastableByViewer(row, slotUserIds, user)}
 									<CastControls {row} {tournament} {user} />
 								{/if}
 							{/if}

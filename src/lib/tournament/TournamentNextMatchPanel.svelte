@@ -42,6 +42,10 @@
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		user: UserMe | null;
+		// Passed through to the table's actions column. An admin who is also playing
+		// reaches their own match here like any other player; the flag only widens
+		// what the Schedule button covers, so it never subtracts a row.
+		isAdmin?: boolean;
 		// Admin substitute, threaded into the match card; undefined for non-admins.
 		onSubstitute?: (
 			// eslint-disable-next-line no-unused-vars -- documentary param names
@@ -63,6 +67,7 @@
 		slotSlugs,
 		slotAvatars,
 		user,
+		isAdmin = false,
 		onSubstitute,
 	}: Props = $props();
 
@@ -162,6 +167,7 @@
 			{slotUserIds}
 			{slotSlugs}
 			{slotAvatars}
+			{isAdmin}
 			onRowClick={pick}
 		/>
 	</section>

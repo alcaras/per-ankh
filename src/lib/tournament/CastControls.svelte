@@ -5,9 +5,10 @@
 	// co-caster, or drop. Writes go through the self-service cast endpoints (a
 	// caster only ever touches their own entry) and refresh via invalidateAll.
 	// Rendered on every match surface for pending scheduled sittings the viewer
-	// isn't a participant of — the caller composes that gate from
-	// rowIsPendingSitting and rowIsOwnPendingMatch, and the worker enforces the
-	// participant half (403 PARTICIPANT_CANNOT_CAST). The "needs a caster" flag is
+	// isn't a participant of — the caller gates on rowIsCastableByViewer, and the
+	// worker enforces the participant half (403 PARTICIPANT_CANNOT_CAST). An
+	// unscheduled match has no sitting to cast, so its cell offers the schedule
+	// editor instead. The "needs a caster" flag is
 	// not here; it lives with the caster/stream data in the Casters & Streams cell
 	// and stays on your own match — it still needs one, just not you.
 	//

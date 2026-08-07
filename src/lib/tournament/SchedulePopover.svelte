@@ -2,7 +2,8 @@
 	import { invalidateAll } from "$app/navigation";
 	// Per-match schedule editor, opened as a nested popover off a "Schedule"
 	// button — in the match popover footer, and inline in the match table's
-	// actions column on a participant's own pending match. A match is one game
+	// actions column on a match still awaiting a time (its own two players, or a
+	// tournament admin on any of them). A match is one game
 	// played across one or more "parts" (sittings); this edits the ordered list of
 	// parts, each with its own time (entered in the viewer's zone), casters
 	// (streamer + co-casters), and stream links. Replace-all: Save sends the full
