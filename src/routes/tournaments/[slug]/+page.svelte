@@ -25,6 +25,7 @@
 	import SwissStandings from "$lib/tournament/SwissStandings.svelte";
 	import { matchSlotOutcome } from "$lib/tournament/match-occupant";
 	import TournamentHeader from "$lib/tournament/TournamentHeader.svelte";
+	import TournamentNextMatchPanel from "$lib/tournament/TournamentNextMatchPanel.svelte";
 	import TournamentUpNextPanel from "$lib/tournament/TournamentUpNextPanel.svelte";
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
 	import {
@@ -67,20 +68,8 @@
 	// doesn't re-initialise when arriving from another tab.
 	const clock = getZoneClock();
 
-	// Per-division Swiss view toggle: the bracket diagram and the standings table
-	// occupy one card and are switched (not stacked) to tighten the page. Each
-	// division keeps its own selection so A and B flip independently.
-	// Once the championship is under way the Swiss rounds are settled, so the
-	// standings are the more useful default for each group; the live bracket is
-	// still one toggle away. untrack: this is a one-time initial default, not a
-	// reactive binding (a later phase change shouldn't yank a user's toggle).
-	const defaultSwissView = untrack(() =>
-		data.tournament.status === "championship" ? "standings" : "diagram",
-	);
-	let swissView = $state<Record<Division, "diagram" | "standings">>({
-		A: defaultSwissView,
-		B: defaultSwissView,
-	});
+	// (swissView is initialised below instead of here, beside its championship
+	// sibling: its default reads openMatchId, which isn't declared yet.)
 	let championshipView = $state<"diagram" | "standings">("diagram");
 	// Segmented switch: the triggers are transparent text laid over a sliding
 	// highlight thumb (see each Tabs.List), so the lit surface-raised segment animates
@@ -205,13 +194,15 @@
 	});
 	// Client-synthesized placeholder cells for future championship rounds the
 	// backend hasn't generated yet (final between two semis before both
-	// semis report, etc.). Keyed by synthetic match_id so currentMatch can
-	// find them.
+	// semis report, etc.). The Next Match panel reads the flat list (a player
+	// who's advanced into an ungenerated cell still gets a row); currentMatch
+	// looks them up by synthetic match_id.
+	const placeholders = $derived(
+		synthesizeChampionshipPlaceholders(data.bracket),
+	);
 	const placeholderById = $derived.by(() => {
 		const out: Record<string, TournamentMatch> = {};
-		for (const m of synthesizeChampionshipPlaceholders(data.bracket)) {
-			out[m.match_id] = m;
-		}
+		for (const m of placeholders) out[m.match_id] = m;
 		return out;
 	});
 	const currentMatch = $derived(
@@ -221,6 +212,34 @@
 					null)
 			: null,
 	);
+
+	// Per-division Swiss view toggle: the bracket diagram and the standings table
+	// occupy one card and are switched (not stacked) to tighten the page. Each
+	// division keeps its own selection so A and B flip independently.
+	// Once the championship is under way the Swiss rounds are settled, so the
+	// standings are the more useful default for each group; the live bracket is
+	// still one toggle away. untrack: this is a one-time initial default, not a
+	// reactive binding (a later phase change shouldn't yank a user's toggle).
+	//
+	// Exception: a `?match=` deep link (the scheduling DM's) must land on a
+	// mounted anchor. SwissFlowBracket is the only carrier of `data-match-id` for
+	// Swiss and the toggle is a real {#if}/{:else}, so parking on standings would
+	// leave the popover's customAnchor selector matching nothing — and bits-ui
+	// resolves it once, in an effect tracking only the string, so a miss is
+	// permanent and the card renders unanchored at the viewport origin. Reachable
+	// during championship phase, whose start only requires the FINAL Swiss round
+	// to have no pending matches.
+	const defaultSwissView = untrack(() => {
+		if (data.tournament.status !== "championship") return "diagram";
+		const target = openMatchId
+			? data.matches.find((m) => m.match_id === openMatchId)
+			: undefined;
+		return target?.phase === "swiss" ? "diagram" : "standings";
+	});
+	let swissView = $state<Record<Division, "diagram" | "standings">>({
+		A: defaultSwissView,
+		B: defaultSwissView,
+	});
 
 	function openMatch(matchId: string) {
 		const base = resolve("/tournaments/[slug]", {
@@ -854,6 +873,23 @@
 	{transitionReady}
 	onStart={startTournament}
 	onConfirmTransition={transitionChampionship}
+/>
+
+<!-- Your own next match, directly under the header's progress bar: the reason
+most players open the page, and the only place an unscheduled match of theirs
+is visible at all (every other view partitions by scheduled time). Hides itself
+for anonymous viewers, non-participants, and once you're out. -->
+<TournamentNextMatchPanel
+	tournament={data.tournament}
+	matches={data.matches}
+	{placeholders}
+	zone={clock.zone}
+	{slotLabels}
+	{slotUserIds}
+	{slotSlugs}
+	{slotAvatars}
+	{user}
+	onSubstitute={isAdmin ? substituteSlot : undefined}
 />
 
 <!-- Live & upcoming matches, surfaced on the overview page while the

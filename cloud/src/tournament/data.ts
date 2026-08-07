@@ -403,6 +403,29 @@ export async function loadSlot(
 		.first<SlotRow>();
 }
 
+// Whether a user occupies either side of a match — the participation test
+// shared by the two rules that turn on it: the schedule endpoint's
+// admin-OR-participant gate, and the cast endpoint's refusal to let a player
+// cast their own match (403 PARTICIPANT_CANNOT_CAST). One definition, so the
+// two can't drift into disagreeing about who is playing.
+//
+// Reads the LIVE slots rather than the match's report-time snapshot. Both
+// callers act on matches that are still pending (casting is pending-only;
+// a participant can only edit a pending schedule), and while pending the live
+// occupant IS the person playing — the two answers agree, and the live read is
+// the one that lets a substitute act on the match they inherited.
+export async function isMatchParticipant(
+	env: TournamentEnv,
+	match: Pick<MatchRow, "slot_a_id" | "slot_b_id">,
+	userId: string,
+): Promise<boolean> {
+	const slotA = await loadSlot(env, match.slot_a_id);
+	if (slotA?.user_id === userId) return true;
+	if (!match.slot_b_id) return false;
+	const slotB = await loadSlot(env, match.slot_b_id);
+	return slotB?.user_id === userId;
+}
+
 // Tournament-scoped slot load. Returns null if the slot doesn't exist OR
 // belongs to a different tournament. Use this whenever a handler accepts a
 // slot_id from request input — the URL pins one tournament, the body must

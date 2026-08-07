@@ -645,12 +645,12 @@ Set a match's scheduled sittings (times, casters, streams).
 ### `POST /v1/tournaments/:id/matches/:match_id/parts/:part_id/casters/me`
 Add yourself as a caster on a match part.
 
-- **Auth:** Session (any logged-in user).
+- **Auth:** Session (any logged-in user who isn't a participant in the match).
 - **Path:** `id`, `match_id` (21-char), `part_id` (1–40 chars).
 - **Body:** `CastMatchPartSchema` — `{ role?: "streamer" | "cocaster", stream_url?: string }` (role defaults: streamer if the part has no caster, else co-caster). `stream_url` (YouTube/Twitch allowlist) is saved to the account (`users.stream_url`) before the cast applies — the one-time "remember my stream" path.
 - **Response:** `204 No Content` (refetch to see the result).
-- **Errors:** `400 INVALID_BODY`, `401 UNAUTHORIZED`, `404 MATCH_NOT_FOUND` / `PART_NOT_FOUND`, `409 MATCH_NOT_PENDING` / `TOO_MANY_CASTERS` / `CONFLICT`, `429 RATE_LIMIT_TOURNAMENT_SCHEDULE`.
-- **Notes:** Self-only (keyed by your `user_id`); the caster name is snapshotted from your Discord username. Taking the streamer slot auto-attaches your stored stream link to the part's streams (skipped for co-casters, already-listed URLs, and at the 20-stream cap). CAS on `parts_rev`; max 10 casters/part. Shares the `tournament_schedule` budget.
+- **Errors:** `400 INVALID_BODY`, `401 UNAUTHORIZED`, `403 PARTICIPANT_CANNOT_CAST`, `404 MATCH_NOT_FOUND` / `PART_NOT_FOUND`, `409 MATCH_NOT_PENDING` / `TOO_MANY_CASTERS` / `CONFLICT`, `429 RATE_LIMIT_TOURNAMENT_SCHEDULE`.
+- **Notes:** Self-only (keyed by your `user_id`); the caster name is snapshotted from your Discord username. Casting is third-party: either slot's occupant is refused with `403 PARTICIPANT_CANNOT_CAST` (distinct from `NOT_MATCH_PARTICIPANT`, which means the inverse). Taking the streamer slot auto-attaches your stored stream link to the part's streams (skipped for co-casters, already-listed URLs, and at the 20-stream cap). CAS on `parts_rev`; max 10 casters/part. Shares the `tournament_schedule` budget.
 
 ### `DELETE /v1/tournaments/:id/matches/:match_id/parts/:part_id/casters/me`
 Remove yourself as a caster.
@@ -659,7 +659,7 @@ Remove yourself as a caster.
 - **Path:** `id`, `match_id` (21-char), `part_id` (1–40 chars).
 - **Response:** `204 No Content`.
 - **Errors:** `401 UNAUTHORIZED`, `404 MATCH_NOT_FOUND` / `PART_NOT_FOUND`, `409 MATCH_NOT_PENDING` (bye) / `CONFLICT`, `429 RATE_LIMIT_TOURNAMENT_SCHEDULE`.
-- **Notes:** Self-only. Allowed even on decided matches (byes still rejected). Also removes your stored stream link (matched by URL) from the part's streams, undoing the cast auto-attach.
+- **Notes:** Self-only. Allowed even on decided matches, and on a match you're playing in — no `PARTICIPANT_CANNOT_CAST` here, so anyone credited before casting became third-party-only can still take themselves off (byes still rejected). Also removes your stored stream link (matched by URL) from the part's streams, undoing the cast auto-attach.
 
 ---
 

@@ -1,20 +1,19 @@
 <script lang="ts">
 	import { invalidateAll } from "$app/navigation";
-	// Per-match schedule editor, opened as a nested popover off the "Schedule"
-	// button in the match popover footer. A match is one game played across one
-	// or more "parts" (sittings); this edits the ordered list of parts, each with
-	// its own time (entered in the viewer's zone), casters (streamer + co-casters),
-	// and stream links. Replace-all: Save sends the full parts list. Open to an admin
-	// or either participant on any non-bye match — scheduling ahead while pending,
-	// attaching streams after it's played. Self-contained: owns its own
+	// Per-match schedule editor, opened as a nested popover off a "Schedule"
+	// button — in the match popover footer, and inline in the match table's
+	// actions column on a participant's own pending match. A match is one game
+	// played across one or more "parts" (sittings); this edits the ordered list of
+	// parts, each with its own time (entered in the viewer's zone), casters
+	// (streamer + co-casters), and stream links. Replace-all: Save sends the full
+	// parts list. An admin gets it on any non-bye match (scheduling ahead while
+	// pending, attaching streams after it's played); a participant only while
+	// pending, matching what the endpoint accepts. Self-contained: owns its own
 	// busy/toast/invalidate cycle, so the parent only decides whether to render it.
-	import {
-		cloudApi,
-		type TournamentDetail,
-		type TournamentMatch,
-	} from "$lib/api-cloud";
+	import { cloudApi, type TournamentMatch } from "$lib/api-cloud";
 	import Popover from "$lib/ui/Popover.svelte";
 	import { runAction } from "$lib/tournament/async-action";
+	import type { MatchTableTournament } from "$lib/tournament/matches-table";
 	import FormFooter from "$lib/tournament/FormFooter.svelte";
 	import SchedulePartEditor, {
 		isValidStreamUrl,
@@ -34,11 +33,28 @@
 		tournament,
 	}: {
 		match: TournamentMatch;
-		tournament: TournamentDetail;
+		// Same compact context the match table takes (only `tournament_id`, the
+		// schedule endpoint's path segment, is read here) — so the inline mount in
+		// the table's actions column doesn't need a whole TournamentDetail.
+		// Mirrors CastControls, which narrows for the same reason.
+		tournament: MatchTableTournament;
 	} = $props();
 
 	let open = $state(false);
 	let busy = $state(false);
+
+	// eslint-disable-next-line no-unused-vars -- documentary param name
+	type TriggerClick = (e: MouseEvent) => void;
+
+	// The trigger's click, contained. The inline mount sits inside the match
+	// table's clickable <tr>, so without stopPropagation opening the editor also
+	// opens the match card behind it. Svelte's spread doesn't compose handlers —
+	// a later `onclick` attribute replaces the spread one — so bits-ui's own
+	// onclick, which is what actually opens the popover, is called through here.
+	function openFromTrigger(props: Record<string, unknown>, e: MouseEvent) {
+		e.stopPropagation();
+		(props.onclick as TriggerClick | undefined)?.(e);
+	}
 
 	// Times are entered/displayed in the viewer's own timezone and stored as the
 	// resulting UTC instant, so a match reads correctly in everyone's zone.
@@ -211,6 +227,7 @@
 			{...props}
 			type="button"
 			class="inline-flex items-center gap-1.5 rounded border border-input px-2.5 py-1 text-xs text-tan transition-colors hover:border-orange hover:text-orange"
+			onclick={(e) => openFromTrigger(props, e)}
 		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"

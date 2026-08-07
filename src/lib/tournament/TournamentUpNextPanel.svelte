@@ -14,12 +14,14 @@
 		type TournamentMatch,
 		type UserMe,
 	} from "$lib/api-cloud";
-	import MatchPopover from "$lib/tournament/MatchPopover.svelte";
+	import MatchDetailPopover, {
+		pointerAnchor,
+		type PointerAnchor,
+	} from "$lib/tournament/MatchDetailPopover.svelte";
 	import MatchTable from "$lib/tournament/MatchTable.svelte";
 	import { pickColumns, type MatchRow } from "$lib/tournament/matches-table";
 	import { liveAndUpcoming, type ScheduleZone } from "$lib/tournament/schedule";
 	import { nowMs } from "$lib/stores/now.svelte";
-	import Popover from "$lib/ui/Popover.svelte";
 
 	interface Props {
 		tournament: TournamentDetail;
@@ -80,12 +82,11 @@
 		resolve("/tournaments/[slug]/matches", { slug: tournament.slug }),
 	);
 
-	// --- Match card, anchored at the click point (mirrors the matches page). A
-	// virtual anchor from the pointer keeps the card beside the clicked row.
+	// --- Match card, anchored at the click point (see MatchDetailPopover for why
+	// the panels anchor this way rather than off the page-level popover).
+	// Resolved from `matches` by id so an edit reflects as soon as data refreshes.
 	let detailMatchId = $state<string | null>(null);
-	let detailAnchor = $state<{ getBoundingClientRect: () => DOMRect } | null>(
-		null,
-	);
+	let detailAnchor = $state<PointerAnchor | null>(null);
 	const detailMatch = $derived(
 		detailMatchId
 			? (matches.find((m) => m.match_id === detailMatchId) ?? null)
@@ -93,9 +94,7 @@
 	);
 
 	function pick(match: TournamentMatch, e: MouseEvent) {
-		const x = e.clientX;
-		const y = e.clientY;
-		detailAnchor = { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) };
+		detailAnchor = pointerAnchor(e);
 		detailMatchId = match.match_id;
 	}
 </script>
@@ -138,34 +137,15 @@
 	/>
 </section>
 
-<!-- Match card, anchored at the click point. Independent of the overview page's
-     bracket-cell modal (this one uses a virtual pointer anchor), so the two
-     never fight over the same [data-match-id] element. -->
-<Popover
-	open={detailMatchId !== null}
-	onOpenChange={(o) => {
-		if (!o) detailMatchId = null;
-	}}
-	customAnchor={detailAnchor}
-	side="right"
-	align="start"
-	contentClass="w-[min(92vw,35.2rem)]"
-	frameClass="bg-surface p-3 shadow-[0_24px_64px_-12px_rgb(var(--color-black)/0.85)]"
-	ariaLabel="Match detail"
->
-	{#if detailMatch}
-		{#key detailMatch.match_id}
-			<MatchPopover
-				match={detailMatch}
-				{tournament}
-				{slotLabels}
-				{slotUserIds}
-				{slotSlugs}
-				{slotAvatars}
-				{user}
-				{onSubstitute}
-				onClose={() => (detailMatchId = null)}
-			/>
-		{/key}
-	{/if}
-</Popover>
+<MatchDetailPopover
+	match={detailMatch}
+	anchor={detailAnchor}
+	{tournament}
+	{slotLabels}
+	{slotUserIds}
+	{slotSlugs}
+	{slotAvatars}
+	{user}
+	{onSubstitute}
+	onClose={() => (detailMatchId = null)}
+/>
