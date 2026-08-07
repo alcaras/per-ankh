@@ -1,5 +1,39 @@
 # Changelog
 
+## [2026-08-06-2d7a830] - 2026-08-06
+
+### Features
+
+- (home) merge tournament playlist videos into the video strip — [d22a305](https://github.com/becked/per-ankh/commit/d22a305800fc97a6b627ab67718a948d626a52bd)
+- (cloud) retune the tournament-link ceiling without a redeploy — [7ea4900](https://github.com/becked/per-ankh/commit/7ea49006e588fde552798887490610658ae65623)
+- (cloud) count server-rendered reads against the visitor — [abf0d67](https://github.com/becked/per-ankh/commit/abf0d67bc4bbe97c2c8fa3b4fb9a8af3a4e088a3)
+- (scripts) preflight-check SSR_TRUSTED_KEY on both Workers — [c24e762](https://github.com/becked/per-ankh/commit/c24e76270f0dd58cd894a90092b6f5b8b16e1cd0)
+
+### Fixes
+
+- (tournaments) answer a spent read budget with 429, not 500 — [33f6784](https://github.com/becked/per-ankh/commit/33f6784fde449efb094e17cf0b28bbc3146cd67e)
+- (cloud) give the tournament-link read its own rate-limit budget — [752ff79](https://github.com/becked/per-ankh/commit/752ff79752097246cde1a47c2f00ebd836519932)
+- (tournaments) 429 the profile page when its read budget is spent — [2602699](https://github.com/becked/per-ankh/commit/26026998eda4a88486d9f3f68de78ddafdfb1bdd)
+- (cloud) log read audit failures under the shared event name — [f6b3793](https://github.com/becked/per-ankh/commit/f6b3793bdc6e34fb100cec2c921048fb67aff3c8)
+- (cloud) carry the visitor's User-Agent across the SSR hop — [b16943f](https://github.com/becked/per-ankh/commit/b16943fb98468c276e63224f87a587410d154347)
+- (tournaments) require a read ceiling to be a whole number — [d42c5ca](https://github.com/becked/per-ankh/commit/d42c5cae41aa427aad150925e1ef6e93409f376c)
+- (web) answer a spent read budget on the Videos tab with the 429 page — [c0bb50a](https://github.com/becked/per-ankh/commit/c0bb50a939d7266ab2b9ec9ba659d7cc0dc94636)
+- (cloud) narrow SSR trust to the visitor's address, charge every read — [8dbec5c](https://github.com/becked/per-ankh/commit/8dbec5c9a8f43cf5e3d62b9b4722eac80daaf3e9)
+- (web) answer a spent read budget on the home page with the 429 page — [6973c0c](https://github.com/becked/per-ankh/commit/6973c0c0dac6d0f267476058608a04f9fc4f0daf)
+
+### Performance
+
+- (tournaments) spend one view slot per server-rendered page load — [2c303b3](https://github.com/becked/per-ankh/commit/2c303b3626eed174c0c7d955e5b00ec3c7007e6d)
+
+### Other
+
+- add a Cloudflare WAF runbook for edge rate limiting — [14a8362](https://github.com/becked/per-ankh/commit/14a83622c0dbbcf9bfaf9f37b3750d06f3618027)
+- bring the rate-limit docs in line with what shipped — [fd7c8e7](https://github.com/becked/per-ankh/commit/fd7c8e7d9d4123dd7818857de65f85589f185bcc)
+- correct what the forwarding path actually guarantees — [95fa3d8](https://github.com/becked/per-ankh/commit/95fa3d825cd08548af31d0cbd34cc265b5d73f35)
+- bring the rate-limit docs in line with what the budgets now do — [d49819a](https://github.com/becked/per-ankh/commit/d49819ac103f6bd9fc11be63c68d1ca7c3ba5c66)
+- (web) drop the home page's unreachable 429 re-throws — [f861757](https://github.com/becked/per-ankh/commit/f8617579d59f1deb3d682e86cd8323a6c0392f83)
+- add turn-save series ingestion & storage design — [2d7a830](https://github.com/becked/per-ankh/commit/2d7a830278bc0aafc26ebf6324ffe3b75e7d66c4)
+
 ## [2026-08-03-454ca5e] - 2026-08-03
 
 ### Features
