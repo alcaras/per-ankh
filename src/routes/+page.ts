@@ -63,13 +63,17 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 	// blank the home page. Failures fall through to empty — the section
 	// just shows its empty-state copy.
 	//
-	// A spent read budget is the exception, on every one of them. The empty
+	// A spent read budget is the exception, on the two that have one. The empty
 	// state reads as "there are no tournaments and nothing has been shared
 	// lately", which is a different and wrong answer to "you've made too many
 	// requests" — and it hides the thing an operator most needs to see, since
 	// this page is the busiest reader of both the tournament_list_view and
 	// anon_read budgets. Same rule as every sibling loader, via
 	// rethrowRateLimit.
+	//
+	// The two video feeds are deliberately outside the read budgets and answer
+	// 200 by construction — each handler swallows its own upstream failures to
+	// an empty list — so there is no 429 for them to re-throw.
 	const [recentRes, tournamentsRes, creatorVideos, tournamentVideos] =
 		await Promise.all([
 			cloudApi.listPublicRecent({ fetch }).catch((err: unknown) => {
@@ -82,14 +86,8 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 					rethrowRateLimit(err);
 					return { tournaments: [], limit: 0, offset: 0 };
 				}),
-			cloudApi.getCreatorVideos({ fetch }).catch((err: unknown) => {
-				rethrowRateLimit(err);
-				return [];
-			}),
-			cloudApi.getTournamentVideos({ fetch }).catch((err: unknown) => {
-				rethrowRateLimit(err);
-				return [];
-			}),
+			cloudApi.getCreatorVideos({ fetch }).catch(() => []),
+			cloudApi.getTournamentVideos({ fetch }).catch(() => []),
 		]);
 
 	return {
