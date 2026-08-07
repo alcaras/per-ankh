@@ -15,7 +15,10 @@
 		type UserMe,
 	} from "$lib/api-cloud";
 	import CollapsibleSearch from "$lib/CollapsibleSearch.svelte";
-	import MatchPopover from "$lib/tournament/MatchPopover.svelte";
+	import MatchDetailPopover, {
+		pointerAnchor,
+		type PointerAnchor,
+	} from "$lib/tournament/MatchDetailPopover.svelte";
 	import MatchTable from "$lib/tournament/MatchTable.svelte";
 	import {
 		matchSlotDisplayName,
@@ -50,7 +53,6 @@
 	import CastView from "$lib/tournament/CastView.svelte";
 	import CopyButton from "$lib/tournament/CopyButton.svelte";
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
-	import Popover from "$lib/ui/Popover.svelte";
 	import { toast } from "$lib/ui/toast";
 	import type { PageData } from "./$types";
 
@@ -263,13 +265,12 @@
 	// The columns the matches page shows, in order (shared by both list tabs).
 	const matchColumns = pickColumns(["time", "matchup", "broadcast", "actions"]);
 
-	// --- Match card. Anchored at the click point via a floating-ui virtual
-	// anchor so it opens beside the cursor. detailMatch resolves live from the
-	// match list so an edit reflects at once.
+	// --- Match card, anchored at the click point (see MatchDetailPopover).
+	// detailMatch resolves live from the match list so an edit reflects at once.
+	// Every surface here — both tables, the Cast view, the calendar chips — hands
+	// back a match id rather than the match, so `pick` takes the id.
 	let detailMatchId = $state<string | null>(null);
-	let detailAnchor = $state<{ getBoundingClientRect: () => DOMRect } | null>(
-		null,
-	);
+	let detailAnchor = $state<PointerAnchor | null>(null);
 	const detailMatch = $derived(
 		detailMatchId
 			? (data.matches.find((m) => m.match_id === detailMatchId) ?? null)
@@ -277,9 +278,7 @@
 	);
 
 	function pick(matchId: string, e: MouseEvent) {
-		const x = e.clientX;
-		const y = e.clientY;
-		detailAnchor = { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) };
+		detailAnchor = pointerAnchor(e);
 		detailMatchId = matchId;
 	}
 
@@ -723,35 +722,19 @@
 	{/key}
 </div>
 
-<!-- Match card, anchored at the click point and shared by both views. -->
-<Popover
-	open={detailMatchId !== null}
-	onOpenChange={(o) => {
-		if (!o) detailMatchId = null;
-	}}
-	customAnchor={detailAnchor}
-	side="right"
-	align="start"
-	contentClass="w-[min(92vw,35.2rem)]"
-	frameClass="bg-surface p-3 shadow-[0_24px_64px_-12px_rgb(var(--color-black)/0.85)]"
-	ariaLabel="Match detail"
->
-	{#if detailMatch}
-		{#key detailMatch.match_id}
-			<MatchPopover
-				match={detailMatch}
-				tournament={data.tournament}
-				slotLabels={slotMaps.labels}
-				slotUserIds={slotMaps.userIds}
-				slotSlugs={slotMaps.slugs}
-				slotAvatars={slotMaps.avatars}
-				{user}
-				onSubstitute={isAdmin ? substituteSlot : undefined}
-				onClose={() => (detailMatchId = null)}
-			/>
-		{/key}
-	{/if}
-</Popover>
+<!-- Match card, anchored at the click point and shared by every view. -->
+<MatchDetailPopover
+	match={detailMatch}
+	anchor={detailAnchor}
+	tournament={data.tournament}
+	slotLabels={slotMaps.labels}
+	slotUserIds={slotMaps.userIds}
+	slotSlugs={slotMaps.slugs}
+	slotAvatars={slotMaps.avatars}
+	{user}
+	onSubstitute={isAdmin ? substituteSlot : undefined}
+	onClose={() => (detailMatchId = null)}
+/>
 
 <style>
 	/* Crossfade the two views: both panes share the grid cell so the outgoing
