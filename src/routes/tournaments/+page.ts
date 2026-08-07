@@ -1,5 +1,6 @@
 import { error } from "@sveltejs/kit";
 import { ApiError, cloudApi } from "$lib/api-cloud";
+import { rethrowRateLimit } from "$lib/utils/load-errors";
 import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ fetch }) => {
@@ -17,6 +18,7 @@ export const load: PageLoad = async ({ fetch }) => {
 			},
 		};
 	} catch (err) {
+		rethrowRateLimit(err);
 		// Surface a real 404 as a SvelteKit 404 so the page renders the
 		// not-found view rather than a generic "Internal Error."
 		if (err instanceof ApiError && err.status === 404) {

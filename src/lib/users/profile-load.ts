@@ -13,6 +13,7 @@ import {
 	type CollectionsListResponse,
 	type UserProfile,
 } from "$lib/api-cloud";
+import { rethrowRateLimit } from "$lib/utils/load-errors";
 import { loginBounce } from "$lib/utils/safe-next";
 import type { ChartBundle, UserScope } from "$lib/stats/types";
 
@@ -154,13 +155,18 @@ export async function buildProfilePage(args: {
 export type ProfilePageData = Awaited<ReturnType<typeof buildProfilePage>>;
 
 // Shared failure mapping for both routes: an anonymous visitor hitting a
-// session-required sub-fetch bounces to login, a missing user is a 404, and
-// everything else — including SvelteKit's own redirect()/error() throws, which
-// is what carries the id route's 307 out — propagates untouched.
+// session-required sub-fetch bounces to login, a spent read budget is a 429, a
+// missing user is a 404, and everything else — including SvelteKit's own
+// redirect()/error() throws, which is what carries the id route's 307 out —
+// propagates untouched.
+//
+// The 429 reaches here through the Tournaments tab: getUserTournaments draws on
+// the per-IP tournament_view budget, the same one the /tournaments pages spend.
 export function rethrowProfileLoadError(err: unknown, url: URL): never {
 	if (err instanceof UnauthorizedError) {
 		throw redirect(303, loginBounce(url));
 	}
+	rethrowRateLimit(err);
 	if (err instanceof ApiError && err.status === 404) {
 		throw error(404, "User not found");
 	}

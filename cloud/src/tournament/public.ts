@@ -44,7 +44,11 @@ import {
 	type TournamentEnv,
 	type TournamentRow,
 } from "./data";
-import { TOURNAMENT_VIEW_PER_HOUR } from "./limits";
+import {
+	tournamentLinkViewPerHour,
+	tournamentListViewPerHour,
+	tournamentViewPerHour,
+} from "./limits";
 import {
 	computeStandings,
 	rankStandings,
@@ -77,6 +81,13 @@ import type { EventsEnv } from "../d1";
 export interface TournamentPublicEnv
 	extends TournamentEnv, SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
+	// Per-IP hourly ceilings on the three read budgets. Optional: unset falls
+	// back to the constant of the same name (see tournamentViewPerHour /
+	// tournamentListViewPerHour / tournamentLinkViewPerHour). Vars rather than
+	// bare consts so any of them can be retuned mid-event without a redeploy.
+	TOURNAMENT_VIEW_PER_HOUR?: string;
+	TOURNAMENT_LIST_VIEW_PER_HOUR?: string;
+	TOURNAMENT_LINK_VIEW_PER_HOUR?: string;
 	// Optional YouTube Data API key. When set, the Videos tab enumerates the
 	// whole playlist (so its search can reach every video); when unset, it falls
 	// back to the free RSS feed's most-recent entries. Same secret the channel
@@ -87,43 +98,143 @@ export interface TournamentPublicEnv
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 20;
 
-// Per-IP rate limit on anonymous tournament reads. Scraper User-Agents
-// (Discord/Slack/Twitter link previews) bypass both the gate and the
-// audit-log insert — they fan out load that's not meaningful to count.
-// Applies to everyone, including signed-in users; 600/hour is generous
-// enough that no real UI traffic should hit it.
-async function enforceTournamentViewRateLimit(
+// A per-IP read budget: which events rows count toward it, and how it answers
+// once it's spent. One shape, three instances — see the three below, and
+// limits.ts for why they aren't one.
+interface ReadBudget {
+	eventType:
+		| "tournament_view"
+		| "tournament_list_view"
+		| "tournament_link_view";
+	message: string;
+	code: string;
+}
+
+const VIEW_BUDGET: ReadBudget = {
+	eventType: "tournament_view",
+	message: "Tournament view rate limit exceeded",
+	code: "RATE_LIMIT_TOURNAMENT_VIEW",
+};
+
+const LIST_BUDGET: ReadBudget = {
+	eventType: "tournament_list_view",
+	message: "Tournament list rate limit exceeded",
+	code: "RATE_LIMIT_TOURNAMENT_LIST",
+};
+
+const LINK_BUDGET: ReadBudget = {
+	eventType: "tournament_link_view",
+	message: "Tournament link rate limit exceeded",
+	code: "RATE_LIMIT_TOURNAMENT_LINK",
+};
+
+// Per-IP rate limit on a public read. Scraper User-Agents (Discord/Slack/
+// Twitter link previews) bypass both the gate and the audit-log insert — they
+// fan out load that's not meaningful to count. Applies to everyone else,
+// including signed-in users.
+//
+// Every read is gated and charged, on every caller. There is no cheaper class
+// of read and no caller who pays less: a tournament page load costs one slot
+// per backend read it makes, whether it was server-rendered or navigated to in
+// a hydrated client. The ceilings are set in reads to match — see
+// TOURNAMENT_VIEW_PER_HOUR for what that works out to per page.
+//
+// This was briefly a per-*page-load* charge, where a sub-resource behind
+// loadViewableTournament skipped both the gate and the count if the caller
+// proved it was our SSR Worker. That saved three to five COUNT(*) per render,
+// and cost more than it saved: the same page charged 1 via SSR and 4–6 via a
+// hydrated navigation, the ceiling meant reads on one path and page loads on
+// the other, and the rate limiter had a branch on who you are. The shared key
+// now settles exactly one question — which visitor is this — and nothing about
+// what a read costs.
+//
+// `eventType` is interpolated into the INSERT rather than bound: event_type
+// is part of the statement's structure, not a value. The literal union closes
+// the injection path — same reasoning as RateLimitedEventType in games.ts.
+async function enforceReadRateLimit(
 	env: TournamentPublicEnv,
 	request: Request,
 	cors: Record<string, string>,
+	budget: ReadBudget,
+	limit: number,
 ): Promise<Response | null> {
 	const ua = request.headers.get("User-Agent");
 	if (isScraperUA(ua)) return null;
 	const ip = getClientIp(request) ?? "untrusted";
 	const count = await countEventsSince(
 		env.EVENTS_DB,
-		"tournament_view",
+		budget.eventType,
 		"ip_address",
 		ip,
 	);
-	if (count >= TOURNAMENT_VIEW_PER_HOUR) {
-		return errorResponse(
-			"Tournament view rate limit exceeded",
-			429,
-			cors,
-			"RATE_LIMIT_TOURNAMENT_VIEW",
-		);
+	if (count >= limit) {
+		return errorResponse(budget.message, 429, cors, budget.code);
 	}
 	env.EVENTS_DB.prepare(
 		`INSERT INTO events (event_type, ip_address)
-		 VALUES ('tournament_view', ?)`,
+		 VALUES ('${budget.eventType}', ?)`,
 	)
 		.bind(ip)
 		.run()
 		.catch((e: unknown) => {
-			logError("tournament_view_audit_failed", e, { ip });
+			logError("audit_event_log_failed", e, {
+				event_type: budget.eventType,
+				ip,
+			});
 		});
 	return null;
+}
+
+// The tournament pages' budget: detail/standings/bracket/rounds/matches/
+// match-detail and both stats reads. Retunable mid-event via the env var.
+function enforceTournamentViewRateLimit(
+	env: TournamentPublicEnv,
+	request: Request,
+	cors: Record<string, string>,
+): Promise<Response | null> {
+	return enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		VIEW_BUDGET,
+		tournamentViewPerHour(env),
+	);
+}
+
+// The tournament list read's own budget. Separate from the pages' one because
+// the home page fetches the list on every render — see
+// TOURNAMENT_LIST_VIEW_PER_HOUR — so on a shared budget the landing page
+// decides when /tournaments/[slug] starts refusing.
+function enforceTournamentListRateLimit(
+	env: TournamentPublicEnv,
+	request: Request,
+	cors: Record<string, string>,
+): Promise<Response | null> {
+	return enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		LIST_BUDGET,
+		tournamentListViewPerHour(env),
+	);
+}
+
+// The game→tournament link read's own budget. Separate from the pages' one
+// because /games/[id] traffic is a different population from /tournaments/*
+// traffic — see TOURNAMENT_LINK_VIEW_PER_HOUR. Retunable mid-event via its own
+// env var, on the same lever as the view ceiling.
+function enforceTournamentLinkRateLimit(
+	env: TournamentPublicEnv,
+	request: Request,
+	cors: Record<string, string>,
+): Promise<Response | null> {
+	return enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		LINK_BUDGET,
+		tournamentLinkViewPerHour(env),
+	);
 }
 
 // Public-read leniency for the map_pool column: render the tournament even when
@@ -148,7 +259,7 @@ export async function handleTournamentList(
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 	const session = await sessionFromRequest(env, request);
-	const rl = await enforceTournamentViewRateLimit(env, request, cors);
+	const rl = await enforceTournamentListRateLimit(env, request, cors);
 	if (rl) return rl;
 	const url = new URL(request.url);
 	const status = url.searchParams.get("status");
@@ -1617,6 +1728,8 @@ export async function handleUserTournaments(
 	env: TournamentPublicEnv,
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
+	// Charged against the tournament pages' budget: this is the profile page's
+	// Tournaments tab, which draws on the same data and the same D1 tables.
 	const rl = await enforceTournamentViewRateLimit(env, request, cors);
 	if (rl) return rl;
 	const session = await sessionFromRequest(env, request);
@@ -1802,13 +1915,18 @@ export async function handleUserTournaments(
 // pair if the game is linked, or null. Used by the /games/[id] page to
 // render the "linked to tournament X" preTabs banner. Public like the rest
 // of the tournament read surface.
+//
+// Metered on its own budget, not the tournament one. This runs on every game
+// page render — before it is known whether the game is linked at all — so on
+// the shared budget a crawl of /games/[id] exhausts the allowance the
+// tournament pages need and 429s them instead (the 2026-08-05 outage).
 export async function handleGameTournamentLink(
 	gameId: string,
 	request: Request,
 	env: TournamentPublicEnv,
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
-	const rl = await enforceTournamentViewRateLimit(env, request, cors);
+	const rl = await enforceTournamentLinkRateLimit(env, request, cors);
 	if (rl) return rl;
 	const row = await env.SHARE_DB.prepare(
 		`SELECT m.match_id, m.slot_a_id, m.slot_b_id, m.status, m.winner_slot_id,

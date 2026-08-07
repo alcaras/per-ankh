@@ -1,5 +1,6 @@
 import { error } from "@sveltejs/kit";
 import { ApiError, cloudApi } from "$lib/api-cloud";
+import { rethrowRateLimit } from "$lib/utils/load-errors";
 import type { LayoutLoad } from "./$types";
 
 // Shared tournament data for every page under /tournaments/[slug] (the overview
@@ -8,29 +9,35 @@ import type { LayoutLoad } from "./$types";
 // only its own page meta. SvelteKit merges this layout data into page data.
 export const load: LayoutLoad = async ({ params, fetch }) => {
 	// Public — shared tournament URLs render for anonymous visitors.
-	let tournament;
+	//
+	// All four reads draw on the same per-IP tournament_view budget, so an
+	// exhausted budget fails them together — the parallel block is inside the
+	// try for that reason, not just getTournament. A 404 from one of the three
+	// (the tournament vanished between calls) lands on the not-found page too,
+	// which is the honest answer for that race.
 	try {
-		tournament = await cloudApi.getTournament(params.slug, { fetch });
+		const tournament = await cloudApi.getTournament(params.slug, { fetch });
+
+		// Parallel reads — standings + bracket + recent matches are independent.
+		// Bracket is empty until championship phase; that's fine, the component
+		// renders a placeholder.
+		const [standings, bracket, matches] = await Promise.all([
+			cloudApi.getTournamentStandings(tournament.tournament_id, { fetch }),
+			cloudApi.getTournamentBracket(tournament.tournament_id, { fetch }),
+			cloudApi.getTournamentMatches(tournament.tournament_id, {}, { fetch }),
+		]);
+
+		return {
+			tournament,
+			standings,
+			bracket,
+			matches: matches.matches,
+		};
 	} catch (err) {
+		rethrowRateLimit(err);
 		if (err instanceof ApiError && err.status === 404) {
 			throw error(404, "Tournament not found");
 		}
 		throw err;
 	}
-
-	// Parallel reads — standings + bracket + recent matches are independent.
-	// Bracket is empty until championship phase; that's fine, the component
-	// renders a placeholder.
-	const [standings, bracket, matches] = await Promise.all([
-		cloudApi.getTournamentStandings(tournament.tournament_id, { fetch }),
-		cloudApi.getTournamentBracket(tournament.tournament_id, { fetch }),
-		cloudApi.getTournamentMatches(tournament.tournament_id, {}, { fetch }),
-	]);
-
-	return {
-		tournament,
-		standings,
-		bracket,
-		matches: matches.matches,
-	};
 };

@@ -12,6 +12,7 @@
 // Other hardening — XFO, Referrer-Policy, Permissions-Policy, X-Content-
 // Type-Options — applies regardless of the request type.
 
+import { env as privateEnv } from "$env/dynamic/private";
 import type { Handle, HandleFetch } from "@sveltejs/kit";
 
 // Build-time API base — the same var the API client reads
@@ -86,10 +87,50 @@ const reportToHeader = JSON.stringify({
 // Pairs with cloud/src/session.ts setting Domain=per-ankh.app on the
 // session cookie — that's what makes the cookie visible on the frontend
 // hostname (where SSR reads it) in the first place.
+//
+// The visitor's address needs forwarding for the same reason and doesn't
+// survive the hop either: this fetch leaves as a fresh request from
+// Cloudflare's egress, so the API sees one address for every SSR visitor at
+// once and its per-IP rate limits count the whole site into one bucket (the
+// 2026-08-05 outage). SSR_TRUSTED_KEY is what lets the API believe the
+// address we send instead — a caller who can't present it gets these headers
+// stripped, so nothing here lets a visitor claim someone else's IP. Unset on
+// either side means no forwarding, which is exactly the old behaviour, so the
+// two Workers can be deployed in either order.
+//
+// The address is all we forward. The visitor's User-Agent doesn't survive the
+// hop either, and sending it would switch on the API's scraper exemption
+// (isScraperUA in cloud/src/games.ts) for ordinary site traffic — an exemption
+// keyed on a string the caller types, granted before both the rate-limit gate
+// and its audit row. Anyone sending `User-Agent: Discordbot/2.0` here would
+// become unmetered and invisible at once. Forwarding the address alone already
+// leaves link-preview crawlers better off than they were: metered against
+// their own IP instead of pooled onto the egress with everyone else.
+//
+// Header names are duplicated from cloud/src/util.ts — separate builds, no
+// shared module between them.
 export const handleFetch: HandleFetch = ({ event, request, fetch }) => {
 	if (new URL(request.url).origin === API_ORIGIN) {
 		const cookie = event.request.headers.get("cookie");
 		if (cookie) request.headers.set("cookie", cookie);
+
+		const ssrKey = privateEnv.SSR_TRUSTED_KEY;
+		if (ssrKey) {
+			request.headers.set("X-SSR-Key", ssrKey);
+			// CF-Connecting-IP is what the API reads for everyone else; falling
+			// back to getClientAddress() keeps `vite dev` (no edge headers) on the
+			// same path rather than leaving it untested until production.
+			const clientIp =
+				event.request.headers.get("CF-Connecting-IP") ??
+				event.getClientAddress();
+			// Deleted, not just conditionally set: the key goes out unconditionally
+			// above, so a request that reached this subrequest carrying an address
+			// we didn't put there would go out keyed and believed. Nothing copies
+			// visitor headers onto a cross-origin server fetch today — this is what
+			// keeps that from being load-bearing.
+			request.headers.delete("X-SSR-Client-IP");
+			if (clientIp) request.headers.set("X-SSR-Client-IP", clientIp);
+		}
 	}
 	return fetch(request);
 };

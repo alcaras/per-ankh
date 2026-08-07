@@ -15,9 +15,11 @@
 				? "Not allowed"
 				: status === 401
 					? "Sign in required"
-					: status >= 500
-						? "Something went wrong"
-						: "Error",
+					: status === 429
+						? "Too many requests"
+						: status >= 500
+							? "Something went wrong"
+							: "Error",
 	);
 
 	// Only offer "Go back" when this tab has a prior history entry —

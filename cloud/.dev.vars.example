@@ -11,6 +11,17 @@
 # in docs/dev-login.md.
 DEV_LOGIN=1
 
+# Shared key that lets this Worker believe the visitor IP the frontend Worker
+# forwards on server-rendered requests (cloud/src/util.ts
+# adoptTrustedFrontend). The value below matches SSR_TRUSTED_KEY in the
+# committed `.env.development`, so copying this file as-is exercises the same
+# path locally that prod uses; leaving it out just means SSR requests count
+# against the dev server's own address, as they did before forwarding existed.
+# In prod/staging it's a real secret, set on BOTH Workers:
+#   npx wrangler secret put SSR_TRUSTED_KEY            (this Worker)
+#   npx wrangler secret put SSR_TRUSTED_KEY --config ../wrangler.toml
+SSR_TRUSTED_KEY=dev-ssr-trusted-key
+
 # Only needed for REAL Discord OAuth locally (skip it if you use DEV_LOGIN
 # above). Get the value from the Discord app at
 # https://discord.com/developers/applications. Real OAuth also requires that app

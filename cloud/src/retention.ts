@@ -25,6 +25,15 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 		types: [
 			"anon_read",
 			"tournament_view",
+			// Tournament list reads (tournament/public.ts): its own budget rather
+			// than tournament_view's, so the home page's tournament strip can't
+			// drain the tournament pages' allowance. Same 1h counter role,
+			// metadata-free.
+			"tournament_list_view",
+			// Game→tournament link reads (tournament/public.ts): its own budget
+			// rather than tournament_view's, so /games/* crawls can't drain the
+			// tournament pages' allowance. Same 1h counter role, metadata-free.
+			"tournament_link_view",
 			"user_search",
 			// Header people search (users.ts): same counter role as
 			// user_search, its own budget. Metadata is q_length only.

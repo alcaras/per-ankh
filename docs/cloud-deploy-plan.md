@@ -78,6 +78,36 @@ npx wrangler secret put DISCORD_CLIENT_SECRET   # from Discord developer portal
 `./per-ankh prod preflight` will fail if `DISCORD_CLIENT_SECRET` is unset on the
 production Worker (it's the only entry in the preflight's required-secrets list).
 
+**`SSR_TRUSTED_KEY` goes on both Workers, with the same value.** It's what lets
+the API believe the visitor address the frontend forwards on
+server-rendered requests; without it every SSR visitor is counted into one
+bucket and a single crawler can spend the whole site's per-IP budget
+(`adoptTrustedFrontend` in `cloud/src/util.ts`, and the 2026-08-05 outage in
+`docs/cloudflare-waf.md`).
+
+```bash
+# Generate one value and give it to both:
+openssl rand -base64 32
+
+(cd cloud && npx wrangler secret put SSR_TRUSTED_KEY)   # API Worker
+npx wrangler secret put SSR_TRUSTED_KEY                 # frontend Worker (repo root)
+```
+
+Not in the preflight's **required** list, because unset is a working state —
+both sides check it, so forwarding stays off until both have it and the two
+Workers can be deployed in either order.
+
+It is checked, though. Leaving it unset costs nothing at deploy time and
+everything at runtime, silently: `ssr_forward_rejected` means a key was
+presented and didn't match (a half-finished rotation), and a Worker with no key
+at all has nothing to reject, so it says nothing. The `secrets.ssr_trust`
+preflight check stands in for that missing signal — it lists the secrets on
+both Workers and **warns** when neither has the key, **fails non-blockingly**
+when only one does. Neither state stops a deploy; both are printed, so the
+deploy window can't quietly become permanent. The runtime confirmation is still
+the counters — a Cloudflare egress address at the top of the per-IP bucket
+query in `docs/cloudflare-waf.md` means SSR traffic is pooling again.
+
 ### 3.3. Discord OAuth app
 
 Both prod and dev redirect URIs are already configured in the Discord
@@ -703,7 +733,12 @@ All commands from `cloud/` unless noted. Each authenticates via `wrangler login`
    ```bash
    npx wrangler secret put DISCORD_CLIENT_SECRET --env staging
    npx wrangler secret put ADMIN_DISCORD_ID --env staging   # optional: staging site-admin
+   npx wrangler secret put SSR_TRUSTED_KEY --env staging    # same value on both staging Workers
    ```
+
+   `SSR_TRUSTED_KEY` also goes on the staging *frontend* Worker
+   (`npx wrangler secret put SSR_TRUSTED_KEY --env staging` from the repo root)
+   — its own value, not prod's. See §3.2 for what it does.
 
    Wrangler stores secrets on a worker, and the staging worker doesn't exist before the first deploy — so the first `secret put` asks *"There doesn't seem to be a Worker called per-ankh-share-api-staging — create it?"*. Answer **yes**: it creates an empty worker shell that the real deploy then overwrites. (Declining silently discards the secret, and staging preflight then blocks on `secrets.required`.)
 

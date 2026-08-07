@@ -169,6 +169,38 @@ PER_IP_UPLOADS_PER_HOUR = "200"
 # a real "something is wrong" threshold, not a normal-growth ceiling.
 GLOBAL_UPLOADS_PER_HOUR = "5000"
 
+# === Tournament read limits ===
+# Per-IP hourly ceilings on the two tournament read budgets
+# (cloud/src/tournament/limits.ts). Vars, not just code consts, so either can
+# be retuned during a live event without a redeploy — same lever as
+# UPLOADS_ENABLED: `npx wrangler secret put TOURNAMENT_VIEW_PER_HOUR` takes
+# effect immediately. Unset or unparseable falls back to the code default,
+# which is this number.
+#
+# The override is temporary. A secret and a var of the same name collide, and
+# the var wins: the next `wrangler deploy` warns "Configuration values (…)
+# conflict with existing remote secrets. This deployment will replace these
+# remote secrets with the configuration values" and puts this number back. So
+# an incident-time secret survives only until the next deploy — to keep a new
+# ceiling, change it here and ship it.
+#
+# Three budgets, by the surface that spends them, not by feature:
+#   _VIEW_ — the tournament pages (detail + standings/bracket/matches/stats)
+#   _LIST_ — GET /v1/tournaments, which the *home page* fetches every render
+#   _LINK_ — GET /v1/games/:id/tournament-link, every game-page render
+# Separate so the busiest surface can't decide when the others start refusing
+# — that coupling is what took the tournament pages down on 2026-08-05, with
+# /games/* as the busy surface. Keep them separate when retuning.
+#
+# All three count *reads*, not page loads, and the numbers differ because the
+# fan-out does: _VIEW_ is ~4 reads per tournament page (6 on stats), the other
+# two are one read each. So all three are about 600 page loads an hour per
+# visitor. Retuning one is deciding how much *browsing* to allow — convert
+# through the fan-out, don't copy a number across.
+TOURNAMENT_VIEW_PER_HOUR = "2400"
+TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
+TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
+
 # === Cloud rewrite (/v1/auth/*, /v1/games/*) ===
 # CORS allowlist for new routes — comma-separated origins. Cookie-based
 # auth requires Access-Control-Allow-Credentials: true, which forbids the
@@ -278,6 +310,9 @@ UPLOADS_ENABLED = "true"
 PER_USER_UPLOADS_PER_HOUR = "100"
 PER_IP_UPLOADS_PER_HOUR = "200"
 GLOBAL_UPLOADS_PER_HOUR = "5000"
+TOURNAMENT_VIEW_PER_HOUR = "2400"
+TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
+TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 ALLOWED_ORIGINS = "https://staging.per-ankh.app"
 # Separate staging Discord OAuth app — paste its client ID:
 DISCORD_CLIENT_ID = "1512545079493922927"

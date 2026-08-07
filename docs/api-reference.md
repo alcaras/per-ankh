@@ -85,10 +85,19 @@ From there it's the user's: [`POST /v1/users/me/slug`](#post-v1usersmeslug) rena
 
 Counters live in the D1 `events` table (or the Cache API for legacy downloads) and are keyed per-user, per-IP, or globally depending on the endpoint. Notable buckets:
 
+Two things shape what "per IP" means for traffic that arrives through `per-ankh.app`'s server-side rendering, since those subrequests leave Cloudflare's SSR egress rather than the visitor's connection:
+
+- **The visitor is the bucket.** The frontend Worker forwards the visitor's edge address and authenticates itself with the `SSR_TRUSTED_KEY` shared secret; `adoptTrustedFrontend` (`cloud/src/util.ts`) verifies it once at the Worker's entry and swaps the address in before any handler reads it. Without a valid key those headers are stripped, so a caller can't claim an address it doesn't have — and with the secret unset on either Worker, nothing is forwarded and every counter behaves as it did before. The address is all that travels: the visitor's User-Agent is deliberately **not** forwarded, because it would extend the scraper exemption below to anyone who types `Discordbot/2.0` into a header.
+- **The address is the only thing the key buys.** Every read is gated and charged the same for every caller — there is no cheaper class of read and no discount for being our own SSR Worker. A cold `/tournaments/[slug]` costs four slots (the tournament, then standings, bracket and matches) whether it was server-rendered or reached by a hydrated navigation, and the stats page costs six. That is why the ceilings below are stated in **reads**, and why the tournament-page one is four times the others: converting to page loads is the operator's job, and the fan-out is the conversion factor.
+
+The three tournament read buckets are split by the *surface that spends them*, not by feature: a read a busy page makes on every render must not share a budget with the pages it could otherwise take down (see `cloud/src/tournament/limits.ts`).
+
 | Bucket | Limit | Applies to |
 | --- | --- | --- |
 | `anon_read` | 200 / hr per IP | anonymous game reads (`GET /v1/games/:id`, `public-recent`) |
-| `tournament_view` | 600 / hr per IP | anonymous tournament reads |
+| `tournament_view` | 2400 reads / hr per IP | the tournament page reads: detail, standings, bracket, rounds, matches, match detail, both stats endpoints, and the profile Tournaments tab. ~4 reads per page load (6 on stats), so ~600 page loads an hour. The ceiling is the `TOURNAMENT_VIEW_PER_HOUR` var, so it can be retuned mid-event with `wrangler secret put` instead of a redeploy — until the next deploy restores the `wrangler.toml` value |
+| `tournament_list_view` | 600 reads / hr per IP | `GET /v1/tournaments`. Its own budget, not `tournament_view`'s: the **home page** fetches the list on every render, so sharing would let ordinary landing-page traffic decide when `/tournaments/[slug]` starts refusing. Own ceiling var (`TOURNAMENT_LIST_VIEW_PER_HOUR`), retuned the same way |
+| `tournament_link_view` | 600 reads / hr per IP | `GET /v1/games/:id/tournament-link`. Its own budget for the same reason: every game-page render calls it, and sharing let a `/games/*` crawl 429 the tournament pages. Own ceiling var too (`TOURNAMENT_LINK_VIEW_PER_HOUR`) |
 | `tournament_export` | 30 / hr per user | `GET /v1/tournaments/:id/export` |
 | `tournament_admin` | 30 / hr per user | tournament admin mutations |
 | `tournament_schedule` | 60 / hr per user | match schedule + caster self-service |
@@ -98,7 +107,7 @@ Counters live in the D1 `events` table (or the Cache API for legacy downloads) a
 | `slug_claim_attempt` | 15 / hr per user | `POST` + `DELETE /v1/users/me/slug` (counts attempts, not successes) |
 | upload / download | per-user + per-IP + global | game upload / download |
 
-Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents are exempt from the anonymous read/view limits (and their audit rows).
+Over-limit → `429` with an endpoint-specific `code`. Known scraper User-Agents are exempt from the anonymous read/view limits, and from their audit rows too — so an exempt read leaves no trace in `events`. The exemption is keyed on a self-declared header, which is why the visitor's UA isn't forwarded across the SSR hop: it applies to a caller hitting the API directly and not to page traffic through `per-ankh.app`.
 
 ### CORS
 
@@ -245,8 +254,8 @@ Whether a game is linked to a tournament match.
 - **Auth:** Public (IP rate-limited).
 - **Path:** `id` (21-char).
 - **Response 200:** `{ link: GameTournamentLink | null }` — `link.tournament` `{ tournament_id, slug, name, status }` + `link.match` `{ match_id, phase, division, round_number, map_script, status, slot_a_id, slot_b_id, winner_slot_id, slot_a_display_name, slot_b_display_name }`; `{ link: null }` when unlinked.
-- **Errors:** `429 RATE_LIMIT_TOURNAMENT_VIEW`.
-- **Notes:** `tournament_view` bucket (600/hr per IP; scraper UAs exempt).
+- **Errors:** `429 RATE_LIMIT_TOURNAMENT_LINK`.
+- **Notes:** `tournament_link_view` bucket (600/hr per IP; scraper UAs exempt) — its own, deliberately not the `tournament_view` one the tournament pages draw on. The budget is charged before the link is looked up, so an unlinked game costs a slot too.
 
 ### `PATCH /v1/games/:id`
 Update a game's visibility, collection, or display name.
@@ -412,14 +421,15 @@ _(Account settings live at [`POST /v1/auth/settings`](#post-v1authsettings).)_
 
 ## Tournaments — reads
 
-All reads in this section are **Public (owner extras)** unless noted: a session is optional and only unlocks admin/owner fields; anonymous callers see the public shape. Setup-phase tournaments return a `404`-shape to non-admins (unless signups are open). All are per-IP rate-limited via the `tournament_view` bucket (600/hr; `429 RATE_LIMIT_TOURNAMENT_VIEW`), and all take the 21-char tournament `id` **except** detail-by-slug.
+All reads in this section are **Public (owner extras)** unless noted: a session is optional and only unlocks admin/owner fields; anonymous callers see the public shape. Setup-phase tournaments return a `404`-shape to non-admins (unless signups are open). All are per-IP rate-limited via the `tournament_view` bucket (2400 reads/hr; `429 RATE_LIMIT_TOURNAMENT_VIEW`) **except the list**, which has its own — see below. All take the 21-char tournament `id` except detail-by-slug.
 
 ### `GET /v1/tournaments`
 List tournaments.
 
 - **Query:** `status` (`setup`|`swiss`|`championship`|`complete`), `limit` (default 20, 1–100), `offset` (default 0).
 - **Response 200:** `{ tournaments: [{ tournament_id, slug, name, status, signups_open, created_at, updated_at, swiss_wins_to_advance, swiss_losses_to_eliminate, swiss_max_rounds, map_pool_size, player_count, active_round: { round_number, matches_total, matches_reported } | null, champion: { display_name, avatar_url } | null }], limit, offset }`.
-- **Notes:** Setup-phase rows appear only to their admins or when `signups_open`.
+- **Errors:** `429 RATE_LIMIT_TOURNAMENT_LIST`.
+- **Notes:** Setup-phase rows appear only to their admins or when `signups_open`. `tournament_list_view` bucket (600/hr per IP), **not** the `tournament_view` one the rest of this section draws on: the home page fetches this list on every render, so a shared budget would let landing-page traffic close the tournament pages.
 
 ### `GET /v1/tournaments/:slug`
 Tournament detail (the only read keyed by **slug**).
