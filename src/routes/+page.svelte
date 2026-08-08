@@ -3,9 +3,8 @@
 	import { resolve } from "$app/paths";
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import CreatorVideos from "$lib/CreatorVideos.svelte";
+	import ProfileLink from "$lib/ProfileLink.svelte";
 	import RecentSaveCard from "$lib/RecentSaveCard.svelte";
-	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
-	import TournamentCard from "$lib/tournament/TournamentCard.svelte";
 	import VideoCard from "$lib/VideoCard.svelte";
 	import { cloudApi, ApiError } from "$lib/api-cloud";
 	import { resolveLoginNext } from "$lib/utils/safe-next";
@@ -39,44 +38,20 @@
 		}
 	}
 
-	// "Active" on the home page = anything not complete. The tournaments
-	// listing already separates "Open for signups" + "Active" + "Past";
-	// here we collapse them so the home surfaces every in-flight bracket.
-	const activeTournaments = $derived(
-		data.tournaments.filter((t) => t.status !== "complete").slice(0, 6),
-	);
-
-	// The right rail is signed-in only: it carries the tournament banner and
-	// the active-tournaments list. Signed-out (public) viewers get no rail —
-	// the discovery grid widens to fill the row, and the signed-out hero
-	// already surfaces the current tournament.
-	const hasRail = $derived(!!user);
-
 	// The videos column only exists when a creator or a tournament playlist has
-	// recent uploads (empty on a cold feed cache). When present it sits between
-	// the games feed and the rail; the games column narrows to make room.
+	// recent uploads (empty on a cold feed cache). When present it sits beside
+	// the games feed, which narrows to make room.
 	const hasVideos = $derived(data.videos.length > 0);
 
-	// Desktop column widths (12-col grid). The games feed dominates and gives up
-	// width to the videos column and/or the signed-in rail; with both absent it
-	// spans the full row.
+	// Desktop column widths (12-col grid): the feed splits the row with the
+	// videos column, and spans it alone when there are no videos.
 	const gamesColClass = $derived(
-		hasVideos && hasRail
-			? "lg:col-span-5"
-			: hasVideos
-				? "lg:col-span-6"
-				: hasRail
-					? "lg:col-span-10"
-					: "lg:col-span-12",
+		hasVideos ? "lg:col-span-6" : "lg:col-span-12",
 	);
-	// Videos column: 5 beside the signed-in rail, 6 in the wider rail-less
-	// signed-out row.
-	const videosColClass = $derived(hasRail ? "lg:col-span-5" : "lg:col-span-6");
 
-	// Two-up game cards only when the games column keeps its full desktop width
-	// — signed-out with no videos column narrowing it. Otherwise a single column
-	// (signed-in cards sit beside the rail; a videos column squeezes the feed).
-	const twoUpCards = $derived(!user && !hasVideos);
+	// Two-up game cards only when the feed keeps the full-width row; a videos
+	// column beside it squeezes the cards back to a single column.
+	const twoUpCards = $derived(!hasVideos);
 </script>
 
 <main class="isolate flex flex-1 flex-col overflow-hidden">
@@ -86,37 +61,39 @@
 	>
 		<div class="mx-auto max-w-screen-2xl">
 			<!--
-			Signed-out hero: a call-to-action band above a pair of feature tiles.
-			Signed-in viewers skip the whole thing — they already know the product
-			and want straight to the feed.
+			The call to action, on one narrow full-width row: the pitch on the left,
+			the action on the right, stacking on mobile. Both viewers get the band —
+			only the action differs (sign in vs. a link into your own games), so the
+			whole page reads the same signed in or out.
 			-->
-			{#if !user}
+			<section
+				class="mb-4 flex flex-col gap-3 rounded-lg px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6"
+				style="background-color: rgb(var(--color-surface-raised));"
+			>
 				<!--
-				The call to action, on one narrow full-width row: the pitch on the left,
-				the sign-in button on the right, stacking on mobile. It replaces the
-				half-width pitch panel that used to sit beside the tournament banner —
-				which is what frees the row below to be two pieces of content instead of
-				one plus a sales panel.
+				Pitch + pills travel together as the left cluster, a fixed `sm:gap-8`
+				apart, so the pills read as part of the pitch instead of floating in
+				the middle. All the row's slack lands between this cluster and the
+				action (the section's `justify-between`), which keeps the pitch→pills
+				spacing identical at every window width.
 				-->
-				<section
-					class="mb-4 flex flex-col gap-3 rounded-lg px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6"
-					style="background-color: rgb(var(--color-surface-raised));"
+				<div
+					class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-8"
 				>
 					<div class="min-w-0">
 						<h1 class="text-xl font-bold text-gray-200 sm:text-2xl">
 							Parse, analyze and share your Old World games
 						</h1>
 						<p class="mt-1 text-sm text-tan opacity-90">
-							Upload save files and explore every detail of your games. Sign in
-							with Discord to get started.
+							Upload save files and explore every detail of your games.{#if !user}
+								Sign in with Discord to get started.{/if}
 						</p>
 					</div>
 
 					<!--
-					The three feature pills, between the pitch and the button. A vertical
-					list at this size: the band is a third the height of the panel they
-					used to sit in as a wrapping row, and stacked they fill it instead of
-					forcing it taller.
+					The three feature pills. A vertical list at this size: the band is a
+					third the height of the panel they used to sit in as a wrapping row,
+					and stacked they fill it instead of forcing it taller.
 					-->
 					<div
 						class="flex shrink-0 flex-col gap-1 text-xs font-semibold text-tan"
@@ -181,7 +158,29 @@
 							Share saves
 						</span>
 					</div>
+				</div>
 
+				<!--
+					The action. Signed in it's the way into your own games, carrying the
+					same avatar the header shows so it reads as "you". Signed out it's the
+					sign-in button the header's Login mirrors.
+					-->
+				{#if user}
+					<ProfileLink
+						userId={user.user_id}
+						slug={user.slug}
+						class="inline-flex shrink-0 items-center gap-2 self-start rounded-md bg-[#292623] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:text-orange sm:self-auto"
+					>
+						<img
+							src={user.avatar_url}
+							alt=""
+							class="h-6 w-6 rounded-full border border-black"
+							width="24"
+							height="24"
+						/>
+						Your Games
+					</ProfileLink>
+				{:else}
 					<button
 						type="button"
 						onclick={handleSignIn}
@@ -201,61 +200,61 @@
 						</svg>
 						{signingIn ? "Redirecting…" : "Continue with Discord"}
 					</button>
-				</section>
-
-				<!--
-				The two hero tiles, side by side on desktop and stacked on mobile: the
-				current major tournament, then the newest featured video. The banner
-				keeps the sizing it had beside the pitch panel — 16:9 stacked, and on
-				desktop stretched to the row (`lg:aspect-auto`) so it ends level with
-				whatever the video card's title wraps to, cropping via object-cover.
-				-->
-				<div class="mb-4 grid gap-4 lg:grid-cols-2">
-					<!--
-					Tournament highlight: the whole card links to the current major
-					tournament. The event name is baked into the still (the animation's
-					opening title card), so no text overlay is needed.
-					-->
-					<a
-						href={resolve("/tournaments/2026-community-tournament")}
-						class="group block aspect-video overflow-hidden rounded-lg bg-black lg:aspect-auto"
-					>
-						<img
-							src="/tournament-hero.webp"
-							alt="2026 Community Tournament"
-							width="654"
-							height="345"
-							class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-						/>
-					</a>
-
-					<!--
-					The newest featured video — the same VideoCard the strip below and every
-					other video surface renders, so the hero can't drift into a second video
-					card style. Absent only when nothing is featured AND both video feeds
-					came back empty (see heroVideo in +page.ts), which leaves the banner
-					alone in its column.
-					-->
-					{#if data.heroVideo}
-						<VideoCard video={data.heroVideo} />
-					{/if}
-				</div>
-			{/if}
+				{/if}
+			</section>
 
 			<!--
-			Discovery grid (desktop): recent saves (dominant, left) → videos
-			(middle) → right rail (tournament banner + active tournaments).
-			Columns that have no content drop out and their neighbours widen. No
-			wrapper panels — cards float directly on the page background, matching
-			the tournaments-listing pattern.
+			The two hero tiles, side by side on desktop and stacked on mobile: the
+			current major tournament, then the newest featured video. Shown to every
+			viewer — they are how the home page surfaces the tournament now that the
+			signed-in rail is gone. 16:9 stacked, and on desktop the banner stretches
+			to the row (`lg:aspect-auto`) so it ends level with whatever the video
+			card's title wraps to, cropping via object-cover.
+			-->
+			<div class="mb-4 grid gap-4 lg:grid-cols-2">
+				<!--
+				Tournament highlight: the whole card links to the current major
+				tournament. The event name is baked into the still (the animation's
+				opening title card), so no text overlay is needed.
+				-->
+				<a
+					href={resolve("/tournaments/2026-community-tournament")}
+					class="group block aspect-video overflow-hidden rounded-lg bg-black lg:aspect-auto"
+				>
+					<img
+						src="/tournament-hero.webp"
+						alt="2026 Community Tournament"
+						width="654"
+						height="345"
+						class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+					/>
+				</a>
+
+				<!--
+				The newest featured video — the same VideoCard the strip below and every
+				other video surface renders, so the hero can't drift into a second video
+				card style. Absent only when nothing is featured AND both video feeds
+				came back empty (see heroVideo in +page.ts), which leaves the banner
+				alone in its column.
+				-->
+				{#if data.heroVideo}
+					<VideoCard video={data.heroVideo} />
+				{/if}
+			</div>
+
+			<!--
+			Discovery grid (desktop): recent saves (left) → videos (right). A column
+			with no content drops out and its neighbour widens. No wrapper panels —
+			cards float directly on the page background, matching the
+			tournaments-listing pattern.
 		-->
 			<!--
 				On mobile the grid stacks in DOM order; `order` utilities lift the
-				rail and videos above the long games feed there, while `lg:order-*`
-				restores the desktop left→right (games → videos → rail) arrangement.
+				videos above the long games feed there, while `lg:order-*` restores
+				the desktop left→right (games → videos) arrangement.
 			-->
 			<div class="grid gap-4 lg:grid-cols-12">
-				<section class={`order-3 lg:order-1 ${gamesColClass}`}>
+				<section class={`order-2 lg:order-1 ${gamesColClass}`}>
 					{#if data.recentGames.length === 0}
 						<p class="text-sm text-tan opacity-70">
 							No public saves yet. Be the first — upload a save and toggle
@@ -263,9 +262,8 @@
 						</p>
 					{:else}
 						<!--
-							Single column whenever the feed is narrowed (beside the rail, or
-							squeezed by the videos column); two-up only when it keeps the
-							full-width row — see `twoUpCards`.
+							Single column whenever a videos column squeezes the feed; two-up
+							only when it keeps the full-width row — see `twoUpCards`.
 						-->
 						<div
 							class={twoUpCards
@@ -281,68 +279,15 @@
 
 				<!--
 				Videos: creator uploads and tournament-playlist uploads merged into one
-				strip — middle column on desktop, full-width on smaller screens (the
+				strip — right column on desktop, full-width on smaller screens (the
 				component handles the responsive grid). Omitted entirely on a cold/empty
 				feed rather than leaving a gap.
 			-->
 				{#if hasVideos}
 					<CreatorVideos
 						videos={data.videos}
-						class={`order-2 lg:order-2 ${videosColClass}`}
+						class="order-1 lg:order-2 lg:col-span-6"
 					/>
-				{/if}
-
-				<!-- Right rail: tournament banner (signed-in only) + active
-				     tournaments. No top offset — with the column headings gone, its
-				     first card aligns with the first game/video card at the top of
-				     the grid. -->
-				{#if hasRail}
-					<aside class="order-1 space-y-3 lg:order-3 lg:col-span-2">
-						{#if user}
-							<!--
-								2026 tournament banner: signed-in viewers skip the signed-out
-								hero, so surface it here in the rail — above the tournaments
-								list. Shown at full rail width so the title card isn't cropped.
-							-->
-							<a
-								href={resolve("/tournaments/2026-community-tournament")}
-								class="group block overflow-hidden rounded-lg bg-black"
-							>
-								<img
-									src="/tournament-hero.webp"
-									alt="2026 Community Tournament"
-									width="654"
-									height="345"
-									class="w-full transition-transform duration-300 group-hover:scale-105"
-								/>
-							</a>
-						{/if}
-
-						{#if activeTournaments.length > 0}
-							<div
-								class="rounded-lg p-3"
-								style="background-color: rgb(var(--color-surface-raised));"
-							>
-								<a
-									href={resolve("/tournaments")}
-									class="mb-2 flex items-center gap-1.5 text-sm font-bold text-gray-200 hover:text-orange"
-								>
-									<SpriteIcon
-										category="icons"
-										value="GAME_HELP"
-										size={14}
-										alt="Tournaments"
-									/>
-									Tournaments
-								</a>
-								<div class="space-y-2">
-									{#each activeTournaments as t (t.tournament_id)}
-										<TournamentCard tournament={t} compact />
-									{/each}
-								</div>
-							</div>
-						{/if}
-					</aside>
 				{/if}
 			</div>
 		</div>

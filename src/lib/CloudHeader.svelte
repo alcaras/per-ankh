@@ -103,9 +103,9 @@
 >
 	<!--
 		Left: hieroglyph wordmark. Always routes to / — the home page is the
-		public discovery surface (recent saves, active tournaments) served to
-		signed-in and signed-out viewers alike. Signed-in users can still jump
-		to their own profile via the hamburger menu.
+		public discovery surface (tournament + video hero, recent saves, videos)
+		served to signed-in and signed-out viewers alike. Signed-in users can
+		still jump to their own profile via the hamburger menu.
 	-->
 	<a
 		href={resolve("/")}
