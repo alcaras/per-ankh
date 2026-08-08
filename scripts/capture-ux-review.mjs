@@ -21,7 +21,7 @@
 //                local user (yours by default). Unlocks the owner /
 //                authenticated surface: / , /users/[user_id] (owner),
 //                /account, /games/[id] (owner), /tournaments,
-//                /tournaments/[slug], /admin/reparse (when the auth user is
+//                /tournaments/[slug], /admin (when the auth user is
 //                the local ADMIN_DISCORD_ID), plus a redirect-verification
 //                note for /dashboard, /games, /auth/callback.
 //
@@ -185,7 +185,7 @@ function discoverIds() {
 }
 
 // Resolve the sign-in user: discord_username for the session payload, plus
-// whether they're the local site admin (gates the /admin/reparse capture).
+// whether they're the local site admin (gates the /admin capture).
 function lookupAuthUser(userId) {
 	const row = d1Query(
 		`SELECT discord_username, discord_id FROM users WHERE user_id = '${userId}';`,
@@ -515,15 +515,14 @@ async function captureAuth(page, baseUrl, ids, opts) {
 	if (opts.isAdmin) {
 		recs.push(
 			await captureSingle(page, baseUrl, {
-				id: "auth__admin-reparse",
+				id: "auth__admin",
 				pass: "auth",
-				page: "admin-reparse",
+				page: "admin",
 				tab: null,
-				title: "Admin · reparse",
-				route: "/admin/reparse",
+				title: "Admin",
+				route: "/admin",
 				state: "admin",
-				errorHint:
-					"Admin reparse unavailable — auth user is not the local admin",
+				errorHint: "Admin page unavailable — auth user is not the local admin",
 			}),
 		);
 	}
@@ -552,7 +551,7 @@ const PAGE_LABELS = {
 	account: "Account",
 	tournaments: "Tournaments",
 	"tournament-detail": "Tournament detail",
-	"admin-reparse": "Admin · reparse",
+	admin: "Admin",
 	redirects: "Redirect routes",
 };
 

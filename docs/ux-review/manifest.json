@@ -499,7 +499,7 @@
 			"page": "admin-reparse",
 			"tab": null,
 			"title": "Admin · reparse",
-			"route": "/admin/reparse",
+			"route": "/admin",
 			"state": "admin",
 			"shots": {
 				"desktop": "shots/auth__admin-reparse__desktop.jpg",

@@ -42,17 +42,26 @@ export const load: PageLoad = async ({ fetch, url }) => {
 	// nameless section rather than failing the page. The tournament list in
 	// particular is IP-rate-limited (it's the public read), and a sweep must
 	// not be blocked by a budget it doesn't spend.
-	const [{ games: outOfDateGames }, { games: allGames }, tournaments, owner] =
-		await Promise.all([
-			cloudApi.adminListOutOfDate(PARSER_VERSION, { fetch, filter }),
-			cloudApi.adminListAllGames({ fetch, filter }),
-			cloudApi
-				.listTournaments({ limit: 100 }, { fetch })
-				.catch(() => ({ tournaments: [] })),
-			filter.user_id
-				? cloudApi.getUserProfile(filter.user_id, { fetch }).catch(() => null)
-				: Promise.resolve(null),
-		]);
+	//
+	// The featured set is the Featured tab's whole content, and is unaffected by
+	// the section filters — it's a curated list, not a slice of the corpus.
+	const [
+		{ games: outOfDateGames },
+		{ games: allGames },
+		tournaments,
+		owner,
+		featuredVideos,
+	] = await Promise.all([
+		cloudApi.adminListOutOfDate(PARSER_VERSION, { fetch, filter }),
+		cloudApi.adminListAllGames({ fetch, filter }),
+		cloudApi
+			.listTournaments({ limit: 100 }, { fetch })
+			.catch(() => ({ tournaments: [] })),
+		filter.user_id
+			? cloudApi.getUserProfile(filter.user_id, { fetch }).catch(() => null)
+			: Promise.resolve(null),
+		cloudApi.listFeaturedVideos({ fetch }),
+	]);
 	return {
 		user,
 		outOfDateGames,
@@ -60,6 +69,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
 		filter,
 		tournaments: tournaments.tournaments,
 		ownerName: owner?.display_name ?? null,
+		featuredVideos,
 		meta: {
 			title: "Admin - Per-Ankh",
 			description: "Per-Ankh site administration.",

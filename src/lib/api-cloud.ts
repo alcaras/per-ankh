@@ -92,6 +92,30 @@ export type TournamentVideo =
 	| CreatorVideo
 	| YouTubeAttributedVideo;
 
+// One video in the site-admin featured set (GET /v1/admin/featured-videos).
+// Attributed exactly the same three ways — the Worker snapshots the video but
+// joins a linked uploader's identity at read time — so VideoCard renders one of
+// these no differently from a playlist entry.
+export type FeaturedVideo = TournamentVideo;
+
+// The body of POST /v1/admin/featured-videos: a snapshot of the video being
+// featured, because it will outlive the feed it came from (a channel's RSS
+// returns ~15 entries). The uploader's name and avatar are deliberately NOT
+// snapshotted — `user_id` names a Per-Ankh uploader whose identity the read
+// joins live, and `uploader_name`/`uploader_url` carry an unlinked YouTube
+// channel. All three omitted is a video whose feed entry named no author.
+export interface FeatureVideoRequest {
+	platform: string;
+	video_id: string;
+	url: string;
+	title: string;
+	thumbnail_url: string | null;
+	published_at: string;
+	user_id?: string | null;
+	uploader_name?: string | null;
+	uploader_url?: string | null;
+}
+
 // Public profile fields returned by GET /v1/users/:user_id. No-auth read;
 // used by the /users/[user_id] page to render the chrome when a visitor
 // views someone else's library.
@@ -917,6 +941,36 @@ export const cloudApi = {
 			method: "POST",
 		});
 		return res.json() as Promise<{ reindexed: boolean }>;
+	},
+
+	// --- Featured videos (site admin) ---
+	// The curated set, newest video first. Admin-only for now: nothing public
+	// reads it yet.
+	listFeaturedVideos: async (opts?: CallOpts): Promise<FeaturedVideo[]> => {
+		const res = await request("/admin/featured-videos", opts);
+		return (await (res.json() as Promise<{ videos: FeaturedVideo[] }>)).videos;
+	},
+
+	// Feature a video, by snapshot (see FeatureVideoRequest). Upserts, so
+	// featuring one that's already in the set is a no-op refresh rather than an
+	// error.
+	featureVideo: async (
+		video: FeatureVideoRequest,
+		opts?: CallOpts,
+	): Promise<void> => {
+		await postJson<{ ok: true }>("/admin/featured-videos", video, opts);
+	},
+
+	// Unfeature. Idempotent on the server, so callers don't need to handle 404.
+	unfeatureVideo: async (
+		platform: string,
+		videoId: string,
+		opts?: CallOpts,
+	): Promise<void> => {
+		await request(
+			`/admin/featured-videos/${encodeURIComponent(platform)}/${encodeURIComponent(videoId)}`,
+			{ ...opts, method: "DELETE" },
+		);
 	},
 
 	getMyOnlineIds: async (opts?: CallOpts): Promise<string[]> => {

@@ -47,7 +47,7 @@
 	// Site admins get the same banner on a *public* game they don't own, wired
 	// to the admin reparse path (targets the original owner, reuses the
 	// uploader's original nation choice, no re-prompt) — the same machinery as
-	// the /admin/reparse sweep, for one game. Private games they don't own
+	// the /admin reparse sweep, for one game. Private games they don't own
 	// return 403 from getGame, so they never reach this page. `game.user_id`
 	// is always present on a loaded game but typed optional, so the target
 	// (owner id + uploader_nation) is derived here and gated null → the banner

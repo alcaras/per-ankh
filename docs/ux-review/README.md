@@ -80,7 +80,7 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 
 - Tournament: test-03: [Desktop](shots/auth__tournament-detail__desktop.jpg) · [Tablet](shots/auth__tournament-detail__tablet.jpg) · [Mobile](shots/auth__tournament-detail__mobile.jpg)
 
-**Admin · reparse** — `/admin/reparse`
+**Admin · reparse** — `/admin`
 
 - Admin · reparse: [Desktop](shots/auth__admin-reparse__desktop.jpg) · [Tablet](shots/auth__admin-reparse__tablet.jpg) · [Mobile](shots/auth__admin-reparse__mobile.jpg)
 

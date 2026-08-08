@@ -4,6 +4,7 @@
 	import { page, updated } from "$app/state";
 	import { beforeNavigate } from "$app/navigation";
 	import CloudHeader from "$lib/CloudHeader.svelte";
+	import { syncFeatured } from "$lib/featured-videos.svelte";
 	import Toaster from "$lib/ui/Toaster.svelte";
 	import ConfirmDialogHost from "$lib/ui/ConfirmDialogHost.svelte";
 	import { PUBLIC_ORIGIN, type PageMeta } from "$lib/page-meta";
@@ -17,6 +18,14 @@
 	// visitors can navigate from the discovery feed back to their
 	// profile, /upload, etc.
 	const showCloudHeader = $derived(!page.url.pathname.startsWith("/auth/"));
+
+	// Seed the shared featured set (empty for everyone but a site admin — see
+	// +layout.ts) so every VideoCard's star knows its state. In an effect
+	// because the set is module-level: populating it during SSR would carry one
+	// request's state into the next.
+	$effect(() => {
+		syncFeatured(data.featuredVideos);
+	});
 
 	// Carry a tab that was open across a deploy onto the new build. Client JS
 	// is content-hashed under /_app/immutable, and a deploy replaces the asset

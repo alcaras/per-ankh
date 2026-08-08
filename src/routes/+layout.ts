@@ -6,6 +6,7 @@ export const prerender = false;
 
 import {
 	cloudApi,
+	type FeaturedVideo,
 	type MyAdminTournamentEntry,
 	type MyTournamentEntry,
 	type UserMe,
@@ -32,6 +33,7 @@ export const load: LayoutLoad = async ({
 	meta: PageMeta;
 	myTournaments: MyTournamentEntry[];
 	adminTournaments: MyAdminTournamentEntry[];
+	featuredVideos: FeaturedVideo[];
 }> => {
 	try {
 		const user = await cloudApi.getMe({ fetch });
@@ -41,6 +43,12 @@ export const load: LayoutLoad = async ({
 		// empty lists so the header still renders.
 		let myTournaments: MyTournamentEntry[] = [];
 		let adminTournaments: MyAdminTournamentEntry[] = [];
+		// The site-admin featured set. Fetched once here — rather than by the
+		// three page loads that render videos — because it's what the star toggle
+		// on each VideoCard reads its state from, and because the alternative
+		// (a per-viewer `featured` flag on /v1/creator-videos) would make an
+		// edge-cached public response viewer-specific.
+		let featuredVideos: FeaturedVideo[] = [];
 		// my-tournaments / my-admin-tournaments are per-user membership lists,
 		// relevant to any logged-in user. Skip the round-trips for signed-out
 		// visitors. The catch blocks still tolerate failure (e.g. network) so a
@@ -61,11 +69,21 @@ export const load: LayoutLoad = async ({
 				// fall through with empty list
 			}
 		}
+		// Site admins only — the endpoint 404s for everyone else, so asking would
+		// spend a round-trip to learn what `is_admin` already says.
+		if (user?.is_admin) {
+			try {
+				featuredVideos = await cloudApi.listFeaturedVideos({ fetch });
+			} catch {
+				// fall through with empty list
+			}
+		}
 		return {
 			user,
 			meta: DEFAULT_META,
 			myTournaments,
 			adminTournaments,
+			featuredVideos,
 		};
 	} catch {
 		// Network errors etc. — header just renders signed-out state.
@@ -75,6 +93,7 @@ export const load: LayoutLoad = async ({
 			meta: DEFAULT_META,
 			myTournaments: [],
 			adminTournaments: [],
+			featuredVideos: [],
 		};
 	}
 };

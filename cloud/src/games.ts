@@ -3012,7 +3012,7 @@ export async function handleGamesOutOfDate(
 //
 // Gated by isSiteAdmin (Discord-ID match against ADMIN_DISCORD_ID secret).
 // Failure returns 404 (not 403) so endpoint existence doesn't leak to
-// non-admins. Used by /admin/reparse to drive a bulk re-parse over every
+// non-admins. Used by /admin's Reparse tab to drive a bulk re-parse over every
 // out-of-date game across all users, optionally narrowed to one owner,
 // tournament, or upload-date range (parseAdminGameFilter).
 

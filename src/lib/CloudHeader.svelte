@@ -235,7 +235,7 @@
 						{#if user.is_admin}
 							<div class="border-t border-black"></div>
 							<a
-								href={resolve("/admin/reparse")}
+								href={resolve("/admin")}
 								class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
 								onclick={closeMenu}
 							>
