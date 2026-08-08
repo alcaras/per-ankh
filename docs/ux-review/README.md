@@ -80,9 +80,9 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 
 - Tournament: test-03: [Desktop](shots/auth__tournament-detail__desktop.jpg) · [Tablet](shots/auth__tournament-detail__tablet.jpg) · [Mobile](shots/auth__tournament-detail__mobile.jpg)
 
-**Admin · reparse** — `/admin`
+**Admin** — `/admin`
 
-- Admin · reparse: [Desktop](shots/auth__admin-reparse__desktop.jpg) · [Tablet](shots/auth__admin-reparse__tablet.jpg) · [Mobile](shots/auth__admin-reparse__mobile.jpg)
+- Admin: [Desktop](shots/auth__admin__desktop.jpg) · [Tablet](shots/auth__admin__tablet.jpg) · [Mobile](shots/auth__admin__mobile.jpg)
 
 **Redirect routes** — `(verification)`
 

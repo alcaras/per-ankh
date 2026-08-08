@@ -494,17 +494,17 @@
 			"errors": {}
 		},
 		{
-			"id": "auth__admin-reparse",
+			"id": "auth__admin",
 			"pass": "auth",
-			"page": "admin-reparse",
+			"page": "admin",
 			"tab": null,
-			"title": "Admin · reparse",
+			"title": "Admin",
 			"route": "/admin",
 			"state": "admin",
 			"shots": {
-				"desktop": "shots/auth__admin-reparse__desktop.jpg",
-				"tablet": "shots/auth__admin-reparse__tablet.jpg",
-				"mobile": "shots/auth__admin-reparse__mobile.jpg"
+				"desktop": "shots/auth__admin__desktop.jpg",
+				"tablet": "shots/auth__admin__tablet.jpg",
+				"mobile": "shots/auth__admin__mobile.jpg"
 			},
 			"errors": {}
 		},
