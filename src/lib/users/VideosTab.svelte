@@ -7,6 +7,7 @@
 	// panel so the raised cards read as a well within the tab. Data comes from
 	// GET /v1/users/:id/videos via the page load.
 	import VideoCard from "$lib/VideoCard.svelte";
+	import { videoKey } from "$lib/featured-videos.svelte";
 	import type { RecentVideo } from "$lib/api-cloud";
 
 	let { videos }: { videos: RecentVideo[] } = $props();
@@ -20,7 +21,7 @@
 		<div class="py-8 text-center text-sm text-gray-400">No recent videos.</div>
 	{:else}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-			{#each videos as v (v.platform + ":" + v.id)}
+			{#each videos as v (videoKey(v))}
 				<VideoCard video={v} />
 			{/each}
 		</div>

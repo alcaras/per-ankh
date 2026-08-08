@@ -12,6 +12,7 @@
 	// VideosTab.
 	import SearchInput from "$lib/SearchInput.svelte";
 	import VideoCard from "$lib/VideoCard.svelte";
+	import { videoKey } from "$lib/featured-videos.svelte";
 	import type { TournamentVideo } from "$lib/api-cloud";
 	import type { PageData } from "./$types";
 
@@ -74,7 +75,7 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-			{#each visible as v (v.platform + ":" + v.id)}
+			{#each visible as v (videoKey(v))}
 				<VideoCard video={v} />
 			{/each}
 		</div>
