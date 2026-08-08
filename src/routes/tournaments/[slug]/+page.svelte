@@ -273,6 +273,20 @@
 		if (!openMatchId) return;
 		const el = document.querySelector(`[data-match-id="${openMatchId}"]`);
 		if (!(el instanceof HTMLElement)) return;
+		// A `?match=` deep link (the scheduling DM's) opens the card against a
+		// cell the page has never scrolled to, so the card lands below the fold.
+		// Left alone the browser reveals it by scrolling the DOCUMENT, which the
+		// fixed-viewport shell (+layout.svelte: h-screen overflow-hidden) has no
+		// room to absorb — the whole chrome slides up and the header clips, over
+		// a bracket that never moved. Scrolling the cell ourselves moves the
+		// inner container instead, the one actually built to scroll. Guarded on
+		// visibility so a normal bracket click, whose cell is already on screen,
+		// doesn't jolt the view it was aimed at.
+		const initial = el.getBoundingClientRect();
+		if (initial.top < 0 || initial.bottom > window.innerHeight) {
+			el.scrollIntoView({ block: "center" });
+		}
+		// Re-measured: the side is chosen from where the cell ended up.
 		const rect = el.getBoundingClientRect();
 		const cellCenter = rect.left + rect.width / 2;
 		matchSide = cellCenter < window.innerWidth / 2 ? "right" : "left";
