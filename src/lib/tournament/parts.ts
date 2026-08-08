@@ -213,9 +213,8 @@ export function owesNextSitting(m: TournamentMatch): number | null {
 	if (parts.length === 0) return null;
 	const cutoff = nowMs() - LIVE_WINDOW_MS;
 	for (const p of parts) {
-		if (p.scheduled_at == null) return null;
-		const t = Date.parse(p.scheduled_at);
-		if (Number.isNaN(t) || t > cutoff) return null;
+		const t = partInstant(p);
+		if (t == null || t > cutoff) return null;
 	}
 	return parts.length + 1;
 }
