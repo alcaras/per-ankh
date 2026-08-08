@@ -8,21 +8,15 @@
 	import { page } from "$app/state";
 	import HeaderGameSearch from "$lib/users/HeaderGameSearch.svelte";
 	import AboutModal from "$lib/AboutModal.svelte";
+	import DiscordLoginButton from "$lib/DiscordLoginButton.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
-	import { resolveLoginNext } from "$lib/utils/safe-next";
-	import { cloudApi, ApiError, type UserMe } from "$lib/api-cloud";
+	import { cloudApi, type UserMe } from "$lib/api-cloud";
 
 	let { user }: { user: UserMe | null } = $props();
 
 	let isMenuOpen = $state(false);
 	let isAboutModalOpen = $state(false);
 	let signingOut = $state(false);
-
-	// Signed-out login. Mirrors the (removed) home-page sign-in card: kicks
-	// off the Discord OAuth round-trip, returning the viewer to the page they
-	// launched from via `next`.
-	let signingIn = $state(false);
-	let loginError = $state<string | null>(null);
 
 	// Upload link carries the current page as `?from=` so the upload flow's
 	// Done button returns the user here rather than to a fixed default. Omit it
@@ -33,25 +27,6 @@
 		const from = encodeURIComponent(page.url.pathname + page.url.search);
 		return `${base}?from=${from}`;
 	});
-
-	async function handleSignIn() {
-		signingIn = true;
-		loginError = null;
-		try {
-			const redirectUri = `${window.location.origin}/auth/callback`;
-			const next = resolveLoginNext(page.url);
-			const { authorize_url } = await cloudApi.discordStart(redirectUri, next);
-			window.location.href = authorize_url;
-		} catch (err) {
-			signingIn = false;
-			loginError =
-				err instanceof ApiError
-					? `${err.code ?? err.status}: ${err.message}`
-					: err instanceof Error
-						? err.message
-						: "Login failed";
-		}
-	}
 
 	function toggleMenu() {
 		isMenuOpen = !isMenuOpen;
@@ -185,15 +160,10 @@
 			</ProfileLink>
 		{:else}
 			<!-- Signed out: a plain login button stands in for the avatar. -->
-			<button
-				type="button"
-				onclick={handleSignIn}
-				disabled={signingIn}
+			<DiscordLoginButton
+				label="Login"
 				class="inline-flex flex-shrink-0 items-center rounded border border-tan px-3 py-1 text-xs font-semibold text-tan transition-colors hover:border-orange hover:text-orange disabled:opacity-60"
-				title={loginError ?? undefined}
-			>
-				{signingIn ? "Redirecting…" : "Login"}
-			</button>
+			/>
 		{/if}
 
 		<!-- Hamburger menu + dropdown, anchored on the far right. -->
