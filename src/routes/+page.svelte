@@ -6,6 +6,7 @@
 	import RecentSaveCard from "$lib/RecentSaveCard.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import TournamentCard from "$lib/tournament/TournamentCard.svelte";
+	import VideoCard from "$lib/VideoCard.svelte";
 	import { cloudApi, ApiError } from "$lib/api-cloud";
 	import { resolveLoginNext } from "$lib/utils/safe-next";
 	import type { PageData } from "./$types";
@@ -85,117 +86,136 @@
 	>
 		<div class="mx-auto max-w-screen-2xl">
 			<!--
-			Signed-out hero: a full-width pitch band above the discovery grid.
-			Signed-in viewers skip it — they already know the product and want
-			straight to the feed.
-		-->
+			Signed-out hero: a call-to-action band above a pair of feature tiles.
+			Signed-in viewers skip the whole thing — they already know the product
+			and want straight to the feed.
+			-->
 			{#if !user}
 				<!--
-				Signed-out hero band: the product pitch (left) beside a highlight
-				card for the current major tournament (right). Side by side on
-				desktop, stacked on mobile.
-			-->
-				<div class="mb-4 grid gap-4 lg:grid-cols-2">
-					<section
-						class="rounded-lg p-6 sm:p-8"
-						style="background-color: rgb(var(--color-surface-raised));"
-					>
-						<h1 class="text-3xl font-bold text-gray-200 sm:text-4xl">
+				The call to action, on one narrow full-width row: the pitch on the left,
+				the sign-in button on the right, stacking on mobile. It replaces the
+				half-width pitch panel that used to sit beside the tournament banner —
+				which is what frees the row below to be two pieces of content instead of
+				one plus a sales panel.
+				-->
+				<section
+					class="mb-4 flex flex-col gap-3 rounded-lg px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6"
+					style="background-color: rgb(var(--color-surface-raised));"
+				>
+					<div class="min-w-0">
+						<h1 class="text-xl font-bold text-gray-200 sm:text-2xl">
 							Parse, analyze and share your Old World games
 						</h1>
-						<p class="mt-2 text-sm text-tan opacity-90 sm:text-base">
+						<p class="mt-1 text-sm text-tan opacity-90">
 							Upload save files and explore every detail of your games. Sign in
 							with Discord to get started.
 						</p>
-						<button
-							type="button"
-							onclick={handleSignIn}
-							disabled={signingIn}
-							class="mt-4 inline-flex items-center gap-2 rounded-md bg-[#5865F2] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4752c4] disabled:opacity-60"
-							title={loginError ?? undefined}
-						>
+					</div>
+
+					<!--
+					The three feature pills, between the pitch and the button. A vertical
+					list at this size: the band is a third the height of the panel they
+					used to sit in as a wrapping row, and stacked they fill it instead of
+					forcing it taller.
+					-->
+					<div
+						class="flex shrink-0 flex-col gap-1 text-xs font-semibold text-tan"
+					>
+						<span class="flex items-center gap-1.5">
 							<svg
-								class="h-5 w-5"
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-3.5 w-3.5 text-orange"
+								fill="none"
 								viewBox="0 0 24 24"
-								fill="currentColor"
+								stroke="currentColor"
+								stroke-width="2"
 								aria-hidden="true"
 							>
 								<path
-									d="M20.317 4.369A19.79 19.79 0 0 0 16.558 3.2a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 5.83 4.369a.07.07 0 0 0-.032.027C3.476 7.86 2.843 11.255 3.156 14.605a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-3.873-.838-7.24-3.549-10.209a.061.061 0 0 0-.031-.028ZM9.681 12.564c-1.182 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418Zm7.974 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.281m5.94 2.28l-2.28 5.941"
 								/>
 							</svg>
-							{signingIn ? "Redirecting…" : "Continue with Discord"}
-						</button>
-						<div
-							class="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-semibold text-tan"
-						>
-							<span class="flex items-center gap-2">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-orange"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-									stroke-width="2"
-									aria-hidden="true"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.281m5.94 2.28l-2.28 5.941"
-									/>
-								</svg>
-								Interactive charts
-							</span>
-							<span class="flex items-center gap-2">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-orange"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-									stroke-width="2"
-									aria-hidden="true"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
-									/>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
-									/>
-								</svg>
-								Explorable map
-							</span>
-							<span class="flex items-center gap-2">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-orange"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-									stroke-width="2"
-									aria-hidden="true"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
-									/>
-								</svg>
-								Share saves
-							</span>
-						</div>
-					</section>
+							Interactive charts
+						</span>
+						<span class="flex items-center gap-1.5">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-3.5 w-3.5 text-orange"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+								aria-hidden="true"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
+								/>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
+								/>
+							</svg>
+							Explorable map
+						</span>
+						<span class="flex items-center gap-1.5">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-3.5 w-3.5 text-orange"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+								aria-hidden="true"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+								/>
+							</svg>
+							Share saves
+						</span>
+					</div>
 
+					<button
+						type="button"
+						onclick={handleSignIn}
+						disabled={signingIn}
+						class="inline-flex shrink-0 items-center gap-2 self-start rounded-md bg-[#5865F2] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4752c4] disabled:opacity-60 sm:self-auto"
+						title={loginError ?? undefined}
+					>
+						<svg
+							class="h-5 w-5"
+							viewBox="0 0 24 24"
+							fill="currentColor"
+							aria-hidden="true"
+						>
+							<path
+								d="M20.317 4.369A19.79 19.79 0 0 0 16.558 3.2a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 5.83 4.369a.07.07 0 0 0-.032.027C3.476 7.86 2.843 11.255 3.156 14.605a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-3.873-.838-7.24-3.549-10.209a.061.061 0 0 0-.031-.028ZM9.681 12.564c-1.182 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418Zm7.974 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z"
+							/>
+						</svg>
+						{signingIn ? "Redirecting…" : "Continue with Discord"}
+					</button>
+				</section>
+
+				<!--
+				The two hero tiles, side by side on desktop and stacked on mobile: the
+				current major tournament, then the newest featured video. The banner
+				keeps the sizing it had beside the pitch panel — 16:9 stacked, and on
+				desktop stretched to the row (`lg:aspect-auto`) so it ends level with
+				whatever the video card's title wraps to, cropping via object-cover.
+				-->
+				<div class="mb-4 grid gap-4 lg:grid-cols-2">
 					<!--
-				Tournament highlight: the whole card links to the current major
-				tournament. The event name is baked into the still (the animation's
-				opening title card), so no text overlay is needed.
-			-->
+					Tournament highlight: the whole card links to the current major
+					tournament. The event name is baked into the still (the animation's
+					opening title card), so no text overlay is needed.
+					-->
 					<a
 						href={resolve("/tournaments/2026-community-tournament")}
 						class="group block aspect-video overflow-hidden rounded-lg bg-black lg:aspect-auto"
@@ -208,6 +228,17 @@
 							class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
 						/>
 					</a>
+
+					<!--
+					The newest featured video — the same VideoCard the strip below and every
+					other video surface renders, so the hero can't drift into a second video
+					card style. Absent only when nothing is featured AND both video feeds
+					came back empty (see heroVideo in +page.ts), which leaves the banner
+					alone in its column.
+					-->
+					{#if data.heroVideo}
+						<VideoCard video={data.heroVideo} />
+					{/if}
 				</div>
 			{/if}
 
