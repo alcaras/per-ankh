@@ -658,8 +658,8 @@ Remove yourself as a caster.
 - **Auth:** Session.
 - **Path:** `id`, `match_id` (21-char), `part_id` (1–40 chars).
 - **Response:** `204 No Content`.
-- **Errors:** `401 UNAUTHORIZED`, `404 MATCH_NOT_FOUND` / `PART_NOT_FOUND`, `409 MATCH_NOT_PENDING` (bye) / `CONFLICT`, `429 RATE_LIMIT_TOURNAMENT_SCHEDULE`.
-- **Notes:** Self-only. Allowed even on decided matches, and on a match you're playing in — no `PARTICIPANT_CANNOT_CAST` here, so anyone credited before casting became third-party-only can still take themselves off (byes still rejected). Also removes your stored stream link (matched by URL) from the part's streams, undoing the cast auto-attach.
+- **Errors:** `401 UNAUTHORIZED`, `403 PARTICIPANT_CANNOT_CAST`, `404 MATCH_NOT_FOUND` / `PART_NOT_FOUND`, `409 MATCH_NOT_PENDING` (bye) / `CONFLICT`, `429 RATE_LIMIT_TOURNAMENT_SCHEDULE`.
+- **Notes:** Self-only. Allowed even on decided matches (byes still rejected). Casting is third-party in both directions, so either slot's occupant is refused here too — a player never has a caster entry on their own match to remove. Also removes your stored stream link (matched by URL) from the part's streams, undoing the cast auto-attach.
 
 ---
 

@@ -6,8 +6,8 @@
 // THEMSELVES on a scheduled part's caster list (index 0 = streamer, the rest
 // co-casters), scoped so they only ever touch their own entry — never the whole
 // list like the admin schedule endpoint. Casting is pending-only and
-// third-party-only; self-removal also works on decided matches and on your own
-// match. Both respond 204 (no body) — state is asserted from the row.
+// third-party-only; self-removal also works on decided matches. Both respond
+// 204 (no body) — state is asserted from the row.
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -208,7 +208,7 @@ describe("caster self-service", () => {
 		expect(await castersOf(t, match.match_id, partId)).toEqual([]);
 	});
 
-	it("rejects a participant CASTING their own match but allows self-REMOVAL", async () => {
+	it("rejects a participant casting their own match", async () => {
 		const player = await makeUser({ discordUsername: "player_one" });
 		const t = await makeTournament({
 			advanceTo: "swiss-round-1-generated",
@@ -222,8 +222,6 @@ describe("caster self-service", () => {
 				row.status === "pending" &&
 				(row.slot_a_id === slotId || row.slot_b_id === slotId),
 		)!;
-		// Schedule the sitting AND credit the player on it, standing in for a
-		// cast recorded before casting became third-party-only.
 		const scheduled = await expectOk<{
 			match: { parts: { id: string }[] };
 		}>(
@@ -231,13 +229,7 @@ describe("caster self-service", () => {
 				path: `/v1/tournaments/${t.tournamentId}/matches/${match.match_id}/schedule`,
 				as: t.admin,
 				body: {
-					parts: [
-						{
-							scheduled_at: WHEN,
-							casters: [{ user_id: player.userId, name: null }],
-							streams: [],
-						},
-					],
+					parts: [{ scheduled_at: WHEN, casters: [], streams: [] }],
 				},
 			}),
 		);
@@ -253,13 +245,6 @@ describe("caster self-service", () => {
 			}),
 			{ status: 403, code: "PARTICIPANT_CANNOT_CAST" },
 		);
-
-		// …but taking yourself off stays open, so a pre-rule credit isn't stuck.
-		const res = await request.delete({
-			path: castPath(t.tournamentId, match.match_id, partId),
-			as: player,
-		});
-		expect(res.status).toBe(204);
 		expect(await castersOf(t, match.match_id, partId)).toEqual([]);
 	});
 });

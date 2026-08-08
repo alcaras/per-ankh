@@ -405,15 +405,14 @@ export async function loadSlot(
 
 // Whether a user occupies either side of a match — the participation test
 // shared by the two rules that turn on it: the schedule endpoint's
-// admin-OR-participant gate, and the cast endpoint's refusal to let a player
-// cast their own match (403 PARTICIPANT_CANNOT_CAST). One definition, so the
-// two can't drift into disagreeing about who is playing.
+// admin-OR-participant gate, and the caster endpoints' refusal to let a player
+// touch the caster list on their own match (403 PARTICIPANT_CANNOT_CAST). One
+// definition, so the two can't drift into disagreeing about who is playing.
 //
-// Reads the LIVE slots rather than the match's report-time snapshot. Both
-// callers act on matches that are still pending (casting is pending-only;
-// a participant can only edit a pending schedule), and while pending the live
-// occupant IS the person playing — the two answers agree, and the live read is
-// the one that lets a substitute act on the match they inherited.
+// Reads the LIVE slots rather than the match's report-time snapshot: the live
+// occupant is whoever can act on the match now, which is what lets a substitute
+// schedule the game they inherited. On a pending match — every caller but
+// uncast, which also allows decided ones — the two readings agree anyway.
 export async function isMatchParticipant(
 	env: TournamentEnv,
 	match: Pick<MatchRow, "slot_a_id" | "slot_b_id">,

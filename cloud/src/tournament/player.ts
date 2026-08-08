@@ -400,8 +400,8 @@ export async function handleTournamentWithdraw(
 // logged-in user who isn't playing in the match (casting is a third-party job);
 // no admin gate. Scoped so a caster only ever touches their own entry, never
 // the whole list like the admin schedule endpoint. Casting is pending-only;
-// UNcasting also works on decided matches — and on your own match — so nobody
-// who signed up but never actually cast is stuck credited.
+// UNcasting also works on decided matches, so nobody who signed up but never
+// actually cast is stuck credited.
 // ----------------------------------------------------------------------
 
 // Concurrent casters are the expected case (several people reacting to the
@@ -439,13 +439,6 @@ async function mutateMyCasterEntry(
 		// Casting requires a pending match; self-removal is also allowed on
 		// decided ones (byes rejected either way).
 		allowDecided: boolean;
-		// Whether a player in the match is refused. True on the cast path — casting
-		// is a third-party job, so you can't cast a game you're playing in — and
-		// false on uncast, where removing yourself stays open to anyone credited
-		// (including from before the rule existed). Deliberately its own flag
-		// rather than a second meaning for allowDecided: two separate rules that
-		// happen to differ on the same two call sites today.
-		rejectParticipants: boolean;
 		prepare: PrepareCasterContext;
 		mutate: ApplyCasterMutation;
 	},
@@ -496,17 +489,16 @@ async function mutateMyCasterEntry(
 				"MATCH_NOT_PENDING",
 			);
 		}
-		// In the loop rather than hoisted above it: the test needs the match's
-		// slot ids, which only exist after loadMatch. Hoisting would cost a load
-		// on every request; here it only repeats on a CAS retry (capped at 3).
+		// Casting is a third-party job, in both directions: a match's own two
+		// players have no caster entry on it to add or to take away. In the loop
+		// rather than hoisted above it because the test needs the match's slot
+		// ids, which only exist after loadMatch — hoisting would cost a load on
+		// every request; here it only repeats on a CAS retry (capped at 3).
 		// Distinct from NOT_MATCH_PARTICIPANT, which means the inverse ("you must
 		// be a participant").
-		if (
-			opts.rejectParticipants &&
-			(await isMatchParticipant(env, match, userId))
-		) {
+		if (await isMatchParticipant(env, match, userId)) {
 			return errorResponse(
-				"You can't cast a match you're playing in",
+				"Players in a match can't cast it",
 				403,
 				cors,
 				"PARTICIPANT_CANNOT_CAST",
@@ -568,7 +560,6 @@ export async function handleCastMatchPart(
 
 	return mutateMyCasterEntry(tournamentId, matchId, partId, request, env, {
 		allowDecided: false,
-		rejectParticipants: true,
 		// Snapshot the caller's canonical handle as the caster name, mirroring
 		// the admin schedule path (linked caster → canonical username), plus
 		// their stream link for the streamer auto-attach. A stream_url in the
@@ -642,10 +633,6 @@ export async function handleUncastMatchPart(
 		// A caster who signed up but never actually cast shouldn't stay credited
 		// on a decided match; removal of your OWN entry is always additive-safe.
 		allowDecided: true,
-		// Same reasoning covers a participant credited from before casting became
-		// third-party-only: they can always take themselves off, so no rows get
-		// stuck and no grandfathering logic is needed.
-		rejectParticipants: false,
 		prepare: async (userId) => {
 			const u = await env.SHARE_DB.prepare(
 				"SELECT stream_url FROM users WHERE user_id = ?",
