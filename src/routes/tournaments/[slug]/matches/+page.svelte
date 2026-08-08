@@ -43,7 +43,7 @@
 	import {
 		matchParts,
 		matchDisplayStatus,
-		owesNextSitting,
+		owedPartNumber,
 		partInstant,
 		upcomingScheduledParts,
 		CAST_GRACE_MS,
@@ -154,14 +154,14 @@
 				const split = parts.length >= 2;
 				// An open part is one with no usable time — partInstant's answer, not
 				// a raw null check, so a part carrying an unparseable time lands here
-				// instead of falling through both this branch and owesNextSitting
+				// instead of falling through both this branch and owedPartNumber
 				// (which reads the same helper) and vanishing from the post.
 				const open = parts
 					.map((part, i) => ({ part, partNumber: i + 1 }))
 					.filter(({ part }) => partInstant(part) == null)
 					.map(({ partNumber }) => line(partNumber, split));
 				if (open.length > 0) return open;
-				const next = owesNextSitting(m);
+				const next = owedPartNumber(m);
 				return next != null ? [line(next, true)] : [];
 			});
 

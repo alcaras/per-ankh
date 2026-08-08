@@ -208,7 +208,7 @@ export function upcomingScheduledParts(
 // live. Classifies every part against one `now` off the shared reactive
 // clock, as liveAndUpcoming does, so a match starts owing as its last sitting
 // ages out.
-export function owesNextSitting(m: TournamentMatch): number | null {
+export function owedPartNumber(m: TournamentMatch): number | null {
 	if (m.status !== "pending" || m.slot_b_id == null) return null;
 	const parts = matchParts(m);
 	if (parts.length === 0) return null;
