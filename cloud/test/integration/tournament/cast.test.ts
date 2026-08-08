@@ -2,11 +2,12 @@
 //   POST   /v1/tournaments/:id/matches/:match_id/parts/:part_id/casters/me
 //   DELETE /v1/tournaments/:id/matches/:match_id/parts/:part_id/casters/me
 //
-// Any logged-in user may add/move/remove THEMSELVES on a scheduled part's
-// caster list (index 0 = streamer, the rest co-casters), scoped so they only
-// ever touch their own entry — never the whole list like the admin schedule
-// endpoint. Casting is pending-only; self-removal also works on decided
-// matches. Both respond 204 (no body) — state is asserted from the row.
+// Any logged-in user who isn't playing in the match may add/move/remove
+// THEMSELVES on a scheduled part's caster list (index 0 = streamer, the rest
+// co-casters), scoped so they only ever touch their own entry — never the whole
+// list like the admin schedule endpoint. Casting is pending-only and
+// third-party-only; self-removal also works on decided matches. Both respond
+// 204 (no body) — state is asserted from the row.
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -204,6 +205,46 @@ describe("caster self-service", () => {
 			as: alice,
 		});
 		expect(res.status).toBe(204);
+		expect(await castersOf(t, match.match_id, partId)).toEqual([]);
+	});
+
+	it("rejects a participant casting their own match", async () => {
+		const player = await makeUser({ discordUsername: "player_one" });
+		const t = await makeTournament({
+			advanceTo: "swiss-round-1-generated",
+			slotOwners: { A: [player] },
+		});
+		const slotId = t.slotsByDivision.A.find(
+			(s) => s.owner?.userId === player.userId,
+		)!.slotId;
+		const match = (await t.matches()).find(
+			(row) =>
+				row.status === "pending" &&
+				(row.slot_a_id === slotId || row.slot_b_id === slotId),
+		)!;
+		const scheduled = await expectOk<{
+			match: { parts: { id: string }[] };
+		}>(
+			await request.patch({
+				path: `/v1/tournaments/${t.tournamentId}/matches/${match.match_id}/schedule`,
+				as: t.admin,
+				body: {
+					parts: [{ scheduled_at: WHEN, casters: [], streams: [] }],
+				},
+			}),
+		);
+		const partId = scheduled.match.parts[0].id;
+
+		// Casting a game you're playing in is refused — a distinct code from
+		// NOT_MATCH_PARTICIPANT, which means the inverse.
+		await expectErrorCode(
+			await request.post({
+				path: castPath(t.tournamentId, match.match_id, partId),
+				as: player,
+				body: {},
+			}),
+			{ status: 403, code: "PARTICIPANT_CANNOT_CAST" },
+		);
 		expect(await castersOf(t, match.match_id, partId)).toEqual([]);
 	});
 });

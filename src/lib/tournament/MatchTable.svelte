@@ -1,11 +1,12 @@
 <script lang="ts">
 	// The one match table, shared by every tournament match surface (the matches
-	// page, the Cast view, the overview's Up Next panel). The caller builds +
-	// filters + sorts the rows and picks which columns to show; this owns all the
-	// cell markup, so a match row and a part row render identically. It reports
-	// header clicks (when sortable) and row clicks (when clickable), and composes
-	// the shared cast buttons (CastControls) in the trailing actions column for
-	// any pending sitting.
+	// page, the Cast view, the overview's Up Next and Next Match panels). The
+	// caller builds + filters + sorts the rows and picks which columns to show;
+	// this owns all the cell markup, so a match row and a part row render
+	// identically. It reports header clicks (when sortable) and row clicks (when
+	// clickable), and composes the trailing actions column: the schedule editor
+	// (SchedulePopover) on a match still awaiting a time, the cast buttons
+	// (CastControls) on a scheduled sitting the viewer isn't playing in.
 	//
 	// Columns are keyed off the shared registry (matches-table.ts).
 	import type {
@@ -17,6 +18,7 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import CastControls from "$lib/tournament/CastControls.svelte";
+	import SchedulePopover from "$lib/tournament/SchedulePopover.svelte";
 	import { matchBracketLabel } from "$lib/tournament/bracket-label";
 	import {
 		matchSlotAvatarUrl,
@@ -39,6 +41,8 @@
 		matchSortInstant,
 		rowCasters,
 		rowStreams,
+		rowCanSchedule,
+		rowIsCastableByViewer,
 		rowIsPendingSitting,
 		MATCH_TABLE_FRAME_CLASS,
 		MATCH_TABLE_ROW_CLASS,
@@ -65,6 +69,7 @@
 		slotUserIds,
 		slotSlugs,
 		slotAvatars,
+		isAdmin = false,
 		sortColumn = null,
 		sortDirection = "asc",
 		onSort,
@@ -80,19 +85,29 @@
 		// not a whole TournamentDetail, so a cross-tournament surface can group
 		// rows and hand each group its own compact context.
 		tournament: MatchTableTournament;
-		// The signed-in viewer (null when anonymous), for the inline cast controls
-		// in the Casters & Streams cell. Reads only; anonymous viewers still see the
-		// "needs a caster" flag but no action buttons.
+		// The signed-in viewer (null when anonymous), for the actions column: a row
+		// awaiting a time offers Schedule to its own two players, and a scheduled
+		// one offers the cast buttons to everyone else (resolved against
+		// slotUserIds). Anonymous viewers still see the "needs a caster" flag but no
+		// action buttons.
 		user: UserMe | null;
 		slotLabels: Record<string, string>;
 		// Live slot → per-ankh account, the fallback half of the same snapshot-
-		// first rule the labels and avatars resolve under. Only the player cells
-		// read it (casters carry their own user_id on the part).
+		// first rule the labels and avatars resolve under. Read by the player cells
+		// and by the actions column's participant gate (casters carry their own
+		// user_id on the part).
 		slotUserIds: Record<string, string | null>;
 		// Live slot → that account's profile slug, the same fallback half
 		// again. Only the player cells read it (casters carry their own slug).
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
+		// Whether the viewer administers THIS tournament — the actions column's only
+		// other input: an admin gets Schedule on every match still awaiting a time,
+		// not just their own. A separate prop rather than a field on
+		// MatchTableTournament, because that type is satisfied structurally by the
+		// profile tab's cross-tournament context, which has no admin notion. Defaults
+		// off, which is the honest answer for every surface that doesn't know.
+		isAdmin?: boolean;
 		// The active sort column/direction, for the header arrow. Only meaningful
 		// alongside onSort (a sortable surface).
 		sortColumn?: string | null;
@@ -137,8 +152,10 @@
 	}
 </script>
 
-<!-- One player's cell: crest + avatar + name. Side B collapses to "Bye" when
-     there's no opponent slot; an unresolved side-A feeder reads "TBD".
+<!-- One player's cell: crest + avatar + name. A side with no occupant reads
+     "Bye" (a real match's empty side B) or "TBD" (a bracket placeholder whose
+     feeder hasn't decided — the synthesizer leaves side A as "" and side B as
+     null, and a bye is never a placeholder, so the two can't collide).
      A decided match emphasizes its winner (bold orange, as the Swiss and
      championship bracket cards already do) and dims the loser — the outcome
      lives here rather than in a `result` column, which would be
@@ -147,8 +164,10 @@
      the crest is the nation, not the player, so it stays outside the link. -->
 {#snippet playerCell(m: TournamentMatch, side: "a" | "b")}
 	{@const slotId = side === "a" ? m.slot_a_id : m.slot_b_id}
-	{#if slotId === null}
-		<span class="opacity-60">{side === "b" ? "Bye" : "TBD"}</span>
+	{#if slotId === null || slotId === ""}
+		<span class="opacity-60"
+			>{side === "b" && m.is_placeholder !== true ? "Bye" : "TBD"}</span
+		>
 	{:else}
 		{@const nation = matchSlotNation(m, side)}
 		{@const name = matchSlotDisplayName(m, side, slotLabels) ?? "—"}
@@ -341,6 +360,12 @@
 											<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
 											Completed
 										</span>
+									{:else if m.is_placeholder}
+										<!-- A bracket cell the backend hasn't generated yet: there's
+										     nothing to schedule until the feeding round reports, so it
+										     reads as waiting rather than as an unscheduled match
+										     somebody forgot. Same wording as the match card's chip. -->
+										<span class="opacity-70">Awaiting prior round</span>
 									{:else}
 										Not scheduled
 									{/if}
@@ -435,10 +460,25 @@
 									{/if}
 								</div>
 							{:else if column.key === "actions"}
-								<!-- Trailing header-less column: the inline cast buttons,
-								     right-aligned (CastControls justifies to the end) so they line
-								     up across rows. -->
-								{#if rowIsPendingSitting(row)}
+								<!-- Trailing header-less column, right-aligned so the buttons line
+								     up across rows. Two branches split on whether the row has a time
+								     yet: a match awaiting one gets Schedule (its two players, or an
+								     admin), a scheduled sitting gets the cast buttons (anyone not
+								     playing in it). Disjoint by construction, so the {:else} is
+								     readability, not arbitration. -->
+								{#if rowCanSchedule(row, slotUserIds, user, isAdmin)}
+									<!-- Right-aligned to match CastControls' own justify-end, and
+									     stopPropagation for the same reason it has it: acting on a row
+									     shouldn't also open the match card behind it. -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="flex justify-end"
+										onclick={(e) => e.stopPropagation()}
+										onkeydown={(e) => e.stopPropagation()}
+									>
+										<SchedulePopover match={m} {tournament} />
+									</div>
+								{:else if rowIsCastableByViewer(row, slotUserIds, user)}
 									<CastControls {row} {tournament} {user} />
 								{/if}
 							{/if}

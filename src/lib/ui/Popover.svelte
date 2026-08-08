@@ -13,13 +13,10 @@
 	//      match popover, whose trigger is a bracket cell rendered elsewhere.
 	import { Popover } from "bits-ui";
 	import type { Snippet } from "svelte";
+	import type { Measurable } from "$lib/ui/types";
 
 	type Side = "top" | "right" | "bottom" | "left";
 	type Align = "start" | "center" | "end";
-	// A floating-ui "virtual" anchor — anything exposing getBoundingClientRect.
-	// Lets callers anchor to a point (e.g. the mouse position) rather than a DOM
-	// element. Mirrors bits-ui's customAnchor, which accepts this same shape.
-	type Measurable = { getBoundingClientRect: () => DOMRect };
 
 	let {
 		open = $bindable(false),

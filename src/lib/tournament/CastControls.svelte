@@ -1,12 +1,16 @@
 <script lang="ts">
 	// Inline caster self-service buttons for one match sitting, hosted in the
 	// shared match table's trailing actions column (MatchTable). Any logged-in
-	// user can add themselves as the streamer or a co-caster, or drop. Writes go
-	// through the self-service cast endpoints (a caster only ever touches their
-	// own entry) and refresh via invalidateAll. Rendered on every match surface
-	// for pending scheduled sittings — the caller gates on rowIsPendingSitting.
-	// The "needs a caster" flag is not here; it lives with the caster/stream data
-	// in the Casters & Streams cell.
+	// user who isn't playing in the match can add themselves as the streamer or a
+	// co-caster, or drop. Writes go through the self-service cast endpoints (a
+	// caster only ever touches their own entry) and refresh via invalidateAll.
+	// Rendered on every match surface for pending scheduled sittings the viewer
+	// isn't a participant of — the caller gates on rowIsCastableByViewer, and the
+	// worker enforces the participant half (403 PARTICIPANT_CANNOT_CAST). An
+	// unscheduled match has no sitting to cast, so its cell offers the schedule
+	// editor instead. The "needs a caster" flag is
+	// not here; it lives with the caster/stream data in the Casters & Streams cell
+	// and stays on your own match — it still needs one, just not you.
 	//
 	// Streamer casts auto-attach the caster's stream link (users.stream_url,
 	// editable in account preferences). A first-time streamer with no stored

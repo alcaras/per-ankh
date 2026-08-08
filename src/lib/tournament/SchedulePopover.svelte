@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { invalidateAll } from "$app/navigation";
-	// Per-match schedule editor, opened as a nested popover off the "Schedule"
-	// button in the match popover footer. A match is one game played across one
-	// or more "parts" (sittings); this edits the ordered list of parts, each with
-	// its own time (entered in the viewer's zone), casters (streamer + co-casters),
-	// and stream links. Replace-all: Save sends the full parts list. Open to an admin
-	// or either participant on any non-bye match — scheduling ahead while pending,
-	// attaching streams after it's played. Self-contained: owns its own
+	// Per-match schedule editor, opened as a nested popover off a "Schedule"
+	// button — in the match popover footer, and inline in the match table's
+	// actions column on a match still awaiting a time (its own two players, or a
+	// tournament admin on any of them). A match is one game
+	// played across one or more "parts" (sittings); this edits the ordered list of
+	// parts, each with its own time (entered in the viewer's zone), casters
+	// (streamer + co-casters), and stream links. Replace-all: Save sends the full
+	// parts list. An admin gets it on any non-bye match (scheduling ahead while
+	// pending, attaching streams after it's played); a participant only while
+	// pending, matching what the endpoint accepts. Self-contained: owns its own
 	// busy/toast/invalidate cycle, so the parent only decides whether to render it.
-	import {
-		cloudApi,
-		type TournamentDetail,
-		type TournamentMatch,
-	} from "$lib/api-cloud";
+	import { cloudApi, type TournamentMatch } from "$lib/api-cloud";
 	import Popover from "$lib/ui/Popover.svelte";
 	import { runAction } from "$lib/tournament/async-action";
+	import type { MatchTableTournament } from "$lib/tournament/matches-table";
 	import FormFooter from "$lib/tournament/FormFooter.svelte";
 	import SchedulePartEditor, {
 		isValidStreamUrl,
@@ -34,7 +34,11 @@
 		tournament,
 	}: {
 		match: TournamentMatch;
-		tournament: TournamentDetail;
+		// Same compact context the match table takes (only `tournament_id`, the
+		// schedule endpoint's path segment, is read here) — so the inline mount in
+		// the table's actions column doesn't need a whole TournamentDetail.
+		// Mirrors CastControls, which narrows for the same reason.
+		tournament: MatchTableTournament;
 	} = $props();
 
 	let open = $state(false);

@@ -25,6 +25,7 @@
 		slotUserIds,
 		slotSlugs,
 		slotAvatars,
+		isAdmin = false,
 		search = "",
 		onOpenMatch,
 	}: {
@@ -38,6 +39,11 @@
 		slotUserIds: Record<string, string | null>;
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
+		// Passed through to the table's actions column. Every row here is a
+		// scheduled sitting, so it changes nothing on this view today — but the
+		// column decides Schedule-vs-cast from it, and a surface that withheld it
+		// would be the one place the rule reads differently.
+		isAdmin?: boolean;
 		// Free-text filter, shared with the other match surfaces via the matches
 		// page header. Empty string = no filter.
 		search?: string;
@@ -123,6 +129,7 @@
 	{slotUserIds}
 	{slotSlugs}
 	{slotAvatars}
+	{isAdmin}
 	onRowClick={onOpenMatch}
 	emptyMessage={upcoming.length === 0
 		? "No upcoming scheduled matches."

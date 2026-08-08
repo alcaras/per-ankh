@@ -14,6 +14,7 @@
 	} from "$lib/api-cloud";
 	import type { ChartOption } from "$lib/echarts";
 	import type { FullGameData } from "$lib/parser/types";
+	import { PUBLIC_ORIGIN } from "$lib/page-meta";
 	import Chart from "$lib/Chart.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
@@ -36,6 +37,7 @@
 		escapeHtml,
 	} from "$lib/utils/formatting";
 	import {
+		isMatchParticipant,
 		matchSlotAvatarUrl,
 		matchSlotNation,
 		matchSlotDisplayName,
@@ -176,10 +178,11 @@
 	);
 
 	// Admin "easy DM" — a ready-to-paste Discord message pairing the two players
-	// for their round: match number, map (name + atlas deep link), scheduling +
-	// DLC/host instructions, each player's timezone (from their signup answer),
-	// and the caster-thread nudge. Only for a real, two-player match with a
-	// number; timezones fall back to a placeholder when the answer is missing.
+	// for their round: match number, map (name + atlas deep link), scheduling
+	// instructions with a deep link to this match's card, DLC/host instructions,
+	// each player's timezone (from their signup answer), and the caster-thread
+	// nudge. Only for a real, two-player match with a number; timezones fall back
+	// to a placeholder when the answer is missing.
 	const dmText = $derived.by(() => {
 		const num = match.match_number;
 		if (num == null || isPlaceholder || match.slot_b_id == null) {
@@ -215,6 +218,11 @@
 			mapLine,
 			"",
 			"Please work together to schedule a time for your match",
+			"",
+			// Deep link straight to this match's card, where either player can set
+			// the time themselves — the DM is where they're being asked to schedule,
+			// so it's where the affordance has to be reachable from.
+			`Either of you can set the time here: ${PUBLIC_ORIGIN}/tournaments/${tournament.slug}?match=${match.match_id}`,
 			"",
 			"(Also please confirm at least one of you has all the DLC and thus can host; if both of you have all the DLC, the second listed player can host if they prefer)",
 			"",
@@ -333,12 +341,7 @@
 			: null,
 	);
 
-	const isParticipant = $derived(
-		user !== null &&
-			(slotUserIds[match.slot_a_id] === user.user_id ||
-				(match.slot_b_id !== null &&
-					slotUserIds[match.slot_b_id] === user.user_id)),
-	);
+	const isParticipant = $derived(isMatchParticipant(match, slotUserIds, user));
 	// Placeholder cells don't correspond to a real tournament_matches row
 	// yet, so any action that PATCHes the match (map, retro, upload-link) is
 	// suppressed in preview mode.
@@ -367,12 +370,17 @@
 	const retroEditLabel = $derived(
 		match.status === "pending" ? "Set result" : "Edit result",
 	);
-	// Scheduling/streams (time / casters / stream links) is open to admins and
-	// participants on any real, non-bye match: pending to coordinate the upcoming
+	// Scheduling/streams (time / casters / stream links) on any real, non-bye
+	// match. An admin gets it in every status: pending to coordinate the upcoming
 	// game, complete/forfeit to attach stream links and casters after it's played.
-	// Suppressed on placeholder cells (no real match row yet).
+	// A participant only while pending — a decided match's parts are an archive
+	// that handlePatchMatchSchedule already refuses them (403), so offering the
+	// button there was only ever a 403 waiting to happen. Suppressed on
+	// placeholder cells (no real match row yet).
 	const canSchedule = $derived(
-		!isPlaceholder && match.status !== "bye" && (isAdmin || isParticipant),
+		!isPlaceholder &&
+			match.status !== "bye" &&
+			(isAdmin || (isParticipant && match.status === "pending")),
 	);
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).

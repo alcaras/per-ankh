@@ -135,6 +135,29 @@ export function matchSlotUserId(
 	return liveBySlotId[slotId] ?? null;
 }
 
+// Whether the viewer is one of the two players in this match — the single
+// definition behind every participant-facing affordance (schedule your own
+// match, and its inverse: you don't get to cast a match you're playing in).
+//
+// Resolves each side through matchSlotUserId, so it inherits the same
+// snapshot-first rule: a decided match answers with the occupants pinned at
+// report time, and a substitution never rewrites who played it. Pending matches
+// read the live map, so a substitute paired into an upcoming round counts
+// immediately. False for an anonymous viewer, and for a side whose occupant has
+// no per-ankh account (an unclaimed slot resolves to null, which no user_id
+// equals).
+export function isMatchParticipant(
+	match: MatchUserIdLike,
+	liveBySlotId: Record<string, string | null | undefined>,
+	user: { user_id: string } | null,
+): boolean {
+	if (user === null) return false;
+	return (
+		matchSlotUserId(match, "a", liveBySlotId) === user.user_id ||
+		matchSlotUserId(match, "b", liveBySlotId) === user.user_id
+	);
+}
+
 // The profile slug of that same occupant — the other half of the URL
 // matchSlotUserId names, which is why it lives here rather than being read off
 // `slot_a/b_slug` at each link site.

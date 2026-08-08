@@ -14,12 +14,14 @@
 		type TournamentMatch,
 		type UserMe,
 	} from "$lib/api-cloud";
-	import MatchPopover from "$lib/tournament/MatchPopover.svelte";
+	import MatchDetailPopover, {
+		pointerAnchor,
+	} from "$lib/tournament/MatchDetailPopover.svelte";
 	import MatchTable from "$lib/tournament/MatchTable.svelte";
 	import { pickColumns, type MatchRow } from "$lib/tournament/matches-table";
 	import { liveAndUpcoming, type ScheduleZone } from "$lib/tournament/schedule";
 	import { nowMs } from "$lib/stores/now.svelte";
-	import Popover from "$lib/ui/Popover.svelte";
+	import type { Measurable } from "$lib/ui/types";
 
 	interface Props {
 		tournament: TournamentDetail;
@@ -32,6 +34,11 @@
 		slotSlugs: Record<string, string | null>;
 		slotAvatars: Record<string, string | null>;
 		user: UserMe | null;
+		// Passed through to the table's actions column. Every row here is a
+		// scheduled sitting, so it changes nothing on this panel today — but the
+		// column decides Schedule-vs-cast from it, and a surface that withheld it
+		// would be the one place the rule reads differently.
+		isAdmin?: boolean;
 		// Admin substitute, threaded into the match card; undefined for non-admins.
 		onSubstitute?: (
 			// eslint-disable-next-line no-unused-vars -- documentary param names
@@ -52,6 +59,7 @@
 		slotSlugs,
 		slotAvatars,
 		user,
+		isAdmin = false,
 		onSubstitute,
 	}: Props = $props();
 
@@ -80,12 +88,11 @@
 		resolve("/tournaments/[slug]/matches", { slug: tournament.slug }),
 	);
 
-	// --- Match card, anchored at the click point (mirrors the matches page). A
-	// virtual anchor from the pointer keeps the card beside the clicked row.
+	// --- Match card, anchored at the click point (see MatchDetailPopover for why
+	// the panels anchor this way rather than off the page-level popover).
+	// Resolved from `matches` by id so an edit reflects as soon as data refreshes.
 	let detailMatchId = $state<string | null>(null);
-	let detailAnchor = $state<{ getBoundingClientRect: () => DOMRect } | null>(
-		null,
-	);
+	let detailAnchor = $state<Measurable | null>(null);
 	const detailMatch = $derived(
 		detailMatchId
 			? (matches.find((m) => m.match_id === detailMatchId) ?? null)
@@ -93,9 +100,7 @@
 	);
 
 	function pick(match: TournamentMatch, e: MouseEvent) {
-		const x = e.clientX;
-		const y = e.clientY;
-		detailAnchor = { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) };
+		detailAnchor = pointerAnchor(e);
 		detailMatchId = match.match_id;
 	}
 </script>
@@ -132,40 +137,22 @@
 		{slotUserIds}
 		{slotSlugs}
 		{slotAvatars}
+		{isAdmin}
 		onRowClick={pick}
 		isLive={(row) => liveSet.has(row)}
 		emptyMessage="No live or upcoming matches."
 	/>
 </section>
 
-<!-- Match card, anchored at the click point. Independent of the overview page's
-     bracket-cell modal (this one uses a virtual pointer anchor), so the two
-     never fight over the same [data-match-id] element. -->
-<Popover
-	open={detailMatchId !== null}
-	onOpenChange={(o) => {
-		if (!o) detailMatchId = null;
-	}}
-	customAnchor={detailAnchor}
-	side="right"
-	align="start"
-	contentClass="w-[min(92vw,35.2rem)]"
-	frameClass="bg-surface p-3 shadow-[0_24px_64px_-12px_rgb(var(--color-black)/0.85)]"
-	ariaLabel="Match detail"
->
-	{#if detailMatch}
-		{#key detailMatch.match_id}
-			<MatchPopover
-				match={detailMatch}
-				{tournament}
-				{slotLabels}
-				{slotUserIds}
-				{slotSlugs}
-				{slotAvatars}
-				{user}
-				{onSubstitute}
-				onClose={() => (detailMatchId = null)}
-			/>
-		{/key}
-	{/if}
-</Popover>
+<MatchDetailPopover
+	match={detailMatch}
+	anchor={detailAnchor}
+	{tournament}
+	{slotLabels}
+	{slotUserIds}
+	{slotSlugs}
+	{slotAvatars}
+	{user}
+	{onSubstitute}
+	onClose={() => (detailMatchId = null)}
+/>

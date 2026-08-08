@@ -27,6 +27,7 @@ import {
 import { countEventsSince } from "../games";
 import {
 	bumpTournamentUpdatedAt,
+	isMatchParticipant,
 	loadMatch,
 	loadRound,
 	loadTournamentById,
@@ -396,10 +397,11 @@ export async function handleTournamentWithdraw(
 // ----------------------------------------------------------------------
 // Caster self-service — a caster adds/moves/removes THEMSELVES on a scheduled
 // part's caster list (index 0 = streamer, the rest co-casters). Open to any
-// logged-in user (no admin/participant gate); scoped so a caster only ever
-// touches their own entry, never the whole list like the admin schedule
-// endpoint. Casting is pending-only; UNcasting also works on decided matches
-// so someone who signed up but never actually cast isn't stuck credited.
+// logged-in user who isn't playing in the match (casting is a third-party job);
+// no admin gate. Scoped so a caster only ever touches their own entry, never
+// the whole list like the admin schedule endpoint. Casting is pending-only;
+// UNcasting also works on decided matches, so nobody who signed up but never
+// actually cast is stuck credited.
 // ----------------------------------------------------------------------
 
 // Concurrent casters are the expected case (several people reacting to the
@@ -485,6 +487,21 @@ async function mutateMyCasterEntry(
 				409,
 				cors,
 				"MATCH_NOT_PENDING",
+			);
+		}
+		// Casting is a third-party job, in both directions: a match's own two
+		// players have no caster entry on it to add or to take away. In the loop
+		// rather than hoisted above it because the test needs the match's slot
+		// ids, which only exist after loadMatch — hoisting would cost a load on
+		// every request; here it only repeats on a CAS retry (capped at 3).
+		// Distinct from NOT_MATCH_PARTICIPANT, which means the inverse ("you must
+		// be a participant").
+		if (await isMatchParticipant(env, match, userId)) {
+			return errorResponse(
+				"Players in a match can't cast it",
+				403,
+				cors,
+				"PARTICIPANT_CANNOT_CAST",
 			);
 		}
 		const parts = parseParts(match);

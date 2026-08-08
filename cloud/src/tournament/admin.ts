@@ -53,6 +53,7 @@ import { computeRecord, computeStandings, rankStandings } from "./standings";
 import { AuthzError, isTournamentBeta, requireTournamentAdmin } from "./authz";
 import {
 	bumpTournamentUpdatedAt,
+	isMatchParticipant,
 	loadMatch,
 	loadMatches,
 	loadRound,
@@ -2296,7 +2297,7 @@ async function authedMatchScheduler(
 	}
 
 	// Admin OR participant. Try admin first (reuses requireTournamentAdmin);
-	// on its 403 fall back to checking whether the caller owns either slot.
+	// on its 403 fall back to the shared participation test.
 	let authorized = false;
 	let isAdmin = false;
 	try {
@@ -2305,11 +2306,7 @@ async function authedMatchScheduler(
 		isAdmin = true;
 	} catch (e) {
 		if (!(e instanceof AuthzError)) throw e;
-		const slotA = await loadSlot(env, match.slot_a_id);
-		const slotB = match.slot_b_id ? await loadSlot(env, match.slot_b_id) : null;
-		authorized =
-			slotA?.user_id === session.data.user_id ||
-			slotB?.user_id === session.data.user_id;
+		authorized = await isMatchParticipant(env, match, session.data.user_id);
 	}
 	if (!authorized) {
 		return {

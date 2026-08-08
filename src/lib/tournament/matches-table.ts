@@ -4,9 +4,11 @@ import type {
 	TournamentMatchPart,
 	TournamentMatchPartCaster,
 	TournamentMatchPartStream,
+	UserMe,
 } from "$lib/api-cloud";
 import { formatEnum } from "$lib/utils/formatting";
 import {
+	isMatchParticipant,
 	matchSlotDisplayName,
 	matchSlotNation,
 	matchupLabel,
@@ -19,9 +21,9 @@ import {
 } from "./parts";
 
 // Shared model for the tournament match table (MatchTable.svelte). One column
-// registry, one row shape, and one set of sort/search helpers back all three
-// match surfaces (the matches page, the Cast view, the overview's Up Next
-// panel) so they can never visually or behaviourally drift.
+// registry, one row shape, and one set of sort/search helpers back every match
+// surface (the matches page, the Cast view, the overview's Up Next and Next
+// Match panels) so they can never visually or behaviourally drift.
 
 // The status buckets the matches table filters/sorts by — the same four
 // display statuses used on the bracket cards (scheduled / in_progress /
@@ -147,14 +149,59 @@ export function rowStreams(row: MatchRow): TournamentMatchPartStream[] {
 }
 
 // Whether a row is a still-castable sitting: a pending, non-bye match with a
-// concrete scheduled sitting to act on. Backs both the "needs a caster" flag and
-// the inline cast controls (CastControls), so they surface on exactly the same
-// rows across every match surface.
+// concrete scheduled sitting to act on. Backs the "needs a caster" flag and the
+// inline cast controls (CastControls), so they surface on the same rows across
+// every match surface — the buttons additionally excluding the viewer's own
+// match (rowIsCastableByViewer). The flag stays on it either way: the match
+// genuinely does need a caster, just not that player.
 export function rowIsPendingSitting(row: MatchRow): boolean {
 	return (
 		row.match.status === "pending" &&
 		row.match.slot_b_id != null &&
 		rowPart(row) != null
+	);
+}
+
+// The two branches of the actions column. They split on whether the row has a
+// time yet, so they can never both match: a match awaiting one gets Schedule,
+// a scheduled sitting gets the cast buttons. Casting an unscheduled match is
+// meaningless — there's nothing to turn up for — which is why the schedule side
+// is the one that owns the no-time-yet row.
+
+// Whether the viewer may set this row's time: a pending, non-bye match with no
+// scheduled sitting at all, acted on by one of its two players or by a
+// tournament admin (who schedules the whole field, not just their own game).
+// Placeholder cells have no match row to PATCH, and a bye has no second player,
+// so both are excluded (as `pending` already excludes every decided status).
+export function rowCanSchedule(
+	row: MatchRow,
+	slotUserIds: Record<string, string | null>,
+	user: UserMe | null,
+	isAdmin: boolean,
+): boolean {
+	return (
+		row.match.is_placeholder !== true &&
+		row.match.status === "pending" &&
+		row.match.slot_b_id != null &&
+		rowPart(row) == null &&
+		(isAdmin || isMatchParticipant(row.match, slotUserIds, user))
+	);
+}
+
+// Whether the viewer may cast this row's sitting: a still-castable sitting they
+// aren't playing in. Casting is third-party — a player can't cast their own
+// game, and the worker rejects it with 403 PARTICIPANT_CANNOT_CAST — so the
+// buttons come off your own match while the "needs a caster" flag stays on it.
+// Admins are not excluded: an admin who isn't playing casts like anyone else,
+// which is what keeps the Cast view usable for the people who run it.
+export function rowIsCastableByViewer(
+	row: MatchRow,
+	slotUserIds: Record<string, string | null>,
+	user: UserMe | null,
+): boolean {
+	return (
+		rowIsPendingSitting(row) &&
+		!isMatchParticipant(row.match, slotUserIds, user)
 	);
 }
 
@@ -250,9 +297,9 @@ export const MATCH_COLUMN_DEFS: Record<string, MatchColumn> = {
 			return name ? name.toLowerCase() : null;
 		},
 	},
-	// Trailing, header-less column for the inline cast buttons (CastControls),
-	// right-aligned so they line up across rows. Empty label → its header isn't
-	// clickable/sortable.
+	// Trailing, header-less column for the inline action buttons (the schedule
+	// editor on your own pending match, else the cast buttons), right-aligned so
+	// they line up across rows. Empty label → its header isn't clickable/sortable.
 	actions: {
 		key: "actions",
 		label: "",
