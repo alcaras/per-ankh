@@ -45,7 +45,7 @@
 		matchSlotSlug,
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
-	import { upcomingScheduledParts } from "$lib/tournament/parts";
+	import { partPlayed, upcomingScheduledParts } from "$lib/tournament/parts";
 	import { seshMatchLine, seshVersus } from "$lib/tournament/sesh";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import {
@@ -382,15 +382,53 @@
 			match.status !== "bye" &&
 			(isAdmin || (isParticipant && match.status === "pending")),
 	);
+	// Whether the collapsed played parts are currently disclosed. Reset per
+	// match by the parent's {#key match.match_id} remount.
+	let showPlayed = $state(false);
+	// Schedule rows, played-last-and-collapsed. A long split match accumulates
+	// played parts that push the one a viewer actually needs — the NEXT one —
+	// below the popover frame's max-h-[85vh] fold, where on a short laptop
+	// screen it clips around the sixth row and the overlay scrollbar gives no
+	// hint there's more (the report that prompted this was a match on part
+	// seven whose only future time sat off-screen). Collapsing keeps the panel
+	// short at any viewport height. A part counts as played once partPlayed
+	// says so — aged out of LIVE_WINDOW_MS, the same boundary the live/upcoming
+	// surfaces draw — so a part being streamed right now stays inline, in
+	// order, with the upcoming ones. Played parts render behind a collapsed
+	// "N played parts" toggle when there are two or more; with nothing else to
+	// show, the most recent played part stays inline so the panel never opens
+	// empty. partPlayed reads the shared clock, so a part slides into the
+	// played group as it ages out.
+	const numberedParts = $derived(
+		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
+	);
+	const schedule = $derived.by(() => {
+		const played = numberedParts.filter(({ part }) => partPlayed(part));
+		const ahead = numberedParts.filter(({ part }) => !partPlayed(part));
+		// A single count drives the whole partition: the hidden rows are the
+		// first `hidden` played ones, the rest render inline. Slicing by that
+		// count keeps played order intact without a membership test.
+		const hidden =
+			played.length < 2
+				? 0
+				: ahead.length > 0
+					? played.length
+					: played.length - 1;
+		return {
+			collapsedCount: hidden,
+			rows: [...(showPlayed ? played : played.slice(hidden)), ...ahead],
+		};
+	});
+
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
 	// castingParts keeps each part's original 1-based number so a split match
 	// labels "Part N" consistently in both panels, and drops parts with no
 	// broadcast info so the casting panel only lists sittings that have some.
 	const castingParts = $derived(
-		match.parts
-			.map((part, i) => ({ part, partNumber: i + 1 }))
-			.filter(({ part }) => part.casters.length > 0 || part.streams.length > 0),
+		numberedParts.filter(
+			({ part }) => part.casters.length > 0 || part.streams.length > 0,
+		),
 	);
 	const hasSecondaryActions = $derived(
 		canSchedule ||
@@ -1076,16 +1114,43 @@
 			class="flex flex-col gap-2 rounded-lg p-3"
 			style="background-color: rgb(var(--color-surface-raised));"
 		>
-			{#each match.parts as part, i (part.id)}
+			{#if schedule.collapsedCount > 0}
+				<button
+					type="button"
+					class="flex items-center gap-1 self-start text-[10px] font-bold uppercase tracking-wider text-muted transition-colors hover:text-tan"
+					onclick={() => (showPlayed = !showPlayed)}
+					aria-expanded={showPlayed}
+					aria-label={`${showPlayed ? "Collapse" : "Expand"} played parts`}
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-3 w-3 shrink-0 transition-transform"
+						class:rotate-90={showPlayed}
+						viewBox="0 0 20 20"
+						fill="currentColor"
+						aria-hidden="true"
+					>
+						<path
+							fill-rule="evenodd"
+							d="M7.21 14.77a.75.75 0 010-1.06L10.94 10 7.21 6.29a.75.75 0 111.06-1.06l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-.02z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+					{schedule.collapsedCount} played part{schedule.collapsedCount === 1
+						? ""
+						: "s"}
+				</button>
+			{/if}
+			{#each schedule.rows as { part, partNumber }, i (part.id)}
 				<div
-					class="flex items-center gap-2 {i > 0
+					class="flex items-center gap-2 {i > 0 || schedule.collapsedCount > 0
 						? 'border-t border-border-subtle pt-2'
 						: ''}"
 				>
 					{#if match.parts.length > 1}
 						<span
 							class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted"
-							>Part {i + 1}</span
+							>Part {partNumber}</span
 						>
 					{/if}
 					{#if part.scheduled_at}

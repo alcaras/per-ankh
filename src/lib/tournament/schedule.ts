@@ -1,5 +1,10 @@
 import type { TournamentMatch } from "$lib/api-cloud";
-import { scheduledParts, LIVE_WINDOW_MS, type NumberedPart } from "./parts";
+import {
+	scheduledParts,
+	partInstant,
+	partPlayed,
+	type NumberedPart,
+} from "./parts";
 
 export type ScheduleZone = "utc" | "local";
 
@@ -33,10 +38,11 @@ export interface LiveAndUpcoming {
 // `now` is passed in (callers thread the reactive nowMs()) so the result
 // recomputes as the clock advances. A sitting is:
 //   • upcoming — its start is still in the future.
-//   • live     — started within LIVE_WINDOW_MS (plausibly still broadcasting).
-//   • aged out — started longer ago than the window: the game has almost
-//                certainly finished (and its ephemeral `…/live` link died), so
-//                it belongs to neither list and drops off the schedule entirely.
+//   • live     — started within the live window (plausibly still broadcasting).
+//   • aged out — started longer ago than the window, i.e. partPlayed (which
+//                owns that boundary): the game has almost certainly finished
+//                (and its ephemeral `…/live` link died), so it belongs to
+//                neither list and drops off the schedule entirely.
 // Both lists inherit partitionSchedule's soonest-first order.
 export function liveAndUpcoming(
 	matches: TournamentMatch[],
@@ -45,10 +51,10 @@ export function liveAndUpcoming(
 	const live: NumberedPart[] = [];
 	const upcoming: NumberedPart[] = [];
 	for (const np of partitionSchedule(matches).scheduled) {
-		const t = Date.parse(np.part.scheduled_at ?? "");
-		if (Number.isNaN(t)) continue;
+		const t = partInstant(np.part);
+		if (t == null) continue;
 		if (t > now) upcoming.push(np);
-		else if (t > now - LIVE_WINDOW_MS) live.push(np);
+		else if (!partPlayed(np.part, now)) live.push(np);
 	}
 	return { live, upcoming };
 }
