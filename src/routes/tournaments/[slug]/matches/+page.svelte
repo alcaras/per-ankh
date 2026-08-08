@@ -43,6 +43,8 @@
 	import {
 		matchParts,
 		matchDisplayStatus,
+		owedPartNumber,
+		partInstant,
 		upcomingScheduledParts,
 		CAST_GRACE_MS,
 		type NumberedPart,
@@ -120,40 +122,47 @@
 				(scheduled.length ? scheduled.join("\n") : "(none — all covered)")
 			);
 		}
-		// "To be scheduled" = matches still owing a time: never scheduled at all,
-		// or carrying a part without one yet (a split match heading into "Part 2,
-		// time TBD" — see #91). A match that has fully started (in progress,
-		// awaiting result, no open part) doesn't belong here. The part tag mirrors
-		// the "Upcoming" lines: shown only when the match is actually split.
+		// "To be scheduled" = matches still owing a time: never scheduled at
+		// all; carrying a part without one yet (a split match heading into
+		// "Part 2, time TBD" — see #91); or still pending after every sitting
+		// aged out — the game didn't finish in its last session (a finished
+		// match gets reported promptly), so it owes a next sitting without the
+		// TO having to add a blank part by hand. A match with a sitting still
+		// ahead or plausibly live doesn't belong here. The part tag mirrors the
+		// "Upcoming" lines: shown for any split match, including the synthetic
+		// next part (it is by definition part 2+).
 		const unscheduled = data.matches
 			.filter((m) => m.status === "pending" && m.slot_b_id != null)
 			.sort((a, b) => (a.match_number ?? 0) - (b.match_number ?? 0))
 			.flatMap((m) => {
+				// Every line in this block is the same match with no time, so only
+				// the part tag varies — bind the match once rather than repeating it
+				// per branch.
+				const line = (partNumber: number, split: boolean) =>
+					seshMatchLine({
+						matchNumber: m.match_number,
+						versus: vs(m),
+						partNumber,
+						split,
+					});
 				const parts = matchParts(m);
 				if (parts.length === 0) {
 					return matchDisplayStatus(m) === "unscheduled"
-						? [
-								seshMatchLine({
-									matchNumber: m.match_number,
-									versus: vs(m),
-									partNumber: 1,
-									split: false,
-								}),
-							]
+						? [line(1, false)]
 						: [];
 				}
 				const split = parts.length >= 2;
-				return parts
+				// An open part is one with no usable time — partInstant's answer, not
+				// a raw null check, so a part carrying an unparseable time lands here
+				// instead of falling through both this branch and owedPartNumber
+				// (which reads the same helper) and vanishing from the post.
+				const open = parts
 					.map((part, i) => ({ part, partNumber: i + 1 }))
-					.filter(({ part }) => part.scheduled_at == null)
-					.map(({ partNumber }) =>
-						seshMatchLine({
-							matchNumber: m.match_number,
-							versus: vs(m),
-							partNumber,
-							split,
-						}),
-					);
+					.filter(({ part }) => partInstant(part) == null)
+					.map(({ partNumber }) => line(partNumber, split));
+				if (open.length > 0) return open;
+				const next = owedPartNumber(m);
+				return next != null ? [line(next, true)] : [];
 			});
 
 		const blocks = [

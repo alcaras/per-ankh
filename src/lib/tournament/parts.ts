@@ -197,3 +197,22 @@ export function upcomingScheduledParts(
 		return t != null && t >= cutoff;
 	});
 }
+
+// A pending match whose every sitting has aged out (partPlayed, which owns
+// that boundary) did not finish in its last session — a finished match gets
+// its save uploaded and reported promptly, so a still-open one is between
+// sittings and owes the schedule its next part. Returns that next part's
+// number, or null when the match doesn't owe one: no sittings yet (a
+// different "to be scheduled" case), an explicitly open part (the TO already
+// added the blank sitting by hand), or a sitting still ahead or plausibly
+// live. Classifies every part against one `now` off the shared reactive
+// clock, as liveAndUpcoming does, so a match starts owing as its last sitting
+// ages out.
+export function owedPartNumber(m: TournamentMatch): number | null {
+	if (m.status !== "pending" || m.slot_b_id == null) return null;
+	const parts = matchParts(m);
+	if (parts.length === 0) return null;
+	const now = nowMs();
+	if (!parts.every((p) => partPlayed(p, now))) return null;
+	return parts.length + 1;
+}
