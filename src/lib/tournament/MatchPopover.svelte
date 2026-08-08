@@ -382,6 +382,9 @@
 			match.status !== "bye" &&
 			(isAdmin || (isParticipant && match.status === "pending")),
 	);
+	// Whether the collapsed played sessions are currently disclosed. Reset per
+	// match by the parent's {#key match.match_id} remount.
+	let showPlayed = $state(false);
 	// Schedule rows, played-last-and-collapsed. A long split match
 	// accumulates played sessions that push the one a viewer actually needs
 	// — the NEXT one — below the popover frame's max-h-[85vh] fold, where on
@@ -400,24 +403,23 @@
 	const numberedSessions = $derived(
 		match.parts.map((part, i) => ({ part, partNumber: i + 1 })),
 	);
-	const playedSessions = $derived(
-		numberedSessions.filter(({ part }) => partPlayed(part)),
-	);
-	const aheadSessions = $derived(
-		numberedSessions.filter((np) => !playedSessions.includes(np)),
-	);
-	const collapsedSessions = $derived(
-		playedSessions.length >= 2
-			? aheadSessions.length > 0
-				? playedSessions
-				: playedSessions.slice(0, -1)
-			: [],
-	);
-	const scheduleRows = $derived([
-		...playedSessions.filter((np) => !collapsedSessions.includes(np)),
-		...aheadSessions,
-	]);
-	let showPlayed = $state(false);
+	const schedule = $derived.by(() => {
+		const played = numberedSessions.filter(({ part }) => partPlayed(part));
+		const ahead = numberedSessions.filter(({ part }) => !partPlayed(part));
+		// A single count drives the whole partition: the hidden rows are the
+		// first `hidden` played ones, the rest render inline. Slicing by that
+		// count keeps played order intact without a membership test.
+		const hidden =
+			played.length < 2
+				? 0
+				: ahead.length > 0
+					? played.length
+					: played.length - 1;
+		return {
+			collapsedCount: hidden,
+			rows: [...(showPlayed ? played : played.slice(hidden)), ...ahead],
+		};
+	});
 
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
@@ -1113,7 +1115,7 @@
 			class="flex flex-col gap-2 rounded-lg p-3"
 			style="background-color: rgb(var(--color-surface-raised));"
 		>
-			{#if collapsedSessions.length > 0}
+			{#if schedule.collapsedCount > 0}
 				<button
 					type="button"
 					class="flex items-center gap-1 self-start text-[10px] font-bold uppercase tracking-wider text-muted transition-colors hover:text-tan"
@@ -1121,13 +1123,13 @@
 					aria-expanded={showPlayed}
 				>
 					<span aria-hidden="true">{showPlayed ? "▾" : "▸"}</span>
-					{collapsedSessions.length} played
-					{collapsedSessions.length === 1 ? "session" : "sessions"}
+					{schedule.collapsedCount} played
+					{schedule.collapsedCount === 1 ? "session" : "sessions"}
 				</button>
 			{/if}
-			{#each showPlayed ? [...collapsedSessions, ...scheduleRows] : scheduleRows as { part, partNumber }, i (part.id)}
+			{#each schedule.rows as { part, partNumber }, i (part.id)}
 				<div
-					class="flex items-center gap-2 {i > 0 || collapsedSessions.length > 0
+					class="flex items-center gap-2 {i > 0 || schedule.collapsedCount > 0
 						? 'border-t border-border-subtle pt-2'
 						: ''}"
 				>
