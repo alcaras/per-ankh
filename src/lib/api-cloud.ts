@@ -92,7 +92,8 @@ export type TournamentVideo =
 	| CreatorVideo
 	| YouTubeAttributedVideo;
 
-// One video in the site-admin featured set (GET /v1/admin/featured-videos).
+// One video in the site-admin featured set — the public feed
+// (GET /v1/featured-videos) and the admin list (GET /v1/admin/featured-videos).
 // Attributed exactly the same three ways — the Worker snapshots the video but
 // joins a linked uploader's identity at read time — so VideoCard renders one of
 // these no differently from a playlist entry.
@@ -698,6 +699,13 @@ export const cloudApi = {
 			.videos;
 	},
 
+	// The site-admin featured set, newest video first. Public read — the curation
+	// is admin-only, the result isn't; the home hero leads with the first entry.
+	getFeaturedVideos: async (opts?: CallOpts): Promise<FeaturedVideo[]> => {
+		const res = await request("/featured-videos", opts);
+		return (await (res.json() as Promise<{ videos: FeaturedVideo[] }>)).videos;
+	},
+
 	// Owner GET — returns the blob with `is_public` and the uploader-identity
 	// triple (`user_nation`, `user_won`, `user_display_name`) injected by the
 	// Worker. `is_public` drives the visibility toggle's initial state; the
@@ -944,8 +952,8 @@ export const cloudApi = {
 	},
 
 	// --- Featured videos (site admin) ---
-	// The curated set, newest video first. Admin-only for now: nothing public
-	// reads it yet.
+	// The whole curated set, newest video first — uncapped, for the Featured tab
+	// that manages it. The public, capped read is getFeaturedVideos above.
 	listFeaturedVideos: async (opts?: CallOpts): Promise<FeaturedVideo[]> => {
 		const res = await request("/admin/featured-videos", opts);
 		return (await (res.json() as Promise<{ videos: FeaturedVideo[] }>)).videos;

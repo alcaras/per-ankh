@@ -379,6 +379,14 @@ Cross-tournament home feed — the newest uploads across every visible tournamen
 - **Response 200:** `{ videos: … }` — entries carry the same three-way uploader attribution as `GET /v1/tournaments/:id/videos` (linked Per-Ankh user → `user_id`/`display_name`/`slug`/`avatar_url`; unlinked YouTube channel → `uploader_name`/`uploader_url`; neither → the bare video). Empty when no visible tournament has a playlist.
 - **Notes:** Which tournaments contribute is read from D1 per request, so a newly-set playlist appears without an invalidation step; visibility is viewer-independent (anything past `setup`, plus `setup` with `signups_open=1`) because the response is shared-cacheable. Playlist videos come from the same per-playlist KV entries (SWR) as the per-tournament read, so a home request is one D1 read plus mostly-warm KV reads. Distinct playlist ids only — two tournaments sharing a playlist fetch it once — and a video listed on two playlists collapses to one entry. Capped at 12, matching the strip. **Unfiltered**, unlike the creator feed's Old World title filter: an admin curated the playlist for that tournament, and match VODs rarely name the game. Edge-cached 60s (`s-maxage`), no browser cache.
 
+### `GET /v1/featured-videos`
+
+The site-admin featured set (see [Site admin: featured videos](#site-admin-featured-videos)), newest video first. The signed-out home page leads with its first entry; the writes that curate it stay admin-only.
+
+- **Auth:** Public — the same videos, and the same uploader identity, the creator strip and tournament playlists already serve to anyone. Outside the `anon_read` budget (no `429` here), like both sibling video feeds.
+- **Response 200:** `{ videos: FeaturedVideo[] }` — the same three-way uploader attribution as [`GET /v1/admin/featured-videos`](#get-v1adminfeatured-videos). Empty when nothing is featured.
+- **Notes:** Read straight from D1 — the set is a small curated table, not a platform fan-out, so there's no KV layer. Ordered `published_at DESC` (the video's own date, not when an admin starred it) and capped at 12, matching the strip. Edge-cached 60s (`s-maxage`), no browser cache, so a newly-starred video shows up on reload. Best-effort: a D1 failure answers an empty feed rather than 500-ing the home page.
+
 ---
 
 ## Account
@@ -813,7 +821,7 @@ All **Site admin** (`ADMIN_DISCORD_ID`). Non-admins receive `404 NOT_FOUND` (exi
 
 The curated set of videos an admin has starred from any video card. These are the only videos stored in D1 — every other video surface (the home creator strip, a profile's Videos tab, a tournament's playlist) reads live from the platform and caches in KV. A featured video ages out of the feed it came from (a channel's RSS returns ~15 entries), so each row is a **snapshot** of the fields the platform owns. The uploader's name and avatar are deliberately not snapshotted: a stored `user_id` is joined against `users` at read time (so a rename follows), and `uploader_name`/`uploader_url` carry an unlinked YouTube channel.
 
-Nothing public serves this table yet.
+Writes are admin-only; the set itself is public — see [`GET /v1/featured-videos`](#get-v1featured-videos).
 
 ### `GET /v1/admin/featured-videos`
 The whole featured set, newest video first (`published_at DESC`). Uncapped — the set is hand-curated.

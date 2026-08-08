@@ -114,6 +114,7 @@ import type { ChannelsEnv } from "./channels";
 import {
 	handleFeatureVideo,
 	handleListFeaturedVideos,
+	handlePublicFeaturedVideos,
 	handleUnfeatureVideo,
 } from "./featured";
 import type { FeaturedVideosEnv } from "./featured";
@@ -911,6 +912,16 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "path", path: "/v1/tournament-videos" },
 		route: "GET /v1/tournament-videos",
 		handler: (r, e, _m, c) => handleTournamentVideosFeed(r, e, c),
+	},
+	// The third home video feed — the site-admin featured set (see
+	// cloud/src/featured.ts), newest first. Read straight from D1 rather than
+	// KV: the set is a small curated table, not a platform fan-out. Public;
+	// only the writes under /v1/admin/featured-videos are gated.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/featured-videos" },
+		route: "GET /v1/featured-videos",
+		handler: (r, e) => handlePublicFeaturedVideos(r, e),
 	},
 	// User-facing tournament endpoints
 	{

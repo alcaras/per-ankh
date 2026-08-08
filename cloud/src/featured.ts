@@ -9,12 +9,13 @@
 // module joins `users` at read time (displayNameSql + buildAvatarUrl), the way
 // every other read builds identity, so a rename is reflected here too.
 //
-// Reads are admin-only for now. Nothing public serves this table yet —
-// surfacing featured videos to ordinary viewers is its own change.
+// Writes are admin-only. The set itself is public — the signed-out home page
+// leads with the newest featured video (GET /v1/featured-videos, below).
 
 import { isSiteAdmin, type AdminAuthEnv } from "./admin";
 import { buildAvatarUrl } from "./auth";
 import { displayNameSql } from "./identity";
+import { logError } from "./log";
 import { FeatureVideoSchema } from "./schemas/featured";
 import { sessionFromRequest, type SessionEnv } from "./session";
 import {
@@ -26,10 +27,20 @@ import {
 import type { VideoPlatform } from "./video/types";
 import type { QueryableD1 } from "./d1";
 
-export interface FeaturedVideosEnv extends SessionEnv, AdminAuthEnv {
+// The public feed needs no session — only the table and the CORS origins.
+export interface PublicFeaturedVideosEnv {
 	SHARE_DB: QueryableD1;
 	ALLOWED_ORIGINS: string;
 }
+
+export interface FeaturedVideosEnv
+	extends SessionEnv, AdminAuthEnv, PublicFeaturedVideosEnv {}
+
+// Display cap on the public feed, matching the two sibling video feeds
+// (MAX_CREATOR_FEED_VIDEOS / MAX_TOURNAMENT_FEED_VIDEOS) and the home page's
+// VIDEO_STRIP_SIZE. The admin list stays uncapped — the Featured tab manages
+// the whole set, so it has to see all of it.
+const MAX_FEATURED_FEED_VIDEOS = 12;
 
 // One row of the read query: the stored snapshot, plus the uploader's live
 // identity from the LEFT JOIN (all four join columns null when the row names no
@@ -93,6 +104,29 @@ export function attributeFeaturedVideo(row: FeaturedVideoRow) {
 	return base;
 }
 
+// The featured set, newest video first — the one read behind both the admin
+// list and the public feed, so the snapshot columns and the live identity join
+// can't drift apart between them. `cap` bounds the public feed; omitted, the
+// query returns the whole set.
+async function selectFeaturedVideos(
+	db: QueryableD1,
+	cap?: number,
+): Promise<ReturnType<typeof attributeFeaturedVideo>[]> {
+	const statement = db.prepare(
+		`SELECT f.platform, f.video_id, f.url, f.title, f.thumbnail_url,
+		        f.published_at, f.uploader_name, f.uploader_url, f.user_id,
+		        ${displayNameSql("u")} AS display_name,
+		        u.slug, u.discord_id, u.avatar_hash
+		 FROM featured_videos f
+		 LEFT JOIN users u ON u.user_id = f.user_id
+		 ORDER BY f.published_at DESC${cap != null ? " LIMIT ?" : ""}`,
+	);
+	const rows = await (
+		cap != null ? statement.bind(cap) : statement
+	).all<FeaturedVideoRow>();
+	return (rows.results ?? []).map(attributeFeaturedVideo);
+}
+
 // GET /v1/admin/featured-videos — the whole featured set, newest video first.
 // Uncapped: the set is hand-curated, so its size is an admin decision.
 export async function handleListFeaturedVideos(
@@ -105,21 +139,45 @@ export async function handleListFeaturedVideos(
 		return errorResponse("Not found", 404, cors, "NOT_FOUND");
 	}
 
-	const rows = await env.SHARE_DB.prepare(
-		`SELECT f.platform, f.video_id, f.url, f.title, f.thumbnail_url,
-		        f.published_at, f.uploader_name, f.uploader_url, f.user_id,
-		        ${displayNameSql("u")} AS display_name,
-		        u.slug, u.discord_id, u.avatar_hash
-		 FROM featured_videos f
-		 LEFT JOIN users u ON u.user_id = f.user_id
-		 ORDER BY f.published_at DESC`,
-	).all<FeaturedVideoRow>();
-
 	return jsonResponse(
-		{ videos: (rows.results ?? []).map(attributeFeaturedVideo) },
+		{ videos: await selectFeaturedVideos(env.SHARE_DB) },
 		200,
 		cors,
 	);
+}
+
+// GET /v1/featured-videos — the public feed, newest video first and capped.
+// The signed-out home page leads with its first entry.
+//
+// Response shaping mirrors the sibling public video feeds (handleCreatorVideos,
+// handleTournamentVideosFeed): best-effort, so a D1 hiccup answers an empty
+// feed rather than 500-ing the page the home load calls it from; 60s of edge
+// cache so repeated home hits don't re-run the join at the origin, with no
+// browser cache so an admin's star shows up on reload; and Vary: Origin because
+// the CORS headers are origin-specific on a shared-cacheable response.
+//
+// Deliberately outside the anon_read budget, like both siblings — the home page
+// fires all three on every anonymous load, and they answer 200 by construction.
+export async function handlePublicFeaturedVideos(
+	request: Request,
+	env: PublicFeaturedVideosEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	let videos: ReturnType<typeof attributeFeaturedVideo>[] = [];
+	try {
+		videos = await selectFeaturedVideos(env.SHARE_DB, MAX_FEATURED_FEED_VIDEOS);
+	} catch (e) {
+		logError("featured_feed_fetch_failed", e);
+	}
+	return new Response(JSON.stringify({ videos }), {
+		status: 200,
+		headers: {
+			"Content-Type": "application/json",
+			"Cache-Control": "public, max-age=0, s-maxage=60",
+			...cors,
+			Vary: "Origin",
+		},
+	});
 }
 
 // POST /v1/admin/featured-videos — feature a video, by snapshot. Upserts on
