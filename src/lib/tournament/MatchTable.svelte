@@ -467,10 +467,15 @@
 								     playing in it). Disjoint by construction, so the {:else} is
 								     readability, not arbitration. -->
 								{#if rowCanSchedule(row, slotUserIds, user, isAdmin)}
-									<!-- Right-aligned to match CastControls' own justify-end. Its
-									     trigger stops the click itself (like every other control in a
-									     row) so opening the editor doesn't also open the match card. -->
-									<div class="flex justify-end">
+									<!-- Right-aligned to match CastControls' own justify-end, and
+									     stopPropagation for the same reason it has it: acting on a row
+									     shouldn't also open the match card behind it. -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="flex justify-end"
+										onclick={(e) => e.stopPropagation()}
+										onkeydown={(e) => e.stopPropagation()}
+									>
 										<SchedulePopover match={m} {tournament} />
 									</div>
 								{:else if rowIsCastableByViewer(row, slotUserIds, user)}

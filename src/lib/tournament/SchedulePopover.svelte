@@ -44,19 +44,6 @@
 	let open = $state(false);
 	let busy = $state(false);
 
-	// eslint-disable-next-line no-unused-vars -- documentary param name
-	type TriggerClick = (e: MouseEvent) => void;
-
-	// The trigger's click, contained. The inline mount sits inside the match
-	// table's clickable <tr>, so without stopPropagation opening the editor also
-	// opens the match card behind it. Svelte's spread doesn't compose handlers —
-	// a later `onclick` attribute replaces the spread one — so bits-ui's own
-	// onclick, which is what actually opens the popover, is called through here.
-	function openFromTrigger(props: Record<string, unknown>, e: MouseEvent) {
-		e.stopPropagation();
-		(props.onclick as TriggerClick | undefined)?.(e);
-	}
-
 	// Times are entered/displayed in the viewer's own timezone and stored as the
 	// resulting UTC instant, so a match reads correctly in everyone's zone.
 	const tz = getLocalTimeZone();
@@ -228,7 +215,6 @@
 			{...props}
 			type="button"
 			class="inline-flex items-center gap-1.5 rounded border border-input px-2.5 py-1 text-xs text-tan transition-colors hover:border-orange hover:text-orange"
-			onclick={(e) => openFromTrigger(props, e)}
 		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
