@@ -64,12 +64,13 @@ function snapshot(video: TournamentVideo): FeatureVideoRequest {
 
 // Feature or unfeature, optimistically: the set flips first so the star (and
 // the Featured tab's list, which filters on it) responds immediately, and
-// reverts on failure. Returns whether the write landed, so a caller holding its
-// own row list can revert that too.
+// reverts on failure. The set is the only thing a caller has to revert — every
+// surface derives what it renders from it — so a failure is reported by the
+// toast here rather than handed back.
 export async function setFeatured(
 	video: TournamentVideo,
 	next: boolean,
-): Promise<boolean> {
+): Promise<void> {
 	const key = videoKey(video);
 	const was = keys.has(key);
 	if (next) keys.add(key);
@@ -77,13 +78,11 @@ export async function setFeatured(
 	try {
 		if (next) await cloudApi.featureVideo(snapshot(video));
 		else await cloudApi.unfeatureVideo(video.platform, video.id);
-		return true;
 	} catch (err) {
 		if (was) keys.add(key);
 		else keys.delete(key);
 		toast.error(
 			`${next ? "Feature" : "Unfeature"} failed: ${err instanceof Error ? err.message : err}`,
 		);
-		return false;
 	}
 }
