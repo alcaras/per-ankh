@@ -22,6 +22,7 @@ This reference is drift-guarded: `cloud/src/routes-doc.test.ts` asserts it docum
 - [Tournaments — player self-service](#tournaments--player-self-service)
 - [Tournament export](#tournament-export)
 - [Site admin: games](#site-admin-games) — `/v1/admin/games/*`
+- [Site admin: featured videos](#site-admin-featured-videos) — `/v1/admin/featured-videos*`
 - [Diagnostics](#diagnostics) — `/v1/csp-report`
 - [Legacy share](#legacy-share) — `/v1/share/*` (frozen)
 
@@ -803,6 +804,38 @@ Re-import a save into a target user's library (admin).
 - **Response:** `UploadGameResponse` — same shapes as `POST /v1/games`.
 - **Errors:** `404 NOT_FOUND` (non-admin), `400 INVALID_FORM` (`tournament_match_id` supplied), plus all `POST /v1/games` errors.
 - **Notes:** Runs as the target user; upload rate limits are skipped and the action is audited as `admin_reimport` (doesn't count toward the user's upload caps).
+
+---
+
+## Site admin: featured videos — `/v1/admin/featured-videos*`
+
+All **Site admin** (`ADMIN_DISCORD_ID`). Non-admins receive `404 NOT_FOUND` (existence hidden).
+
+The curated set of videos an admin has starred from any video card. These are the only videos stored in D1 — every other video surface (the home creator strip, a profile's Videos tab, a tournament's playlist) reads live from the platform and caches in KV. A featured video ages out of the feed it came from (a channel's RSS returns ~15 entries), so each row is a **snapshot** of the fields the platform owns. The uploader's name and avatar are deliberately not snapshotted: a stored `user_id` is joined against `users` at read time (so a rename follows), and `uploader_name`/`uploader_url` carry an unlinked YouTube channel.
+
+Nothing public serves this table yet.
+
+### `GET /v1/admin/featured-videos`
+The whole featured set, newest video first (`published_at DESC`). Uncapped — the set is hand-curated.
+
+- **Response 200:** `{ videos: FeaturedVideo[] }`, each `{ id, title, url, thumbnail_url, published_at, platform }` plus one of three uploader attributions: `user_id, display_name, slug, avatar_url` (a linked Per-Ankh user), `uploader_name, uploader_url` (an unlinked YouTube channel), or nothing at all. The same three-way shape [`GET /v1/tournaments/:id/videos`](#get-v1tournamentsidvideos) returns.
+- **Errors:** `404 NOT_FOUND`.
+
+### `POST /v1/admin/featured-videos`
+Feature a video, by snapshot.
+
+- **Body:** JSON `{ platform, video_id, url, title, published_at }` plus optional `thumbnail_url`, `user_id`, `uploader_name`, `uploader_url` (each defaulting to null). `platform` must have a registered provider (`youtube`); `url`/`thumbnail_url`/`uploader_url` must be http(s) — they're rendered as hrefs.
+- **Response 200:** `{ ok: true }`.
+- **Errors:** `404 NOT_FOUND`, `400 INVALID_BODY` / `INVALID_JSON`, `415 UNSUPPORTED_MEDIA_TYPE`.
+- **Notes:** Upserts on `(platform, video_id)` — re-featuring a video already in the set refreshes its snapshot (and its `featured_at`/`featured_by`) rather than failing. Omitted attribution fields are cleared, not preserved: the write is a whole-row replace, not a patch.
+
+### `DELETE /v1/admin/featured-videos/:platform/:video_id`
+Unfeature.
+
+- **Path:** `platform` (lowercase), `video_id` (≤64 chars of `[A-Za-z0-9_-]`).
+- **Response 200:** `{ ok: true }`.
+- **Errors:** `404 NOT_FOUND` (non-admin only).
+- **Notes:** Idempotent — deleting a video that isn't featured still succeeds, so the card star and the Featured tab's Remove don't have to agree on which got there first.
 
 ---
 

@@ -1,0 +1,202 @@
+// Site-admin "featured videos" — the curated set, stored in D1.
+//
+// Every other video surface (the home creator strip, a profile's Videos tab, a
+// tournament's playlist) reads live from the platform and caches in KV; nothing
+// is persisted. Featuring can't work that way: a featured video ages out of the
+// source feed, so the row carries a SNAPSHOT of the fields the platform owns
+// (see migration 0041). What it deliberately does NOT snapshot is the
+// uploader's name and avatar — `user_id` names a Per-Ankh uploader and this
+// module joins `users` at read time (displayNameSql + buildAvatarUrl), the way
+// every other read builds identity, so a rename is reflected here too.
+//
+// Reads are admin-only for now. Nothing public serves this table yet —
+// surfacing featured videos to ordinary viewers is its own change.
+
+import { isSiteAdmin, type AdminAuthEnv } from "./admin";
+import { buildAvatarUrl } from "./auth";
+import { displayNameSql } from "./identity";
+import { FeatureVideoSchema } from "./schemas/featured";
+import { sessionFromRequest, type SessionEnv } from "./session";
+import {
+	cloudCorsHeaders,
+	errorResponse,
+	jsonResponse,
+	parseJsonBody,
+} from "./util";
+import type { VideoPlatform } from "./video/types";
+import type { QueryableD1 } from "./d1";
+
+export interface FeaturedVideosEnv extends SessionEnv, AdminAuthEnv {
+	SHARE_DB: QueryableD1;
+	ALLOWED_ORIGINS: string;
+}
+
+// One row of the read query: the stored snapshot, plus the uploader's live
+// identity from the LEFT JOIN (all four join columns null when the row names no
+// Per-Ankh user). `platform` is typed as the union because the write schema
+// only accepts platforms with a registered provider.
+export interface FeaturedVideoRow {
+	platform: VideoPlatform;
+	video_id: string;
+	url: string;
+	title: string;
+	thumbnail_url: string | null;
+	published_at: string;
+	uploader_name: string | null;
+	uploader_url: string | null;
+	user_id: string | null;
+	display_name: string | null;
+	slug: string | null;
+	discord_id: string | null;
+	avatar_hash: string | null;
+}
+
+// Attribute one row's uploader, three ways — the same discrimination the
+// tournament playlist read applies (attributePlaylistVideos in
+// tournament/public.ts) and the frontend's TournamentVideo union mirrors: a
+// linked Per-Ankh user renders with their live Discord identity, an unlinked
+// YouTube channel with the snapshotted channel name + URL, and a video whose
+// feed entry named no author carries no attribution at all.
+//
+// The join, not the stored user_id, decides the first branch — there is no name
+// or avatar to render without it, so a row whose join came back empty falls
+// through to the next branch rather than producing a nameless card.
+export function attributeFeaturedVideo(row: FeaturedVideoRow) {
+	const base = {
+		id: row.video_id,
+		title: row.title,
+		url: row.url,
+		thumbnail_url: row.thumbnail_url,
+		published_at: row.published_at,
+		platform: row.platform,
+	};
+	if (
+		row.user_id != null &&
+		row.display_name != null &&
+		row.discord_id != null
+	) {
+		return {
+			...base,
+			user_id: row.user_id,
+			display_name: row.display_name,
+			slug: row.slug,
+			avatar_url: buildAvatarUrl(row.discord_id, row.avatar_hash),
+		};
+	}
+	if (row.uploader_name != null && row.uploader_url != null) {
+		return {
+			...base,
+			uploader_name: row.uploader_name,
+			uploader_url: row.uploader_url,
+		};
+	}
+	return base;
+}
+
+// GET /v1/admin/featured-videos — the whole featured set, newest video first.
+// Uncapped: the set is hand-curated, so its size is an admin decision.
+export async function handleListFeaturedVideos(
+	request: Request,
+	env: FeaturedVideosEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const session = await sessionFromRequest(env, request);
+	if (!(await isSiteAdmin(env, session))) {
+		return errorResponse("Not found", 404, cors, "NOT_FOUND");
+	}
+
+	const rows = await env.SHARE_DB.prepare(
+		`SELECT f.platform, f.video_id, f.url, f.title, f.thumbnail_url,
+		        f.published_at, f.uploader_name, f.uploader_url, f.user_id,
+		        ${displayNameSql("u")} AS display_name,
+		        u.slug, u.discord_id, u.avatar_hash
+		 FROM featured_videos f
+		 LEFT JOIN users u ON u.user_id = f.user_id
+		 ORDER BY f.published_at DESC`,
+	).all<FeaturedVideoRow>();
+
+	return jsonResponse(
+		{ videos: (rows.results ?? []).map(attributeFeaturedVideo) },
+		200,
+		cors,
+	);
+}
+
+// POST /v1/admin/featured-videos — feature a video, by snapshot. Upserts on
+// (platform, video_id): re-featuring one that's already in the set refreshes
+// its snapshot (a re-titled video, a rotated thumbnail) rather than failing,
+// which also makes the star toggle safe to press twice.
+export async function handleFeatureVideo(
+	request: Request,
+	env: FeaturedVideosEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const session = await sessionFromRequest(env, request);
+	// The `!session` leg is redundant against isSiteAdmin (which returns false
+	// without one) and carries its weight by narrowing the session for
+	// featured_by below.
+	if (!session || !(await isSiteAdmin(env, session))) {
+		return errorResponse("Not found", 404, cors, "NOT_FOUND");
+	}
+
+	const parsed = await parseJsonBody(request, FeatureVideoSchema, cors);
+	if (!parsed.ok) return parsed.response;
+	const body = parsed.body;
+
+	await env.SHARE_DB.prepare(
+		`INSERT INTO featured_videos (
+		   platform, video_id, url, title, thumbnail_url, published_at,
+		   user_id, uploader_name, uploader_url, featured_by
+		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(platform, video_id) DO UPDATE SET
+		   url           = excluded.url,
+		   title         = excluded.title,
+		   thumbnail_url = excluded.thumbnail_url,
+		   published_at  = excluded.published_at,
+		   user_id       = excluded.user_id,
+		   uploader_name = excluded.uploader_name,
+		   uploader_url  = excluded.uploader_url,
+		   featured_at   = datetime('now'),
+		   featured_by   = excluded.featured_by`,
+	)
+		.bind(
+			body.platform,
+			body.video_id,
+			body.url,
+			body.title,
+			body.thumbnail_url,
+			body.published_at,
+			body.user_id,
+			body.uploader_name,
+			body.uploader_url,
+			session.data.user_id,
+		)
+		.run();
+
+	return jsonResponse({ ok: true }, 200, cors);
+}
+
+// DELETE /v1/admin/featured-videos/:platform/:video_id — unfeature. Idempotent:
+// deleting a video that isn't featured still succeeds, so the star toggle and
+// the Featured tab's Remove don't have to agree on who got there first
+// (mirrors handleDeleteChannel).
+export async function handleUnfeatureVideo(
+	platform: string,
+	videoId: string,
+	request: Request,
+	env: FeaturedVideosEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+	const session = await sessionFromRequest(env, request);
+	if (!(await isSiteAdmin(env, session))) {
+		return errorResponse("Not found", 404, cors, "NOT_FOUND");
+	}
+
+	await env.SHARE_DB.prepare(
+		"DELETE FROM featured_videos WHERE platform = ? AND video_id = ?",
+	)
+		.bind(platform, videoId)
+		.run();
+
+	return jsonResponse({ ok: true }, 200, cors);
+}

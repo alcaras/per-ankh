@@ -111,6 +111,12 @@ import {
 	handleUserVideos,
 } from "./channels";
 import type { ChannelsEnv } from "./channels";
+import {
+	handleFeatureVideo,
+	handleListFeaturedVideos,
+	handleUnfeatureVideo,
+} from "./featured";
+import type { FeaturedVideosEnv } from "./featured";
 import type { TournamentPlayerEnv } from "./tournament/player";
 import {
 	handleAddRoundMatch,
@@ -149,6 +155,7 @@ interface Env
 		TournamentAdminEnv,
 		ShareLegacyEnv,
 		ChannelsEnv,
+		FeaturedVideosEnv,
 		SecurityEventsEnv,
 		TrustedFrontendEnv {
 	SHARE_BUCKET: R2Bucket;
@@ -383,6 +390,33 @@ const ROUTES: RouteSpec[] = [
 		},
 		route: "POST /v1/admin/games/:user_id/reparse-upload",
 		handler: (r, e, m) => handleAdminReparseUpload(m![1], r, e),
+	},
+
+	// Site-admin: the curated featured-video set (see cloud/src/featured.ts).
+	// Same gate as the reparse endpoints above — 404 to everyone else.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/admin/featured-videos" },
+		route: "GET /v1/admin/featured-videos",
+		handler: (r, e) => handleListFeaturedVideos(r, e),
+	},
+	{
+		method: "POST",
+		match: { kind: "path", path: "/v1/admin/featured-videos" },
+		route: "POST /v1/admin/featured-videos",
+		handler: (r, e) => handleFeatureVideo(r, e),
+	},
+	{
+		// Platform + provider-native video id (YouTube's is 11 chars of the
+		// same alphabet); bounded here so the id never reaches the query as
+		// arbitrary path text.
+		method: "DELETE",
+		match: {
+			kind: "regex",
+			regex: /^\/v1\/admin\/featured-videos\/([a-z]+)\/([A-Za-z0-9_-]{1,64})$/,
+		},
+		route: "DELETE /v1/admin/featured-videos/:platform/:video_id",
+		handler: (r, e, m) => handleUnfeatureVideo(m![1], m![2], r, e),
 	},
 
 	// Cloud rewrite: /v1/collections
@@ -948,6 +982,7 @@ function isCloudPath(pathname: string): boolean {
 		pathname.startsWith("/v1/games/") ||
 		pathname === "/v1/collections" ||
 		pathname.startsWith("/v1/users/") ||
+		pathname.startsWith("/v1/admin/") ||
 		pathname === "/v1/csp-report" ||
 		pathname === "/v1/tournaments" ||
 		pathname.startsWith("/v1/tournaments/")

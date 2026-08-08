@@ -78,12 +78,16 @@ const LinkLabelSchema = v.pipe(
 	v.minLength(1, "link label cannot be empty"),
 	v.maxLength(80),
 );
+// Any URL we store and later render as an href, with no host allowlist to lean
+// on: tournament links here, and the snapshotted video/uploader URLs on a
+// featured video (../schemas/featured.ts).
+//
 // SECURITY: v.url() alone is NOT enough — it just runs the URL constructor, and
 // `new URL("javascript:alert(1)")` is a *valid* URL. Since these are rendered as
 // hrefs, an unrestricted scheme is stored XSS. Pin the protocol to http(s). (The
 // StreamUrlSchema below is safe only incidentally, via its host allowlist; a
 // general link can't use one, so the scheme check is the load-bearing guard.)
-const LinkUrlSchema = v.pipe(
+export const HttpUrlSchema = v.pipe(
 	v.string(),
 	v.trim(),
 	v.maxLength(500),
@@ -96,7 +100,7 @@ const LinkUrlSchema = v.pipe(
 		}
 	}, "url must be an http(s) link"),
 );
-const LinkSchema = v.object({ label: LinkLabelSchema, url: LinkUrlSchema });
+const LinkSchema = v.object({ label: LinkLabelSchema, url: HttpUrlSchema });
 // Capped to bound the stored blob. The whole list is replaced on each PATCH.
 const LinksSchema = v.pipe(v.array(LinkSchema), v.maxLength(16));
 
