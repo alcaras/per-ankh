@@ -15,6 +15,18 @@ export function matchParts(m: TournamentMatch): TournamentMatchPart[] {
 	return m.parts ?? [];
 }
 
+// A part's scheduled instant as epoch ms, or null when it has no usable time.
+// Unscheduled (scheduled_at null) and unparseable collapse to the same answer
+// because no caller distinguishes them — both mean "this part has no time to
+// compare against". The one place that turns the stored string into a number,
+// so the time-window helpers below don't each re-derive it. Note epoch 0 is a
+// valid instant: test the result with `!= null`, never for truthiness.
+export function partInstant(part: TournamentMatchPart): number | null {
+	if (part.scheduled_at == null) return null;
+	const t = Date.parse(part.scheduled_at);
+	return Number.isNaN(t) ? null : t;
+}
+
 // A match's status for display, refining the raw match status with parts info:
 //   completed    — reported or forfeit.
 //   in_progress  — pending, but a scheduled part's time has already passed, so
@@ -56,9 +68,8 @@ export function matchDisplayStatus(
 export function hasStartedPart(m: TournamentMatch): boolean {
 	const now = nowMs();
 	return matchParts(m).some((p) => {
-		if (p.scheduled_at == null) return false;
-		const t = Date.parse(p.scheduled_at);
-		return !Number.isNaN(t) && t <= now;
+		const t = partInstant(p);
+		return t != null && t <= now;
 	});
 }
 
@@ -73,9 +84,8 @@ export function nextScheduledAt(m: TournamentMatch): string | null {
 	let next: string | null = null;
 	let nextT = Infinity;
 	for (const p of matchParts(m)) {
-		if (p.scheduled_at == null) continue;
-		const t = Date.parse(p.scheduled_at);
-		if (Number.isNaN(t) || t < now) continue; // unparseable or already passed
+		const t = partInstant(p);
+		if (t == null || t < now) continue; // no usable time, or already passed
 		if (t < nextT) {
 			nextT = t;
 			next = p.scheduled_at;
@@ -155,15 +165,15 @@ export const CAST_GRACE_MS = 2 * 60 * 60 * 1000;
 export const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 // True once a sitting has aged out of LIVE_WINDOW_MS — its broadcast window
-// has closed, so the session was plausibly played to completion. The
-// complement of the live/upcoming windows above, kept beside them so every
-// surface that groups a match's past sessions draws the same boundary.
-// Reactive: reads the shared clock (nowMs), so a session slides into the
-// played group as it ages out.
-export function partPlayed(part: TournamentMatchPart): boolean {
-	if (part.scheduled_at == null) return false;
-	const t = Date.parse(part.scheduled_at);
-	return !Number.isNaN(t) && t <= nowMs() - LIVE_WINDOW_MS;
+// has closed, so the part was plausibly played to completion. The complement
+// of the live/upcoming windows above, kept beside them so every surface that
+// groups a match's past parts draws the same boundary. Defaults to the shared
+// reactive clock (nowMs), so a part slides into the played group as it ages
+// out; callers already threading a `now` (liveAndUpcoming) pass theirs in so
+// every part in one pass is classified against the same instant.
+export function partPlayed(part: TournamentMatchPart, now = nowMs()): boolean {
+	const t = partInstant(part);
+	return t != null && t <= now - LIVE_WINDOW_MS;
 }
 
 // Upcoming scheduled parts of still-pending, non-bye matches, soonest first.
@@ -183,7 +193,7 @@ export function upcomingScheduledParts(
 		(m) => m.status === "pending" && m.slot_b_id != null,
 	);
 	return scheduledParts(pending).filter((np) => {
-		const t = Date.parse(np.part.scheduled_at as string);
-		return !Number.isNaN(t) && t >= cutoff;
+		const t = partInstant(np.part);
+		return t != null && t >= cutoff;
 	});
 }
