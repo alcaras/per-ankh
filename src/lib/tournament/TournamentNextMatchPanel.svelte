@@ -15,7 +15,6 @@
 	} from "$lib/api-cloud";
 	import MatchDetailPopover, {
 		pointerAnchor,
-		type PointerAnchor,
 	} from "$lib/tournament/MatchDetailPopover.svelte";
 	import MatchTable from "$lib/tournament/MatchTable.svelte";
 	import {
@@ -24,6 +23,7 @@
 		toMatchRows,
 	} from "$lib/tournament/matches-table";
 	import type { ScheduleZone } from "$lib/tournament/schedule";
+	import type { Measurable } from "$lib/ui/types";
 
 	interface Props {
 		tournament: TournamentDetail;
@@ -132,7 +132,7 @@
 	// card reflects as soon as data refreshes, and the card closes by itself if
 	// the match stops being your next one.
 	let detailMatchId = $state<string | null>(null);
-	let detailAnchor = $state<PointerAnchor | null>(null);
+	let detailAnchor = $state<Measurable | null>(null);
 	const detailMatch = $derived(
 		detailMatchId !== null && nextMatch?.match_id === detailMatchId
 			? nextMatch

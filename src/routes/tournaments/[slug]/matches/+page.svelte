@@ -17,7 +17,6 @@
 	import CollapsibleSearch from "$lib/CollapsibleSearch.svelte";
 	import MatchDetailPopover, {
 		pointerAnchor,
-		type PointerAnchor,
 	} from "$lib/tournament/MatchDetailPopover.svelte";
 	import MatchTable from "$lib/tournament/MatchTable.svelte";
 	import {
@@ -54,6 +53,7 @@
 	import CopyButton from "$lib/tournament/CopyButton.svelte";
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
 	import { toast } from "$lib/ui/toast";
+	import type { Measurable } from "$lib/ui/types";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -270,7 +270,7 @@
 	// Every surface here — both tables, the Cast view, the calendar chips — hands
 	// back a match id rather than the match, so `pick` takes the id.
 	let detailMatchId = $state<string | null>(null);
-	let detailAnchor = $state<PointerAnchor | null>(null);
+	let detailAnchor = $state<Measurable | null>(null);
 	const detailMatch = $derived(
 		detailMatchId
 			? (data.matches.find((m) => m.match_id === detailMatchId) ?? null)

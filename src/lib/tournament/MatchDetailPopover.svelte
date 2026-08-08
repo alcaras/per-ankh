@@ -1,11 +1,9 @@
 <script lang="ts" module>
-	// A floating-ui "virtual" anchor — anything exposing getBoundingClientRect.
-	// Mirrors bits-ui's customAnchor, which accepts this same shape.
-	export type PointerAnchor = { getBoundingClientRect: () => DOMRect };
+	import type { Measurable } from "$lib/ui/types";
 
 	// An anchor frozen at a click's position, so the card opens beside the
 	// cursor rather than off a fixed element.
-	export function pointerAnchor(e: MouseEvent): PointerAnchor {
+	export function pointerAnchor(e: MouseEvent): Measurable {
 		const x = e.clientX;
 		const y = e.clientY;
 		return { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) };
@@ -49,7 +47,7 @@
 		// live from their row source so an edit reflects as soon as data refreshes.
 		match: TournamentMatch | null;
 		// Where it was clicked (pointerAnchor above). Null before the first click.
-		anchor: PointerAnchor | null;
+		anchor: Measurable | null;
 		tournament: TournamentDetail;
 		slotLabels: Record<string, string>;
 		slotUserIds: Record<string, string | null>;

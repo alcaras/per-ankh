@@ -16,12 +16,12 @@
 	} from "$lib/api-cloud";
 	import MatchDetailPopover, {
 		pointerAnchor,
-		type PointerAnchor,
 	} from "$lib/tournament/MatchDetailPopover.svelte";
 	import MatchTable from "$lib/tournament/MatchTable.svelte";
 	import { pickColumns, type MatchRow } from "$lib/tournament/matches-table";
 	import { liveAndUpcoming, type ScheduleZone } from "$lib/tournament/schedule";
 	import { nowMs } from "$lib/stores/now.svelte";
+	import type { Measurable } from "$lib/ui/types";
 
 	interface Props {
 		tournament: TournamentDetail;
@@ -92,7 +92,7 @@
 	// the panels anchor this way rather than off the page-level popover).
 	// Resolved from `matches` by id so an edit reflects as soon as data refreshes.
 	let detailMatchId = $state<string | null>(null);
-	let detailAnchor = $state<PointerAnchor | null>(null);
+	let detailAnchor = $state<Measurable | null>(null);
 	const detailMatch = $derived(
 		detailMatchId
 			? (matches.find((m) => m.match_id === detailMatchId) ?? null)
