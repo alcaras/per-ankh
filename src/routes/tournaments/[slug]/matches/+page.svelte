@@ -134,43 +134,30 @@
 			.filter((m) => m.status === "pending" && m.slot_b_id != null)
 			.sort((a, b) => (a.match_number ?? 0) - (b.match_number ?? 0))
 			.flatMap((m) => {
+				// Every line in this block is the same match with no time, so only
+				// the part tag varies — bind the match once rather than repeating it
+				// per branch.
+				const line = (partNumber: number, split: boolean) =>
+					seshMatchLine({
+						matchNumber: m.match_number,
+						versus: vs(m),
+						partNumber,
+						split,
+					});
 				const parts = matchParts(m);
 				if (parts.length === 0) {
 					return matchDisplayStatus(m) === "unscheduled"
-						? [
-								seshMatchLine({
-									matchNumber: m.match_number,
-									versus: vs(m),
-									partNumber: 1,
-									split: false,
-								}),
-							]
+						? [line(1, false)]
 						: [];
 				}
 				const split = parts.length >= 2;
 				const open = parts
 					.map((part, i) => ({ part, partNumber: i + 1 }))
 					.filter(({ part }) => part.scheduled_at == null)
-					.map(({ partNumber }) =>
-						seshMatchLine({
-							matchNumber: m.match_number,
-							versus: vs(m),
-							partNumber,
-							split,
-						}),
-					);
+					.map(({ partNumber }) => line(partNumber, split));
 				if (open.length > 0) return open;
 				const next = owesNextSitting(m);
-				return next != null
-					? [
-							seshMatchLine({
-								matchNumber: m.match_number,
-								versus: vs(m),
-								partNumber: next,
-								split: true,
-							}),
-						]
-					: [];
+				return next != null ? [line(next, true)] : [];
 			});
 
 		const blocks = [
