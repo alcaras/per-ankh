@@ -12,9 +12,8 @@
 		enrolled?: boolean;
 	} = $props();
 
-	// Phase pill mirrors the small TournamentCard's status label, with the
-	// active round folded in when the tournament is mid-round so the player
-	// sees "Swiss · Rd 3" instead of just "Swiss".
+	// Phase pill: the tournament's status, with the active round folded in when
+	// it's mid-round so the player sees "Swiss · Rd 3" instead of just "Swiss".
 	const phaseLabel = $derived.by(() => {
 		const base = {
 			setup: "Setup",

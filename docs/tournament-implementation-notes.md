@@ -152,7 +152,9 @@ Eight migrations applied locally; not yet remote.
   initially separate routes; commit `5972110` collapsed them into the
   public page driven by `MatchModal` and `TournamentSettingsModal`. No
   nested `/admin/` or `/matches/[match_id]/` routes.
-- `src/lib/tournament/` — `TournamentCard`, `SwissStandings`,
+- `src/lib/tournament/` — `TournamentCard` (since removed: the home
+  page's tournament rail was its last consumer, and the listing uses
+  `TournamentRowCard`), `SwissStandings`,
   `SwissFlowBracket` (per-division W-L bracket SVG, replacing the old
   cards-by-round list), `ChampionshipBracketTree` (single-elim SVG with
   elbow connectors), `MatchModal` (per-match view + admin-gated
