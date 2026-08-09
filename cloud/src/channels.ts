@@ -177,9 +177,81 @@ export async function handleDeleteChannel(
 	return jsonResponse({ ok: true }, 200, cors);
 }
 
+// --- Attributed video reads ------------------------------------------------
+//
+// Both public reads below are the same thing at two widths: linked channels
+// joined to their owner, each channel's recent uploads fetched (KV-cached,
+// SWR) and tagged with that owner. One profile's channels for the Videos tab,
+// every creator's for the home strip.
+//
+// Every video carries its uploader even where the surface won't render the
+// credit, because attribution has to survive being copied off the card: the
+// admin featured set snapshots exactly the fields the card it was starred from
+// was holding (see cloud/src/featured.ts), so a feed that omits the uploader
+// produces a permanently unattributed featured row.
+//
+// Attribution is applied AFTER the cache, so the cached per-channel lists stay
+// identity-free and a rename needs no eviction.
+
+// A video attributed to the Per-Ankh user whose linked channel published it,
+// so a surface can credit the uploader and link to their profile.
+export interface CreatorVideo extends Video {
+	user_id: string;
+	display_name: string;
+	// Null for a user who has no slug; their profile link falls back to the
+	// /users/<user_id> permalink.
+	slug: string | null;
+	avatar_url: string;
+}
+
+// One linked channel joined to its owner — the SELECT both reads run, and the
+// row it lands in. Callers append their own WHERE (one profile) or none (every
+// creator). The join is inner: user_video_channels.user_id is an ON DELETE
+// CASCADE foreign key, so a channel row without its user is not a state that
+// exists.
+const CHANNELS_WITH_OWNER_SQL = `SELECT c.user_id, c.platform, c.channel_id,
+        ${displayNameSql("u")} AS display_name,
+        u.slug, u.discord_id, u.avatar_hash
+ FROM user_video_channels c
+ JOIN users u ON u.user_id = c.user_id`;
+
+interface ChannelWithOwner {
+	user_id: string;
+	platform: string;
+	channel_id: string;
+	display_name: string;
+	slug: string | null;
+	discord_id: string;
+	avatar_hash: string | null;
+}
+
+// One channel's recent uploads, each tagged with the creator who owns it.
+function attributedChannelVideos(
+	env: ChannelsEnv,
+	ctx: ExecutionContext,
+	channel: ChannelWithOwner,
+): Promise<CreatorVideo[]> {
+	const provider = providerForPlatform(channel.platform);
+	// A stored platform with no registered provider (e.g. one removed in a
+	// later release) simply contributes nothing.
+	if (!provider) return Promise.resolve([]);
+	const author = {
+		user_id: channel.user_id,
+		display_name: channel.display_name,
+		slug: channel.slug,
+		avatar_url: buildAvatarUrl(channel.discord_id, channel.avatar_hash),
+	};
+	return getRecentVideosCached(env, provider, channel.channel_id, ctx).then(
+		(videos) => videos.map((video) => ({ ...video, ...author })),
+	);
+}
+
 // GET /v1/users/:user_id/videos — public. Merges recent uploads across the
-// user's linked channels (each KV-cached, SWR). No auth, no PII: channels are
-// user-published and videos are the same for every viewer.
+// user's linked channels (each KV-cached, SWR). No auth: channels are
+// user-published and videos are the same for every viewer. The uploader on
+// each video is the profile's own owner — the display name and avatar this
+// page's header already serves publicly — so the tab renders the cards with
+// the credit suppressed rather than repeating it once per card.
 export async function handleUserVideos(
 	userId: string,
 	request: Request,
@@ -189,21 +261,13 @@ export async function handleUserVideos(
 	const cors = cloudCorsHeaders(env, request);
 
 	const rows = await env.SHARE_DB.prepare(
-		"SELECT platform, channel_id FROM user_video_channels WHERE user_id = ?",
+		`${CHANNELS_WITH_OWNER_SQL} WHERE c.user_id = ?`,
 	)
 		.bind(userId)
-		.all<{ platform: string; channel_id: string }>();
-
-	const channels = rows.results ?? [];
+		.all<ChannelWithOwner>();
 
 	const perChannel = await Promise.all(
-		channels.map((c): Promise<Video[]> => {
-			const provider = providerForPlatform(c.platform);
-			// A stored platform with no registered provider (e.g. one removed in
-			// a later release) simply contributes nothing.
-			if (!provider) return Promise.resolve([]);
-			return getRecentVideosCached(env, provider, c.channel_id, ctx);
-		}),
+		(rows.results ?? []).map((c) => attributedChannelVideos(env, ctx, c)),
 	);
 
 	const videos = perChannel
@@ -249,14 +313,6 @@ function titlesOldWorld(video: Video): boolean {
 	return video.title.toLowerCase().includes("old world");
 }
 
-// A home-feed video: the normalized Video plus the creator it belongs to, so
-// the strip can attribute each upload and link to the uploader's profile.
-export interface CreatorVideo extends Video {
-	user_id: string;
-	display_name: string;
-	avatar_url: string;
-}
-
 // Merge per-channel lists (each already attributed to its creator) into the
 // home feed: Old World uploads only, newest-first across all creators, capped.
 // The filter runs before the cap — filtering downstream (in the component, or
@@ -282,38 +338,11 @@ async function buildCreatorFeed(
 	ctx: ExecutionContext,
 ): Promise<CreatorVideo[]> {
 	const rows = await env.SHARE_DB.prepare(
-		`SELECT c.user_id, c.platform, c.channel_id,
-		        ${displayNameSql("u")} AS display_name,
-		        u.slug, u.discord_id, u.avatar_hash
-		 FROM user_video_channels c
-		 JOIN users u ON u.user_id = c.user_id`,
-	).all<{
-		user_id: string;
-		platform: string;
-		channel_id: string;
-		display_name: string;
-		slug: string | null;
-		discord_id: string;
-		avatar_hash: string | null;
-	}>();
-
-	const channels = rows.results ?? [];
+		CHANNELS_WITH_OWNER_SQL,
+	).all<ChannelWithOwner>();
 
 	const perChannel = await Promise.all(
-		channels.map((c): Promise<CreatorVideo[]> => {
-			const provider = providerForPlatform(c.platform);
-			// A stored platform with no registered provider contributes nothing.
-			if (!provider) return Promise.resolve([]);
-			const author = {
-				user_id: c.user_id,
-				display_name: c.display_name,
-				slug: c.slug,
-				avatar_url: buildAvatarUrl(c.discord_id, c.avatar_hash),
-			};
-			return getRecentVideosCached(env, provider, c.channel_id, ctx).then(
-				(videos) => videos.map((video) => ({ ...video, ...author })),
-			);
-		}),
+		(rows.results ?? []).map((c) => attributedChannelVideos(env, ctx, c)),
 	);
 
 	return mergeCreatorFeed(perChannel);

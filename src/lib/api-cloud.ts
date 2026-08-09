@@ -51,8 +51,9 @@ export interface VideoChannel {
 	channel_id?: string;
 }
 
-// One recent video for the profile "Videos" tab. Merged across the user's
-// linked channels, newest first (GET /v1/users/:id/videos).
+// The platform-owned fields of one video — the shape every attributed variant
+// below extends. On its own it's a video with no uploader at all: a feed entry
+// that named no author (a tournament playlist can hold one).
 export interface RecentVideo {
 	id: string;
 	title: string;
@@ -62,9 +63,12 @@ export interface RecentVideo {
 	platform: string;
 }
 
-// One video in the cross-creator home feed: a RecentVideo plus the creator it
-// belongs to, so the home strip can attribute each upload and link to the
-// uploader's profile (GET /v1/creator-videos).
+// A video plus the creator whose linked channel published it, so a surface can
+// attribute the upload and link to the uploader's profile. What both
+// channel-backed feeds return: the cross-creator home strip
+// (GET /v1/creator-videos) and one profile's uploads
+// (GET /v1/users/:id/videos), which carries it even though that tab renders
+// the credit suppressed.
 export interface CreatorVideo extends RecentVideo {
 	user_id: string;
 	display_name: string;
@@ -661,13 +665,15 @@ export const cloudApi = {
 	},
 
 	// Recent videos merged across the target user's linked channels, newest
-	// first. Public read; feeds the profile "Videos" tab.
+	// first. Public read; feeds the profile "Videos" tab. Each video is
+	// attributed to that user — the tab hides the redundant credit, but it has
+	// to be on the video for the admin star to snapshot it.
 	getUserVideos: async (
 		userId: string,
 		opts?: CallOpts,
-	): Promise<RecentVideo[]> => {
+	): Promise<CreatorVideo[]> => {
 		const res = await request(`/users/${userId}/videos`, opts);
-		return (await (res.json() as Promise<{ videos: RecentVideo[] }>)).videos;
+		return (await (res.json() as Promise<{ videos: CreatorVideo[] }>)).videos;
 	},
 
 	// The target user's tournament record — played + upcoming matches, and cast

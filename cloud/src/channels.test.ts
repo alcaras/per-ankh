@@ -14,6 +14,7 @@ function vid(
 		platform: "youtube",
 		user_id: "u1",
 		display_name: "Creator One",
+		slug: null,
 		avatar_url: "https://example.test/a.png",
 		...over,
 	};

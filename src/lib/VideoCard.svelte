@@ -6,10 +6,12 @@
 	// thumbnail as the media below. The whole card is a stretched link out to the
 	// video's external watch URL.
 	//
-	// A CreatorVideo (the cross-creator home feed) bundles the uploader, so the
-	// header carries an avatar + name linking to their profile. A plain
-	// RecentVideo (a single profile's tab) has no uploader — every video is that
-	// one user's, so attribution would be redundant — and only the date pill shows.
+	// A CreatorVideo bundles the uploader, so the header carries an avatar + name
+	// linking to their profile. A surface where that credit would be redundant —
+	// a profile's own Videos tab, where every video is that one user's — passes
+	// showUploader={false} and gets the date pill alone. The video still carries
+	// its uploader there, which is what lets the admin star below snapshot who
+	// uploaded it.
 	import { page } from "$app/state";
 	import type {
 		CreatorVideo,
@@ -22,7 +24,11 @@
 
 	let {
 		video,
-	}: { video: RecentVideo | CreatorVideo | YouTubeAttributedVideo } = $props();
+		showUploader = true,
+	}: {
+		video: RecentVideo | CreatorVideo | YouTubeAttributedVideo;
+		showUploader?: boolean;
+	} = $props();
 
 	// A linked Per-Ankh user (home feed + matched tournament uploads): avatar +
 	// display name linking to their profile.
@@ -70,11 +76,11 @@
 	></a>
 	<!-- eslint-enable svelte/no-navigation-without-resolve -->
 
-	<!-- Discovery row: uploader (left, cross-creator feed only) + published date
-	     (right), mirroring RecentSaveCard's header. The date pill uses ml-auto so
-	     it stays right-aligned even when the uploader is absent. -->
+	<!-- Discovery row: uploader (left, where the surface credits one) + published
+	     date (right), mirroring RecentSaveCard's header. The date pill uses
+	     ml-auto so it stays right-aligned even when the uploader is absent. -->
 	<div class="mb-2 flex items-center gap-2">
-		{#if uploader}
+		{#if showUploader && uploader}
 			<ProfileLink
 				userId={uploader.user_id}
 				slug={uploader.slug}
@@ -92,7 +98,7 @@
 					{uploader.display_name}
 				</span>
 			</ProfileLink>
-		{:else if ytUploader}
+		{:else if showUploader && ytUploader}
 			<!-- Unlinked YouTube uploader: name links out to the channel (external URL,
 			     not an app route), sitting above the card's stretched link. -->
 			<!-- eslint-disable svelte/no-navigation-without-resolve -->
