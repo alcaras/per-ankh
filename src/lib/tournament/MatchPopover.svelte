@@ -9,6 +9,7 @@
 		cloudApi,
 		type TournamentDetail,
 		type TournamentMatch,
+		type TournamentMatchPart,
 		type UserMe,
 		type UserSearchResult,
 	} from "$lib/api-cloud";
@@ -423,22 +424,34 @@
 		};
 	});
 
+	// A sitting the casting panel advertises even without broadcast info: a
+	// pending match's *scheduled* part that hasn't aged into the played group.
+	// Unscheduled placeholder parts stay out — there's nothing to turn up for,
+	// the same line the match tables draw (rowIsPendingSitting). One predicate
+	// shared by the filter and the "Needs a caster" note so the two can't
+	// drift; reads the shared clock via partPlayed, so an uncast part falls
+	// out as it ages into the played group.
+	function partAdvertisesSeat(part: TournamentMatchPart): boolean {
+		return (
+			match.status === "pending" &&
+			part.scheduled_at != null &&
+			!partPlayed(part)
+		);
+	}
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
 	// castingParts keeps each part's original 1-based number so a split match
 	// labels "Part N" consistently in both panels. Played parts appear only
-	// when they have broadcast info to archive; a part still ahead (or live)
-	// of a pending match appears regardless — an upcoming sitting with nobody
-	// signed up is exactly the seat this panel should be advertising, and
-	// dropping it made a split match's next part vanish from the list (its
-	// only trace the schedule row above). partPlayed reads the shared clock,
-	// so an uncast part falls out as it ages into the played group.
+	// when they have broadcast info to archive; an upcoming (or live) sitting
+	// appears regardless — one with nobody signed up is exactly the seat this
+	// panel should be advertising, and dropping it made a split match's next
+	// part vanish from the list (its only trace the schedule row above).
 	const castingParts = $derived(
 		numberedParts.filter(
 			({ part }) =>
 				part.casters.length > 0 ||
 				part.streams.length > 0 ||
-				(match.status === "pending" && !partPlayed(part)),
+				partAdvertisesSeat(part),
 		),
 	);
 	const hasSecondaryActions = $derived(
@@ -1225,7 +1238,7 @@
 					{/if}
 					<!-- Caster on the left, its stream link(s) to the right. -->
 					<div class="flex items-start gap-3">
-						{#if part.casters.length === 0 && match.status === "pending" && !partPlayed(part)}
+						{#if part.casters.length === 0 && partAdvertisesSeat(part)}
 							<!-- An upcoming sitting with nobody signed up — the reason
 							     it's listed at all is to advertise the seat. A played
 							     part that archived only a stream link keeps rendering
