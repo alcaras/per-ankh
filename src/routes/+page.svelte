@@ -6,6 +6,7 @@
 	import DiscordLoginButton from "$lib/DiscordLoginButton.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import RecentSaveCard from "$lib/RecentSaveCard.svelte";
+	import Panel from "$lib/ui/Panel.svelte";
 	import VideoCard from "$lib/VideoCard.svelte";
 	import type { PageData } from "./$types";
 
@@ -170,46 +171,51 @@
 			The two hero tiles, side by side on desktop and stacked on mobile: the
 			current major tournament, then the newest featured video. Shown to every
 			viewer — they are how the home page surfaces the tournament now that the
-			signed-in rail is gone. 16:9 stacked, and on desktop the banner stretches
-			to the row (`lg:aspect-auto`) so it ends level with whatever the video
-			card's title wraps to, cropping via object-cover.
+			signed-in rail is gone. 16:9 stacked, and on desktop the grid stretches
+			both panels to the row height, with the banner filling whatever its panel
+			gets (`lg:flex-1`) so it ends level with the video panel however the video
+			title wraps, cropping via object-cover.
 			-->
 			<div class="mb-4 grid gap-4 lg:grid-cols-2">
 				<!--
-				Tournament highlight: the whole card links to the current major
+				Tournament highlight: the whole tile links to the current major
 				tournament. The event name is baked into the still (the animation's
-				opening title card), so no text overlay is needed.
+				opening title card), so no text overlay is needed — the panel header
+				names the section.
 				-->
-				<a
-					href={resolve("/tournaments/2026-community-tournament")}
-					class="group block aspect-video overflow-hidden rounded-lg bg-black lg:aspect-auto"
-				>
-					<img
-						src="/tournament-hero.webp"
-						alt="2026 Community Tournament"
-						width="654"
-						height="345"
-						class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-					/>
-				</a>
+				<Panel title="Featured Tournament" class="flex flex-col">
+					<a
+						href={resolve("/tournaments/2026-community-tournament")}
+						class="group block aspect-video overflow-hidden rounded-lg bg-black lg:aspect-auto lg:flex-1"
+					>
+						<img
+							src="/tournament-hero.webp"
+							alt="2026 Community Tournament"
+							width="654"
+							height="345"
+							class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+						/>
+					</a>
+				</Panel>
 
 				<!--
 				The newest featured video — the same VideoCard the strip below and every
 				other video surface renders, so the hero can't drift into a second video
 				card style. Absent only when nothing is featured AND both video feeds
-				came back empty (see heroVideo in +page.ts), which leaves the banner
-				alone in its column.
+				came back empty (see heroVideo in +page.ts), which leaves the tournament
+				panel alone in its column.
 				-->
 				{#if data.heroVideo}
-					<VideoCard video={data.heroVideo} />
+					<Panel title="Featured Video">
+						<VideoCard video={data.heroVideo} />
+					</Panel>
 				{/if}
 			</div>
 
 			<!--
 			Discovery grid (desktop): recent saves (left) → videos (right). A column
-			with no content drops out and its neighbour widens. No wrapper panels —
-			cards float directly on the page background, matching the
-			tournaments-listing pattern.
+			with no content drops out and its neighbour widens. Each column is a
+			titled Panel, the same chrome the hero row uses.
 		-->
 			<!--
 				On mobile the grid stacks in DOM order; `order` utilities lift the
@@ -217,7 +223,8 @@
 				the desktop left→right (games → videos) arrangement.
 			-->
 			<div class="grid gap-4 lg:grid-cols-2">
-				<section
+				<Panel
+					title="Recent Games"
 					class={`order-2 lg:order-1 ${hasVideos ? "" : "lg:col-span-2"}`}
 				>
 					{#if data.recentGames.length === 0}
@@ -236,16 +243,20 @@
 							{/each}
 						</div>
 					{/if}
-				</section>
+				</Panel>
 
 				<!--
 				Videos: creator uploads and tournament-playlist uploads merged into one
 				strip — right column on desktop, full-width on smaller screens (the
-				component handles the responsive grid). Omitted entirely on a cold/empty
-				feed rather than leaving a gap.
+				component handles the responsive grid). `self-start` keeps it at its
+				content height instead of stretching to the (much taller) games column,
+				so it ends after its last card. Omitted entirely on a cold/empty feed
+				rather than leaving a gap.
 			-->
 				{#if hasVideos}
-					<CreatorVideos videos={data.videos} class="order-1 lg:order-2" />
+					<Panel title="Recent Videos" class="order-1 self-start lg:order-2">
+						<CreatorVideos videos={data.videos} />
+					</Panel>
 				{/if}
 			</div>
 		</div>
