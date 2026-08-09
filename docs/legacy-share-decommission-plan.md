@@ -1,12 +1,12 @@
 # Legacy share decommission — deploy procedure
 
-Removes the desktop-era share feature: the `/v1/share/*` Worker endpoints, the `shares`/`blocked_keys`/`blocked_ips` D1 tables (migration `0034`), the frozen `web/` SPA, the `/share/*` → `legacy.per-ankh.app` redirect, and the legacy vars/CLI/admin surfaces that fed them. `per-ankh.app/share/[id]` now serves a static "link retired" tombstone.
+Removes the desktop-era share feature: the `/v1/share/*` Worker endpoints, the `shares`/`blocked_keys`/`blocked_ips` D1 tables (migration `0042`), the frozen `web/` SPA, the `/share/*` → `legacy.per-ankh.app` redirect, and the legacy vars/CLI/admin surfaces that fed them. `per-ankh.app/share/[id]` now serves a static "link retired" tombstone.
 
-The irreversible steps are the `0034` migration (`DROP TABLE`, forward-only, no down) and the R2 blob deletion. Everything else rolls back by redeploying the previous Worker/frontend version. That asymmetry is why the migration rides the deploy pipeline and the R2 deletion goes last in each environment.
+The irreversible steps are the `0042` migration (`DROP TABLE`, forward-only, no down) and the R2 blob deletion. Everything else rolls back by redeploying the previous Worker/frontend version. That asymmetry is why the migration rides the deploy pipeline and the R2 deletion goes last in each environment.
 
 ## Phase 0 — before touching either environment
 
-**0.1 — Capture the share_id list.** The one irreversible ordering mistake available. Migration `0034` drops `shares`, and `admin shares list` is deleted in this branch, so after migrating there is no record of which R2 keys were legacy. Run from a checkout that still has the command, or raw:
+**0.1 — Capture the share_id list.** The one irreversible ordering mistake available. Migration `0042` drops `shares`, and `admin shares list` is deleted in this branch, so after migrating there is no record of which R2 keys were legacy. Run from a checkout that still has the command, or raw:
 
 ```bash
 npx wrangler d1 execute per-ankh-share-index --remote \
@@ -27,7 +27,7 @@ Save the output outside the repo. **Record the actual row count here and let lat
 
 Staging never served the legacy viewer (`legacyOrigin` was null), but its D1 has all three tables from `0001_baseline`, and its R2 may hold legacy blobs if it was ever recloned from prod. The migration and R2 steps are both live rehearsals here.
 
-**1.1** `./per-ankh staging status` — confirm pending migrations show `0034` and nothing unexpected.
+**1.1** `./per-ankh staging status` — confirm pending migrations show `0042` and nothing unexpected.
 
 **1.2** `./per-ankh staging preflight` — expect green. Watch `secrets.parity`: 8 keys were removed from both `[vars]` and `[env.staging.vars]`, and the key sets have been verified to still match, but this is the check that catches a miss.
 
