@@ -136,6 +136,11 @@
 
 	const distinguishing = $derived(distinguishingOptions(tournament.map_pool));
 
+	// Whether this mount shows the "Match N" handle as its own column — a
+	// property of the table, not of any row, so the Match cell reads it rather
+	// than re-scanning the column list per cell.
+	const showsNumberColumn = $derived(columns.some((c) => c.key === "number"));
+
 	// Part rows key by match+part (part ids are only unique within a match — the
 	// 0029 backfill mints "p1" per migrated match); match rows key by match id.
 	function rowKey(row: MatchRow): string {
@@ -302,7 +307,7 @@
 									<span class="inline-flex items-center gap-2">
 										<!-- Inline handle only when the surface doesn't already
 										     show it as its own # column. -->
-										{#if m.match_number != null && !columns.some((c) => c.key === "number")}
+										{#if m.match_number != null && !showsNumberColumn}
 											<span class="shrink-0 opacity-75">
 												{padMatchNumber(m.match_number)}
 											</span>
