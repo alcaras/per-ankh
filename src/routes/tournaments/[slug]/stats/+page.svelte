@@ -77,38 +77,49 @@
 	// toggle drives — shown on Stats too, so the scheduled times here have to
 	// follow it rather than pin to local.
 	const clock = getZoneClock();
-	// Status chips facet the list through MatchTableState.filters. Completed-only
-	// by default — the list's job is finding played games — with the other
-	// buckets a toggle away; an empty selection shows everything (see
-	// filterMatchRows), so switching off the last chip widens rather than
-	// emptying the table.
+	// A status segment facets the list through MatchTableState.filters.
+	// Completed by default — the list's job is finding played games — with the
+	// other buckets one segment away. "All" is the empty selection filterMatchRows
+	// already reads as "no filter", so the segment carries no special case.
 	let matchesTableState = $state<MatchTableState>({
 		sortColumn: "number",
 		sortDirection: "asc",
 		filters: ["completed"],
 	});
 	const allMatchRows = $derived(toMatchRows(data.matches));
-	// Chip labels reuse the shared status wording; unscheduled has no badge
-	// label (deliberately — see MATCH_STATUS_LABEL), so it's named here.
-	const STATUS_CHIPS: Array<{ key: MatchStatusGroup; label: string }> = [
+	// One bucket at a time, All first. Labels reuse the shared status wording;
+	// unscheduled has no badge label (deliberately — see MATCH_STATUS_LABEL), so
+	// it's named here.
+	type MatchStatusSegment = MatchStatusGroup | "all";
+	const STATUS_SEGMENTS: Array<{ key: MatchStatusSegment; label: string }> = [
+		{ key: "all", label: "All" },
 		{ key: "completed", label: MATCH_STATUS_LABEL.completed },
 		{ key: "in_progress", label: MATCH_STATUS_LABEL.in_progress },
 		{ key: "scheduled", label: MATCH_STATUS_LABEL.scheduled },
 		{ key: "unscheduled", label: "Unscheduled" },
 	];
+	// Segmented-control tokens, matching the matches page's view switch.
+	const statusTriggerClass =
+		"relative z-10 cursor-pointer whitespace-nowrap px-3 py-1.5 text-center text-xs font-bold text-tan transition-colors";
+	// The lit segment reads back out of filters rather than shadowing it in a
+	// second state field, so the control can never disagree with the table.
+	const activeStatus = $derived<MatchStatusSegment>(
+		STATUS_SEGMENTS.find((s) => s.key === matchesTableState.filters[0])?.key ??
+			"all",
+	);
+	function selectStatus(key: MatchStatusSegment) {
+		matchesTableState.filters = key === "all" ? [] : [key];
+	}
 	const statusCounts = $derived.by(() => {
-		const counts: Partial<Record<MatchStatusGroup, number>> = {};
+		const counts: Partial<Record<MatchStatusSegment, number>> = {
+			all: allMatchRows.length,
+		};
 		for (const row of allMatchRows) {
 			const group = matchStatusGroup(row.match);
 			if (group !== null) counts[group] = (counts[group] ?? 0) + 1;
 		}
 		return counts;
 	});
-	function toggleStatusChip(key: MatchStatusGroup) {
-		matchesTableState.filters = matchesTableState.filters.includes(key)
-			? matchesTableState.filters.filter((f) => f !== key)
-			: [...matchesTableState.filters, key];
-	}
 	const matchRows = $derived(
 		sortMatchRows(
 			filterMatchRows(allMatchRows, matchesTableState.filters),
@@ -209,29 +220,42 @@
 		</Tabs.List>
 
 		<!-- Matches — every match as a sortable list (default: match-number
-		     order, completed-only via the status chips), each side showing its
+		     order, completed via the status switch), each side showing its
 		     nation crest + starting-ruler archetype glyph and the winner
 		     emphasized, with a per-row link to the uploaded game. The list form
 		     of the brackets, for finding and opening games. -->
 		<Tabs.Content value="matches">
 			<section class="mb-8">
 				<h2 class="mb-3 text-base font-bold text-tan">Matches</h2>
-				<!-- Status facet chips: multi-toggle, counts per bucket. Completed
-				     is on by default; deselecting every chip shows all matches. -->
-				<div class="mb-3 flex flex-wrap items-center gap-1.5">
-					{#each STATUS_CHIPS as chip (chip.key)}
-						{@const active = matchesTableState.filters.includes(chip.key)}
-						{@const count = statusCounts[chip.key] ?? 0}
+				<!-- Status switch: one bucket at a time with its count, the lit
+				     segment sliding across (the matches page's view switch, and the
+				     game detail tabs', in the same construct). All comes first so
+				     widening back out is one click from anywhere. -->
+				<div
+					class="relative mb-3 grid w-fit overflow-hidden rounded-lg border-2 border-surface"
+					style="background-color: rgb(var(--color-surface)); grid-template-columns: repeat({STATUS_SEGMENTS.length}, minmax(0, 1fr));"
+					role="group"
+					aria-label="Match status"
+				>
+					<div
+						class="pointer-events-none absolute inset-y-0 left-0 transition-transform duration-200 ease-out"
+						style:width="{100 / STATUS_SEGMENTS.length}%"
+						style:background-color="rgb(var(--color-surface-raised))"
+						style:transform="translateX({STATUS_SEGMENTS.findIndex(
+							(s) => s.key === activeStatus,
+						) * 100}%)"
+					></div>
+					{#each STATUS_SEGMENTS as segment (segment.key)}
 						<button
 							type="button"
-							class="cursor-pointer rounded px-3 py-1.5 text-sm font-bold transition-colors hover:bg-tan-hover {active
-								? 'bg-surface-raised text-tan'
-								: 'bg-surface text-tan opacity-60'}"
-							aria-pressed={active}
-							onclick={() => toggleStatusChip(chip.key)}
+							class={statusTriggerClass}
+							aria-pressed={activeStatus === segment.key}
+							onclick={() => selectStatus(segment.key)}
 						>
-							{chip.label}
-							<span class="ml-1 text-xs opacity-60">{count}</span>
+							{segment.label}
+							<span class="ml-1 opacity-60"
+								>{statusCounts[segment.key] ?? 0}</span
+							>
 						</button>
 					{/each}
 				</div>
