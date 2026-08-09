@@ -167,6 +167,11 @@
 
 	const fmt = (v: number, dp: number): string =>
 		(v < 0 ? "−" : "") + Math.abs(v).toFixed(dp);
+	// Every contribution row carries its sign — a cognomen can cost legitimacy
+	// (COGNOMEN_BLOODY is −100) and the remainder runs either way. Totals use
+	// plain `fmt`.
+	const signed = (v: number, dp: number): string =>
+		(v < 0 ? "" : "+") + fmt(v, dp);
 
 	// ─── Duel side-by-side ────────────────────────────────────────────
 	// Two players read best as one table — every source row, both values in
@@ -211,7 +216,7 @@
 					</td>
 					<td
 						class="py-0.5 text-right align-top font-mono tabular-nums text-gray-200"
-						>+{fmt(row.value, dp)}</td
+						>{signed(row.value, dp)}</td
 					>
 				</tr>
 			{/each}
@@ -222,7 +227,7 @@
 				<td
 					class="py-0.5 text-right font-mono tabular-nums {b.other < 0
 						? 'text-red-400'
-						: 'text-gray-200'}">{b.other >= 0 ? "+" : ""}{fmt(b.other, dp)}</td
+						: 'text-gray-200'}">{signed(b.other, dp)}</td
 				>
 			</tr>
 			<tr class="border-t border-border-subtle font-bold">
@@ -282,7 +287,7 @@
 									<td
 										class="py-0.5 text-right font-mono tabular-nums text-gray-200"
 									>
-										{#if v != null}+{fmt(v, section.dp)}{:else}<span
+										{#if v != null}{signed(v, section.dp)}{:else}<span
 												class="opacity-40">—</span
 											>{/if}
 									</td>
@@ -301,10 +306,9 @@
 										? 'text-red-400'
 										: 'text-gray-200'}"
 								>
-									{#if bd}{bd.other >= 0 ? "+" : ""}{fmt(
-											bd.other,
-											section.dp,
-										)}{:else}<span class="opacity-40">—</span>{/if}
+									{#if bd}{signed(bd.other, section.dp)}{:else}<span
+											class="opacity-40">—</span
+										>{/if}
 								</td>
 							{/each}
 						</tr>
