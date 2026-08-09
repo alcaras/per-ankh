@@ -7,6 +7,7 @@ import type {
 } from "$lib/parser/types";
 import type { YieldHistory } from "$lib/types/YieldHistory";
 import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
+import type { PlayerHistory } from "$lib/types/PlayerHistory";
 import type { PlayerInfo } from "$lib/types/PlayerInfo";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
@@ -960,6 +961,19 @@ export function findByPlayer<T>(
 	});
 }
 
+/**
+ * The canonical `EVENTSTORY_*` type behind a story row's `event_type`.
+ *
+ * The same event reaches the save once per audience under its own prefix
+ * ("P.1.EVENTSTORY_X", the family's copy, the religion's copy), so callers
+ * normalize before naming or deduping an event. Returns null for a row
+ * carrying no EVENTSTORY_ type.
+ */
+export function storyEventType(eventType: string): string | null {
+	const at = eventType.indexOf("EVENTSTORY_");
+	return at < 0 ? null : eventType.slice(at);
+}
+
 // ─── Build Comparison Panels ─────────────────────────────────────────
 
 /** One row's subject and how many of it a side has. */
@@ -1187,6 +1201,73 @@ export function createYieldChartOption(
 					d.turn,
 					mode === "rate" ? d.rate : d.cumulative,
 				]),
+				itemStyle: { color },
+				...filledLineStyle(color),
+			};
+		}),
+	};
+}
+
+/**
+ * Legitimacy over time, one line per player — the counterpart to
+ * {@link createYieldChartOption} for the series that isn't a yield.
+ * Rendered by the Leaders tab (where the dynasty explains its shape) and by
+ * the Orders tab (where it drives orders through ORDERS_PER_LEGITIMACY), so
+ * both draw the same plot from one definition.
+ *
+ * `players` supplies the resolved label/color; a row without a match falls
+ * back to its nation, as the yield builder does.
+ */
+export function createLegitimacyChartOption(
+	playerHistory: PlayerHistory[],
+	players: DetailPlayer[],
+	selectedPlayersState: Record<string, boolean>,
+): ChartOption | null {
+	if (playerHistory.length === 0) return null;
+
+	const byId = new Map(players.map((p) => [p.playerId, p]));
+	const labelOf = (row: PlayerHistory): string =>
+		byId.get(row.player_id)?.label ?? formatEnum(row.nation, "NATION_");
+
+	// Value x-axis with a small pad so the area fill doesn't clip at the edges.
+	const turns = playerHistory[0]?.history.map((h) => h.turn) ?? [];
+	const minTurn = turns[0] ?? 0;
+	const maxTurn = turns[turns.length - 1] ?? 0;
+	const pad = Math.max(1, (maxTurn - minTurn) * 0.02);
+
+	return {
+		...CHART_THEME,
+		title: { ...CHART_THEME.title, text: "Legitimacy" },
+		legend: {
+			show: false,
+			data: playerHistory.map(labelOf),
+			selected: selectedPlayersState,
+		},
+		grid: { left: 60, right: 40, top: 80, bottom: 60 },
+		xAxis: {
+			type: "value",
+			name: "Turn",
+			nameLocation: "middle",
+			nameGap: 30,
+			min: minTurn - pad,
+			max: maxTurn + pad,
+			minInterval: 1,
+			splitLine: { show: false },
+		},
+		yAxis: {
+			type: "value",
+			name: "Legitimacy",
+			nameLocation: "middle",
+			nameGap: 40,
+			axisLine: { onZero: false },
+		},
+		series: playerHistory.map((row, i) => {
+			const color =
+				byId.get(row.player_id)?.color ?? getPlayerColor(row.nation, i);
+			return {
+				name: labelOf(row),
+				type: "line",
+				data: row.history.map((h) => [h.turn, h.legitimacy]),
 				itemStyle: { color },
 				...filledLineStyle(color),
 			};

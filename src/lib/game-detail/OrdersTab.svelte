@@ -1,12 +1,11 @@
 <script lang="ts">
-	// Orders tab — the action economy. Two charts (orders/turn and
-	// legitimacy, every player, nation colours) over per-player itemizations
-	// of where both come from at end of game, anchored on the game's own
-	// calculation (see orders.ts). Works for any player count — cards render
-	// per player, duel or FFA.
-	import type { ChartOption } from "$lib/echarts";
-	import { CHART_THEME } from "$lib/config";
-	import Chart from "$lib/Chart.svelte";
+	// Orders tab — the action economy. The orders-per-turn and legitimacy
+	// plots (the same builders the Yields and Leaders tabs draw, so a player
+	// keeps one colour and one selection across the page) over per-player
+	// itemizations of where both come from at end of game, anchored on the
+	// game's own calculation (see orders.ts). Works for any player count —
+	// cards render per player, duel or FFA.
+	import ChartContainer from "$lib/ChartContainer.svelte";
 	import type { PlayerHistory } from "$lib/types/PlayerHistory";
 	import type { YieldHistory } from "$lib/types/YieldHistory";
 	import type { PlayerLaw } from "$lib/types/PlayerLaw";
@@ -22,6 +21,12 @@
 		ordersEndBreakdown,
 		type EndBreakdown,
 	} from "./orders";
+	import {
+		createLegitimacyChartOption,
+		createYieldChartOption,
+		findByPlayer,
+		ownedByPlayer,
+	} from "./helpers";
 	import type { DetailPlayer } from "./helpers";
 
 	let {
@@ -33,6 +38,8 @@
 		currentLaws,
 		playerGoals = [],
 		storyEvents = [],
+		ordersChartFilter = $bindable<Record<string, boolean>>({}),
+		legitimacyChartFilter = $bindable<Record<string, boolean>>({}),
 	}: {
 		players: DetailPlayer[];
 		allYields: YieldHistory[];
@@ -42,90 +49,66 @@
 		currentLaws: PlayerLaw[];
 		playerGoals?: PlayerGoalInfo[];
 		storyEvents?: StoryEvent[];
+		ordersChartFilter?: Record<string, boolean>;
+		legitimacyChartFilter?: Record<string, boolean>;
 	} = $props();
 
 	// ─── Charts ───────────────────────────────────────────────────────
-
-	const ordersSeries = $derived(
-		players.map((p) => {
-			const rows =
-				allYields.find(
-					(y) => y.player_id === p.playerId && y.yield_type === "YIELD_ORDERS",
-				)?.data ?? [];
-			return {
-				player: p,
-				color: p.color,
-				data: rows
-					.filter((d) => d.rate != null)
-					.map((d) => [d.turn, d.rate] as [number, number]),
-			};
-		}),
-	);
-
-	const legitimacySeries = $derived(
-		players.map((p) => {
-			const rows =
-				playerHistory.find((h) => h.player_id === p.playerId)?.history ?? [];
-			return {
-				player: p,
-				color: p.color,
-				data: rows
-					.filter((d) => d.legitimacy != null)
-					.map((d) => [d.turn, d.legitimacy] as [number, number]),
-			};
-		}),
-	);
-
-	function lineChart(
-		title: string,
-		yAxisLabel: string,
-		series: { player: DetailPlayer; color: string; data: [number, number][] }[],
-	): ChartOption {
-		return {
-			...CHART_THEME,
-			title: { ...CHART_THEME.title, text: title },
-			tooltip: { trigger: "axis" },
-			legend: {
-				top: 8,
-				right: 16,
-				left: undefined,
-				textStyle: { color: "#c4b998" },
-				data: series.map((s) => s.player.label),
-			},
-			grid: { left: 48, right: 16, top: 56, bottom: 32 },
-			xAxis: { type: "value", min: 1, name: "Turn" },
-			yAxis: { type: "value", name: yAxisLabel },
-			series: series.map((s) => ({
-				type: "line" as const,
-				name: s.player.label,
-				showSymbol: false,
-				lineStyle: { width: 2, color: s.color },
-				itemStyle: { color: s.color },
-				data: s.data,
-			})),
-		};
-	}
-
+	// Both plots exist elsewhere on the page — orders/turn in Yields, legitimacy
+	// in Leaders — and are built here from the same helpers, so they read as one
+	// family and share the page's per-player chart selection.
 	const ordersChart = $derived(
-		lineChart("Orders per turn", "Orders", ordersSeries),
+		createYieldChartOption(
+			allYields,
+			"YIELD_ORDERS",
+			"Orders",
+			"Orders",
+			ordersChartFilter,
+		),
 	);
 	const legitimacyChart = $derived(
-		lineChart("Legitimacy", "Legitimacy", legitimacySeries),
+		createLegitimacyChartOption(playerHistory, players, legitimacyChartFilter),
 	);
+
+	// ─── Footnotes ────────────────────────────────────────────────────
+	// One string per metric: the duel table and the FFA cards annotate the same
+	// "Other" row, so the text lives in one place.
+	const ORDERS_NOTE =
+		"Everything the save can't itemize: council and court ratings, city yields (shrines, cathedrals), agents, trade and tribute. The save records gross production — orders spent by working or fortifying units are not deducted here. MP advantage compensation is also unrecorded per player.";
+	const LEGITIMACY_NOTE =
+		"Bonuses without a same-turn story event, legacy-ambition differences, cathedrals and shrines, and jumps on succession turns (the dynasty term reshuffles). A cognomen earned mid-reign is counted both in its ruler's row and inside a timed jump, and an ambition's completion turn isn't recorded, so a jump paying one out is credited to that turn's event — this signed row nets the overlap out.";
 
 	// ─── Per-player breakdowns ────────────────────────────────────────
 
-	const breakdowns = $derived(
+	const ordersYields = $derived(
+		allYields.filter((y) => y.yield_type === "YIELD_ORDERS"),
+	);
+
+	type PlayerBreakdown = {
+		player: DetailPlayer;
+		orders: EndBreakdown | null;
+		legitimacy: EndBreakdown | null;
+	};
+
+	const breakdowns = $derived<PlayerBreakdown[]>(
 		players.map((p) => {
 			const history =
-				playerHistory.find((h) => h.player_id === p.playerId)?.history ?? [];
+				findByPlayer(
+					playerHistory,
+					p,
+					(h) => h.player_id,
+					(h) => h.nation,
+				)?.history ?? [];
 			const lastLegit = [...history]
 				.reverse()
 				.find((d) => d.legitimacy != null)?.legitimacy;
 			const finalLegitimacy = p.legitimacy ?? lastLegit ?? null;
 			const ordersRows =
-				allYields.find(
-					(y) => y.player_id === p.playerId && y.yield_type === "YIELD_ORDERS",
+				findByPlayer(
+					ordersYields,
+					p,
+					(y) => y.player_id,
+					(y) => y.nation,
 				)?.data ?? [];
 			const finalOrdersRate =
 				[...ordersRows].reverse().find((d) => d.rate != null)?.rate ?? null;
@@ -144,7 +127,12 @@
 							finalOrdersRate,
 							finalLegitimacy,
 							difficulty: p.difficulty,
-							laws: currentLaws.filter((l) => l.player_id === p.playerId),
+							laws: ownedByPlayer(
+								currentLaws,
+								p,
+								(l) => l.player_id,
+								(l) => l.nation,
+							),
 							ruler,
 							characterTraits,
 						})
@@ -161,7 +149,7 @@
 							),
 						})
 					: null;
-			return { player: p, color: p.color, orders, legitimacy };
+			return { player: p, orders, legitimacy };
 		}),
 	);
 
@@ -178,29 +166,63 @@
 	// facing columns. Rows are the union of both sides' labels, ordered by
 	// the larger value; a source only one side has shows "—" for the other.
 	const isDuel = $derived(players.length === 2);
-	// eslint-disable-next-line no-unused-vars -- param name documentary
-	type PickFn = (b: (typeof breakdowns)[number]) => EndBreakdown | null;
-	function unionRows(pick: PickFn): { label: string; detail?: string }[] {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and consumed inside one call, never mutated after
-		const best = new Map<string, { max: number; detail?: string }>();
-		for (const b of breakdowns) {
-			for (const r of pick(b)?.rows ?? []) {
-				const prev = best.get(r.label);
-				if (!prev || r.value > prev.max) {
-					best.set(r.label, { max: r.value, detail: r.detail });
+
+	const SECTIONS = [
+		{
+			title: "Orders per turn, at end",
+			dp: 1,
+			note: ORDERS_NOTE,
+			pick: (b: PlayerBreakdown) => b.orders,
+		},
+		{
+			title: "Legitimacy, at end",
+			dp: 0,
+			note: LEGITIMACY_NOTE,
+			pick: (b: PlayerBreakdown) => b.legitimacy,
+		},
+	];
+
+	// The union walk and every cell lookup run once per derivation here, not
+	// once per render per cell as they would from the template.
+	const duelSections = $derived(
+		SECTIONS.map((section) => {
+			const labels = breakdowns.map((b) => b.player.label);
+			const sides = breakdowns.map((b) => section.pick(b));
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and consumed inside one derivation, never mutated after
+			const best = new Map<string, { max: number; detail?: string }>();
+			for (const bd of sides) {
+				for (const r of bd?.rows ?? []) {
+					const prev = best.get(r.label);
+					if (!prev || r.value > prev.max) {
+						best.set(r.label, { max: r.value, detail: r.detail });
+					}
 				}
 			}
-		}
-		return [...best.entries()]
-			.sort((a, b) => b[1].max - a[1].max)
-			.map(([label, v]) => ({ label, detail: v.detail }));
-	}
-	const valueFor = (
-		pick: PickFn,
-		b: (typeof breakdowns)[number],
-		label: string,
-	): number | null =>
-		pick(b)?.rows.find((r) => r.label === label)?.value ?? null;
+			return {
+				title: section.title,
+				dp: section.dp,
+				note: section.note,
+				rows: [...best.entries()]
+					.sort((a, b) => b[1].max - a[1].max)
+					.map(([label, v]) => ({
+						label,
+						detail: v.detail,
+						values: sides.map((bd, i) => ({
+							player: labels[i],
+							value: bd?.rows.find((r) => r.label === label)?.value ?? null,
+						})),
+					})),
+				others: sides.map((bd, i) => ({
+					player: labels[i],
+					value: bd?.other ?? null,
+				})),
+				totals: sides.map((bd, i) => ({
+					player: labels[i],
+					value: bd?.total ?? null,
+				})),
+			};
+		}),
+	);
 </script>
 
 {#snippet breakdownTable(b: EndBreakdown, dp: number, otherNote: string)}
@@ -241,23 +263,31 @@
 {/snippet}
 
 <div class="space-y-4">
-	<div
-		class="rounded-lg p-4"
-		style="background-color: rgb(var(--color-surface));"
-	>
-		<Chart option={ordersChart} height="300px" />
-	</div>
+	{#if ordersChart}
+		<div
+			class="rounded-lg p-4"
+			style="background-color: rgb(var(--color-surface));"
+		>
+			<ChartContainer option={ordersChart} height="400px" title="Orders" />
+		</div>
+	{/if}
 
-	<div
-		class="rounded-lg p-4"
-		style="background-color: rgb(var(--color-surface));"
-	>
-		<Chart option={legitimacyChart} height="300px" />
-	</div>
+	{#if legitimacyChart}
+		<div
+			class="rounded-lg p-4"
+			style="background-color: rgb(var(--color-surface));"
+		>
+			<ChartContainer
+				option={legitimacyChart}
+				height="400px"
+				title="Legitimacy"
+			/>
+		</div>
+	{/if}
 
 	{#if isDuel}
 		<!-- Duel: one table per metric, both players in facing columns. -->
-		{#each [{ title: "Orders per turn, at end", pick: ((b) => b.orders) as PickFn, dp: 1, note: "Everything the save can't itemize: council and court ratings, city yields (shrines, cathedrals), agents, trade and tribute. The save records gross production — orders spent by working or fortifying units are not deducted here. MP advantage compensation is also unrecorded per player." }, { title: "Legitimacy, at end", pick: ((b) => b.legitimacy) as PickFn, dp: 0, note: "Bonuses without a same-turn story event, legacy-ambition differences, cathedrals and shrines, and jumps on succession turns (the dynasty term reshuffles). A cognomen earned mid-reign is counted both in its ruler's row and inside a timed jump — this signed row nets the overlap out." }] as section (section.title)}
+		{#each duelSections as section (section.title)}
 			<div
 				class="rounded-lg p-4"
 				style="background-color: rgb(var(--color-surface));"
@@ -270,26 +300,27 @@
 						<tr>
 							<td></td>
 							{#each breakdowns as b (b.player.label)}
-								<td class="pb-1 text-right font-bold" style="color: {b.color};"
-									>{b.player.label}</td
+								<td
+									class="pb-1 text-right font-bold"
+									style="color: {b.player.color};">{b.player.label}</td
 								>
 							{/each}
 						</tr>
 					</thead>
 					<tbody>
-						{#each unionRows(section.pick) as row (row.label)}
+						{#each section.rows as row (row.label)}
 							<tr>
 								<td class="py-0.5 pr-2 text-tan" title={row.detail}>
 									{row.label}
 								</td>
-								{#each breakdowns as b (b.player.label)}
-									{@const v = valueFor(section.pick, b, row.label)}
+								{#each row.values as cell (cell.player)}
 									<td
 										class="py-0.5 text-right font-mono tabular-nums text-gray-200"
 									>
-										{#if v != null}{signed(v, section.dp)}{:else}<span
-												class="opacity-40">—</span
-											>{/if}
+										{#if cell.value != null}{signed(
+												cell.value,
+												section.dp,
+											)}{:else}<span class="opacity-40">—</span>{/if}
 									</td>
 								{/each}
 							</tr>
@@ -298,26 +329,28 @@
 							<td class="py-0.5 pr-2 text-tan" title={section.note}>
 								Other <span class="text-[10px] opacity-60">(?)</span>
 							</td>
-							{#each breakdowns as b (b.player.label)}
-								{@const bd = section.pick(b)}
+							{#each section.others as cell (cell.player)}
 								<td
-									class="py-0.5 text-right font-mono tabular-nums {bd &&
-									bd.other < 0
+									class="py-0.5 text-right font-mono tabular-nums {cell.value !=
+										null && cell.value < 0
 										? 'text-red-400'
 										: 'text-gray-200'}"
 								>
-									{#if bd}{signed(bd.other, section.dp)}{:else}<span
-											class="opacity-40">—</span
-										>{/if}
+									{#if cell.value != null}{signed(
+											cell.value,
+											section.dp,
+										)}{:else}<span class="opacity-40">—</span>{/if}
 								</td>
 							{/each}
 						</tr>
 						<tr class="border-t border-border-subtle font-bold">
 							<td class="py-1 pr-2 text-gray-200">Total</td>
-							{#each breakdowns as b (b.player.label)}
-								{@const bd = section.pick(b)}
+							{#each section.totals as cell (cell.player)}
 								<td class="py-1 text-right font-mono tabular-nums text-white">
-									{#if bd}{fmt(bd.total, section.dp)}{:else}—{/if}
+									{#if cell.value != null}{fmt(
+											cell.value,
+											section.dp,
+										)}{:else}—{/if}
 								</td>
 							{/each}
 						</tr>
@@ -333,7 +366,7 @@
 					class="rounded-lg p-4"
 					style="background-color: rgb(var(--color-surface));"
 				>
-					<h3 class="mb-3 text-sm font-bold" style="color: {b.color};">
+					<h3 class="mb-3 text-sm font-bold" style="color: {b.player.color};">
 						{b.player.label}
 					</h3>
 					<div class="grid gap-4 sm:grid-cols-2">
@@ -342,11 +375,7 @@
 								Orders per turn, at end
 							</div>
 							{#if b.orders}
-								{@render breakdownTable(
-									b.orders,
-									1,
-									"Everything the save can't itemize: council and court ratings, city yields (shrines, cathedrals), agents, trade and tribute. The save records gross production — orders spent by working or fortifying units are not deducted here. MP advantage compensation is also unrecorded per player.",
-								)}
+								{@render breakdownTable(b.orders, 1, ORDERS_NOTE)}
 							{:else}
 								<div class="text-xs text-tan opacity-70">no orders data</div>
 							{/if}
@@ -356,11 +385,7 @@
 								Legitimacy, at end
 							</div>
 							{#if b.legitimacy}
-								{@render breakdownTable(
-									b.legitimacy,
-									0,
-									"Bonuses without a same-turn story event, legacy-ambition differences, cathedrals and shrines, and jumps on succession turns (the dynasty term reshuffles). A cognomen earned mid-reign is counted both in its ruler's row and inside a timed jump — this signed row nets the overlap out.",
-								)}
+								{@render breakdownTable(b.legitimacy, 0, LEGITIMACY_NOTE)}
 							{:else}
 								<div class="text-xs text-tan opacity-70">
 									no legitimacy data

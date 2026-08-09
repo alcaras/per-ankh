@@ -601,6 +601,8 @@
 			{currentLaws}
 			{playerGoals}
 			{storyEvents}
+			bind:ordersChartFilter={chartFilters.orders}
+			bind:legitimacyChartFilter={chartFilters.legitimacy}
 		/>
 	</Tabs.Content>
 

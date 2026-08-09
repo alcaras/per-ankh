@@ -26,6 +26,7 @@ import {
 	ORDERS_SOURCES,
 } from "$lib/generated/orders-sources";
 import { GOAL_NAMES } from "$lib/generated/goal-names";
+import { storyEventType } from "./helpers";
 import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
 import type {
 	CharacterInfo,
@@ -182,31 +183,26 @@ export function legitimacyEndBreakdown(opts: {
 		});
 	}
 
-	// Event attribution: a legitimacy jump not explained by that turn's
-	// ambitions, on a turn a story event fired for this player, is credited
-	// to the event by name — timing-based, so it's labelled with its turn
-	// rather than presented as an exact price. Succession turns are skipped
-	// (the dynasty term reshuffles and would mislabel the reshuffle as an
-	// event), as are sub-2 leftovers (noise).
+	// Event attribution: a legitimacy jump on a turn a story event fired for
+	// this player is credited to the event by name — timing-based, so it's
+	// labelled with its turn rather than presented as an exact price.
+	// Succession turns are skipped (the dynasty term reshuffles and would
+	// mislabel the reshuffle as an event), as are sub-2 jumps (noise).
+	//
+	// A jump is NOT netted against that turn's ambition completions: the save
+	// records no completion turn, so a finished goal's `completed_turn` is its
+	// START turn (a documented placeholder — see parsePlayerGoals in
+	// parsers/player-data.ts). Subtracting there would deduct the award on the
+	// turn the ambition was taken up, suppressing genuine event rows; an event
+	// sharing a turn with a real completion over-claims by the award instead,
+	// which the signed remainder nets out.
 	const successionTurns = new Set(
 		opts.leaders.map((c) => c.became_leader_turn),
 	);
-	const goalsByTurn = new Map<number, number>();
-	for (const g of completed) {
-		goalsByTurn.set(
-			g.completed_turn!,
-			(goalsByTurn.get(g.completed_turn!) ?? 0) + 1,
-		);
-	}
 	const eventsByTurn = new Map<number, Set<string>>();
 	for (const e of opts.storyEvents) {
-		// The same event appears under several prefixes ("P.1.", the family's
-		// copy, the religion's copy) — normalise to the EVENTSTORY_ core so
-		// each event names itself once.
-		const idx = e.event_type.lastIndexOf("EVENTSTORY_");
-		if (idx < 0) continue;
-		const name = e.event_type.slice(idx);
-		if (EVENT_IGNORE.test(name)) continue;
+		const name = storyEventType(e.event_type);
+		if (name == null || EVENT_IGNORE.test(name)) continue;
 		const set = eventsByTurn.get(e.occurred_turn) ?? new Set<string>();
 		set.add(formatEnum(name, "EVENTSTORY_"));
 		eventsByTurn.set(e.occurred_turn, set);
@@ -221,9 +217,8 @@ export function legitimacyEndBreakdown(opts: {
 		const turn = pts[i].turn;
 		if (successionTurns.has(turn)) continue;
 		const jump = pts[i].legitimacy! - pts[i - 1].legitimacy!;
-		const leftover = jump - (goalsByTurn.get(turn) ?? 0) * AMBITION_LEGITIMACY;
 		const names = eventsByTurn.get(turn);
-		if (leftover < 2 || !names || names.size === 0) continue;
+		if (jump < 2 || !names || names.size === 0) continue;
 		const list = [...names];
 		const label =
 			list.length > 2
@@ -231,10 +226,10 @@ export function legitimacyEndBreakdown(opts: {
 				: list.join(" + ");
 		const prev = byLabel.get(label);
 		if (prev) {
-			prev.value += leftover;
+			prev.value += jump;
 			prev.turns.push(turn);
 		} else {
-			byLabel.set(label, { value: leftover, turns: [turn] });
+			byLabel.set(label, { value: jump, turns: [turn] });
 		}
 	}
 	for (const [label, e] of byLabel) {

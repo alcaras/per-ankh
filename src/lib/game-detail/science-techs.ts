@@ -53,6 +53,7 @@ import {
 	COMPETITIVE_SCIENCE_STIPEND,
 } from "$lib/generated/science-yields";
 import { formatEnum } from "$lib/utils/formatting";
+import { storyEventType } from "./helpers";
 
 // ─── Key-science-tech conditions ─────────────────────────────────────
 
@@ -246,9 +247,9 @@ function countByName<T>(rows: T[], nameOf: (row: T) => string): NamedCount[] {
 }
 
 // A player's expedition story events, deduped and display-ready. Story rows
-// key players by name (no id), and prefixed variants of the same event
-// ("P.1.EVENTSTORY_X" / "EVENTSTORY_X") appear per audience, so entries
-// normalize to their EVENTSTORY_ suffix and dedupe on (event, turn).
+// key players by name (no id), and prefixed variants of the same event appear
+// per audience, so entries normalize through storyEventType and dedupe on
+// (event, turn).
 export function expeditionEvents(
 	playerName: string,
 	storyEvents: StoryEvent[],
@@ -257,9 +258,8 @@ export function expeditionEvents(
 	const out: { name: string; turn: number }[] = [];
 	for (const s of storyEvents) {
 		if (s.player_name !== playerName) continue;
-		const at = s.event_type.indexOf("EVENTSTORY_EXPEDITION");
-		if (at < 0) continue;
-		const norm = s.event_type.slice(at);
+		const norm = storyEventType(s.event_type);
+		if (norm == null || !norm.startsWith("EVENTSTORY_EXPEDITION")) continue;
 		const key = `${norm}@${s.occurred_turn}`;
 		if (seen.has(key)) continue;
 		seen.add(key);

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { ChartOption } from "$lib/echarts";
 	import type {
 		CharacterInfo,
 		CharacterTraitInfo,
@@ -11,8 +10,7 @@
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import LeaderCard from "./LeaderCard.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
-	import { CHART_THEME, getNationChartColor } from "$lib/config";
-	import { filledLineStyle } from "./helpers";
+	import { createLegitimacyChartOption } from "./helpers";
 	import type { DetailPlayer, Reign } from "./helpers";
 
 	let {
@@ -34,7 +32,6 @@
 	} = $props();
 
 	const totalTurns = $derived(gameDetails.total_turns || 1);
-	const playerById = $derived(new Map(players.map((p) => [p.playerId, p])));
 	const histByPlayer = $derived(
 		new Map(playerHistory.map((ph) => [ph.player_id, ph])),
 	);
@@ -119,59 +116,11 @@
 	});
 
 	// ─── Legitimacy chart (relocated from the Events tab) ─────────────
-	const legitimacyChartOption = $derived.by<ChartOption | null>(() => {
-		if (!playerHistory) return null;
-		// Value x-axis with a small pad so the area fill doesn't clip at the edges.
-		const turns = playerHistory[0]?.history.map((h) => h.turn) ?? [];
-		const minTurn = turns[0] ?? 0;
-		const maxTurn = turns[turns.length - 1] ?? 0;
-		const pad = Math.max(1, (maxTurn - minTurn) * 0.02);
-		return {
-			...CHART_THEME,
-			title: {
-				...CHART_THEME.title,
-				text: "Legitimacy",
-			},
-			legend: {
-				show: false,
-				data: playerHistory.map(
-					(p) =>
-						playerById.get(p.player_id)?.label ??
-						formatEnum(p.nation, "NATION_"),
-				),
-				selected: legitimacyChartFilter,
-			},
-			grid: { left: 60, right: 40, top: 80, bottom: 60 },
-			xAxis: {
-				type: "value",
-				name: "Turn",
-				nameLocation: "middle",
-				nameGap: 30,
-				min: minTurn - pad,
-				max: maxTurn + pad,
-				minInterval: 1,
-				splitLine: { show: false },
-			},
-			yAxis: {
-				type: "value",
-				name: "Legitimacy",
-				nameLocation: "middle",
-				nameGap: 40,
-				axisLine: { onZero: false },
-			},
-			series: playerHistory.map((player, i) => {
-				const rp = playerById.get(player.player_id);
-				const color = rp?.color ?? getNationChartColor(player.nation, i);
-				return {
-					name: rp?.label ?? formatEnum(player.nation, "NATION_"),
-					type: "line",
-					data: player.history.map((h) => [h.turn, h.legitimacy]),
-					itemStyle: { color },
-					...filledLineStyle(color),
-				};
-			}),
-		};
-	});
+	// Shared with the Orders tab, which plots the same series against the
+	// orders it buys — see createLegitimacyChartOption.
+	const legitimacyChartOption = $derived(
+		createLegitimacyChartOption(playerHistory, players, legitimacyChartFilter),
+	);
 </script>
 
 {#if dynasties.length === 0}
