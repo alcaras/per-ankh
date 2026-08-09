@@ -26,7 +26,7 @@ import {
 	ORDERS_SOURCES,
 } from "$lib/generated/orders-sources";
 import { GOAL_NAMES } from "$lib/generated/goal-names";
-import { formatEnum } from "$lib/utils/formatting";
+import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
 import type {
 	CharacterInfo,
 	CharacterTraitInfo,
@@ -59,9 +59,13 @@ export function dynastyLeaders(
 		.sort((a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0));
 }
 
-// Same rendering rule as LeaderCard: names arrive as NAME_* tokens.
+// Same rendering rule as LeaderCard: names arrive as NAME_* tokens, and a
+// ruler who shares a first name with an earlier one carries their regnal
+// numeral (appended after formatEnum so its trailing-digit strip can't eat
+// it) — without it two rulers of a dynasty can render the same label.
 const characterLabel = (c: CharacterInfo): string => {
-	const name = formatEnum(c.first_name ?? "", "NAME_") || `#${c.xml_id}`;
+	const base = formatEnum(c.first_name ?? "", "NAME_") || `#${c.xml_id}`;
+	const name = c.suffix > 1 ? `${base} ${toRomanNumeral(c.suffix)}` : base;
 	return c.cognomen
 		? `${name} the ${formatEnum(c.cognomen, "COGNOMEN_")}`
 		: name;
