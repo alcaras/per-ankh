@@ -12,7 +12,6 @@ Per-Ankh is two Workers on one zone:
 | --- | --- | --- |
 | `per-ankh.app` | `per-ankh-frontend` (SvelteKit SSR) | `wrangler.toml` |
 | `api.per-ankh.app` | `per-ankh-share-api` | `cloud/wrangler.toml` |
-| `legacy.per-ankh.app` | frozen share viewer | `web/` |
 
 When a visitor loads a page, the frontend Worker server-renders it, and that render makes its own subrequests to `api.per-ankh.app`. **Those subrequests do not carry the visitor's IP.** They arrive at the API from a Cloudflare egress address — on 2026-08-05 every server-rendered request in production came from `2a06:98c0:3600::103`.
 

@@ -74,7 +74,7 @@
 	// Family column uses. The roster is the source: it names every family in
 	// the game, including one holding no city at the final turn, which the
 	// cities alone would leave crestless. Cities still fill in for blobs that
-	// predate the roster (the legacy share viewer passes none).
+	// predate the roster, which arrive with `families` empty.
 	const familyClasses = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
 		const out = new Map<string, string>();

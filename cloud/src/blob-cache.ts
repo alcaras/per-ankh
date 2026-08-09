@@ -32,9 +32,10 @@
 
 import { beginR2Op, setLogField } from "./log";
 
-// Synthetic key origin — same idiom as the download rate-limit counter in
-// share-legacy.ts. R2 keys are `games/{id}.json.gz` where id is a nanoid(21)
-// over [A-Za-z0-9_-], so they're URL-path-safe as-is with no escaping.
+// Synthetic key origin — the Cache API keys on a Request, so a non-routable
+// origin stands in for one. R2 keys are `games/{id}.json.gz` where id is a
+// nanoid(21) over [A-Za-z0-9_-], so they're URL-path-safe as-is with no
+// escaping.
 const CACHE_ORIGIN = "https://blob-cache.internal/r2/";
 
 // 24h, matching the stats bundle cache. The TTL is purely a retention knob

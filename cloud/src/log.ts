@@ -99,7 +99,7 @@ export interface StorageTiming {
 	// /v1/games is the heaviest R2 path in the app — a sum that skipped them
 	// would score the upload route as doing no R2 work at all.
 	//
-	// Two exclusions, both deliberate:
+	// One exclusion, deliberate:
 	//
 	// The save-download routes are not in it and cannot be: GET
 	// /v1/games/:id/download and its /v1/admin/ twin hand `obj.body` straight
@@ -111,10 +111,6 @@ export interface StorageTiming {
 	// still a real cross-region round trip; it shows up as an auto-instrumented
 	// R2 span (wrangler.toml [observability.traces]), which is where to look
 	// for it rather than here.
-	//
-	// The legacy share routes (share-legacy.ts) are not instrumented at all.
-	// They are frozen and slated for decom, so they were left alone rather than
-	// wired up and then deleted.
 	//
 	// No intervals, unlike the D1 side. The one place concurrent R2 operations
 	// happen — the parallel puts on upload, and the parallel deletes that clean
