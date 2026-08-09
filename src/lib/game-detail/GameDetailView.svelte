@@ -594,7 +594,6 @@
 	<Tabs.Content value="orders" class="tab-pane min-h-[400px]">
 		<OrdersTab
 			players={resolvedPlayers}
-			{gameDetails}
 			{allYields}
 			{playerHistory}
 			{characters}

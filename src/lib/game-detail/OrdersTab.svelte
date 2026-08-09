@@ -5,9 +5,8 @@
 	// calculation (see orders.ts). Works for any player count — cards render
 	// per player, duel or FFA.
 	import type { ChartOption } from "$lib/echarts";
-	import { CHART_THEME, getNationChartColor } from "$lib/config";
+	import { CHART_THEME } from "$lib/config";
 	import Chart from "$lib/Chart.svelte";
-	import type { GameDetails } from "$lib/types/GameDetails";
 	import type { PlayerHistory } from "$lib/types/PlayerHistory";
 	import type { YieldHistory } from "$lib/types/YieldHistory";
 	import type { PlayerLaw } from "$lib/types/PlayerLaw";
@@ -27,7 +26,6 @@
 
 	let {
 		players,
-		gameDetails,
 		allYields,
 		playerHistory,
 		characters = [],
@@ -37,7 +35,6 @@
 		storyEvents = [],
 	}: {
 		players: DetailPlayer[];
-		gameDetails: GameDetails;
 		allYields: YieldHistory[];
 		playerHistory: PlayerHistory[];
 		characters?: CharacterInfo[];
@@ -47,20 +44,17 @@
 		storyEvents?: StoryEvent[];
 	} = $props();
 
-	const colorOf = (p: DetailPlayer, i: number) =>
-		getNationChartColor(p.nation, i);
-
 	// ─── Charts ───────────────────────────────────────────────────────
 
 	const ordersSeries = $derived(
-		players.map((p, i) => {
+		players.map((p) => {
 			const rows =
 				allYields.find(
-					(y) => y.player_id === p.player_id && y.yield_type === "YIELD_ORDERS",
+					(y) => y.player_id === p.playerId && y.yield_type === "YIELD_ORDERS",
 				)?.data ?? [];
 			return {
 				player: p,
-				color: colorOf(p, i),
+				color: p.color,
 				data: rows
 					.filter((d) => d.rate != null)
 					.map((d) => [d.turn, d.rate] as [number, number]),
@@ -69,12 +63,12 @@
 	);
 
 	const legitimacySeries = $derived(
-		players.map((p, i) => {
+		players.map((p) => {
 			const rows =
-				playerHistory.find((h) => h.player_id === p.player_id)?.history ?? [];
+				playerHistory.find((h) => h.player_id === p.playerId)?.history ?? [];
 			return {
 				player: p,
-				color: colorOf(p, i),
+				color: p.color,
 				data: rows
 					.filter((d) => d.legitimacy != null)
 					.map((d) => [d.turn, d.legitimacy] as [number, number]),
@@ -122,24 +116,21 @@
 	// ─── Per-player breakdowns ────────────────────────────────────────
 
 	const breakdowns = $derived(
-		players.map((p, i) => {
-			const info = gameDetails.players.find(
-				(gp) => gp.player_id === p.player_id,
-			);
+		players.map((p) => {
 			const history =
-				playerHistory.find((h) => h.player_id === p.player_id)?.history ?? [];
+				playerHistory.find((h) => h.player_id === p.playerId)?.history ?? [];
 			const lastLegit = [...history]
 				.reverse()
 				.find((d) => d.legitimacy != null)?.legitimacy;
-			const finalLegitimacy = info?.legitimacy ?? lastLegit ?? null;
+			const finalLegitimacy = p.legitimacy ?? lastLegit ?? null;
 			const ordersRows =
 				allYields.find(
-					(y) => y.player_id === p.player_id && y.yield_type === "YIELD_ORDERS",
+					(y) => y.player_id === p.playerId && y.yield_type === "YIELD_ORDERS",
 				)?.data ?? [];
 			const finalOrdersRate =
 				[...ordersRows].reverse().find((d) => d.rate != null)?.rate ?? null;
-			const leaders = dynastyLeaders(characters, p.player_id ?? -1);
-			const rulerId = info?.leader_character_xml_id;
+			const leaders = dynastyLeaders(characters, p.playerId);
+			const rulerId = p.leader_character_xml_id;
 			const ruler =
 				(rulerId != null
 					? characters.find((c) => c.xml_id === rulerId)
@@ -152,8 +143,8 @@
 					? ordersEndBreakdown({
 							finalOrdersRate,
 							finalLegitimacy,
-							difficulty: info?.difficulty ?? null,
-							laws: currentLaws.filter((l) => l.player_id === p.player_id),
+							difficulty: p.difficulty,
+							laws: currentLaws.filter((l) => l.player_id === p.playerId),
 							ruler,
 							characterTraits,
 						})
@@ -163,14 +154,14 @@
 					? legitimacyEndBreakdown({
 							finalLegitimacy,
 							leaders,
-							goals: playerGoals.filter((g) => g.player_xml_id === p.player_id),
+							goals: playerGoals.filter((g) => g.player_xml_id === p.playerId),
 							series: history,
 							storyEvents: storyEvents.filter(
 								(e) => e.player_name === p.player_name,
 							),
 						})
 					: null;
-			return { player: p, color: colorOf(p, i), orders, legitimacy };
+			return { player: p, color: p.color, orders, legitimacy };
 		}),
 	);
 
