@@ -6,8 +6,8 @@
 export const ORDERS_PER_LEGITIMACY = 0.1;
 
 // Real orders/turn granted while the source is active, keyed by the
-// source's own zType (laws, techs, nations, and ruler traits — the
-// trait values apply while the character holding them rules).
+// source's own zType (difficulty handicaps, laws, and ruler traits —
+// the trait values apply while the character holding them rules).
 export const ORDERS_SOURCES: Readonly<Record<string, number>> = {
 	DIFFICULTY_ABLE: 10,
 	DIFFICULTY_GLORIOUS: 7,
@@ -21,9 +21,8 @@ export const ORDERS_SOURCES: Readonly<Record<string, number>> = {
 };
 
 // Legitimacy added to the player's base per finished ambition
-// (Globals.FINISHED_AMBITION_BONUS / FINISHED_LEGACY_BONUS).
+// (Globals.FINISHED_AMBITION_BONUS).
 export const AMBITION_LEGITIMACY = 10;
-export const LEGACY_AMBITION_LEGITIMACY = 5;
 
 // Each ruler's cognomen contributes this much legitimacy, divided by
 // reign recency (Character.getLegitimacy: value / (numLeaders − index)).

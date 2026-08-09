@@ -6,20 +6,28 @@
 //   `getLegitimacy() × yield.xml ORDERS <iPerLegitimacy>` and every active
 //   effectPlayer's <aiYieldRate> ORDERS entry. EffectPlayers are granted by
 //   nations (<EffectPlayer>), completed techs (<EffectPlayer>), active laws
-//   (<EffectPlayer>) and the ruler's traits/archetype (<LeaderEffectPlayer>).
-//   Yield rates are stored ×10 (Constants.YIELDS_MULTIPLIER), so values here
-//   are divided down to real orders.
+//   (<EffectPlayer>), difficulty handicaps (<EffectPlayer>) and the ruler's
+//   traits/archetype (<LeaderEffectPlayer>). Yield rates are stored ×10
+//   (Constants.YIELDS_MULTIPLIER), so values here are divided down to real
+//   orders.
+//
+//   Only the granters the tab can look up per player are baked: difficulty,
+//   laws and ruler traits. Nations and techs were swept too and grant no
+//   ORDERS in the current XML — and the tab has no per-tech or per-nation
+//   lookup to spend them on, so a future patch's grant belongs with a
+//   consumer, not with a key nothing reads.
 //
 //   Legitimacy (Player.getLegitimacy) = an accumulated base — finishing an
 //   ambition awards Globals.FINISHED_AMBITION_BONUS's <iLegitimacy> (legacy
-//   ambitions the smaller FINISHED_LEGACY_BONUS; events/bonuses this bake
+//   ambitions the smaller FINISHED_LEGACY_BONUS, which the blob can't tell
+//   apart from a normal ambition, so it isn't baked; events/bonuses this bake
 //   can't price) — plus every past-and-present leader's cognomen worth,
 //   cognomen.xml <iLegitimacy> divided by reign recency
 //   (Character.getLegitimacy: miLegitimacy / (numLeaders − leaderIndex)).
 //
 // SOURCES (local-only, via the Reference/ symlink resolved by paths.ts):
-//   Reference/XML/Infos/{yield,effectPlayer,law,tech,nation,trait,
-//   globalsType,bonus,cognomen,difficulty}.xml
+//   Reference/XML/Infos/{yield,effectPlayer,law,trait,globalsType,bonus,
+//   cognomen,difficulty}.xml
 //
 // OUTPUT: src/lib/generated/orders-sources.ts (checked in, self-contained).
 //
@@ -85,8 +93,6 @@ async function main(): Promise<void> {
 		yields,
 		effects,
 		laws,
-		techs,
-		nations,
 		traits,
 		globalsType,
 		bonuses,
@@ -96,8 +102,6 @@ async function main(): Promise<void> {
 		load("yield.xml"),
 		load("effectPlayer.xml"),
 		load("law.xml"),
-		load("tech.xml"),
-		load("nation.xml"),
 		load("trait.xml"),
 		load("globalsType.xml"),
 		load("bonus.xml"),
@@ -138,24 +142,23 @@ async function main(): Promise<void> {
 		}
 	};
 	takeFrom(laws, "EffectPlayer");
-	takeFrom(techs, "EffectPlayer");
-	takeFrom(nations, "EffectPlayer");
 	takeFrom(traits, "LeaderEffectPlayer");
 	// MP players pick their own handicap; game_details.players carries it.
 	takeFrom(difficulties, "EffectPlayer");
 
 	// Ambition completions award a flat legitimacy bonus (PlayerGoal.
 	// getGoalFinishBonus → Globals.FINISHED_AMBITION_BONUS → bonus.xml
-	// iLegitimacy). Legacy ambitions use the smaller legacy bonus; the blob
-	// can't tell the two apart, so the tab prices every completion at the
-	// ambition value and the remainder line absorbs the difference.
+	// iLegitimacy). Legacy ambitions use the smaller FINISHED_LEGACY_BONUS,
+	// but nothing in the blob marks a goal as legacy (goal.xml carries no
+	// legacy flag and PlayerGoalInfo.goal_state is a serialized <Stats> map),
+	// so the tab prices every completion at the ambition value and the
+	// remainder line absorbs the difference — no point baking the other value.
 	const bonusFor = (globalType: string): number => {
 		const g = globalsType.find((e) => e.zType === globalType);
 		const b = bonuses.find((e) => e.zType === (g?.zValue as string));
 		return Number(b?.iLegitimacy ?? 0);
 	};
 	const ambitionLegitimacy = bonusFor("FINISHED_AMBITION_BONUS");
-	const legacyAmbitionLegitimacy = bonusFor("FINISHED_LEGACY_BONUS");
 	if (ambitionLegitimacy <= 0) {
 		throw new Error(
 			"bake-orders-sources: FINISHED_AMBITION_BONUS legitimacy missing",
@@ -198,19 +201,18 @@ async function main(): Promise<void> {
 		"// Real orders/turn granted while the source is active, keyed by the",
 	);
 	lines.push(
-		"// source's own zType (laws, techs, nations, and ruler traits — the",
+		"// source's own zType (difficulty handicaps, laws, and ruler traits —",
 	);
-	lines.push("// trait values apply while the character holding them rules).");
+	lines.push(
+		"// the trait values apply while the character holding them rules).",
+	);
 	lines.push(
 		`export const ORDERS_SOURCES: Readonly<Record<string, number>> = ${JSON.stringify(sorted(sourceOrders))};`,
 	);
 	lines.push("");
 	lines.push("// Legitimacy added to the player's base per finished ambition");
-	lines.push("// (Globals.FINISHED_AMBITION_BONUS / FINISHED_LEGACY_BONUS).");
+	lines.push("// (Globals.FINISHED_AMBITION_BONUS).");
 	lines.push(`export const AMBITION_LEGITIMACY = ${ambitionLegitimacy};`);
-	lines.push(
-		`export const LEGACY_AMBITION_LEGITIMACY = ${legacyAmbitionLegitimacy};`,
-	);
 	lines.push("");
 	lines.push(
 		"// Each ruler's cognomen contributes this much legitimacy, divided by",
@@ -240,7 +242,7 @@ async function main(): Promise<void> {
 	await writeFile(OUTPUT_TS, formatted);
 	console.log(
 		`bake-orders-sources: ${Object.keys(sourceOrders).length} orders sources, ` +
-			`ambition +${ambitionLegitimacy} (legacy +${legacyAmbitionLegitimacy}), ` +
+			`ambition +${ambitionLegitimacy}, ` +
 			`${Object.keys(cognomenLegitimacy).length} cognomen legitimacy entries → ` +
 			OUTPUT_TS.replace(REPO_ROOT + "/", ""),
 	);
