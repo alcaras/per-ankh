@@ -55,7 +55,7 @@ Then:
 
 ```bash
 npm run bake:finalize          # Emits committed manifest TS modules + reconciles orphans
-npm run bake:all               # Every baker above except unit-stats + owtt (15), then finalize
+npm run bake:all               # Every baker above except unit-stats + owtt, then finalize
 ```
 
 `bake:all` deliberately omits `bake:unit-stats` and `bake:owtt` — rerun those by hand when their sources change. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, and `bake:screenshots` / `ux:review` drive Playwright capture for UX review (output under `docs/ux-review/`).

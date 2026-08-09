@@ -16,7 +16,7 @@
 		UnitInfo,
 	} from "$lib/parser/types";
 	import { FAMILY_OPINION_BANDS } from "$lib/generated/family-opinion";
-	import { CHART_THEME, getChartColor } from "$lib/config";
+	import { CHART_THEME, getFamilyChartColor } from "$lib/config";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
 	import {
@@ -63,6 +63,23 @@
 	const opinions = $derived(
 		familyOpinionSeries(familyOpinionHistory, orderedPlayers, totalTurns),
 	);
+
+	// Where each family sits among its own nation's opinion series. The band
+	// chart's rows run in founding order while the opinion chart's series run
+	// alphabetically, so a band row can't derive this from its own position —
+	// and it has to, because a family the bake doesn't know falls back to an
+	// indexed palette colour, which only keys the line above if both places
+	// index it the same way.
+	const familySeriesIndex = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+		const out = new Map<string, number>();
+		for (const player of orderedPlayers) {
+			opinions
+				.filter((s) => s.playerId === player.playerId)
+				.forEach((s, i) => out.set(`${player.playerId}|${s.family}`, i));
+		}
+		return out;
+	});
 
 	function pct(value: number): string {
 		return `${Math.round(value * 100)}%`;
@@ -126,9 +143,9 @@
 	// ─── Opinion over time ────────────────────────────────────────────
 	// One chart per nation rather than one with everybody on it: six lines in
 	// two colours is unreadable, and the comparison that matters is between a
-	// nation's own families, not across nations. Within a chart the families
-	// get distinct colours from the shared series palette; the nation is named
-	// and crested in the title, so its colour doesn't have to carry that.
+	// nation's own families, not across nations. Within a chart each family
+	// takes the game's own colour for it; the nation is named and crested in
+	// the title, so its colour doesn't have to carry that.
 	function opinionChartFor(player: DetailPlayer): ChartOption | null {
 		const mine = opinions.filter((s) => s.playerId === player.playerId);
 		if (mine.length === 0) return null;
@@ -174,18 +191,21 @@
 				nameLocation: "middle",
 				nameGap: 38,
 			},
-			series: mine.map((s, i) => ({
-				name: formatEnum(s.family, "FAMILY_"),
-				type: "line" as const,
-				data: s.points,
-				// No symbol at all rather than one that's merely hidden on the
-				// plot: the legend draws the series symbol too, and a marker
-				// punched through the middle of each swatch reads as noise when
-				// the colour of the line is the whole key.
-				symbol: "none" as const,
-				lineStyle: { color: getChartColor(i), width: 2 },
-				itemStyle: { color: getChartColor(i) },
-			})),
+			series: mine.map((s, i) => {
+				const color = getFamilyChartColor(s.family, i);
+				return {
+					name: formatEnum(s.family, "FAMILY_"),
+					type: "line" as const,
+					data: s.points,
+					// No symbol at all rather than one that's merely hidden on the
+					// plot: the legend draws the series symbol too, and a marker
+					// punched through the middle of each swatch reads as noise when
+					// the colour of the line is the whole key.
+					symbol: "none" as const,
+					lineStyle: { color, width: 2 },
+					itemStyle: { color },
+				};
+			}),
 		} as ChartOption;
 	}
 
@@ -229,8 +249,8 @@
 			`${value > 0 ? "+" : ""}${value.toFixed(1)}% upkeep`;
 		// A row reads left to right: the indent that puts a family under its
 		// nation, its crest, then the name. A nation heading stays in the axis
-		// white; its families take its colour, which is what ties a run of rows
-		// to the heading above them once the list is several nations long.
+		// white; each family's name takes the same colour its opinion line uses
+		// above, which is what ties the two panels together.
 		const rich: Record<string, object> = {
 			// An empty fragment reserving its width, the same mechanism that
 			// draws the crests. The indent can't ride on the crest's own padding:
@@ -239,22 +259,25 @@
 			indent: { width: 14 },
 			nation: { fontWeight: "bold", fontSize: 12 },
 		};
-		orderedPlayers.forEach((p, i) => {
-			rich[`family${i}`] = { color: p.color, fontSize: 11 };
-		});
 		ordered.forEach((t, i) => {
 			const url =
 				t.family == null ? nationCrest(t.player.nation) : familyCrest(t.family);
 			if (url != null) rich[`crest${i}`] = crestStyle(url, CREST_SIZE);
+			if (t.family != null) {
+				rich[`family${i}`] = {
+					color: getFamilyChartColor(
+						t.family,
+						familySeriesIndex.get(`${t.player.playerId}|${t.family}`) ?? 0,
+					),
+					fontSize: 11,
+				};
+			}
 		});
 		const styleOf = (t: (typeof ordered)[number], i: number) => {
 			const crest = rich[`crest${i}`] != null ? `{crest${i}|} ` : "";
 			if (t.family == null) return `${crest}{nation|${t.player.label}}`;
-			const owner = orderedPlayers.findIndex(
-				(p) => p.playerId === t.player.playerId,
-			);
 			const name = formatEnum(t.family, "FAMILY_");
-			return `{indent|}${crest}{family${owner}|${name}}`;
+			return `{indent|}${crest}{family${i}|${name}}`;
 		};
 		return {
 			...CHART_THEME,
