@@ -16,8 +16,7 @@
 		UnitInfo,
 	} from "$lib/parser/types";
 	import { FAMILY_OPINION_BANDS } from "$lib/generated/family-opinion";
-	import { FAMILY_COLORS } from "$lib/generated/family-colors";
-	import { CHART_THEME, getChartColor } from "$lib/config";
+	import { CHART_THEME, getFamilyChartColor } from "$lib/config";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
 	import {
@@ -64,6 +63,23 @@
 	const opinions = $derived(
 		familyOpinionSeries(familyOpinionHistory, orderedPlayers, totalTurns),
 	);
+
+	// Where each family sits among its own nation's opinion series. The band
+	// chart's rows run in founding order while the opinion chart's series run
+	// alphabetically, so a band row can't derive this from its own position —
+	// and it has to, because a family the bake doesn't know falls back to an
+	// indexed palette colour, which only keys the line above if both places
+	// index it the same way.
+	const familySeriesIndex = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+		const out = new Map<string, number>();
+		for (const player of orderedPlayers) {
+			opinions
+				.filter((s) => s.playerId === player.playerId)
+				.forEach((s, i) => out.set(`${player.playerId}|${s.family}`, i));
+		}
+		return out;
+	});
 
 	function pct(value: number): string {
 		return `${Math.round(value * 100)}%`;
@@ -127,9 +143,9 @@
 	// ─── Opinion over time ────────────────────────────────────────────
 	// One chart per nation rather than one with everybody on it: six lines in
 	// two colours is unreadable, and the comparison that matters is between a
-	// nation's own families, not across nations. Within a chart the families
-	// get distinct colours from the shared series palette; the nation is named
-	// and crested in the title, so its colour doesn't have to carry that.
+	// nation's own families, not across nations. Within a chart each family
+	// takes the game's own colour for it; the nation is named and crested in
+	// the title, so its colour doesn't have to carry that.
 	function opinionChartFor(player: DetailPlayer): ChartOption | null {
 		const mine = opinions.filter((s) => s.playerId === player.playerId);
 		if (mine.length === 0) return null;
@@ -176,10 +192,7 @@
 				nameGap: 38,
 			},
 			series: mine.map((s, i) => {
-				// The game's own colour for the family (unique per family ×
-				// nation, baked from the family palette); indexed fallback for
-				// a family the bake doesn't know (mods).
-				const color = FAMILY_COLORS[s.family] ?? getChartColor(i);
+				const color = getFamilyChartColor(s.family, i);
 				return {
 					name: formatEnum(s.family, "FAMILY_"),
 					type: "line" as const,
@@ -236,9 +249,8 @@
 			`${value > 0 ? "+" : ""}${value.toFixed(1)}% upkeep`;
 		// A row reads left to right: the indent that puts a family under its
 		// nation, its crest, then the name. A nation heading stays in the axis
-		// white; each family's name takes the game's own family colour (the
-		// same one its opinion line uses above), falling back to the player
-		// colour for a family the bake doesn't know (mods).
+		// white; each family's name takes the same colour its opinion line uses
+		// above, which is what ties the two panels together.
 		const rich: Record<string, object> = {
 			// An empty fragment reserving its width, the same mechanism that
 			// draws the crests. The indent can't ride on the crest's own padding:
@@ -253,7 +265,10 @@
 			if (url != null) rich[`crest${i}`] = crestStyle(url, CREST_SIZE);
 			if (t.family != null) {
 				rich[`family${i}`] = {
-					color: FAMILY_COLORS[t.family] ?? t.player.color,
+					color: getFamilyChartColor(
+						t.family,
+						familySeriesIndex.get(`${t.player.playerId}|${t.family}`) ?? 0,
+					),
 					fontSize: 11,
 				};
 			}

@@ -22,6 +22,9 @@ export {
 	type TribeKey,
 } from "./nations";
 
+// Re-export family colors
+export { getFamilyChartColor } from "./families";
+
 // Re-export terrain colors
 export {
 	TERRAIN_COLORS,
