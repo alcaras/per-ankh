@@ -498,21 +498,12 @@
 										class="inline-flex items-center gap-1 text-tan hover:text-orange hover:underline"
 										onclick={(e) => e.stopPropagation()}
 									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											class="h-3.5 w-3.5"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke="currentColor"
-											stroke-width="2"
-											aria-hidden="true"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M9 5l7 7-7 7"
-											/>
-										</svg>
+										<SpriteIcon
+											category="icons"
+											value="REPLAY"
+											size={18}
+											alt=""
+										/>
 										View game
 									</a>
 								{:else}

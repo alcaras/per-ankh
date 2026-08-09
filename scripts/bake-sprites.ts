@@ -32,6 +32,7 @@
 //   other/GOAL_STARTED.png                       → icons/GOAL_STARTED.png
 //   other/GOAL_FAILED.png                        → icons/GOAL_FAILED.png
 //   mods/dynamic-unit/sprites/EFFECTUNIT_ENLIST_ICON.png → icons/EFFECTUNIT_ENLIST_ICON.png
+//   events_images/UI_HUD_Icon_Replay.png         → icons/REPLAY.png
 //
 // PORTRAITS also read the OW Reference XML (Reference/XML/Infos/
 // characterPortrait*.xml) — like bake-improvements, this baker needs BOTH a
@@ -236,6 +237,9 @@ const ICON_MAPPINGS: readonly IconMapping[] = [
 		source: "events_images/TURN_SUMMARY_AMBITION.png",
 		target: "TURN_SUMMARY_AMBITION.png",
 	},
+	// The game's replay glyph — marks the link from a tournament match to the
+	// uploaded save's game page (see MatchTable.svelte's game column).
+	{ source: "events_images/UI_HUD_Icon_Replay.png", target: "REPLAY.png" },
 ];
 
 function contentHash(buf: Buffer): string {
