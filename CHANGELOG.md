@@ -1,5 +1,47 @@
 # Changelog
 
+## [2026-08-08-a315818] - 2026-08-08
+
+### Features
+
+- (tournaments) make scheduling your own match reachable — [be23372](https://github.com/becked/per-ankh/commit/be23372ae0feebf42900222ae20ee219b514cbf0)
+- (tournaments) split the actions column on schedule state, not on who you are — [c2f5b53](https://github.com/becked/per-ankh/commit/c2f5b539b2d28f33948379a90a3415e37dbe59e6)
+- (tournament) a match that outlived its sitting owes the sesh post its next part — [7cda80e](https://github.com/becked/per-ankh/commit/7cda80ec118f23cfe4acb16cbddfd76456ec39cb)
+- (admin) store and serve a curated featured-video set — [4713973](https://github.com/becked/per-ankh/commit/47139739abc37f4a26e9dd34b42058fbd5523607)
+- (admin) star any video card to feature it — [20ee1e1](https://github.com/becked/per-ankh/commit/20ee1e183350841905bd23da874f8ee520da0fb7)
+- (api) serve the featured-video set publicly — [2639fee](https://github.com/becked/per-ankh/commit/2639fee7e97a9104c6bcf30759a8a45bacf9c601)
+- (home) rebuild the signed-out hero around the tournament and a video — [aa11272](https://github.com/becked/per-ankh/commit/aa11272ec6596e1aba9830f88d66f77fccaa813d)
+- (home) serve one home page to signed-in and signed-out viewers — [93532ce](https://github.com/becked/per-ankh/commit/93532ce4e8d34d2665956866abc38f37a51097b2)
+- (home) frame the home page sections in titled panels — [0da1ce9](https://github.com/becked/per-ankh/commit/0da1ce9ab919fedc34c4337d9de37e4cbab1b772)
+
+### Fixes
+
+- (dev) point VITE_PUBLIC_ORIGIN at the dev server's actual port — [b26500a](https://github.com/becked/per-ankh/commit/b26500a881c329dedf52d4c7f0eeae370ac6551b)
+- (tournaments) scroll a deep-linked match into view before opening its card — [b236a87](https://github.com/becked/per-ankh/commit/b236a87ec59bb587e18053452eea13593c89776a)
+- (tournament) collapse played sessions so the next one stays above the fold — [8764619](https://github.com/becked/per-ankh/commit/876461901c8de6d634d8b3461f9d459ab96111bb)
+- (tournament) an unparseable part time reads as an open part in the sesh export — [2daa8f2](https://github.com/becked/per-ankh/commit/2daa8f2c9149e8a52b96456adfcf72203990ae09)
+- (deps) bump nanoid and kit to unblock the preflight audit gate — [2b2702f](https://github.com/becked/per-ankh/commit/2b2702fc5939583477684bee2c44fd165865effa)
+- (video) attribute the profile videos feed to its owner — [a315818](https://github.com/becked/per-ankh/commit/a3158180ea1a332e59403ab83d0c5a22fb7bacf2)
+
+### Other
+
+- (tournaments) use MatchDetailPopover on the matches page — [7d65a25](https://github.com/becked/per-ankh/commit/7d65a252a7781c011d1a9c986f6a61c47ca2cd93)
+- (ui) give the popover virtual-anchor shape one name — [05cbc2f](https://github.com/becked/per-ankh/commit/05cbc2f95d6302f276ad526d960b96988963af8b)
+- (tournaments) stop the row click on the actions wrapper — [9d82712](https://github.com/becked/per-ankh/commit/9d8271217cad19be2701d8ab33c4b394e0e9bd65)
+- (tournaments) make the caster participant refusal unconditional — [5cf7485](https://github.com/becked/per-ankh/commit/5cf748540360fdba08aa3e57f5c8b4b2b57cb58e)
+- (tournament) fold the schedule collapse into one partition — [4f7f552](https://github.com/becked/per-ankh/commit/4f7f5522012718bf4ce77931702dc533412fc6cc)
+- (tournament) say "parts", not "sessions", and share the played boundary — [0326a14](https://github.com/becked/per-ankh/commit/0326a14febf4196a9f714af3a0e32a71505c826e)
+- reunite upcomingScheduledParts with its doc comment — [1d91fe6](https://github.com/becked/per-ankh/commit/1d91fe614286d6606bd7a168b61a9bdddfd1c0e3)
+- (tournament) read part times through partInstant in owesNextSitting — [05ea8a9](https://github.com/becked/per-ankh/commit/05ea8a99c3e93998563fc8da56cb16e8b225b1c2)
+- (tournament) read the aged-out boundary through partPlayed — [0508892](https://github.com/becked/per-ankh/commit/0508892b1c1cd745468f0248983bb024ad65685f)
+- (tournament) bind the match once in the sesh to-be-scheduled block — [a2056de](https://github.com/becked/per-ankh/commit/a2056de49b2f4ef7fafd36bc605d92b76c465266)
+- (tournament) name the owed-part helper for what it returns — [d93de7d](https://github.com/becked/per-ankh/commit/d93de7dae37e288dda06efea39f91cc6ad567e33)
+- (tournament) delete the orphaned TournamentCard — [b309c7c](https://github.com/becked/per-ankh/commit/b309c7c0fbefa3a965c078c85a422749f82f7d83)
+- (home) clear the leftovers from the two-page merge — [59416e7](https://github.com/becked/per-ankh/commit/59416e750e2ba5800220f9ce9c4da76a1a3fbb92)
+- (video) key every video grid through videoKey — [08758b4](https://github.com/becked/per-ankh/commit/08758b4fbec2465897e66abb2b1a8ebf073805d0)
+- (video) drop setFeatured's unused return value — [49cfe02](https://github.com/becked/per-ankh/commit/49cfe02ace31984bfd3f4ab5dc8e6170050833d5)
+- (ux-review) rename the admin capture to match its route — [bbde145](https://github.com/becked/per-ankh/commit/bbde14532429fc2413f8268085e90e5ce7deeb81)
+
 ## [2026-08-06-2d7a830] - 2026-08-06
 
 ### Features
