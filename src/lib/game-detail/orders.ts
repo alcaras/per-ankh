@@ -211,6 +211,11 @@ export function legitimacyEndBreakdown(opts: {
 		set.add(formatEnum(name, "EVENTSTORY_"));
 		eventsByTurn.set(e.occurred_turn, set);
 	}
+	// An event can be credited on several turns, and a row per turn would
+	// share its label with the others — a duplicate `{#each}` key, and a
+	// silent merge in the duel face-off table, which collapses by label. One
+	// row per event instead: the jumps summed, every turn named.
+	const byLabel = new Map<string, { value: number; turns: number[] }>();
 	const pts = opts.series.filter((d) => d.legitimacy != null);
 	for (let i = 1; i < pts.length; i++) {
 		const turn = pts[i].turn;
@@ -224,10 +229,22 @@ export function legitimacyEndBreakdown(opts: {
 			list.length > 2
 				? `${list.slice(0, 2).join(" + ")} +${list.length - 2} more`
 				: list.join(" + ");
+		const prev = byLabel.get(label);
+		if (prev) {
+			prev.value += leftover;
+			prev.turns.push(turn);
+		} else {
+			byLabel.set(label, { value: leftover, turns: [turn] });
+		}
+	}
+	for (const [label, e] of byLabel) {
 		rows.push({
 			label,
-			value: leftover,
-			detail: `event on turn ${turn}`,
+			value: e.value,
+			detail:
+				e.turns.length > 1
+					? `events on turns ${e.turns.join(", ")}`
+					: `event on turn ${e.turns[0]}`,
 		});
 	}
 
