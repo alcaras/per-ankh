@@ -272,12 +272,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		iconCategory: "crests",
 		// Per-family crest art ships for only a few families; fall back to the
 		// always-available archetype crest derived from family_class.
-		iconValue: (c) =>
-			c.family && getSpritePath("crests", c.family)
-				? c.family
-				: c.family_class
-					? c.family_class.replace("FAMILYCLASS_", "ARCHETYPE_")
-					: null,
+		iconValue: (c) => familyCrestKey(c.family, c.family_class),
 	},
 	{
 		key: "founded_turn",
@@ -580,6 +575,52 @@ export function getSpritePath(
 		return SPRITE_MANIFEST[`units/${name}`] ?? null;
 	}
 	return SPRITE_MANIFEST[`${category}/${enumValue}`] ?? null;
+}
+
+/**
+ * Crest sprite key (for the `crests` category) of a family: the per-family
+ * crest when we ship the art, else the family-class archetype crest —
+ * which always exists for non-null family_class values. Null when neither
+ * resolves, so callers can degrade (the map omits the crest, the rail
+ * renders its colored dot).
+ */
+export function familyCrestKey(
+	family: string | null | undefined,
+	familyClass: string | null | undefined,
+): string | null {
+	// Family values already carry the FAMILY_ prefix (FAMILY_ANTIGONUS) and the
+	// art ships as CREST_FAMILY_ANTIGONUS, but the CREST_ prefix is
+	// getSpritePath's to add — so the value goes through as-is.
+	if (family && getSpritePath("crests", family)) {
+		return family;
+	}
+	if (familyClass) {
+		// FAMILYCLASS_CHAMPIONS → ARCHETYPE_CHAMPIONS
+		return familyClass.replace(/^FAMILYCLASS_/, "ARCHETYPE_");
+	}
+	return null;
+}
+
+/**
+ * The family a city was held under by a given owner: its `player_families`
+ * entry, else the city's current family. A city's family only changes on
+ * conquest, so each past owner's entry is the family during their tenure —
+ * a captured city resolves to the founder's family for the founder and the
+ * conqueror's for the conqueror. Falls back to the current family when the
+ * owner is unknown, or for pre-2.10.0 blobs, which ship no `player_families`.
+ */
+export function familyForOwner(
+	city: CityInfo,
+	playerXmlId: number | null | undefined,
+): { family: string | null; familyClass: string | null } {
+	const pf =
+		playerXmlId != null
+			? city.player_families?.find((f) => f.player_xml_id === playerXmlId)
+			: undefined;
+	return {
+		family: pf?.family ?? city.family,
+		familyClass: pf?.family_class ?? city.family_class,
+	};
 }
 
 // ─── Unit Classification ────────────────────────────────────────────
