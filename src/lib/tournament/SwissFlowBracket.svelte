@@ -11,12 +11,17 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import {
+		matchSlotArchetype,
 		matchSlotAvatarUrl,
 		matchSlotDisplayName,
 		matchSlotNation,
 		matchSlotOutcome,
 	} from "$lib/tournament/match-occupant";
-	import { formatEnum } from "$lib/utils/formatting";
+	import {
+		archetypeSpriteKey,
+		formatArchetype,
+		formatEnum,
+	} from "$lib/utils/formatting";
 	import {
 		matchDisplayStatus,
 		MATCH_STATUS_LABEL,
@@ -437,12 +442,21 @@
 										>
 											{#if m.slot_a_id}
 												{@const aNation = matchSlotNation(m, "a")}
+												{@const aArchetype = matchSlotArchetype(m, "a")}
 												{#if aNation}
 													<SpriteIcon
 														category="crests"
 														value={aNation}
 														size={12}
 														alt={formatEnum(aNation, "NATION_")}
+													/>
+												{/if}
+												{#if aArchetype}
+													<SpriteIcon
+														category="traits-trimmed"
+														value={archetypeSpriteKey(aArchetype)}
+														size={12}
+														alt={formatArchetype(aArchetype)}
 													/>
 												{/if}
 												<PlayerAvatar
@@ -469,12 +483,21 @@
 										>
 											{#if m.slot_b_id}
 												{@const bNation = matchSlotNation(m, "b")}
+												{@const bArchetype = matchSlotArchetype(m, "b")}
 												{#if bNation}
 													<SpriteIcon
 														category="crests"
 														value={bNation}
 														size={12}
 														alt={formatEnum(bNation, "NATION_")}
+													/>
+												{/if}
+												{#if bArchetype}
+													<SpriteIcon
+														category="traits-trimmed"
+														value={archetypeSpriteKey(bArchetype)}
+														size={12}
+														alt={formatArchetype(bArchetype)}
 													/>
 												{/if}
 												<PlayerAvatar

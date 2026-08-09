@@ -129,6 +129,7 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 	"icons/RATING_COURAGE": "/sprites/icons/RATING_COURAGE.5a9886a6.png",
 	"icons/RATING_DISCIPLINE": "/sprites/icons/RATING_DISCIPLINE.6b6a0fe1.png",
 	"icons/RATING_WISDOM": "/sprites/icons/RATING_WISDOM.a9e63d6b.png",
+	"icons/REPLAY": "/sprites/icons/REPLAY.ae2e8b9c.png",
 	"icons/STATS": "/sprites/icons/STATS.ec506166.png",
 	"icons/TECHS_Normal": "/sprites/icons/TECHS_Normal.752625de.png",
 	"icons/TOOL_SETTINGS": "/sprites/icons/TOOL_SETTINGS.cb187c2e.png",

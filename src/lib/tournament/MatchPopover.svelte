@@ -31,6 +31,8 @@
 		getCivilizationColor,
 	} from "$lib/config";
 	import {
+		archetypeSpriteKey,
+		formatArchetype,
 		formatEnum,
 		formatRelativeToNow,
 		formatScheduledWithLocal,
@@ -38,6 +40,7 @@
 	} from "$lib/utils/formatting";
 	import {
 		isMatchParticipant,
+		matchSlotArchetype,
 		matchSlotAvatarUrl,
 		matchSlotNation,
 		matchSlotDisplayName,
@@ -664,6 +667,7 @@
 )}
 	{@const slotId = side === "a" ? match.slot_a_id : match.slot_b_id}
 	{@const nation = matchSlotNation(match, side)}
+	{@const archetype = matchSlotArchetype(match, side)}
 	{#if substituteSide === side}
 		<span class="inline-flex flex-col gap-0.5">
 			<span class="inline-flex items-center gap-1">
@@ -714,9 +718,17 @@
 					alt={formatEnum(nation, "NATION_")}
 				/>
 			{/if}
-			<!-- Avatar + name link to the occupant's profile; the crest (nation) and
-			     the substitute pencil stay outside, so the pencil keeps its own click
-			     target right beside the link. -->
+			{#if archetype}
+				<SpriteIcon
+					category="traits-trimmed"
+					value={archetypeSpriteKey(archetype)}
+					size={16}
+					alt={formatArchetype(archetype)}
+				/>
+			{/if}
+			<!-- Avatar + name link to the occupant's profile; the crest (nation),
+			     the archetype glyph and the substitute pencil stay outside, so the
+			     pencil keeps its own click target right beside the link. -->
 			<ProfileLink
 				userId={matchSlotUserId(match, side, slotUserIds)}
 				slug={matchSlotSlug(match, side, slotSlugs)}

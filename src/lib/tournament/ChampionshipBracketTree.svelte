@@ -6,12 +6,17 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import {
+		matchSlotArchetype,
 		matchSlotAvatarUrl,
 		matchSlotDisplayName,
 		matchSlotNation,
 		matchSlotOutcome,
 	} from "$lib/tournament/match-occupant";
-	import { formatEnum } from "$lib/utils/formatting";
+	import {
+		archetypeSpriteKey,
+		formatArchetype,
+		formatEnum,
+	} from "$lib/utils/formatting";
 	import {
 		matchDisplayStatus,
 		type MatchDisplayStatus,
@@ -134,10 +139,12 @@
 		slot_a_user_id: string | null;
 		slot_a_avatar_url: string | null;
 		slot_a_nation: string | null;
+		slot_a_archetype: string | null;
 		slot_b_display_name: string | null;
 		slot_b_user_id: string | null;
 		slot_b_avatar_url: string | null;
 		slot_b_nation: string | null;
+		slot_b_archetype: string | null;
 	};
 
 	// A match in the bracket model: either a real DB match or a synthesized
@@ -158,10 +165,12 @@
 		slot_a_user_id: string | null;
 		slot_a_avatar_url: string | null;
 		slot_a_nation: string | null;
+		slot_a_archetype: string | null;
 		slot_b_display_name: string | null;
 		slot_b_user_id: string | null;
 		slot_b_avatar_url: string | null;
 		slot_b_nation: string | null;
+		slot_b_archetype: string | null;
 	};
 
 	type BracketRoundModel = {
@@ -208,10 +217,12 @@
 				slot_a_user_id: m.slot_a_user_id,
 				slot_a_avatar_url: m.slot_a_avatar_url,
 				slot_a_nation: m.slot_a_nation,
+				slot_a_archetype: m.slot_a_archetype,
 				slot_b_display_name: m.slot_b_display_name,
 				slot_b_user_id: m.slot_b_user_id,
 				slot_b_avatar_url: m.slot_b_avatar_url,
 				slot_b_nation: m.slot_b_nation,
+				slot_b_archetype: m.slot_b_archetype,
 			})),
 		}));
 
@@ -246,10 +257,12 @@
 					slot_a_user_id: null,
 					slot_a_avatar_url: null,
 					slot_a_nation: null,
+					slot_a_archetype: null,
 					slot_b_display_name: null,
 					slot_b_user_id: null,
 					slot_b_avatar_url: null,
 					slot_b_nation: null,
+					slot_b_archetype: null,
 				});
 			}
 			model.push({
@@ -307,10 +320,12 @@
 					slot_a_user_id: m.slot_a_user_id,
 					slot_a_avatar_url: m.slot_a_avatar_url,
 					slot_a_nation: m.slot_a_nation,
+					slot_a_archetype: m.slot_a_archetype,
 					slot_b_display_name: m.slot_b_display_name,
 					slot_b_user_id: m.slot_b_user_id,
 					slot_b_avatar_url: m.slot_b_avatar_url,
 					slot_b_nation: m.slot_b_nation,
+					slot_b_archetype: m.slot_b_archetype,
 				});
 				centersByRound[rIdx][kIdx] = centerY;
 			});
@@ -417,6 +432,8 @@
 	{@const bWon = matchSlotOutcome(m, "b") === "won"}
 	{@const aNation = matchSlotNation(m, "a")}
 	{@const bNation = matchSlotNation(m, "b")}
+	{@const aArchetype = matchSlotArchetype(m, "a")}
+	{@const bArchetype = matchSlotArchetype(m, "b")}
 	{#if m.match_number != null}
 		<span class="match-num">{padMatchNumber(m.match_number)}</span>
 	{/if}
@@ -432,6 +449,14 @@
 					value={aNation}
 					size={14}
 					alt={formatEnum(aNation, "NATION_")}
+				/>
+			{/if}
+			{#if aArchetype}
+				<SpriteIcon
+					category="traits-trimmed"
+					value={archetypeSpriteKey(aArchetype)}
+					size={14}
+					alt={formatArchetype(aArchetype)}
 				/>
 			{/if}
 			<PlayerAvatar avatarUrl={matchAvatar(m, "a")} size={14} />
@@ -450,6 +475,14 @@
 					value={bNation}
 					size={14}
 					alt={formatEnum(bNation, "NATION_")}
+				/>
+			{/if}
+			{#if bArchetype}
+				<SpriteIcon
+					category="traits-trimmed"
+					value={archetypeSpriteKey(bArchetype)}
+					size={14}
+					alt={formatArchetype(bArchetype)}
 				/>
 			{/if}
 			<PlayerAvatar avatarUrl={matchAvatar(m, "b")} size={14} />

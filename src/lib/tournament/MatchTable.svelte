@@ -21,6 +21,7 @@
 	import SchedulePopover from "$lib/tournament/SchedulePopover.svelte";
 	import { matchBracketLabel } from "$lib/tournament/bracket-label";
 	import {
+		matchSlotArchetype,
 		matchSlotAvatarUrl,
 		matchSlotDisplayName,
 		matchSlotNation,
@@ -54,10 +55,13 @@
 	} from "$lib/tournament/matches-table";
 	import type { ScheduleZone } from "$lib/tournament/schedule";
 	import {
+		archetypeSpriteKey,
+		formatArchetype,
 		formatEnum,
 		formatRelativeToNow,
 		formatScheduledInZone,
 	} from "$lib/utils/formatting";
+	import { resolve } from "$app/paths";
 
 	let {
 		columns,
@@ -132,6 +136,11 @@
 
 	const distinguishing = $derived(distinguishingOptions(tournament.map_pool));
 
+	// Whether this mount shows the "Match N" handle as its own column — a
+	// property of the table, not of any row, so the Match cell reads it rather
+	// than re-scanning the column list per cell.
+	const showsNumberColumn = $derived(columns.some((c) => c.key === "number"));
+
 	// Part rows key by match+part (part ids are only unique within a match — the
 	// 0029 backfill mints "p1" per migrated match); match rows key by match id.
 	function rowKey(row: MatchRow): string {
@@ -170,6 +179,7 @@
 		>
 	{:else}
 		{@const nation = matchSlotNation(m, side)}
+		{@const archetype = matchSlotArchetype(m, side)}
 		{@const name = matchSlotDisplayName(m, side, slotLabels) ?? "—"}
 		{@const outcome = matchSlotOutcome(m, side)}
 		<span
@@ -182,6 +192,17 @@
 					value={nation}
 					size={16}
 					alt={formatEnum(nation, "NATION_")}
+				/>
+			{/if}
+			<!-- Starting-ruler archetype glyph beside the crest — the game facts
+			     of the side (what nation, what leader roll), from the same
+			     player_summaries row, ahead of who played it. -->
+			{#if archetype}
+				<SpriteIcon
+					category="traits-trimmed"
+					value={archetypeSpriteKey(archetype)}
+					size={16}
+					alt={formatArchetype(archetype)}
 				/>
 			{/if}
 			<ProfileLink
@@ -270,7 +291,13 @@
 				>
 					{#each columns as column (column.key)}
 						<td class={MATCH_TABLE_TD_CLASS}>
-							{#if column.key === "matchup"}
+							{#if column.key === "number"}
+								{#if m.match_number != null}
+									<span class="opacity-75"
+										>{padMatchNumber(m.match_number)}</span
+									>
+								{/if}
+							{:else if column.key === "matchup"}
 								{@const bracketLabel = matchBracketLabel(tournament, m)}
 								{@const entry = poolEntryById(
 									tournament.map_pool,
@@ -278,7 +305,9 @@
 								)}
 								<div class="flex flex-col gap-0.5">
 									<span class="inline-flex items-center gap-2">
-										{#if m.match_number != null}
+										<!-- Inline handle only when the surface doesn't already
+										     show it as its own # column. -->
+										{#if m.match_number != null && !showsNumberColumn}
 											<span class="shrink-0 opacity-75">
 												{padMatchNumber(m.match_number)}
 											</span>
@@ -459,6 +488,27 @@
 										<span>—</span>
 									{/if}
 								</div>
+							{:else if column.key === "game"}
+								<!-- The uploaded save's game page — the row's clickable access
+								     to the game itself. "—" when no save is linked (pending, or
+								     a forfeit/bye reported without one). -->
+								{#if m.game_id != null}
+									<a
+										href={resolve("/games/[id]", { id: m.game_id })}
+										class="inline-flex items-center gap-1 text-tan hover:text-orange hover:underline"
+										onclick={(e) => e.stopPropagation()}
+									>
+										<SpriteIcon
+											category="icons"
+											value="REPLAY"
+											size={18}
+											alt=""
+										/>
+										View game
+									</a>
+								{:else}
+									<span class="opacity-60">—</span>
+								{/if}
 							{:else if column.key === "actions"}
 								<!-- Trailing header-less column, right-aligned so the buttons line
 								     up across rows. Two branches split on whether the row has a time
