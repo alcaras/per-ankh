@@ -588,10 +588,10 @@ export function familyCrestKey(
 	family: string | null | undefined,
 	familyClass: string | null | undefined,
 ): string | null {
-	// Family values already carry the FAMILY_ prefix (FAMILY_ANTIGONUS), and
-	// the crest art ships as CREST_FAMILY_ANTIGONUS — so the value is used
-	// as-is, no re-prefixing.
-	if (family && SPRITE_MANIFEST[`crests/CREST_${family}`] != null) {
+	// Family values already carry the FAMILY_ prefix (FAMILY_ANTIGONUS) and the
+	// art ships as CREST_FAMILY_ANTIGONUS, but the CREST_ prefix is
+	// getSpritePath's to add — so the value goes through as-is.
+	if (family && getSpritePath("crests", family)) {
 		return family;
 	}
 	if (familyClass) {
@@ -599,6 +599,28 @@ export function familyCrestKey(
 		return familyClass.replace(/^FAMILYCLASS_/, "ARCHETYPE_");
 	}
 	return null;
+}
+
+/**
+ * The family a city was held under by a given owner: its `player_families`
+ * entry, else the city's current family. A city's family only changes on
+ * conquest, so each past owner's entry is the family during their tenure —
+ * a captured city resolves to the founder's family for the founder and the
+ * conqueror's for the conqueror. Falls back to the current family when the
+ * owner is unknown, or for pre-2.10.0 blobs, which ship no `player_families`.
+ */
+export function familyForOwner(
+	city: CityInfo,
+	playerXmlId: number | null | undefined,
+): { family: string | null; familyClass: string | null } {
+	const pf =
+		playerXmlId != null
+			? city.player_families?.find((f) => f.player_xml_id === playerXmlId)
+			: undefined;
+	return {
+		family: pf?.family ?? city.family,
+		familyClass: pf?.family_class ?? city.family_class,
+	};
 }
 
 // ─── Unit Classification ────────────────────────────────────────────

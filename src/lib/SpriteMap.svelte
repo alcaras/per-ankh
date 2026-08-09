@@ -11,7 +11,7 @@
 		NATION_ALIASES_URL,
 	} from "$lib/generated/atlas-manifest";
 	import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
-	import { familyCrestKey } from "$lib/game-detail/helpers";
+	import { familyCrestKey, familyForOwner } from "$lib/game-detail/helpers";
 	import MapTooltip from "$lib/MapTooltip.svelte";
 	import Checkbox from "$lib/ui/Checkbox.svelte";
 
@@ -306,24 +306,19 @@
 	// renderable), via the shared familyCrestKey rule (per-family crest when
 	// we ship the art, else the family-class archetype crest).
 	//
-	// The family is resolved for whoever owns the city at the represented turn:
-	// a city's family only changes when another nation conquers it, so
-	// player_families holds each past owner's family and a captured city shows
-	// its founder's family for turns before the capture. Recomputed when the
-	// cities prop or the per-turn tiles change.
+	// The family is resolved (via familyForOwner) for whoever owns the city at
+	// the represented turn, so a captured city shows its founder's family for
+	// turns before the capture. Recomputed when the cities prop or the
+	// per-turn tiles change.
 	const cityFamilyCrestByName = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- locally-scoped Map, not reactive state
 		const map = new Map<string, string | null>();
 		for (const c of cities) {
-			const ownerAtTurn = cityCenterOwnerByTurn.get(c.city_name);
-			const pf =
-				ownerAtTurn != null
-					? c.player_families?.find((f) => f.player_xml_id === ownerAtTurn)
-					: undefined;
-			map.set(
-				c.city_name,
-				familyCrestKey(pf?.family ?? c.family, pf?.family_class ?? c.family_class),
+			const { family, familyClass } = familyForOwner(
+				c,
+				cityCenterOwnerByTurn.get(c.city_name),
 			);
+			map.set(c.city_name, familyCrestKey(family, familyClass));
 		}
 		return map;
 	});

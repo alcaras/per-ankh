@@ -60,6 +60,7 @@
 		ownedByPlayer,
 		type TableState,
 		familyCrestKey,
+		familyForOwner,
 		filledLineStyle,
 		getSpritePath,
 		improvementDisplayName,
@@ -396,29 +397,22 @@
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
 				const familySeen = new Map<string, number>();
 				const cityMarkers: RailMarker[] = founded.map((c, i) => {
-					const pf = c.player_families?.find(
-						(f) => f.player_xml_id === player.playerId,
-					);
-					const family = pf?.family ?? c.family;
-					const familyClass = pf?.family_class ?? c.family_class;
+					const { family, familyClass } = familyForOwner(c, player.playerId);
 					const crest = familyCrestKey(family, familyClass);
-					const familyLabel = familyClass
-						? formatEnum(familyClass, "FAMILYCLASS_")
-						: null;
-					const nthOfFamily = familyClass
-						? (familySeen.get(familyClass) ?? 0) + 1
-						: null;
-					if (familyClass) familySeen.set(familyClass, nthOfFamily!);
+					const lines = [`Founded turn ${c.founded_turn}`];
+					if (familyClass) {
+						const nthOfFamily = (familySeen.get(familyClass) ?? 0) + 1;
+						familySeen.set(familyClass, nthOfFamily);
+						lines.push(
+							`${formatEnum(familyClass, "FAMILYCLASS_")} city #${nthOfFamily}`,
+						);
+					}
+					lines.push(`Overall city #${i + 1}`);
 					const crestUrl = crest ? getSpritePath("crests", crest) : null;
 					const title =
 						(crestUrl
 							? `<img src="${crestUrl}" alt="" style="display:inline;width:14px;height:14px;vertical-align:-2px;margin-right:3px"/>`
 							: "") + formatEnum(c.city_name, "CITYNAME_");
-					const lines = [
-						`Founded on turn ${c.founded_turn}`,
-						...(familyLabel ? [`${familyLabel} city #${nthOfFamily}`] : []),
-						`Overall city #${i + 1}`,
-					];
 					return {
 						turn: c.founded_turn,
 						iconCategory: "crests" as const,
