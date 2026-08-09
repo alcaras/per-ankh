@@ -28,6 +28,8 @@
 		ownedByPlayer,
 	} from "./helpers";
 	import type { DetailPlayer } from "./helpers";
+	import SpriteIcon from "./SpriteIcon.svelte";
+	import { formatEnum } from "$lib/utils/formatting";
 
 	let {
 		players,
@@ -71,8 +73,8 @@
 	);
 
 	// ─── Footnotes ────────────────────────────────────────────────────
-	// One string per metric: the duel table and the FFA cards annotate the same
-	// "Other" row, so the text lives in one place.
+	// One string per metric, annotating that breakdown's "Other" row on every
+	// nation panel.
 	const ORDERS_NOTE =
 		"Everything the save can't itemize: council and court ratings, city yields (shrines, cathedrals), agents, trade and tribute. The save records gross production — orders spent by working or fortifying units are not deducted here. MP advantage compensation is also unrecorded per player.";
 	const LEGITIMACY_NOTE =
@@ -153,6 +155,12 @@
 		}),
 	);
 
+	// The itemization sits in the same recessed subpanel the Economy tab's
+	// ledgers use (BuildComparison), so a list reads as a list wherever it
+	// appears on the page.
+	const LIST_PANEL =
+		"overflow-hidden rounded-md border border-border-subtle bg-surface-sunken px-2.5 py-1.5";
+
 	const fmt = (v: number, dp: number): string =>
 		(v < 0 ? "−" : "") + Math.abs(v).toFixed(dp);
 	// Every contribution row carries its sign — a cognomen can cost legitimacy
@@ -161,105 +169,81 @@
 	const signed = (v: number, dp: number): string =>
 		(v < 0 ? "" : "+") + fmt(v, dp);
 
-	// ─── Duel side-by-side ────────────────────────────────────────────
-	// Two players read best as one table — every source row, both values in
-	// facing columns. Rows are the union of both sides' labels, ordered by
-	// the larger value; a source only one side has shows "—" for the other.
-	const isDuel = $derived(players.length === 2);
-
+	// ─── Sections ─────────────────────────────────────────────────────
+	// The two itemizations a nation panel stacks, in render order. One entry
+	// each, so the heading, precision, footnote and empty state can't drift
+	// apart from the breakdown they describe.
 	const SECTIONS = [
 		{
-			title: "Orders per turn, at end",
+			title: "Ending Orders",
+			icon: "YIELD_ORDERS",
 			dp: 1,
 			note: ORDERS_NOTE,
+			empty: "no orders data",
 			pick: (b: PlayerBreakdown) => b.orders,
 		},
 		{
-			title: "Legitimacy, at end",
+			title: "Ending Legitimacy",
+			icon: "YIELD_LEGITIMACY",
 			dp: 0,
 			note: LEGITIMACY_NOTE,
+			empty: "no legitimacy data",
 			pick: (b: PlayerBreakdown) => b.legitimacy,
 		},
 	];
-
-	// The union walk and every cell lookup run once per derivation here, not
-	// once per render per cell as they would from the template.
-	const duelSections = $derived(
-		SECTIONS.map((section) => {
-			const labels = breakdowns.map((b) => b.player.label);
-			const sides = breakdowns.map((b) => section.pick(b));
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and consumed inside one derivation, never mutated after
-			const best = new Map<string, { max: number; detail?: string }>();
-			for (const bd of sides) {
-				for (const r of bd?.rows ?? []) {
-					const prev = best.get(r.label);
-					if (!prev || r.value > prev.max) {
-						best.set(r.label, { max: r.value, detail: r.detail });
-					}
-				}
-			}
-			return {
-				title: section.title,
-				dp: section.dp,
-				note: section.note,
-				rows: [...best.entries()]
-					.sort((a, b) => b[1].max - a[1].max)
-					.map(([label, v]) => ({
-						label,
-						detail: v.detail,
-						values: sides.map((bd, i) => ({
-							player: labels[i],
-							value: bd?.rows.find((r) => r.label === label)?.value ?? null,
-						})),
-					})),
-				others: sides.map((bd, i) => ({
-					player: labels[i],
-					value: bd?.other ?? null,
-				})),
-				totals: sides.map((bd, i) => ({
-					player: labels[i],
-					value: bd?.total ?? null,
-				})),
-			};
-		}),
-	);
 </script>
 
+{#snippet sectionHeading(title: string, icon: string)}
+	<span
+		class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-tan"
+	>
+		{title}
+		<SpriteIcon
+			category="yields"
+			value={icon}
+			size={14}
+			alt={formatEnum(icon, "YIELD_")}
+		/>
+	</span>
+{/snippet}
+
 {#snippet breakdownTable(b: EndBreakdown, dp: number, otherNote: string)}
-	<table class="w-full text-xs">
-		<tbody>
-			{#each b.rows as row (row.label)}
+	<div class={LIST_PANEL}>
+		<table class="w-full text-xs">
+			<tbody>
+				{#each b.rows as row (row.label)}
+					<tr>
+						<td class="py-0.5 pr-2 text-tan">
+							{row.label}
+							{#if row.detail}
+								<div class="text-[10px] text-tan opacity-60">{row.detail}</div>
+							{/if}
+						</td>
+						<td
+							class="py-0.5 text-right align-top font-mono tabular-nums text-gray-200"
+							>{signed(row.value, dp)}</td
+						>
+					</tr>
+				{/each}
 				<tr>
-					<td class="py-0.5 pr-2 text-tan">
-						{row.label}
-						{#if row.detail}
-							<div class="text-[10px] text-tan opacity-60">{row.detail}</div>
-						{/if}
+					<td class="py-0.5 pr-2 text-tan" title={otherNote}>
+						Other <span class="text-[10px] opacity-60">(?)</span>
 					</td>
 					<td
-						class="py-0.5 text-right align-top font-mono tabular-nums text-gray-200"
-						>{signed(row.value, dp)}</td
+						class="py-0.5 text-right font-mono tabular-nums {b.other < 0
+							? 'text-red-400'
+							: 'text-gray-200'}">{signed(b.other, dp)}</td
 					>
 				</tr>
-			{/each}
-			<tr>
-				<td class="py-0.5 pr-2 text-tan" title={otherNote}>
-					Other <span class="text-[10px] opacity-60">(?)</span>
-				</td>
-				<td
-					class="py-0.5 text-right font-mono tabular-nums {b.other < 0
-						? 'text-red-400'
-						: 'text-gray-200'}">{signed(b.other, dp)}</td
-				>
-			</tr>
-			<tr class="border-t border-border-subtle font-bold">
-				<td class="py-1 pr-2 text-gray-200">Total</td>
-				<td class="py-1 text-right font-mono tabular-nums text-white"
-					>{fmt(b.total, dp)}</td
-				>
-			</tr>
-		</tbody>
-	</table>
+				<tr class="border-t border-border-subtle font-bold">
+					<td class="py-1 pr-2 text-gray-200">Total</td>
+					<td class="py-1 text-right font-mono tabular-nums text-white"
+						>{fmt(b.total, dp)}</td
+					>
+				</tr>
+			</tbody>
+		</table>
+	</div>
 {/snippet}
 
 <div class="space-y-4">
@@ -285,116 +269,35 @@
 		</div>
 	{/if}
 
-	{#if isDuel}
-		<!-- Duel: one table per metric, both players in facing columns. -->
-		{#each duelSections as section (section.title)}
+	<!-- One panel per nation, whatever the player count. -->
+	<div class="grid gap-4 md:grid-cols-2">
+		{#each breakdowns as b (b.player.label)}
 			<div
 				class="rounded-lg p-4"
 				style="background-color: rgb(var(--color-surface));"
 			>
-				<div class="mb-2 text-[10px] uppercase tracking-wide text-tan">
-					{section.title}
+				<h3 class="mb-3 text-sm font-bold" style="color: {b.player.color};">
+					{b.player.label}
+				</h3>
+				<!-- Stacked, not side-by-side: the two itemizations have unrelated
+				     row counts, so facing columns leave whichever is shorter
+				     trailing dead space down its half of the panel. -->
+				<div class="space-y-4">
+					{#each SECTIONS as section (section.title)}
+						{@const bd = section.pick(b)}
+						<div>
+							<div class="mb-1">
+								{@render sectionHeading(section.title, section.icon)}
+							</div>
+							{#if bd}
+								{@render breakdownTable(bd, section.dp, section.note)}
+							{:else}
+								<div class="text-xs text-tan opacity-70">{section.empty}</div>
+							{/if}
+						</div>
+					{/each}
 				</div>
-				<table class="w-full text-xs">
-					<thead>
-						<tr>
-							<td></td>
-							{#each breakdowns as b (b.player.label)}
-								<td
-									class="pb-1 text-right font-bold"
-									style="color: {b.player.color};">{b.player.label}</td
-								>
-							{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each section.rows as row (row.label)}
-							<tr>
-								<td class="py-0.5 pr-2 text-tan" title={row.detail}>
-									{row.label}
-								</td>
-								{#each row.values as cell (cell.player)}
-									<td
-										class="py-0.5 text-right font-mono tabular-nums text-gray-200"
-									>
-										{#if cell.value != null}{signed(
-												cell.value,
-												section.dp,
-											)}{:else}<span class="opacity-40">—</span>{/if}
-									</td>
-								{/each}
-							</tr>
-						{/each}
-						<tr>
-							<td class="py-0.5 pr-2 text-tan" title={section.note}>
-								Other <span class="text-[10px] opacity-60">(?)</span>
-							</td>
-							{#each section.others as cell (cell.player)}
-								<td
-									class="py-0.5 text-right font-mono tabular-nums {cell.value !=
-										null && cell.value < 0
-										? 'text-red-400'
-										: 'text-gray-200'}"
-								>
-									{#if cell.value != null}{signed(
-											cell.value,
-											section.dp,
-										)}{:else}<span class="opacity-40">—</span>{/if}
-								</td>
-							{/each}
-						</tr>
-						<tr class="border-t border-border-subtle font-bold">
-							<td class="py-1 pr-2 text-gray-200">Total</td>
-							{#each section.totals as cell (cell.player)}
-								<td class="py-1 text-right font-mono tabular-nums text-white">
-									{#if cell.value != null}{fmt(
-											cell.value,
-											section.dp,
-										)}{:else}—{/if}
-								</td>
-							{/each}
-						</tr>
-					</tbody>
-				</table>
 			</div>
 		{/each}
-	{:else}
-		<!-- FFA: one card per player. -->
-		<div class="grid gap-4 md:grid-cols-2">
-			{#each breakdowns as b (b.player.label)}
-				<div
-					class="rounded-lg p-4"
-					style="background-color: rgb(var(--color-surface));"
-				>
-					<h3 class="mb-3 text-sm font-bold" style="color: {b.player.color};">
-						{b.player.label}
-					</h3>
-					<div class="grid gap-4 sm:grid-cols-2">
-						<div>
-							<div class="mb-1 text-[10px] uppercase tracking-wide text-tan">
-								Orders per turn, at end
-							</div>
-							{#if b.orders}
-								{@render breakdownTable(b.orders, 1, ORDERS_NOTE)}
-							{:else}
-								<div class="text-xs text-tan opacity-70">no orders data</div>
-							{/if}
-						</div>
-						<div>
-							<div class="mb-1 text-[10px] uppercase tracking-wide text-tan">
-								Legitimacy, at end
-							</div>
-							{#if b.legitimacy}
-								{@render breakdownTable(b.legitimacy, 0, LEGITIMACY_NOTE)}
-							{:else}
-								<div class="text-xs text-tan opacity-70">
-									no legitimacy data
-								</div>
-							{/if}
-						</div>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
+	</div>
 </div>
