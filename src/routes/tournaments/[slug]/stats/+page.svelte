@@ -26,6 +26,7 @@
 	} from "$lib/tournament/matches-table";
 	import { MATCH_STATUS_LABEL } from "$lib/tournament/parts";
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
+	import { getZoneClock } from "$lib/tournament/zone-context.svelte";
 	import FamilyStatsPanel from "$lib/stats/FamilyStatsPanel.svelte";
 	import YieldsStatsPanel from "$lib/stats/YieldsStatsPanel.svelte";
 	import { barChartHeight } from "$lib/stats/charts/helpers";
@@ -72,6 +73,10 @@
 	// maps back the pending rows' names (completed rows carry their snapshot).
 	const slotMaps = $derived(buildSlotMaps(data.standings, data.bracket));
 	const matchColumns = pickColumns(["number", "matchup", "time", "game"]);
+	// The tournament-wide UTC/local clock the [slug] layout owns and the header
+	// toggle drives — shown on Stats too, so the scheduled times here have to
+	// follow it rather than pin to local.
+	const clock = getZoneClock();
 	// Status chips facet the list through MatchTableState.filters. Completed-only
 	// by default — the list's job is finding played games — with the other
 	// buckets a toggle away; an empty selection shows everything (see
@@ -233,7 +238,7 @@
 				<MatchTable
 					columns={matchColumns}
 					rows={matchRows}
-					zone="local"
+					zone={clock.zone}
 					tournament={data.tournament}
 					user={null}
 					slotLabels={slotMaps.labels}
