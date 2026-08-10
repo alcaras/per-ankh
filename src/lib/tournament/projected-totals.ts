@@ -102,6 +102,10 @@ function playRound(start: BranchState, config: Config): BranchState[] {
 	if (total % 2 === 1) {
 		// Odd field: the worst-ranked active takes the bye — recorded as a free
 		// win, which can itself advance a player one short of the threshold.
+		// Approximation: the engine skips players who already had a bye
+		// (pickByeRecipient), which this census can't see — when the true
+		// recipient sits in a different bucket the walk drifts by at most one
+		// player-bucket. Even fields (the common case) never reach this.
 		const [rec, n] = buckets[buckets.length - 1];
 		buckets[buckets.length - 1] = [rec, n - 1];
 		if (rec.wins + 1 >= config.winsToAdvance) first.qualifiers += 1;
@@ -188,13 +192,26 @@ export function projectSwissDivision(
 		{ census, matches: 0, qualifiers: alreadyQualified },
 	];
 
-	// Resolve the current round's open matches into the census.
+	// Resolve the current round's open matches into the census. A pair whose
+	// participants aren't (both) in the active census — a withdrawn player's
+	// not-yet-forfeited match, or records out of sync with the standings —
+	// is skipped rather than driving a count negative: the walk degrades to
+	// ignoring that game instead of corrupting every later round.
 	for (const [a, b] of pendingPairs) {
+		const same = a.wins === b.wins && a.losses === b.losses;
 		const forked: BranchState[] = [];
 		for (const br of branches) {
+			const present = same
+				? (br.census.get(key(a)) ?? 0) >= 2
+				: (br.census.get(key(a)) ?? 0) >= 1 &&
+					(br.census.get(key(b)) ?? 0) >= 1;
+			if (!present) {
+				forked.push(br);
+				continue;
+			}
 			bump(br.census, a, -1);
 			bump(br.census, b, -1);
-			if (a.wins === b.wins && a.losses === b.losses) {
+			if (same) {
 				br.qualifiers += settle(br.census, a, b, config);
 				forked.push(br);
 			} else {
