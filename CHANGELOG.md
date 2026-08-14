@@ -1,5 +1,43 @@
 # Changelog
 
+## [2026-08-14-aa79556] - 2026-08-14
+
+### Features
+
+- (bake) family colours from the game's palette chain — [4b5c94c](https://github.com/becked/per-ankh/commit/4b5c94c721f8b54133dd721cc2d6b1eeaa4d74d2)
+- (families) opinion lines and names in the game's family colours — [c374a15](https://github.com/becked/per-ankh/commit/c374a15ffa75d4cd7ae7d60269a7ad32adc2c9c6)
+- (economy) city markers wear their family crest, tooltip counts ordinals — [a28c66a](https://github.com/becked/per-ankh/commit/a28c66a8b58eaf140497ad70738bba8099ade422)
+- (tournament) resolve each side's starting-ruler archetype onto the match payload — [488df3e](https://github.com/becked/per-ankh/commit/488df3e5666ae575713bc008b17bc4cb1f050e8d)
+- (tournament) Matches tab on the stats page — sortable match list with game links — [2216d31](https://github.com/becked/per-ankh/commit/2216d311df19cab66c41a1ac10444a41d5b3bb71)
+- (tournament) status facet chips on the stats match list — completed by default — [400d8d3](https://github.com/becked/per-ankh/commit/400d8d3a8d5a1f6a759d8df05e0f746247afe8db)
+- (tournament) archetype glyph on every surface that shows a crest — [44065a7](https://github.com/becked/per-ankh/commit/44065a7d0fb9aa94517cb6c9e7ce9e4bda64174a)
+- (tournament) one-at-a-time status switch on the stats match list — [ff216c5](https://github.com/becked/per-ankh/commit/ff216c59ee87834602e4056087b36eb1ff504b02)
+- (tournament) the game's replay glyph on the stats match list's game link — [318f204](https://github.com/becked/per-ankh/commit/318f204e01a1faf9a39dd77ac2528eb8d4bb17a3)
+
+### Fixes
+
+- (scripts) drop web/ output targets left over from the legacy viewer — [e224732](https://github.com/becked/per-ankh/commit/e224732177b6f69687f315912f5ca75fabcd0f67)
+- (migrations) renumber the legacy-share drop to 0042 — [98fcd8a](https://github.com/becked/per-ankh/commit/98fcd8a61376e62a08489268746de0bdd76f5323)
+- (map) family crest lookup double-prefixed FAMILY_, extract the rule — [de5b492](https://github.com/becked/per-ankh/commit/de5b49260415155a4b68f2b8f59cb55f069ebc01)
+- (tournament) the stats match list follows the tournament clock — [b9d1f6c](https://github.com/becked/per-ankh/commit/b9d1f6ceeb5a58b8ee24de6427a01ca4599447e8)
+
+### Other
+
+- (legacy) decommission the desktop-era share feature — [568144d](https://github.com/becked/per-ankh/commit/568144d6b07919167c36fecdebf4f362474d7a99)
+- (legacy) sweep stale references to the desktop share feature — [86b4650](https://github.com/becked/per-ankh/commit/86b46505a52a0949334b0aebf18bfb54227a52b1)
+- (parser) drop dead src-tauri citations from parser comments — [29abd01](https://github.com/becked/per-ankh/commit/29abd018509bd65808b6c9376e6a70e9a7e53165)
+- (parser) delete the last six dead src-tauri pointers — [359db9b](https://github.com/becked/per-ankh/commit/359db9b810fb1880e191e9163c37c202e2bc1d23)
+- (legacy) add the legacy share decommission deploy procedure — [e5b0af3](https://github.com/becked/per-ankh/commit/e5b0af3916b2ae535401ee566e8f19dfb251a791)
+- (legacy) sweep share-feature references that landed since the branch — [728ccbc](https://github.com/becked/per-ankh/commit/728ccbc5380d3410795b4c0b6c9b9509d8244129)
+- (types) describe src/lib/types as hand-maintained — [0a81807](https://github.com/becked/per-ankh/commit/0a818073df3cb888ba4a0981be900fd64a36a233)
+- (legacy) restructure the decommission plan as a checklist — [290870f](https://github.com/becked/per-ankh/commit/290870fd06e35679b984ddf85726de4e08cebc30)
+- (families) resolve family colour through one config helper — [e8d4e1f](https://github.com/becked/per-ankh/commit/e8d4e1fd396629d9e197b146f1ec6c9c7991fd9e)
+- (bake) order the family-colours baker with bake:all — [5899c1d](https://github.com/becked/per-ankh/commit/5899c1d1443ff85c8e036b6cdc564ab776b2ac2d)
+- (game-detail) resolve a city's family and crest through shared helpers — [d2565a5](https://github.com/becked/per-ankh/commit/d2565a5bdbfe0702402ae3ea6e0fc9e8b5a96749)
+- (tournament) use the real archetype enum shape in the linkGame fixture — [13c147e](https://github.com/becked/per-ankh/commit/13c147e95bf07d59a4211f29e15ae589cac9017c)
+- (tournament) hoist the # column check out of the cell render — [bcd94cf](https://github.com/becked/per-ankh/commit/bcd94cfb7f2c0c005e830478b78d8ccdcd8ac284)
+- (format) prettier the family-colours baker — [aa79556](https://github.com/becked/per-ankh/commit/aa795565cbb9de8919066eb822dd7d9f930a0ba7)
+
 ## [2026-08-08-a315818] - 2026-08-08
 
 ### Features
