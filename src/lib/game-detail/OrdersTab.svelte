@@ -90,6 +90,8 @@
 		player: DetailPlayer;
 		orders: EndBreakdown | null;
 		legitimacy: EndBreakdown | null;
+		/** The turn the realm fell, for a player who didn't survive the game. */
+		eliminatedTurn: number | null;
 	};
 
 	const breakdowns = $derived<PlayerBreakdown[]>(
@@ -123,8 +125,18 @@
 				leaders[leaders.length - 1] ??
 				null;
 
+			// A dead reigning ruler means an eliminated realm: succession appends
+			// a new id on every handover, so the tail of <Leaders> is dead only
+			// for a realm that fell without anyone taking the throne (the same
+			// end-state rule TechsTab applies to the science breakdown). Their
+			// orders rate is 0 from the turn they fell, while the save still
+			// carries the legitimacy, difficulty and laws they held — itemizing
+			// those against 0 prices a realm that no longer plays, and buries
+			// the contradiction in a large negative Other.
+			const eliminatedTurn = ruler?.death_turn ?? null;
+
 			const orders: EndBreakdown | null =
-				finalOrdersRate != null
+				finalOrdersRate != null && eliminatedTurn == null
 					? ordersEndBreakdown({
 							finalOrdersRate,
 							finalLegitimacy,
@@ -151,7 +163,7 @@
 							),
 						})
 					: null;
-			return { player: p, orders, legitimacy };
+			return { player: p, orders, legitimacy, eliminatedTurn };
 		}),
 	);
 
@@ -292,7 +304,11 @@
 							{#if bd}
 								{@render breakdownTable(bd, section.dp, section.note)}
 							{:else}
-								<div class="text-xs text-tan opacity-70">{section.empty}</div>
+								<div class="text-xs text-tan opacity-70">
+									{b.eliminatedTurn != null
+										? `eliminated on turn ${b.eliminatedTurn}`
+										: section.empty}
+								</div>
 							{/if}
 						</div>
 					{/each}
