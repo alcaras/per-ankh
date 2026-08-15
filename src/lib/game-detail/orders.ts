@@ -25,6 +25,7 @@ import {
 	ORDERS_PER_LEGITIMACY,
 	ORDERS_SOURCES,
 } from "$lib/generated/orders-sources";
+import { DIFFICULTY_NAMES } from "$lib/generated/difficulty-names";
 import { GOAL_NAMES } from "$lib/generated/goal-names";
 import { rulerCognomen, rulerName, storyEventType } from "./helpers";
 import { formatEnum } from "$lib/utils/formatting";
@@ -66,10 +67,15 @@ export function ordersEndBreakdown(opts: {
 	finalOrdersRate: number;
 	finalLegitimacy: number | null;
 	difficulty: string | null;
-	/** The player's active laws at end (PlayerLaw.law, nulls skipped). */
+	/** The player's active laws at end of game. */
 	laws: PlayerLaw[];
-	/** The final ruler, for the trait-granted orders. */
+	/** The reigning ruler, for the trait-granted orders. */
 	ruler: CharacterInfo | null;
+	/**
+	 * Every character's traits — the ruler's are picked out here. The save
+	 * records acquisition but not removal, so a trait the ruler later lost is
+	 * still priced; the signed remainder absorbs it.
+	 */
 	characterTraits: CharacterTraitInfo[];
 }): EndBreakdown {
 	const rows: SourceRow[] = [];
@@ -85,13 +91,15 @@ export function ordersEndBreakdown(opts: {
 		const v = ORDERS_SOURCES[opts.difficulty];
 		if (v != null) {
 			rows.push({
-				label: `Difficulty (${formatEnum(opts.difficulty, "DIFFICULTY_")})`,
+				label: `Difficulty (${
+					DIFFICULTY_NAMES[opts.difficulty] ??
+					formatEnum(opts.difficulty, "DIFFICULTY_")
+				})`,
 				value: v,
 			});
 		}
 	}
 	for (const l of opts.laws) {
-		if (l.law == null) continue;
 		const v = ORDERS_SOURCES[l.law];
 		if (v != null) {
 			rows.push({ label: formatEnum(l.law, "LAW_"), value: v });
@@ -100,7 +108,6 @@ export function ordersEndBreakdown(opts: {
 	if (opts.ruler != null) {
 		for (const t of opts.characterTraits) {
 			if (t.character_xml_id !== opts.ruler.xml_id) continue;
-			if (t.removed_turn != null) continue;
 			const v = ORDERS_SOURCES[t.trait_name];
 			if (v != null) {
 				rows.push({
