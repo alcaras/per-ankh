@@ -26,8 +26,8 @@ import {
 	ORDERS_SOURCES,
 } from "$lib/generated/orders-sources";
 import { GOAL_NAMES } from "$lib/generated/goal-names";
-import { storyEventType } from "./helpers";
-import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
+import { rulerCognomen, rulerName, storyEventType } from "./helpers";
+import { formatEnum } from "$lib/utils/formatting";
 import type {
 	CharacterInfo,
 	CharacterTraitInfo,
@@ -50,26 +50,14 @@ export interface EndBreakdown {
 	total: number;
 }
 
-/** The player's rulers in reign order — the dynasty the legitimacy math walks. */
-export function dynastyLeaders(
-	characters: CharacterInfo[],
-	playerId: number,
-): CharacterInfo[] {
-	return characters
-		.filter((c) => c.player_xml_id === playerId && c.became_leader_turn != null)
-		.sort((a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0));
-}
-
-// Same rendering rule as LeaderCard: names arrive as NAME_* tokens, and a
-// ruler who shares a first name with an earlier one carries their regnal
-// numeral (appended after formatEnum so its trailing-digit strip can't eat
-// it) — without it two rulers of a dynasty can render the same label.
+// The dynasty's own label form: the ruler as the Leaders tab titles them,
+// "Name the Cognomen" — an itemization row names a ruler in one line, where
+// LeaderCard has two elements to style. The xml_id stands in for a ruler the
+// save left unnamed, so the row still points at someone.
 const characterLabel = (c: CharacterInfo): string => {
-	const base = formatEnum(c.first_name ?? "", "NAME_") || `#${c.xml_id}`;
-	const name = c.suffix > 1 ? `${base} ${toRomanNumeral(c.suffix)}` : base;
-	return c.cognomen
-		? `${name} the ${formatEnum(c.cognomen, "COGNOMEN_")}`
-		: name;
+	const name = rulerName(c) ?? `#${c.xml_id}`;
+	const cognomen = rulerCognomen(c);
+	return cognomen ? `${name} the ${cognomen}` : name;
 };
 
 // ─── Orders at end of game ────────────────────────────────────────────

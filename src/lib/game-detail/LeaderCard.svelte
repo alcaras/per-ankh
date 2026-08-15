@@ -5,6 +5,7 @@
 		PlayerGoalInfo,
 	} from "$lib/parser/types";
 	import type { DetailPlayer, Reign } from "./helpers";
+	import { rulerCognomen, rulerName } from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import Popover from "$lib/ui/Popover.svelte";
 	import {
@@ -12,7 +13,6 @@
 		formatArchetype,
 		formatEnum,
 		isArchetypeTrait,
-		toRomanNumeral,
 	} from "$lib/utils/formatting";
 	import { getCivilizationColor } from "$lib/config";
 	import { GOAL_NAMES } from "$lib/generated/goal-names";
@@ -38,17 +38,11 @@
 	);
 
 	// ─── Display helpers ──────────────────────────────────────────────
-	// First name plus the regnal numeral when the leader shares a name with an
-	// earlier ruler (suffix > 1). The first of a name carries no numeral, matching
-	// Old World. The numeral is appended after formatEnum so its trailing-digit
-	// strip can't eat it (and it's Roman letters anyway).
-	const rulerName = (c: CharacterInfo): string => {
-		const name = formatEnum(c.first_name, "NAME_") || "Unknown";
-		return c.suffix > 1 ? `${name} ${toRomanNumeral(c.suffix)}` : name;
-	};
-
-	const cognomen = (c: CharacterInfo): string | null =>
-		c.cognomen ? formatEnum(c.cognomen, "COGNOMEN_") : null;
+	// The card names one ruler, so their name and cognomen resolve once. The
+	// two stay separate here (unlike the Orders tab's single-line label): the
+	// cognomen carries its own styling.
+	const name = $derived(rulerName(ruler) ?? "Unknown");
+	const cognomen = $derived(rulerCognomen(ruler));
 
 	const archetypeLabel = (c: CharacterInfo): string | null =>
 		c.archetype ? formatArchetype(c.archetype) : null;
@@ -99,7 +93,7 @@
 
 <Popover
 	bind:open
-	ariaLabel={rulerName(ruler)}
+	ariaLabel={name}
 	contentClass="w-max max-w-[min(92vw,32rem)]"
 	frameClass="border-2 border-[#211b12] bg-[#2a2623] p-5 shadow-2xl"
 >
@@ -116,7 +110,7 @@
 						category="portraits"
 						value={ruler.portrait}
 						size={46}
-						alt={rulerName(ruler)}
+						alt={name}
 					/>
 				</div>
 			{/if}
@@ -132,9 +126,9 @@
 							alt={archetypeLabel(ruler) ?? ""}
 						/>
 					{/if}
-					<span>{rulerName(ruler)}</span>
-					{#if cognomen(ruler)}
-						<span class="font-normal text-gray-400">the {cognomen(ruler)}</span>
+					<span>{name}</span>
+					{#if cognomen}
+						<span class="font-normal text-gray-400">the {cognomen}</span>
 					{/if}
 				</div>
 				<div
@@ -171,7 +165,7 @@
 						category="portraits"
 						value={ruler.portrait}
 						size={64}
-						alt={rulerName(ruler)}
+						alt={name}
 					/>
 				</div>
 			{/if}
@@ -186,11 +180,9 @@
 						/>
 					{/if}
 					<span>
-						{rulerName(ruler)}
-						{#if cognomen(ruler)}
-							<span class="font-normal text-gray-400"
-								>the {cognomen(ruler)}</span
-							>
+						{name}
+						{#if cognomen}
+							<span class="font-normal text-gray-400">the {cognomen}</span>
 						{/if}
 					</span>
 				</div>

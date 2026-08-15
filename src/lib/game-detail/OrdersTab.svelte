@@ -16,7 +16,6 @@
 		PlayerGoalInfo,
 	} from "$lib/parser/types";
 	import {
-		dynastyLeaders,
 		legitimacyEndBreakdown,
 		ordersEndBreakdown,
 		type EndBreakdown,
@@ -24,6 +23,7 @@
 	import {
 		createLegitimacyChartOption,
 		createYieldChartOption,
+		dynastyLeaders,
 		findByPlayer,
 		ownedByPlayer,
 	} from "./helpers";

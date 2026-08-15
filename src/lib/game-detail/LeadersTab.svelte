@@ -10,7 +10,7 @@
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import LeaderCard from "./LeaderCard.svelte";
 	import { formatEnum } from "$lib/utils/formatting";
-	import { createLegitimacyChartOption } from "./helpers";
+	import { createLegitimacyChartOption, dynastyLeaders } from "./helpers";
 	import type { DetailPlayer, Reign } from "./helpers";
 
 	let {
@@ -73,14 +73,7 @@
 	const dynasties = $derived.by<Dynasty[]>(() => {
 		const out: Dynasty[] = [];
 		for (const player of players) {
-			const rulers = characters
-				.filter(
-					(c) =>
-						c.player_xml_id === player.playerId && c.became_leader_turn != null,
-				)
-				.sort(
-					(a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0),
-				);
+			const rulers = dynastyLeaders(characters, player.playerId);
 			if (rulers.length === 0) continue;
 
 			const reigns: Reign[] = rulers.map((ruler, i) => {

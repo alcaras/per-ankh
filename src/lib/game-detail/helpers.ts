@@ -11,7 +11,7 @@ import type { PlayerHistory } from "$lib/types/PlayerHistory";
 import type { PlayerInfo } from "$lib/types/PlayerInfo";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
-import { formatEnum } from "$lib/utils/formatting";
+import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
 import { toRgba } from "$lib/utils/color";
 import { CHART_THEME, getChartColor, getNationChartColor } from "$lib/config";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
@@ -972,6 +972,43 @@ export function findByPlayer<T>(
 export function storyEventType(eventType: string): string | null {
 	const at = eventType.indexOf("EVENTSTORY_");
 	return at < 0 ? null : eventType.slice(at);
+}
+
+// ─── Rulers ──────────────────────────────────────────────────────────
+
+/**
+ * A player's rulers in reign order — the dynasty every tab that walks a
+ * succession starts from: Leaders derives its reign windows, Military plots
+ * its accession markers, and Orders divides cognomen legitimacy by reign
+ * recency.
+ */
+export function dynastyLeaders(
+	characters: CharacterInfo[],
+	playerId: number,
+): CharacterInfo[] {
+	return characters
+		.filter((c) => c.player_xml_id === playerId && c.became_leader_turn != null)
+		.sort((a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0));
+}
+
+/**
+ * A ruler's first name, carrying their regnal numeral when they share a name
+ * with an earlier ruler (`suffix > 1`) — the first of a name carries none,
+ * matching Old World. The numeral is appended after `formatEnum` so its
+ * trailing-digit strip can't eat it (and it's Roman letters anyway).
+ *
+ * Null for a character the save left unnamed, so each surface supplies its
+ * own fallback rather than inheriting `formatEnum`'s "Unknown".
+ */
+export function rulerName(c: CharacterInfo): string | null {
+	if (!c.first_name) return null;
+	const name = formatEnum(c.first_name, "NAME_");
+	return c.suffix > 1 ? `${name} ${toRomanNumeral(c.suffix)}` : name;
+}
+
+/** A ruler's cognomen, rendered; null until they've earned one. */
+export function rulerCognomen(c: CharacterInfo): string | null {
+	return c.cognomen ? formatEnum(c.cognomen, "COGNOMEN_") : null;
 }
 
 // ─── Build Comparison Panels ─────────────────────────────────────────
