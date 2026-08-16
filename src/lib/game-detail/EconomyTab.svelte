@@ -57,6 +57,7 @@
 		type BuildItem,
 		comparisonRowKeys,
 		type DetailPlayer,
+		eventLogOwnedBy,
 		ownedByPlayer,
 		type TableState,
 		familyCrestKey,
@@ -434,12 +435,13 @@
 							`Completed turn ${w.completed_turn}`,
 						),
 					}));
-				// A calamity with no player is game-wide (a plague), so it lands on
-				// every band — it hit this player too.
+				// Every event log comes off a Player node, so a calamity's owner
+				// set names exactly the realms that logged it — there is no
+				// "game-wide, so show it everywhere" case to fall back on. A
+				// plague the whole world caught carries every player and still
+				// lands on every band.
 				const calamityMarkers: RailMarker[] = gameCalamities
-					.filter(
-						(c) => c.playerName == null || c.playerName === player.player_name,
-					)
+					.filter((c) => eventLogOwnedBy(c.playerXmlIds, c.playerName, player))
 					.map((c) => ({
 						turn: c.turn,
 						iconCategory: "icons" as const,

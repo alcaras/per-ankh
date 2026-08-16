@@ -14,8 +14,10 @@
 		type TimelineEvent,
 		type TimelineCategory,
 		type SpriteCategory,
+		eventLogOwnedBy,
 		getPlayerColor,
 		improvementDisplayName,
+		resolveDetailPlayers,
 	} from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import Checkbox from "$lib/ui/Checkbox.svelte";
@@ -73,6 +75,10 @@
 			index: i,
 		})),
 	);
+
+	// Event logs attribute by player xml_id, which older blobs leave off the
+	// player rows themselves — resolving recovers it.
+	const resolvedPlayers = $derived(resolveDetailPlayers(gameDetails.players));
 
 	// ─── Build unified event list ────────────────────────────────────
 	const allEvents = $derived.by<TimelineEvent[]>(() => {
@@ -158,9 +164,13 @@
 		for (const log of eventLogs) {
 			const cat = EVENT_LOG_CATEGORIES[log.log_type];
 			if (cat) {
-				const matchingPlayer = gameDetails.players.find(
-					(p) => p.player_name === log.player_name,
+				// A log row is a dedup group, so it can name several realms —
+				// a spread half the world saw belongs to no single one, and
+				// gets no nation rather than the first realm in the roster.
+				const owners = resolvedPlayers.filter((p) =>
+					eventLogOwnedBy(log.player_xml_ids, log.player_name, p),
 				);
+				const matchingPlayer = owners.length === 1 ? owners[0] : undefined;
 				events.push({
 					turn: log.turn,
 					nation: matchingPlayer?.nation ?? null,

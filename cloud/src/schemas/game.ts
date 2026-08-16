@@ -124,6 +124,18 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         below 2.14.0 fall back to the name, and leave expedition markers,
 //         science-spike sources and legitimacy event rows missing at every
 //         earlier turn.
+//         event_logs gains the same attribution key for the same reason,
+//         as player_xml_ids — a list, not a scalar, because a row there is a
+//         dedup group over (turn, log_type, description) and can hold several
+//         realms' copies of one event. The old shape put two meanings in
+//         player_name: null for a multi-row group, which consumers read as
+//         "game-wide", and a name for a single-row one, which in single-player
+//         is empty and so matches every player. The Economy tab's calamity
+//         rail showed every realm's droughts and plagues on every band as a
+//         result. The set says which realms actually logged the event, so a
+//         genuinely global plague carries them all and still lands
+//         everywhere. player_name is unchanged, and is what blobs below
+//         2.14.0 still join on.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
