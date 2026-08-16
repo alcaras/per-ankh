@@ -26,7 +26,7 @@
 //     list, so an entry on P's list targeting Q feeds Q's opinion of P.
 //     Memories can expire from the save, so this can undercount long games.
 //   - expeditions — `EVENTSTORY_EXPEDITION_*` entries in `story_events`
-//     (complete from parser 2.13.1; blobs below it carry only the newest 100
+//     (complete from parser 2.14.0; blobs below it carry only the newest 100
 //     events of the whole game, so coverage is best-effort until re-imported).
 
 import type { ImprovementInfo } from "$lib/types/ImprovementInfo";
@@ -879,7 +879,7 @@ export type ScienceSpike = {
 	// Best-effort attribution: what the save shows happening to this player
 	// that turn (steal-research mission, story events). Empty when nothing
 	// lines up — ruins/tribe rewards leave no trace, and blobs below parser
-	// 2.13.1 carry only the newest 100 story events.
+	// 2.14.0 carry only the newest 100 story events.
 	sources: string[];
 };
 

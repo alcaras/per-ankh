@@ -323,7 +323,7 @@
 	function spikeTooltip(s: ScienceSpike, color: string): string {
 		// Best-effort attribution: the player's same-turn steal-research
 		// missions / story events. Unattributed gains (ruins and tribe rewards
-		// leave no trace; blobs below parser 2.13.1 carry only the newest 100
+		// leave no trace; blobs below parser 2.14.0 carry only the newest 100
 		// story events) just read as an event.
 		const sources =
 			s.sources.length > 0
