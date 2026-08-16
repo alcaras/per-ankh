@@ -323,7 +323,8 @@
 	function spikeTooltip(s: ScienceSpike, color: string): string {
 		// Best-effort attribution: the player's same-turn steal-research
 		// missions / story events. Unattributed gains (ruins and tribe rewards
-		// leave no trace; story_events is capped at 100) just read as an event.
+		// leave no trace; blobs below parser 2.13.1 carry only the newest 100
+		// story events) just read as an event.
 		const sources =
 			s.sources.length > 0
 				? `<div style="color:${TOOLTIP_MUTED};margin:3px 0 2px">One-off gain — that turn:</div>` +
@@ -375,8 +376,7 @@
 					(y) => y.player_id,
 					(y) => y.nation,
 				)?.data ?? [];
-			// Story rows key players by name (no id on StoryEvent).
-			const expeditions = expeditionEvents(player.player_name, storyEvents);
+			const expeditions = expeditionEvents(player, storyEvents);
 			return {
 				player,
 				techs,
@@ -385,12 +385,7 @@
 				stealTurns,
 				expeditions,
 				science,
-				spikes: scienceSpikes(
-					science,
-					player.player_name,
-					stealTurns,
-					storyEvents,
-				),
+				spikes: scienceSpikes(science, player, stealTurns, storyEvents),
 			};
 		}),
 	);

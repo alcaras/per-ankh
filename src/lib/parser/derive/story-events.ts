@@ -1,5 +1,16 @@
-// Parsed event_stories carry XML ids; resolve to player_name + first_name +
-// city_name. ORDER BY occurred_turn DESC, event_id DESC, LIMIT 100.
+// Parsed event_stories carry XML ids; resolve to first_name + city_name and
+// keep the owning player as both an id and a name, newest turn first. The id
+// is what consumers join on — see player_xml_id on the StoryEvent type.
+//
+// The whole history ships. The DuckDB query this was ported from ended
+// `LIMIT 100`, which fed a "100 most recent events" table in the desktop
+// Events tab; that table is gone, and every consumer since reads these rows
+// as per-(player, turn) evidence — expedition markers and science spikes on
+// the Techs tab, legitimacy itemization on the Orders tab. Saves carry
+// 214-688 events, so a newest-100 window spanned only the last ~12-17 turns
+// and left every earlier turn unattributable. Shipping all of them costs
+// 0.8-3.4% of blob bytes. Keep it that way: the ordering below is for
+// consumers' convenience, not to select a prefix.
 
 import type { Character } from "../parsers/characters.js";
 import type { City } from "../parsers/cities.js";
@@ -7,8 +18,6 @@ import type { EventStory } from "../parsers/events.js";
 import type { Player } from "../parsers/players.js";
 import type { StoryEvent } from "../types.js";
 import { playerByXmlId } from "./_helpers.js";
-
-const STORY_EVENT_LIMIT = 100;
 
 export function deriveStoryEvents(
 	eventStories: EventStory[],
@@ -31,6 +40,7 @@ export function deriveStoryEvents(
 		out.push({
 			event_id: surrogateId++,
 			event_type: e.eventType,
+			player_xml_id: player.xmlId,
 			player_name: player.playerName,
 			occurred_turn: e.occurredTurn,
 			primary_character_name:
@@ -48,5 +58,5 @@ export function deriveStoryEvents(
 		(a, b) => b.occurred_turn - a.occurred_turn || b.event_id - a.event_id,
 	);
 
-	return out.slice(0, STORY_EVENT_LIMIT);
+	return out;
 }

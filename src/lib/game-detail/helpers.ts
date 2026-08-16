@@ -9,6 +9,7 @@ import type { YieldHistory } from "$lib/types/YieldHistory";
 import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
 import type { PlayerHistory } from "$lib/types/PlayerHistory";
 import type { PlayerInfo } from "$lib/types/PlayerInfo";
+import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
 import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
@@ -959,6 +960,27 @@ export function findByPlayer<T>(
 			? id === player.playerId
 			: nationOf(row) === player.nation;
 	});
+}
+
+/**
+ * One player's story rows. The story-row counterpart to {@link ownedByPlayer}
+ * — same id-first shape, but the fallback is the player *name*, because a
+ * `StoryEvent` carries no nation.
+ *
+ * The fallback is a poor one and only exists for blobs below PARSER_VERSION
+ * 2.14.0: single-player saves leave `player_name` empty for every player, so
+ * matching on it hands each of them every realm's events. Re-importing such a
+ * game fills in `player_xml_id` and the join becomes exact.
+ */
+export function storyEventsFor(
+	events: StoryEvent[],
+	player: Pick<DetailPlayer, "playerId" | "player_name">,
+): StoryEvent[] {
+	return events.filter((e) =>
+		e.player_xml_id != null
+			? e.player_xml_id === player.playerId
+			: e.player_name === player.player_name,
+	);
 }
 
 /**

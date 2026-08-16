@@ -26,6 +26,7 @@
 		dynastyLeaders,
 		findByPlayer,
 		ownedByPlayer,
+		storyEventsFor,
 	} from "./helpers";
 	import type { DetailPlayer } from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
@@ -158,9 +159,7 @@
 							leaders,
 							goals: playerGoals.filter((g) => g.player_xml_id === p.playerId),
 							series: history,
-							storyEvents: storyEvents.filter(
-								(e) => e.player_name === p.player_name,
-							),
+							storyEvents: storyEventsFor(storyEvents, p),
 						})
 					: null;
 			return { player: p, orders, legitimacy, eliminatedTurn };
