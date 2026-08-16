@@ -518,6 +518,7 @@
 	>
 		<TimelineTab
 			{gameDetails}
+			players={resolvedPlayers}
 			{techDiscoveryHistory}
 			{lawAdoptionHistory}
 			{cityStatistics}

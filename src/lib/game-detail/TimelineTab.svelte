@@ -14,16 +14,17 @@
 		type TimelineEvent,
 		type TimelineCategory,
 		type SpriteCategory,
+		type DetailPlayer,
 		eventLogOwnedBy,
 		getPlayerColor,
 		improvementDisplayName,
-		resolveDetailPlayers,
 	} from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import Checkbox from "$lib/ui/Checkbox.svelte";
 
 	let {
 		gameDetails,
+		players,
 		techDiscoveryHistory,
 		lawAdoptionHistory,
 		cityStatistics,
@@ -42,6 +43,7 @@
 		}),
 	}: {
 		gameDetails: GameDetails;
+		players: DetailPlayer[];
 		techDiscoveryHistory: TechDiscoveryHistory[];
 		lawAdoptionHistory: LawAdoptionHistory[];
 		cityStatistics: CityStatistics;
@@ -76,10 +78,6 @@
 		})),
 	);
 
-	// Event logs attribute by player xml_id, which older blobs leave off the
-	// player rows themselves — resolving recovers it.
-	const resolvedPlayers = $derived(resolveDetailPlayers(gameDetails.players));
-
 	// ─── Build unified event list ────────────────────────────────────
 	const allEvents = $derived.by<TimelineEvent[]>(() => {
 		const events: TimelineEvent[] = [];
@@ -91,7 +89,6 @@
 					events.push({
 						turn: dp.turn,
 						nation: player.nation,
-						playerName: player.player_name,
 						category: "tech",
 						label:
 							TECH_NAMES[dp.tech_name] ?? formatEnum(dp.tech_name, "TECH_"),
@@ -109,7 +106,6 @@
 					events.push({
 						turn: dp.turn,
 						nation: player.nation,
-						playerName: player.player_name,
 						category: "law",
 						label: formatEnum(dp.law_name, "LAW_"),
 						enumValue: dp.law_name,
@@ -124,7 +120,6 @@
 			events.push({
 				turn: city.founded_turn,
 				nation: city.owner_nation,
-				playerName: formatEnum(city.owner_nation, "NATION_"),
 				category: "city",
 				label: `${formatEnum(city.city_name, "CITYNAME_")}${city.is_capital ? " (Capital)" : ""}`,
 				enumValue: city.city_name,
@@ -137,7 +132,6 @@
 			events.push({
 				turn: wonder.completed_turn,
 				nation: wonder.nation,
-				playerName: wonder.player_name,
 				category: "wonder",
 				label: improvementDisplayName(wonder.wonder),
 				enumValue: wonder.wonder,
@@ -151,7 +145,6 @@
 				events.push({
 					turn: religion.founded_turn,
 					nation: religion.founder_nation,
-					playerName: formatEnum(religion.founder_nation, "NATION_"),
 					category: "religion",
 					label: "Founded " + formatEnum(religion.religion_name, "RELIGION_"),
 					enumValue: religion.religion_name,
@@ -167,14 +160,13 @@
 				// A log row is a dedup group, so it can name several realms —
 				// a spread half the world saw belongs to no single one, and
 				// gets no nation rather than the first realm in the roster.
-				const owners = resolvedPlayers.filter((p) =>
+				const owners = players.filter((p) =>
 					eventLogOwnedBy(log.player_xml_ids, log.player_name, p),
 				);
 				const matchingPlayer = owners.length === 1 ? owners[0] : undefined;
 				events.push({
 					turn: log.turn,
 					nation: matchingPlayer?.nation ?? null,
-					playerName: log.player_name ?? "Unknown",
 					category: cat,
 					label: stripMarkup(log.description) ?? formatEnum(log.log_type, ""),
 					enumValue: log.log_type,
@@ -200,7 +192,6 @@
 						events.push({
 							turn: curr.turn,
 							nation: player.nation,
-							playerName: player.player_name,
 							category: "battle",
 							label: `Lost ${pctLost}% military power (${prev.military_power} → ${curr.military_power})`,
 							enumValue: `BATTLE_${player.nation}_${curr.turn}`,

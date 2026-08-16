@@ -738,10 +738,13 @@ export type TimelineCategory =
 	| "wonder"
 	| "battle";
 
+// The timeline table buckets by nation, so `nation` is the whole of a row's
+// attribution — hence no player name here. The one it used to carry was a
+// mix of raw player names (empty on single-player saves) and nation labels,
+// depending on which producer built the row, and nothing read it.
 export type TimelineEvent = {
 	turn: number;
 	nation: string | null;
-	playerName: string;
 	category: TimelineCategory;
 	label: string;
 	enumValue: string;
