@@ -537,7 +537,6 @@
 		<EventsTab
 			{eventLogs}
 			{playerHistory}
-			{gameDetails}
 			players={resolvedPlayers}
 			{victoryPointsEnabled}
 			bind:chartFilter={chartFilters.points}

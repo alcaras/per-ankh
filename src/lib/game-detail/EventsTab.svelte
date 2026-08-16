@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { EventLog } from "$lib/types/EventLog";
 	import type { PlayerHistory } from "$lib/types/PlayerHistory";
-	import type { GameDetails } from "$lib/types/GameDetails";
 	import type { ChartOption } from "$lib/echarts";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import { Select } from "bits-ui";
@@ -15,6 +14,7 @@
 		TABLE_CLASS,
 		TABLE_HEADER_TH_CLASS,
 		TABLE_CELL_TD_CLASS,
+		eventLogOwnedBy,
 		toggleSort,
 		filledLineStyle,
 	} from "./helpers";
@@ -22,7 +22,6 @@
 	let {
 		eventLogs,
 		playerHistory,
-		gameDetails,
 		players,
 		victoryPointsEnabled,
 		chartFilter = $bindable<Record<string, boolean>>({}),
@@ -35,7 +34,6 @@
 	}: {
 		eventLogs: EventLog[];
 		playerHistory: PlayerHistory[];
-		gameDetails: GameDetails;
 		players: DetailPlayer[];
 		victoryPointsEnabled: boolean;
 		chartFilter?: Record<string, boolean>;
@@ -107,52 +105,41 @@
 	});
 
 	// ─── Event log processing ─────────────────────────────────────────
-	const processedEventLogs = $derived(
+	// Annotate each row with the players that logged it, then filter and label
+	// off that. A row is a dedup group over (turn, log_type, description), so
+	// an event several realms saw carries all of them and belongs under each
+	// one's chip. `player_name` is no help here: it is null the moment a group
+	// holds more than one row, and empty for every player in a single-player
+	// save.
+	const annotatedEventLogs = $derived(
 		eventLogs.map((log) => {
-			const cleanDesc = stripMarkup(log.description);
-			if (log.player_name) {
-				return { ...log, description: cleanDesc };
-			}
-			const match = cleanDesc?.match(/\s*\(([^)]+)\)\s*$/);
-			if (match) {
-				return {
-					...log,
-					player_name: match[1],
-					description: cleanDesc?.replace(/\s*\([^)]+\)\s*$/, "") ?? null,
-				};
-			}
-			return { ...log, description: cleanDesc };
+			const owners = players.filter((p) =>
+				eventLogOwnedBy(log.player_xml_ids, log.player_name, p),
+			);
+			return {
+				...log,
+				description: stripMarkup(log.description),
+				ownerIds: owners.map((p) => p.playerId),
+				ownerLabel: owners.map((p) => p.label).join(", "),
+			};
 		}),
 	);
 
 	const uniqueLogTypes = $derived(
-		[...new Set(processedEventLogs.map((log) => log.log_type))].sort(),
+		[...new Set(annotatedEventLogs.map((log) => log.log_type))].sort(),
 	);
 
-	const uniquePlayers = $derived(
-		[
-			...new Set(
-				processedEventLogs
-					.map((log) => log.player_name)
-					.filter((p): p is string => p != null && p !== "Player"),
-			),
-		].sort(),
+	// The players that logged something — the filter's options. Empty on a blob
+	// below PARSER_VERSION 2.14.0 whose players are all unnamed, which is every
+	// single-player save: there is nothing to attribute by until re-import, so
+	// the column and its chips stay hidden rather than showing blanks.
+	const playersWithEvents = $derived(
+		new Set(annotatedEventLogs.flatMap((log) => log.ownerIds)),
 	);
-
-	const nationNames = $derived(
-		gameDetails.players.map((p) => formatEnum(p.nation, "NATION_")),
+	const filterablePlayers = $derived(
+		players.filter((p) => playersWithEvents.has(p.playerId)),
 	);
-
-	// Show player column if any event has a player name that's NOT a nation name
-	const showPlayerColumn = $derived(
-		processedEventLogs.some(
-			(log) =>
-				log.player_name &&
-				log.player_name !== "Player" &&
-				!nationNames.includes(log.player_name) &&
-				!log.player_name.includes(" "),
-		),
-	);
+	const showPlayerColumn = $derived(filterablePlayers.length > 0);
 
 	// Parse selected filters
 	const selectedLogTypes = $derived(
@@ -161,22 +148,21 @@
 			.map((f) => f.replace("logtype:", "")),
 	);
 
-	const selectedPlayers = $derived(
+	const selectedPlayerIds = $derived(
 		tableState.filters
 			.filter((f) => f.startsWith("player:"))
-			.map((f) => f.replace("player:", "")),
+			.map((f) => Number(f.replace("player:", ""))),
 	);
 
 	// Filtered and sorted event logs
 	const filteredEventLogs = $derived.by(() => {
-		let logs = processedEventLogs.filter((log) => {
+		let logs = annotatedEventLogs.filter((log) => {
 			if (tableState.search) {
 				const term = tableState.search.toLowerCase();
 				const matchesLogType = formatEnum(log.log_type, "")
 					.toLowerCase()
 					.includes(term);
-				const matchesPlayer =
-					log.player_name?.toLowerCase().includes(term) ?? false;
+				const matchesPlayer = log.ownerLabel.toLowerCase().includes(term);
 				const matchesDescription =
 					log.description?.toLowerCase().includes(term) ?? false;
 				if (!matchesLogType && !matchesPlayer && !matchesDescription) {
@@ -190,8 +176,8 @@
 				return false;
 			}
 			if (
-				selectedPlayers.length > 0 &&
-				(!log.player_name || !selectedPlayers.includes(log.player_name))
+				selectedPlayerIds.length > 0 &&
+				!log.ownerIds.some((id) => selectedPlayerIds.includes(id))
 			) {
 				return false;
 			}
@@ -211,9 +197,9 @@
 					aVal = a.log_type;
 					bVal = b.log_type;
 					break;
-				case "player_name":
-					aVal = a.player_name ?? "";
-					bVal = b.player_name ?? "";
+				case "owners":
+					aVal = a.ownerLabel;
+					bVal = b.ownerLabel;
 					break;
 				case "description":
 					aVal = a.description ?? "";
@@ -256,18 +242,18 @@
 {/if}
 
 <!-- Event Logs Table -->
-{#if processedEventLogs.length === 0}
+{#if annotatedEventLogs.length === 0}
 	<p class="p-8 text-center italic text-tan">No event logs recorded</p>
 {:else}
 	<h3 class="mb-2 mt-0 font-bold text-tan">Event Logs</h3>
 	<div class={TABLE_FRAME_CLASS}>
 		<TableFilterColumn
 			bind:search={tableState.search}
-			count={`${filteredEventLogs?.length ?? 0} / ${processedEventLogs.length} events`}
+			count={`${filteredEventLogs?.length ?? 0} / ${annotatedEventLogs.length} events`}
 			chips={tableState.filters.map((f) =>
 				f.startsWith("logtype:")
 					? formatEnum(f.replace("logtype:", ""), "")
-					: f.replace("player:", ""),
+					: (playerById.get(Number(f.replace("player:", "")))?.label ?? ""),
 			)}
 		>
 			{#snippet filters()}
@@ -285,21 +271,21 @@
 						>
 							<Select.Viewport>
 								<!-- Players Group (only show if player column is visible) -->
-								{#if showPlayerColumn && uniquePlayers.length > 0}
+								{#if showPlayerColumn}
 									<Select.Group>
 										<Select.GroupHeading
 											class="border-b border-surface px-3 py-2 text-xs font-bold uppercase tracking-wide text-tan"
 										>
 											Players
 										</Select.GroupHeading>
-										{#each uniquePlayers as player (player)}
+										{#each filterablePlayers as player (player.playerId)}
 											<Select.Item
-												value={`player:${player}`}
-												label={player}
+												value={`player:${player.playerId}`}
+												label={player.label}
 												class="flex cursor-pointer items-center justify-between px-3 py-2 text-sm text-tan hover:bg-surface-raised data-[highlighted]:bg-surface-raised"
 											>
 												{#snippet children({ selected })}
-													{player}
+													{player.label}
 													{#if selected}
 														<span class="font-bold text-orange">✓</span>
 													{/if}
@@ -313,8 +299,7 @@
 								{#if uniqueLogTypes.length > 0}
 									<Select.Group>
 										<Select.GroupHeading
-											class="border-b border-surface px-3 py-2 text-xs font-bold uppercase tracking-wide text-tan {showPlayerColumn &&
-											uniquePlayers.length > 0
+											class="border-b border-surface px-3 py-2 text-xs font-bold uppercase tracking-wide text-tan {showPlayerColumn
 												? 'border-t border-surface'
 												: ''}"
 										>
@@ -376,11 +361,11 @@
 						{#if showPlayerColumn}
 							<th
 								class={TABLE_HEADER_TH_CLASS}
-								onclick={() => toggleSort(tableState, "player_name")}
+								onclick={() => toggleSort(tableState, "owners")}
 							>
 								<span class="inline-flex items-center gap-1">
-									Player
-									{#if tableState.sortColumn === "player_name"}
+									Players
+									{#if tableState.sortColumn === "owners"}
 										<span class="text-orange"
 											>{tableState.sortDirection === "asc" ? "↑" : "↓"}</span
 										>
@@ -411,7 +396,7 @@
 								{formatEnum(log.log_type, "")}
 							</td>
 							{#if showPlayerColumn}
-								<td class={TABLE_CELL_TD_CLASS}>{log.player_name ?? ""}</td>
+								<td class={TABLE_CELL_TD_CLASS}>{log.ownerLabel}</td>
 							{/if}
 							<td class="{TABLE_CELL_TD_CLASS} rounded-r-lg">
 								{log.description || "—"}
