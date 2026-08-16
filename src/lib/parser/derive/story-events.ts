@@ -7,10 +7,12 @@
 // Events tab; that table is gone, and every consumer since reads these rows
 // as per-(player, turn) evidence — expedition markers and science spikes on
 // the Techs tab, legitimacy itemization on the Orders tab. Saves carry
-// 214-688 events, so a newest-100 window spanned only the last ~12-17 turns
-// and left every earlier turn unattributable. Shipping all of them costs
-// 0.8-3.4% of blob bytes. Keep it that way: the ordering below is for
-// consumers' convenience, not to select a prefix.
+// 214-688 events, so a newest-100 window spanned only the last 12-22 turns
+// and left every earlier turn unattributable. Shipping all of them, with the
+// player id below on every row, costs 0.9-3.9% of blob bytes — worst case in
+// the corpus +104 KiB uncompressed, +8 KiB gzipped, against Worker limits of
+// 10 MB compressed / 50 MB decompressed. Keep it that way: the ordering below
+// is for consumers' convenience, not to select a prefix.
 
 import type { Character } from "../parsers/characters.js";
 import type { City } from "../parsers/cities.js";
