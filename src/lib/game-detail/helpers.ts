@@ -967,10 +967,13 @@ export function findByPlayer<T>(
  * — same id-first shape, but the fallback is the player *name*, because a
  * `StoryEvent` carries no nation.
  *
- * The fallback is a poor one and only exists for blobs below PARSER_VERSION
- * 2.14.0: single-player saves leave `player_name` empty for every player, so
- * matching on it hands each of them every realm's events. Re-importing such a
- * game fills in `player_xml_id` and the join becomes exact.
+ * The fallback only exists for blobs below PARSER_VERSION 2.14.0, and it
+ * skips a player with no name: single-player saves leave `player_name` empty
+ * for every player, and `"" === ""` would hand each of them every realm's
+ * events. An empty name matches nothing instead — the same call the Techs
+ * tab's espionage markers make, where a row carrying no usable key simply
+ * yields no markers on a legacy blob. Re-importing the game fills in
+ * `player_xml_id` and the join becomes exact.
  */
 export function storyEventsFor(
 	events: StoryEvent[],
@@ -979,7 +982,7 @@ export function storyEventsFor(
 	return events.filter((e) =>
 		e.player_xml_id != null
 			? e.player_xml_id === player.playerId
-			: e.player_name === player.player_name,
+			: player.player_name !== "" && e.player_name === player.player_name,
 	);
 }
 
