@@ -1,5 +1,5 @@
 // Parsed event_stories carry XML ids; resolve to first_name + city_name and
-// keep the owning player as both an id and a name, newest turn first. The id
+// keep the owning player as both an id and a name, oldest turn first. The id
 // is what consumers join on — see player_xml_id on the StoryEvent type.
 //
 // The whole history ships. The DuckDB query this was ported from ended
@@ -11,8 +11,14 @@
 // and left every earlier turn unattributable. Shipping all of them, with the
 // player id below on every row, costs 0.9-3.9% of blob bytes — worst case in
 // the corpus +104 KiB uncompressed, +8 KiB gzipped, against Worker limits of
-// 10 MB compressed / 50 MB decompressed. Keep it that way: the ordering below
-// is for consumers' convenience, not to select a prefix.
+// 10 MB compressed / 50 MB decompressed. Keep it that way: the ordering is a
+// chronological reading order, not a way to select a prefix.
+//
+// Consumers bucket by turn, so the turn order itself is invisible to them —
+// but they truncate *within* a turn, and the tiebreaker decides what survives:
+// a spike tooltip keeps the first SPIKE_SOURCES_MAX same-turn events and a
+// legitimacy row names the first two. Ascending event_id is parse order, so
+// a player's own events come before their characters' and cities'.
 
 import type { Character } from "../parsers/characters.js";
 import type { City } from "../parsers/cities.js";
@@ -57,7 +63,7 @@ export function deriveStoryEvents(
 	}
 
 	out.sort(
-		(a, b) => b.occurred_turn - a.occurred_turn || b.event_id - a.event_id,
+		(a, b) => a.occurred_turn - b.occurred_turn || a.event_id - b.event_id,
 	);
 
 	return out;
