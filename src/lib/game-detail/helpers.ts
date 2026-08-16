@@ -738,10 +738,13 @@ export type TimelineCategory =
 	| "wonder"
 	| "battle";
 
+// The timeline table buckets by nation, so `nation` is the whole of a row's
+// attribution — hence no player name here. The one it used to carry was a
+// mix of raw player names (empty on single-player saves) and nation labels,
+// depending on which producer built the row, and nothing read it.
 export type TimelineEvent = {
 	turn: number;
 	nation: string | null;
-	playerName: string;
 	category: TimelineCategory;
 	label: string;
 	enumValue: string;
@@ -984,6 +987,31 @@ export function storyEventsFor(
 			? e.player_xml_id === player.playerId
 			: player.player_name !== "" && e.player_name === player.player_name,
 	);
+}
+
+/**
+ * Whether an event-log row belongs to `player`. The event-log counterpart to
+ * {@link storyEventsFor} — same id-first shape, except the id is a *set*: a
+ * derived event-log row stands for a dedup group, and `player_xml_ids` names
+ * every realm that logged it. A game-wide plague carries the whole roster and
+ * so matches everyone; a drought three realms logged matches exactly those
+ * three.
+ *
+ * The name fallback exists only for blobs below PARSER_VERSION 2.14.0, and it
+ * skips a player with no name for the reason given on {@link storyEventsFor}.
+ *
+ * Takes the row's two fields as arguments rather than a `Pick<>` because the
+ * callers hold them under different names — `EventLog.player_xml_ids` /
+ * `player_name` and `Calamity.playerXmlIds` / `playerName`.
+ */
+export function eventLogOwnedBy(
+	playerXmlIds: number[] | undefined,
+	playerName: string | null,
+	player: Pick<DetailPlayer, "playerId" | "player_name">,
+): boolean {
+	return playerXmlIds != null
+		? playerXmlIds.includes(player.playerId)
+		: player.player_name !== "" && playerName === player.player_name;
 }
 
 /**

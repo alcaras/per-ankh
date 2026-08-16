@@ -164,7 +164,15 @@ export interface Calamity {
 	turn: number;
 	/** OCCURRENCE_* zType. */
 	occurrence: string;
-	/** The save's player_name, or null for a game-wide occurrence (a plague). */
+	/**
+	 * xml_ids of every realm that logged the occurrence — a plague the whole
+	 * world caught carries them all. Absent below PARSER_VERSION 2.14.0.
+	 */
+	playerXmlIds?: number[];
+	/**
+	 * The save's player_name: the legacy attribution key, kept for blobs below
+	 * 2.14.0. Null once the log row grouped more than one realm's copy.
+	 */
 	playerName: string | null;
 	/** The log line, markup stripped. */
 	description: string;
@@ -189,6 +197,7 @@ export function calamities(logs: EventLog[]): Calamity[] {
 		out.push({
 			turn: log.turn,
 			occurrence: match[1],
+			playerXmlIds: log.player_xml_ids,
 			playerName: log.player_name,
 			description: stripMarkup(log.description),
 		});
