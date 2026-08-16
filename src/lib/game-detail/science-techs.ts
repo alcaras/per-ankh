@@ -26,7 +26,8 @@
 //     list, so an entry on P's list targeting Q feeds Q's opinion of P.
 //     Memories can expire from the save, so this can undercount long games.
 //   - expeditions — `EVENTSTORY_EXPEDITION_*` entries in `story_events`
-//     (capped at 100 per blob, so coverage is best-effort).
+//     (complete from parser 2.14.0; blobs below it carry only the newest 100
+//     events of the whole game, so coverage is best-effort until re-imported).
 
 import type { ImprovementInfo } from "$lib/types/ImprovementInfo";
 import type { LawAdoptionDataPoint } from "$lib/types/LawAdoptionDataPoint";
@@ -53,6 +54,7 @@ import {
 	COMPETITIVE_SCIENCE_STIPEND,
 } from "$lib/generated/science-yields";
 import { formatEnum } from "$lib/utils/formatting";
+import { storyEventType, storyEventsFor, type DetailPlayer } from "./helpers";
 
 // ─── Key-science-tech conditions ─────────────────────────────────────
 
@@ -245,21 +247,18 @@ function countByName<T>(rows: T[], nameOf: (row: T) => string): NamedCount[] {
 	return [...counts].map(([name, count]) => ({ name, count }));
 }
 
-// A player's expedition story events, deduped and display-ready. Story rows
-// key players by name (no id), and prefixed variants of the same event
-// ("P.1.EVENTSTORY_X" / "EVENTSTORY_X") appear per audience, so entries
-// normalize to their EVENTSTORY_ suffix and dedupe on (event, turn).
+// A player's expedition story events, deduped and display-ready. Prefixed
+// variants of the same event appear per audience, so entries normalize
+// through storyEventType and dedupe on (event, turn).
 export function expeditionEvents(
-	playerName: string,
+	player: Pick<DetailPlayer, "playerId" | "player_name">,
 	storyEvents: StoryEvent[],
 ): { name: string; turn: number }[] {
 	const seen = new Set<string>();
 	const out: { name: string; turn: number }[] = [];
-	for (const s of storyEvents) {
-		if (s.player_name !== playerName) continue;
-		const at = s.event_type.indexOf("EVENTSTORY_EXPEDITION");
-		if (at < 0) continue;
-		const norm = s.event_type.slice(at);
+	for (const s of storyEventsFor(storyEvents, player)) {
+		const norm = storyEventType(s.event_type);
+		if (norm == null || !norm.startsWith("EVENTSTORY_EXPEDITION")) continue;
 		const key = `${norm}@${s.occurred_turn}`;
 		if (seen.has(key)) continue;
 		seen.add(key);
@@ -879,8 +878,8 @@ export type ScienceSpike = {
 	amount: number;
 	// Best-effort attribution: what the save shows happening to this player
 	// that turn (steal-research mission, story events). Empty when nothing
-	// lines up — ruins/tribe rewards leave no trace, and story_events is
-	// capped at 100 per blob.
+	// lines up — ruins/tribe rewards leave no trace, and blobs below parser
+	// 2.14.0 carry only the newest 100 story events.
 	sources: string[];
 };
 
@@ -901,19 +900,18 @@ const SPIKE_SOURCES_MAX = 3;
  */
 export function scienceSpikes(
 	data: YieldDataPoint[],
-	playerName: string,
+	player: Pick<DetailPlayer, "playerId" | "player_name">,
 	stealTurns: number[],
 	storyEvents: StoryEvent[],
 ): ScienceSpike[] {
 	// Same-turn story events per turn for this player, deduped on the
 	// normalized event type (audience-prefixed variants collapse).
 	const storiesByTurn = new Map<number, Set<string>>();
-	for (const s of storyEvents) {
-		if (s.player_name !== playerName) continue;
-		const at = s.event_type.indexOf("EVENTSTORY_");
-		if (at < 0) continue;
+	for (const s of storyEventsFor(storyEvents, player)) {
+		const norm = storyEventType(s.event_type);
+		if (norm == null) continue;
 		const set = storiesByTurn.get(s.occurred_turn) ?? new Set<string>();
-		set.add(formatEnum(s.event_type.slice(at), "EVENTSTORY_"));
+		set.add(formatEnum(norm, "EVENTSTORY_"));
 		storiesByTurn.set(s.occurred_turn, set);
 	}
 	const steals = new Set(stealTurns);

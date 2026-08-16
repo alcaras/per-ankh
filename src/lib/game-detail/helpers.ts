@@ -7,10 +7,12 @@ import type {
 } from "$lib/parser/types";
 import type { YieldHistory } from "$lib/types/YieldHistory";
 import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
+import type { PlayerHistory } from "$lib/types/PlayerHistory";
 import type { PlayerInfo } from "$lib/types/PlayerInfo";
+import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
-import { formatEnum } from "$lib/utils/formatting";
+import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
 import { toRgba } from "$lib/utils/color";
 import { CHART_THEME, getChartColor, getNationChartColor } from "$lib/config";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
@@ -960,6 +962,80 @@ export function findByPlayer<T>(
 	});
 }
 
+/**
+ * One player's story rows. The story-row counterpart to {@link ownedByPlayer}
+ * — same id-first shape, but the fallback is the player *name*, because a
+ * `StoryEvent` carries no nation.
+ *
+ * The fallback only exists for blobs below PARSER_VERSION 2.14.0, and it
+ * skips a player with no name: single-player saves leave `player_name` empty
+ * for every player, and `"" === ""` would hand each of them every realm's
+ * events. An empty name matches nothing instead — the same call the Techs
+ * tab's espionage markers make, where a row carrying no usable key simply
+ * yields no markers on a legacy blob. Re-importing the game fills in
+ * `player_xml_id` and the join becomes exact.
+ */
+export function storyEventsFor(
+	events: StoryEvent[],
+	player: Pick<DetailPlayer, "playerId" | "player_name">,
+): StoryEvent[] {
+	return events.filter((e) =>
+		e.player_xml_id != null
+			? e.player_xml_id === player.playerId
+			: player.player_name !== "" && e.player_name === player.player_name,
+	);
+}
+
+/**
+ * The canonical `EVENTSTORY_*` type behind a story row's `event_type`.
+ *
+ * The same event reaches the save once per audience under its own prefix
+ * ("P.1.EVENTSTORY_X", the family's copy, the religion's copy), so callers
+ * normalize before naming or deduping an event. Returns null for a row
+ * carrying no EVENTSTORY_ type.
+ */
+export function storyEventType(eventType: string): string | null {
+	const at = eventType.indexOf("EVENTSTORY_");
+	return at < 0 ? null : eventType.slice(at);
+}
+
+// ─── Rulers ──────────────────────────────────────────────────────────
+
+/**
+ * A player's rulers in reign order — the dynasty every tab that walks a
+ * succession starts from: Leaders derives its reign windows, Military plots
+ * its accession markers, and Orders divides cognomen legitimacy by reign
+ * recency.
+ */
+export function dynastyLeaders(
+	characters: CharacterInfo[],
+	playerId: number,
+): CharacterInfo[] {
+	return characters
+		.filter((c) => c.player_xml_id === playerId && c.became_leader_turn != null)
+		.sort((a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0));
+}
+
+/**
+ * A ruler's first name, carrying their regnal numeral when they share a name
+ * with an earlier ruler (`suffix > 1`) — the first of a name carries none,
+ * matching Old World. The numeral is appended after `formatEnum` so its
+ * trailing-digit strip can't eat it (and it's Roman letters anyway).
+ *
+ * Null for a character the save left unnamed, so each surface supplies its
+ * own fallback rather than inheriting `formatEnum`'s "Unknown".
+ */
+export function rulerName(c: CharacterInfo): string | null {
+	if (!c.first_name) return null;
+	const name = formatEnum(c.first_name, "NAME_");
+	return c.suffix > 1 ? `${name} ${toRomanNumeral(c.suffix)}` : name;
+}
+
+/** A ruler's cognomen, rendered; null until they've earned one. */
+export function rulerCognomen(c: CharacterInfo): string | null {
+	return c.cognomen ? formatEnum(c.cognomen, "COGNOMEN_") : null;
+}
+
 // ─── Build Comparison Panels ─────────────────────────────────────────
 
 /** One row's subject and how many of it a side has. */
@@ -1187,6 +1263,73 @@ export function createYieldChartOption(
 					d.turn,
 					mode === "rate" ? d.rate : d.cumulative,
 				]),
+				itemStyle: { color },
+				...filledLineStyle(color),
+			};
+		}),
+	};
+}
+
+/**
+ * Legitimacy over time, one line per player — the counterpart to
+ * {@link createYieldChartOption} for the series that isn't a yield.
+ * Rendered by the Leaders tab (where the dynasty explains its shape) and by
+ * the Orders tab (where it drives orders through ORDERS_PER_LEGITIMACY), so
+ * both draw the same plot from one definition.
+ *
+ * `players` supplies the resolved label/color; a row without a match falls
+ * back to its nation, as the yield builder does.
+ */
+export function createLegitimacyChartOption(
+	playerHistory: PlayerHistory[],
+	players: DetailPlayer[],
+	selectedPlayersState: Record<string, boolean>,
+): ChartOption | null {
+	if (playerHistory.length === 0) return null;
+
+	const byId = new Map(players.map((p) => [p.playerId, p]));
+	const labelOf = (row: PlayerHistory): string =>
+		byId.get(row.player_id)?.label ?? formatEnum(row.nation, "NATION_");
+
+	// Value x-axis with a small pad so the area fill doesn't clip at the edges.
+	const turns = playerHistory[0]?.history.map((h) => h.turn) ?? [];
+	const minTurn = turns[0] ?? 0;
+	const maxTurn = turns[turns.length - 1] ?? 0;
+	const pad = Math.max(1, (maxTurn - minTurn) * 0.02);
+
+	return {
+		...CHART_THEME,
+		title: { ...CHART_THEME.title, text: "Legitimacy" },
+		legend: {
+			show: false,
+			data: playerHistory.map(labelOf),
+			selected: selectedPlayersState,
+		},
+		grid: { left: 60, right: 40, top: 80, bottom: 60 },
+		xAxis: {
+			type: "value",
+			name: "Turn",
+			nameLocation: "middle",
+			nameGap: 30,
+			min: minTurn - pad,
+			max: maxTurn + pad,
+			minInterval: 1,
+			splitLine: { show: false },
+		},
+		yAxis: {
+			type: "value",
+			name: "Legitimacy",
+			nameLocation: "middle",
+			nameGap: 40,
+			axisLine: { onZero: false },
+		},
+		series: playerHistory.map((row, i) => {
+			const color =
+				byId.get(row.player_id)?.color ?? getPlayerColor(row.nation, i);
+			return {
+				name: labelOf(row),
+				type: "line",
+				data: row.history.map((h) => [h.turn, h.legitimacy]),
 				itemStyle: { color },
 				...filledLineStyle(color),
 			};

@@ -109,6 +109,21 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         (every project completed, whole-game counts). Purely additive;
 //         older blobs simply lack the field and the Economy tab hides the
 //         panel.
+// 2.14.0 — story_events ships the game's whole history instead of the newest
+//         100, and every row carries player_xml_id, the owning player's
+//         xml_id. The cap came from the DuckDB query that fed the desktop
+//         "recent events" table; its consumers now attribute per (player,
+//         turn), and the window covered only the last 12-22 turns. The id is
+//         what those consumers join on: rows previously carried only
+//         player_name, and single-player saves leave that empty for every
+//         player, so the name join handed each of them every realm's events.
+//         The array also gains the character- and city-scoped events the save
+//         records — the parser read them off `player`, and the save writes
+//         `Player`, so every one of them was dropped — which populates
+//         primary_character_name and city_name for the first time. Blobs
+//         below 2.14.0 fall back to the name, and leave expedition markers,
+//         science-spike sources and legitimacy event rows missing at every
+//         earlier turn.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -129,13 +144,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.11.0",
 	"2.12.0",
 	"2.13.0",
+	"2.14.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.13.0";
+export const CURRENT_PARSER_VERSION = "2.14.0";
 
 // ----- Reusable atoms -----
 

@@ -43,6 +43,9 @@
 		techName,
 		UNIT_CLASS_COLORS,
 		filledLineStyle,
+		dynastyLeaders,
+		rulerCognomen,
+		rulerName,
 	} from "./helpers";
 
 	let {
@@ -242,8 +245,9 @@
 		turn: number,
 		color: string,
 	): string {
-		const name = c.first_name ? formatEnum(c.first_name, "NAME_") : "New ruler";
-		const cog = c.cognomen ? ` ‘${formatEnum(c.cognomen, "COGNOMEN_")}’` : "";
+		const name = rulerName(c) ?? "New ruler";
+		const cognomen = rulerCognomen(c);
+		const cog = cognomen ? ` ‘${cognomen}’` : "";
 		const arch = c.archetype ? formatArchetype(c.archetype) : null;
 		const ratings = [
 			ratingChip("Wis", "RATING_WISDOM", c.wisdom),
@@ -380,15 +384,7 @@
 			const events: RailEvent[] = [];
 
 			// Leaders, including the starting ruler.
-			for (const c of characters
-				.filter(
-					(c) =>
-						c.player_xml_id === player.player_id &&
-						c.became_leader_turn != null,
-				)
-				.sort(
-					(a, b) => (a.became_leader_turn ?? 0) - (b.became_leader_turn ?? 0),
-				)) {
+			for (const c of dynastyLeaders(characters, player.player_id)) {
 				const turn = c.became_leader_turn as number;
 				const archKey = c.archetype ? archetypeSpriteKey(c.archetype) : null;
 				events.push({
