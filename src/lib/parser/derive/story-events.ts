@@ -6,13 +6,15 @@
 // `LIMIT 100`, which fed a "100 most recent events" table in the desktop
 // Events tab; that table is gone, and every consumer since reads these rows
 // as per-(player, turn) evidence — expedition markers and science spikes on
-// the Techs tab, legitimacy itemization on the Orders tab. Saves carry
-// 214-688 events, so a newest-100 window spanned only the last 12-22 turns
-// and left every earlier turn unattributable. Shipping all of them, with the
-// player id below on every row, costs 0.9-3.9% of blob bytes — worst case in
-// the corpus +104 KiB uncompressed, +8 KiB gzipped, against Worker limits of
-// 10 MB compressed / 50 MB decompressed. Keep it that way: the ordering is a
-// chronological reading order, not a way to select a prefix.
+// the Techs tab, legitimacy itemization on the Orders tab. A newest-100
+// window spanned only the last 12-22 turns of the corpus and left every
+// earlier turn unattributable. Saves carry 399-1361 rows across the three
+// levels they record events at — player, character and city — and shipping
+// all of them, with the player id below on every row, costs 1.9-8.3% of blob
+// bytes: worst case in the corpus +225 KiB uncompressed, +15 KiB gzipped,
+// against Worker limits of 10 MB compressed / 50 MB decompressed. Keep it
+// that way: the ordering is a chronological reading order, not a way to
+// select a prefix.
 //
 // Consumers bucket by turn, so the turn order itself is invisible to them —
 // but they truncate *within* a turn, and the tiebreaker decides what survives:

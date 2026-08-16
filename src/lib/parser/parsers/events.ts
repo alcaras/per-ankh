@@ -101,14 +101,15 @@ export function parseEventStories(root: Record<string, unknown>): EventStory[] {
 		}
 	}
 
-	// 2. Character-level: only emit if the character carries a parseable
-	//    `player` ATTRIBUTE (note the lowercase — `@_player`, NOT
-	//    `@_Player`).
+	// 2. Character-level: only emit for a character some player owns. An
+	//    unowned character carries `Player="-1"` — the same negative-means-
+	//    nobody encoding parseCharacters and parseCities read off this
+	//    attribute.
 	for (const charNode of asArray(root.Character) as unknown[]) {
 		if (!isElement(charNode)) continue;
 		const charXmlId = requireInt(charNode["@_ID"], "Character.ID");
-		const playerXmlId = optInt(charNode["@_player"]);
-		if (playerXmlId === null) continue;
+		const playerXmlId = optInt(charNode["@_Player"]);
+		if (playerXmlId === null || playerXmlId < 0) continue;
 		for (const { eventType, occurredTurn } of collectEventTurns(
 			charNode.EventStoryTurn,
 		)) {
@@ -122,12 +123,12 @@ export function parseEventStories(root: Record<string, unknown>): EventStory[] {
 		}
 	}
 
-	// 3. City-level: same lowercase `@_player` attribute pattern.
+	// 3. City-level: same ownership attribute, same negative-means-nobody.
 	for (const cityNode of asArray(root.City) as unknown[]) {
 		if (!isElement(cityNode)) continue;
 		const cityXmlId = requireInt(cityNode["@_ID"], "City.ID");
-		const playerXmlId = optInt(cityNode["@_player"]);
-		if (playerXmlId === null) continue;
+		const playerXmlId = optInt(cityNode["@_Player"]);
+		if (playerXmlId === null || playerXmlId < 0) continue;
 		for (const { eventType, occurredTurn } of collectEventTurns(
 			cityNode.EventStoryTurn,
 		)) {

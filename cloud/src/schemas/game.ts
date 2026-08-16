@@ -113,13 +113,17 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         100, and every row carries player_xml_id, the owning player's
 //         xml_id. The cap came from the DuckDB query that fed the desktop
 //         "recent events" table; its consumers now attribute per (player,
-//         turn), and saves carry 214-688 events, so the window covered only
-//         the last 12-22 turns. The id is what those consumers join on: rows
-//         previously carried only player_name, and single-player saves leave
-//         that empty for every player, so the name join handed each of them
-//         every realm's events. Blobs below 2.14.0 fall back to the name, and
-//         leave expedition markers, science-spike sources and legitimacy
-//         event rows missing at every earlier turn.
+//         turn), and the window covered only the last 12-22 turns. The id is
+//         what those consumers join on: rows previously carried only
+//         player_name, and single-player saves leave that empty for every
+//         player, so the name join handed each of them every realm's events.
+//         The array also gains the character- and city-scoped events the save
+//         records — the parser read them off `player`, and the save writes
+//         `Player`, so every one of them was dropped — which populates
+//         primary_character_name and city_name for the first time. Blobs
+//         below 2.14.0 fall back to the name, and leave expedition markers,
+//         science-spike sources and legitimacy event rows missing at every
+//         earlier turn.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
