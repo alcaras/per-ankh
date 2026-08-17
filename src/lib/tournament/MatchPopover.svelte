@@ -9,7 +9,6 @@
 		cloudApi,
 		type TournamentDetail,
 		type TournamentMatch,
-		type TournamentMatchPart,
 		type UserMe,
 		type UserSearchResult,
 	} from "$lib/api-cloud";
@@ -49,7 +48,11 @@
 		matchSlotSlug,
 		matchSlotUserId,
 	} from "$lib/tournament/match-occupant";
-	import { partPlayed, upcomingScheduledParts } from "$lib/tournament/parts";
+	import {
+		CAST_GRACE_MS,
+		partPlayed,
+		upcomingScheduledParts,
+	} from "$lib/tournament/parts";
 	import { seshMatchLine, seshVersus } from "$lib/tournament/sesh";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import {
@@ -424,34 +427,35 @@
 		};
 	});
 
-	// A sitting the casting panel advertises even without broadcast info: a
-	// pending match's *scheduled* part that hasn't aged into the played group.
-	// Unscheduled placeholder parts stay out — there's nothing to turn up for,
-	// the same line the match tables draw (rowIsPendingSitting). One predicate
-	// shared by the filter and the "Needs a caster" note so the two can't
-	// drift; reads the shared clock via partPlayed, so an uncast part falls
-	// out as it ages into the played group.
-	function partAdvertisesSeat(part: TournamentMatchPart): boolean {
-		return (
-			match.status === "pending" &&
-			part.scheduled_at != null &&
-			!partPlayed(part)
-		);
-	}
+	// The sittings whose casting seat is still worth advertising, by part id:
+	// the shared caster-facing set (upcomingScheduledParts + CAST_GRACE_MS), so
+	// this panel, the Cast view, and the matches page's needs-casters filter
+	// can't disagree about whether a seat is still open — that helper also owns
+	// the pending/non-bye and has-a-time guards. Ids because the filter and the
+	// "needs a caster" chip below both test membership: one source, no drift.
+	// The helper reads the shared clock, so a sitting falls out as its grace
+	// window closes.
+	const advertisedPartIds = $derived(
+		new Set(
+			upcomingScheduledParts([match], CAST_GRACE_MS).map(({ part }) => part.id),
+		),
+	);
 	// Read view splits the old combined parts block into two stacked panels: the
 	// schedule (per-part times) and casting (per-part casters + stream links).
 	// castingParts keeps each part's original 1-based number so a split match
 	// labels "Part N" consistently in both panels. Played parts appear only
-	// when they have broadcast info to archive; an upcoming (or live) sitting
-	// appears regardless — one with nobody signed up is exactly the seat this
-	// panel should be advertising, and dropping it made a split match's next
-	// part vanish from the list (its only trace the schedule row above).
+	// when they have broadcast info to archive; a sitting still advertising its
+	// seat appears regardless — one with nobody signed up is exactly the seat
+	// this panel should be recruiting for, and dropping it made a split match's
+	// next part vanish from the list (its only trace the schedule row above).
+	// The two panels are deliberately not row-for-row: the schedule lists every
+	// sitting, casting lists broadcasts plus open seats.
 	const castingParts = $derived(
 		numberedParts.filter(
 			({ part }) =>
 				part.casters.length > 0 ||
 				part.streams.length > 0 ||
-				partAdvertisesSeat(part),
+				advertisedPartIds.has(part.id),
 		),
 	);
 	const hasSecondaryActions = $derived(
@@ -1217,8 +1221,10 @@
 	{/if}
 
 	<!-- Casting: per-sitting casters and their stream links (the broadcast), split
-	     out from the schedule above. Only sittings that have a caster or stream
-	     appear; "Part N" labels them when the match is split. -->
+	     out from the schedule above. A sitting appears when it has a caster or
+	     stream to show, or when its seat is still open (advertisedPartIds), so a
+	     played sitting nobody cast stays out while the next one is listed and
+	     flagged. "Part N" labels them when the match is split. -->
 	{#if !isPlaceholder && castingParts.length > 0}
 		<div
 			class="flex flex-col gap-2 rounded-lg p-3"
@@ -1238,12 +1244,17 @@
 					{/if}
 					<!-- Caster on the left, its stream link(s) to the right. -->
 					<div class="flex items-start gap-3">
-						{#if part.casters.length === 0 && partAdvertisesSeat(part)}
-							<!-- An upcoming sitting with nobody signed up — the reason
-							     it's listed at all is to advertise the seat. A played
-							     part that archived only a stream link keeps rendering
-							     just the link, as before. -->
-							<span class="text-xs italic text-muted">Needs a caster</span>
+						{#if part.casters.length === 0 && advertisedPartIds.has(part.id)}
+							<!-- A sitting with an open seat and nobody signed up — the
+							     reason it's listed at all is to advertise it. Same chip as
+							     the match tables' flag, so one state reads one way
+							     everywhere. shrink-0 keeps the badge intact beside a
+							     stream link pinned right. A played part that archived only
+							     a stream link keeps rendering just the link, as before. -->
+							<span
+								class="shrink-0 rounded bg-orange/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange"
+								>needs a caster</span
+							>
 						{/if}
 						{#if part.casters.length > 0}
 							<!-- Streamer first (with avatar), co-casters appended. Each name
