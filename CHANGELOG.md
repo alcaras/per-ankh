@@ -1,5 +1,41 @@
 # Changelog
 
+## [2026-08-18-392cd92] - 2026-08-18
+
+### Features
+
+- (game-detail) Orders tab — orders and legitimacy, charted and itemized — [9223678](https://github.com/becked/per-ankh/commit/922367861e1b88113de3b553679d81ac0cfaa929)
+- (game-detail) Orders tab v2 — duel tables face off, legitimacy names its events — [18bb988](https://github.com/becked/per-ankh/commit/18bb98875aaa4a0819ddaacf9174fefe264b9a1f)
+- (parser) story_events span the whole game and name their player — [43b2e75](https://github.com/becked/per-ankh/commit/43b2e75dc4ca2665afa19f34dec4fe0162f5989a)
+
+### Fixes
+
+- (game-detail) a ruler carries their regnal numeral into the itemization — [9398d35](https://github.com/becked/per-ankh/commit/9398d3569837fcfb700c807caeeb52256e772da6)
+- (game-detail) a repeat event gets one legitimacy row, not a duplicate key — [bf4ead1](https://github.com/becked/per-ankh/commit/bf4ead145fcb09bb2467a1328a3c4b6a14ae237c)
+- (game-detail) the Orders tab reads the resolved player — [b6491bb](https://github.com/becked/per-ankh/commit/b6491bbf3834952c2e38d566f3d1cf0e27441177)
+- (game-detail) a contribution row renders its own sign — [808bf54](https://github.com/becked/per-ankh/commit/808bf549aca7c2f6b838c7f45cf58a4385e14aba)
+- (bake) orders sources bake only the granters the tab can price — [f877e6f](https://github.com/becked/per-ankh/commit/f877e6ff3d4139a2e30c39858e137afc4ae7f447)
+- (game-detail) the Orders tab draws the page's charts, not its own — [78e2587](https://github.com/becked/per-ankh/commit/78e25878f24a7639c06018491f2cd4fd3ecb559f)
+- (game-detail) difficulty by its in-game name, and no guards that can't fire — [0190b04](https://github.com/becked/per-ankh/commit/0190b0458cdd75f026840882c2aa7a791d81d076)
+- (game-detail) an eliminated realm doesn't itemize its ending orders — [595fd6f](https://github.com/becked/per-ankh/commit/595fd6fb00ef6187e41efaad95c70b55e777dbaa)
+- (game-detail) a nameless player matches no story rows — [6a820fa](https://github.com/becked/per-ankh/commit/6a820fa42b5f6e9ea191aec8c10632c2d37c7bc6)
+- (parser) story_events read oldest turn first — [2e94dbf](https://github.com/becked/per-ankh/commit/2e94dbfb97facff55535dccc515104e6876a74cb)
+- (cloud) 2.13.1 never shipped, so the Worker stops claiming it — [8630779](https://github.com/becked/per-ankh/commit/8630779265164cf74ee5881a17217c800eb26d65)
+- (parser) character and city story events read Player, not player — [f0ab8e6](https://github.com/becked/per-ankh/commit/f0ab8e6eb617615c020a35e40fbeab57b26854ac)
+- (parser) event_logs rows carry their group's owner set — [9e13431](https://github.com/becked/per-ankh/commit/9e13431b47e182c666b6e19c5b7693db2c3b4950)
+- (events) the Events tab filters and labels by player id — [758bb40](https://github.com/becked/per-ankh/commit/758bb40f1d81a07f371bca58bd3c2e64150e24e1)
+- (tournament) the casting panel lists a pending match's upcoming sittings — [9b7debe](https://github.com/becked/per-ankh/commit/9b7debe6aee065e0a3ed955d4f7f2172775fcd3c)
+- (tournament) only a scheduled sitting advertises its casting seat — [25a7127](https://github.com/becked/per-ankh/commit/25a71279d00ff50827dd3125897fad51665fd860)
+
+### Other
+
+- merge-safe ambition rows, unshadow Pick, honest footnotes — [fd993c5](https://github.com/becked/per-ankh/commit/fd993c524db99473772e5be9c71e74ceb10bb64c)
+- (game-detail) the Orders tab itemizes in nation panels — [a1be7c9](https://github.com/becked/per-ankh/commit/a1be7c98d1629729262339ce960d538da09bd81a)
+- (game-detail) the dynasty walk and the ruler's name are shared — [d5ecb4d](https://github.com/becked/per-ankh/commit/d5ecb4da9882b111bd20a60435ac8b11bbeab51d)
+- (parser) the story_events header states what the corpus measures — [f556638](https://github.com/becked/per-ankh/commit/f5566385ee3bfdd6067ffa4bfd73736ae7c544e6)
+- (game-detail) TimelineTab takes the resolved players, not its own — [3cccc70](https://github.com/becked/per-ankh/commit/3cccc70bd1adbddbb38bcc8339e11eb26b167741)
+- (tournament) the casting panel reads the shared cast window — [456a84b](https://github.com/becked/per-ankh/commit/456a84b01dc6bb62edc054a325abad40c4330367)
+
 ## [2026-08-14-aa79556] - 2026-08-14
 
 ### Features
