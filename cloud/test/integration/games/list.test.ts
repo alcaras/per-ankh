@@ -154,6 +154,69 @@ describe("GET /v1/games", () => {
 		expect(body.games[0].game_name).toBe("100% complete");
 	});
 
+	it("?q matches the nation's in-game name, not just its token", async () => {
+		const user = await makeUser({ discordUsername: "list-q-nation-name" });
+		// No game_name: searching by nation is the common case for a save the
+		// owner never renamed, which is exactly when the label has to be
+		// reachable.
+		const hatti = await seedGame(user, { userNation: "NATION_HITTITE" });
+		await seedGame(user, { userNation: "NATION_TAMIL" });
+		await seedGame(user, { userNation: "NATION_ROME" });
+
+		// "Hatti" is what the app labels NATION_HITTITE, and no substring of
+		// the token reaches it — the baked NATION_NAMES table is the only path.
+		const byName = await expectOk<GamesListResponse>(
+			await request.get({ path: "/v1/games?q=Hatti", as: user }),
+		);
+		expect(byName.total).toBe(1);
+		expect(byName.games[0].game_id).toBe(hatti);
+
+		// The substring match on the column stays alongside it: it carries the
+		// label for the other eleven nations, and "Hittite" is still the
+		// adjective a player may type.
+		const byToken = await expectOk<GamesListResponse>(
+			await request.get({ path: "/v1/games?q=hittite", as: user }),
+		);
+		expect(byToken.total).toBe(1);
+		expect(byToken.games[0].game_id).toBe(hatti);
+	});
+
+	it("?q that matches no in-game name searches the column alone", async () => {
+		const user = await makeUser({ discordUsername: "list-q-nation-token" });
+		const rome = await seedGame(user, { userNation: "NATION_ROME" });
+		await seedGame(user, { userNation: "NATION_HITTITE" });
+
+		// No baked name contains "rome", so the nation-name clause is omitted
+		// entirely and the LIKE bindings have to stay aligned without it.
+		const res = await request.get({ path: "/v1/games?q=rome", as: user });
+		const body = await expectOk<GamesListResponse>(res);
+		expect(body.total).toBe(1);
+		expect(body.games[0].game_id).toBe(rome);
+	});
+
+	it("?q on an in-game name composes with the other filters", async () => {
+		const user = await makeUser({ discordUsername: "list-q-nation-combo" });
+		const kept = await seedGame(user, {
+			userNation: "NATION_TAMIL",
+			saveDate: "2025-12-18",
+		});
+		await seedGame(user, {
+			userNation: "NATION_TAMIL",
+			saveDate: "2025-12-19",
+		});
+
+		// The nation-name bindings land between the search and the date
+		// binding, so a filter after the search catches them going in out of
+		// order rather than just miscounted.
+		const res = await request.get({
+			path: "/v1/games?q=Tamilakam&date=2025-12-18",
+			as: user,
+		});
+		const body = await expectOk<GamesListResponse>(res);
+		expect(body.total).toBe(1);
+		expect(body.games[0].game_id).toBe(kept);
+	});
+
 	it("?nation filters on the raw user_nation column", async () => {
 		const user = await makeUser({ discordUsername: "list-nation" });
 		await seedGame(user, {
