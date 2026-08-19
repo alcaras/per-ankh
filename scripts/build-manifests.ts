@@ -35,7 +35,9 @@
 //   src/lib/generated/game-option-names.ts — GAME_OPTION_NAMES
 //   src/lib/generated/goal-names.ts       — GOAL_NAMES
 //   src/lib/generated/name-text.ts        — NAME_TEXT
-//   src/lib/generated/nation-names.ts     — NATION_NAMES
+//   src/lib/generated/nation-names.ts +   — NATION_NAMES, emitted identically
+//   cloud/src/generated/nation-names.ts     to both (frontend labels + the
+//                                           Worker's game search)
 //   src/lib/generated/project-icons.ts    — PROJECT_ICON
 //   src/lib/generated/victory-ordering.ts — VICTORY_ORDERING
 //   src/lib/generated/law-classes.ts +    — LAW_CLASSES + LAW_TO_CLASS, emitted
@@ -117,6 +119,10 @@ const GOAL_NAMES_SIDECAR = resolve(REPO_ROOT, ".bake/goal-names.json");
 const NAME_TEXT_TS = resolve(REPO_ROOT, "src/lib/generated/name-text.ts");
 const NAME_TEXT_SIDECAR = resolve(REPO_ROOT, ".bake/name-text.json");
 const NATION_NAMES_TS = resolve(REPO_ROOT, "src/lib/generated/nation-names.ts");
+const NATION_NAMES_CLOUD_TS = resolve(
+	REPO_ROOT,
+	"cloud/src/generated/nation-names.ts",
+);
 const NATION_NAMES_SIDECAR = resolve(REPO_ROOT, ".bake/nation-names.json");
 const PROJECT_ICONS_TS = resolve(
 	REPO_ROOT,
@@ -895,6 +901,8 @@ async function main(): Promise<void> {
 		NAME_TEXT_TS,
 		emitNameTextTs(nameTextSidecar),
 	);
+	// One generated module, two destinations (frontend + Worker). Format once
+	// against the frontend path; both files are byte-identical.
 	const nationNamesTs = await formatTs(
 		NATION_NAMES_TS,
 		emitNationNamesTs(nationNamesSidecar),
@@ -944,6 +952,10 @@ async function main(): Promise<void> {
 	const nameTextChanged = await writeIfChanged(NAME_TEXT_TS, nameTextTs);
 	const nationNamesChanged = await writeIfChanged(
 		NATION_NAMES_TS,
+		nationNamesTs,
+	);
+	const nationNamesCloudChanged = await writeIfChanged(
+		NATION_NAMES_CLOUD_TS,
 		nationNamesTs,
 	);
 	const projectIconsChanged = await writeIfChanged(
@@ -1011,7 +1023,7 @@ async function main(): Promise<void> {
 		`[manifests] name-text.ts: ${nameTextCount} entries${nameTextChanged ? "" : " (unchanged)"}`,
 	);
 	console.log(
-		`[manifests] nation-names.ts: ${nationNamesCount} entries${nationNamesChanged ? "" : " (unchanged)"}`,
+		`[manifests] nation-names.ts (src + cloud): ${nationNamesCount} entries${nationNamesChanged || nationNamesCloudChanged ? "" : " (unchanged)"}`,
 	);
 	console.log(
 		`[manifests] project-icons.ts: ${projectIconsCount} entries${projectIconsChanged ? "" : " (unchanged)"}`,

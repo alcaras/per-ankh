@@ -27,6 +27,7 @@ import {
 	jsonResponse,
 	sha256Hex,
 } from "./util";
+import { NATION_NAMES } from "./generated/nation-names";
 import { WONDER_CULTURE_PREREQ } from "./generated/wonders";
 import { sessionFromRequest } from "./session";
 import {
@@ -2033,9 +2034,23 @@ export async function handleGameList(
 		// user_nation is the raw enum (e.g. NATION_MAURYA), so a search for
 		// "maurya" matches via substring — searching by nation is the common
 		// case when a save was never given a custom name.
+		//
+		// The token carries the label for eleven of the thirteen nations. Where
+		// it doesn't, the app shows the baked name (NATION_HITTITE is "Hatti",
+		// NATION_TAMIL is "Tamilakam") and no substring of the token reaches it,
+		// so those tokens match on their name as well.
+		const namedNations = Object.entries(NATION_NAMES)
+			.filter(([, name]) => name.toLowerCase().includes(q.toLowerCase()))
+			.map(([token]) => token);
+		const nationNameClause =
+			namedNations.length > 0
+				? ` OR user_nation IN (${namedNations.map(() => "?").join(", ")})`
+				: "";
 		where +=
-			" AND (LOWER(game_name) LIKE ? ESCAPE '\\' OR LOWER(display_name) LIKE ? ESCAPE '\\' OR LOWER(user_nation) LIKE ? ESCAPE '\\')";
-		bindings.push(likePattern, likePattern, likePattern);
+			" AND (LOWER(game_name) LIKE ? ESCAPE '\\' OR LOWER(display_name) LIKE ? ESCAPE '\\' OR LOWER(user_nation) LIKE ? ESCAPE '\\'" +
+			nationNameClause +
+			")";
+		bindings.push(likePattern, likePattern, likePattern, ...namedNations);
 	}
 	if (nation !== null) {
 		// Filter on the raw user_nation column (not the COALESCE'd fallback)

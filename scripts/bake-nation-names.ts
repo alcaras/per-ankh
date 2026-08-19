@@ -23,8 +23,10 @@
 //                                             goal-names bake does.
 //
 // OUTPUT: .bake/nation-names.json (gitignored sidecar). The finalize step
-// (scripts/build-manifests.ts) reads it and emits the runtime module at
-// src/lib/generated/nation-names.ts.
+// (scripts/build-manifests.ts) reads it and emits the runtime module to both
+// src/lib/generated/nation-names.ts (frontend labels) and cloud/src/generated/
+// nation-names.ts (the Worker matches a game search against the name it shows)
+// — same data, both generated, no hand-mirroring, as law-classes does.
 //
 // We emit only entries whose resolved name differs from the runtime formatEnum()
 // fallback — matching the tech/goal/difficulty bakes — so today's table is two
