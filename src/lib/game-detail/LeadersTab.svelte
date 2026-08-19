@@ -9,7 +9,7 @@
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import LeaderCard from "./LeaderCard.svelte";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import { createLegitimacyChartOption, dynastyLeaders } from "./helpers";
 	import type { DetailPlayer, Reign } from "./helpers";
 
@@ -138,7 +138,7 @@
 								category="crests"
 								value={dynasty.player.nation}
 								size={16}
-								alt={formatEnum(dynasty.player.nation, "NATION_")}
+								alt={nationName(dynasty.player.nation)}
 							/>
 						{/if}
 						<span class="truncate">{dynasty.player.label}</span>

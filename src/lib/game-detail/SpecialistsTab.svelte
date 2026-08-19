@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ImprovementData } from "$lib/types/ImprovementData";
 	import type { ChartOption } from "$lib/echarts";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import { CHART_THEME } from "$lib/config";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { ToggleGroup } from "bits-ui";
@@ -346,7 +346,7 @@
 								category="crests"
 								value={player.nation}
 								size={16}
-								alt={formatEnum(player.nation, "NATION_")}
+								alt={nationName(player.nation)}
 							/>
 						{/if}
 						<span class="truncate text-sm font-semibold text-tan"
@@ -436,7 +436,7 @@
 		<TableFilterColumn
 			bind:search={tableState.search}
 			count={`${pivotData.length} ${breakOutByLevel ? "specialists" : "classes"}`}
-			chips={selectedNations.map((n) => formatEnum(n, "NATION_"))}
+			chips={selectedNations.map((n) => nationName(n))}
 		>
 			{#snippet filters()}
 				<NationFilterSelect
@@ -506,7 +506,7 @@
 											category="crests"
 											value={player.nation}
 											size={14}
-											alt={formatEnum(player.nation, "NATION_")}
+											alt={nationName(player.nation)}
 										/>
 									{/if}
 									{player.label}

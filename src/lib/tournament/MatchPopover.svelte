@@ -37,6 +37,7 @@
 		formatRelativeToNow,
 		formatScheduledWithLocal,
 		escapeHtml,
+		nationName,
 	} from "$lib/utils/formatting";
 	import {
 		isMatchParticipant,
@@ -612,7 +613,7 @@
 			},
 		},
 		series: (gameData?.player_history ?? []).map((p, i) => ({
-			name: `${p.player_name}${p.nation ? ` (${formatEnum(p.nation, "NATION_")})` : ""}`,
+			name: `${p.player_name}${p.nation ? ` (${nationName(p.nation)})` : ""}`,
 			type: "line",
 			showSymbol: false,
 			smooth: true,
@@ -740,7 +741,7 @@
 					category="crests"
 					value={nation}
 					size={16}
-					alt={formatEnum(nation, "NATION_")}
+					alt={nationName(nation)}
 				/>
 			{/if}
 			{#if archetype}

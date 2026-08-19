@@ -6,7 +6,7 @@ import {
 	type CollectionInfo,
 } from "$lib/api-cloud";
 import type { PageMeta } from "$lib/page-meta";
-import { formatEnum, formatGameTitle } from "$lib/utils/formatting";
+import { formatEnum, formatGameTitle, nationName } from "$lib/utils/formatting";
 import { rethrowRateLimit } from "$lib/utils/load-errors";
 import { loginBounce } from "$lib/utils/safe-next";
 import type { PageLoad } from "./$types";
@@ -30,7 +30,7 @@ function buildMeta(game: {
 	};
 	const parts: string[] = [];
 	if (gd.winner_civilization) {
-		parts.push(formatEnum(gd.winner_civilization, "NATION_"));
+		parts.push(nationName(gd.winner_civilization));
 	} else if (gd.winner_name) {
 		parts.push(gd.winner_name);
 	}

@@ -10,7 +10,7 @@
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import Popover from "$lib/ui/Popover.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
-	import { formatEnum, formatGameTitle } from "$lib/utils/formatting";
+	import { formatGameTitle, nationName } from "$lib/utils/formatting";
 	import {
 		CHART_THEME,
 		getChartColor,
@@ -91,7 +91,7 @@
 		},
 		xAxis: {
 			type: "category",
-			data: bundle.nations.map((n) => formatEnum(n.nation, "NATION_")),
+			data: bundle.nations.map((n) => nationName(n.nation)),
 			axisLabel: { rotate: 45, interval: 0 },
 		},
 		yAxis: { type: "value", name: "Games Played" },
@@ -152,7 +152,7 @@
 					const p = params as { value: [string, string, string] };
 					const nations = JSON.parse(p.value[1]) as string[];
 					const nationsFormatted = nations
-						.map((n) => formatEnum(n, "NATION_"))
+						.map((n) => nationName(n))
 						.join("<br/>");
 					return `${p.value[0]}<br/>${nationsFormatted}`;
 				},
@@ -298,7 +298,7 @@
 						category="crests"
 						value={game.nation}
 						size={16}
-						alt={formatEnum(game.nation, "NATION_")}
+						alt={nationName(game.nation)}
 					/>
 				{/if}
 				<span class="truncate">{game.title}</span>

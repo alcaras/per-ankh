@@ -24,7 +24,7 @@
 	import type { FullGameData, PlayerRosterEntry } from "$lib/parser/types";
 	import type { WorkerMessage } from "$lib/parser/worker";
 	import { cloudApi, ApiError, DuplicateUploadError } from "$lib/api-cloud";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import RadioGroup from "$lib/ui/RadioGroup.svelte";
 	import RadioItem from "$lib/ui/RadioItem.svelte";
 
@@ -202,8 +202,7 @@
 		if (picker.selected === OBSERVER) return "Upload as observer";
 		const human = picker.humans.find((h) => h.player_index === picker.selected);
 		if (!human) return "Upload";
-		const label =
-			human.player_name || formatEnum(human.nation, "NATION_") || "player";
+		const label = human.player_name || nationName(human.nation) || "player";
 		return `Upload as ${label}`;
 	});
 
@@ -334,11 +333,11 @@
 					<RadioItem value={String(human.player_index)} />
 					<div class="flex-1 text-sm text-tan">
 						<div class="font-bold" style="color: rgb(var(--color-bright));">
-							{human.player_name || formatEnum(human.nation, "NATION_") || "—"}
+							{human.player_name || nationName(human.nation) || "—"}
 						</div>
 						{#if human.player_name}
 							<div class="text-xs text-gray-400">
-								{formatEnum(human.nation, "NATION_") ?? "—"}
+								{nationName(human.nation) ?? "—"}
 								{#if human.online_id}
 									<span class="ml-2 font-mono">
 										id:{human.online_id.slice(0, 8)}…

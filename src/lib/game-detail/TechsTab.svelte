@@ -15,7 +15,7 @@
 	import type { ChartOption, ECharts } from "$lib/echarts";
 	import Chart from "$lib/Chart.svelte";
 	import ChartContainer from "$lib/ChartContainer.svelte";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import { CHART_THEME, getNationChartColor } from "$lib/config";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import EventRail, {
@@ -111,9 +111,7 @@
 						...histories.flatMap((player) => player.data.map((d) => d.turn)),
 					);
 					const seriesLabels = histories.map(
-						(p) =>
-							playerById.get(p.player_id)?.label ??
-							formatEnum(p.nation, "NATION_"),
+						(p) => playerById.get(p.player_id)?.label ?? nationName(p.nation),
 					);
 
 					return {
@@ -173,7 +171,7 @@
 							const rp = playerById.get(player.player_id);
 							const color = rp?.color ?? getNationChartColor(player.nation, i);
 							return {
-								name: rp?.label ?? formatEnum(player.nation, "NATION_"),
+								name: rp?.label ?? nationName(player.nation),
 								type: "line" as const,
 								data: player.data.map((d) => [
 									d.turn,

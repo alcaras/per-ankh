@@ -18,7 +18,7 @@
 	import type { SelectOption } from "$lib/ui/types";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { getCivilizationColor } from "$lib/config";
-	import { formatDate, formatEnum } from "$lib/utils/formatting";
+	import { formatDate, formatEnum, nationName } from "$lib/utils/formatting";
 	import { mapSizeLabel } from "$lib/map-settings";
 
 	// Nation accent color for the name cell (falls back to inheriting the
@@ -113,7 +113,7 @@
 		{ value: "", label: "All nations" },
 		...nationOptions.map((n) => ({
 			value: n,
-			label: formatEnum(n, "NATION_"),
+			label: nationName(n),
 		})),
 	]);
 
@@ -330,7 +330,7 @@
 									category="crests"
 									value={game.user_nation}
 									size={16}
-									alt={formatEnum(game.user_nation, "NATION_")}
+									alt={nationName(game.user_nation)}
 								/>
 							{/if}
 							<span
@@ -339,9 +339,7 @@
 									? `color: ${nationColor(game.user_nation)}`
 									: undefined}
 							>
-								{game.user_nation
-									? formatEnum(game.user_nation, "NATION_")
-									: "—"}
+								{game.user_nation ? nationName(game.user_nation) : "—"}
 							</span>
 						</span>
 						<span class="truncate text-tan opacity-80">

@@ -3,7 +3,7 @@
 	// owning table's `filters` array directly; emits `nation:<NATION_*>` values
 	// and renders matching chips elsewhere. Styled as a games-table dark select.
 	import { Select } from "bits-ui";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 
 	let {
 		nations,
@@ -40,11 +40,11 @@
 						{#each nations as nation (nation)}
 							<Select.Item
 								value={`nation:${nation}`}
-								label={formatEnum(nation, "NATION_")}
+								label={nationName(nation)}
 								class="flex cursor-pointer items-center justify-between px-3 py-2 text-sm text-tan hover:bg-surface-raised data-[highlighted]:bg-surface-raised"
 							>
 								{#snippet children({ selected })}
-									{formatEnum(nation, "NATION_")}
+									{nationName(nation)}
 									{#if selected}
 										<span class="font-bold text-orange">✓</span>
 									{/if}

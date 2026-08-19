@@ -57,9 +57,9 @@
 	import {
 		archetypeSpriteKey,
 		formatArchetype,
-		formatEnum,
 		formatRelativeToNow,
 		formatScheduledInZone,
+		nationName,
 	} from "$lib/utils/formatting";
 	import { resolve } from "$app/paths";
 
@@ -191,7 +191,7 @@
 					category="crests"
 					value={nation}
 					size={16}
-					alt={formatEnum(nation, "NATION_")}
+					alt={nationName(nation)}
 				/>
 			{/if}
 			<!-- Starting-ruler archetype glyph beside the crest — the game facts

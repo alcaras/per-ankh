@@ -11,6 +11,7 @@
 		formatDate,
 		formatGameTitle,
 		escapeHtml,
+		nationName,
 	} from "$lib/utils/formatting";
 	import { DIFFICULTY_NAMES } from "$lib/generated/difficulty-names";
 	import { mapScriptLabel, mapSizeLabel } from "$lib/map-settings";
@@ -69,9 +70,9 @@
 		);
 		const winnerName = game.winner_name ?? winningPlayer?.player_name ?? null;
 		if (winnerName && game.winner_nation) {
-			return `${winnerName} (${formatEnum(game.winner_nation, "NATION_")})`;
+			return `${winnerName} (${nationName(game.winner_nation)})`;
 		}
-		if (game.winner_nation) return formatEnum(game.winner_nation, "NATION_");
+		if (game.winner_nation) return nationName(game.winner_nation);
 		return "—";
 	});
 
@@ -107,7 +108,7 @@
 			},
 		},
 		series: orderedPlayers.map((p, i) => ({
-			name: `${p.player_name}${p.nation ? ` (${formatEnum(p.nation, "NATION_")})` : ""}`,
+			name: `${p.player_name}${p.nation ? ` (${nationName(p.nation)})` : ""}`,
 			type: "line",
 			showSymbol: false,
 			smooth: true,
@@ -210,11 +211,11 @@
 						category="crests"
 						value={humanNation}
 						size={10}
-						alt={formatEnum(humanNation, "NATION_")}
+						alt={nationName(humanNation)}
 					/>
 				{/if}
 			{/snippet}
-			{humanNation ? formatEnum(humanNation, "NATION_") : "—"}
+			{humanNation ? nationName(humanNation) : "—"}
 		</StatTile>
 
 		<StatTile label="Winner">

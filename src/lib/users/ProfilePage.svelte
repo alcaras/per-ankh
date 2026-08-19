@@ -22,7 +22,7 @@
 	import ScopeRow from "$lib/users/ScopeRow.svelte";
 	import VideosTab from "$lib/users/VideosTab.svelte";
 	import StatsView from "$lib/stats/StatsView.svelte";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import type { ProfilePageData } from "$lib/users/profile-load";
 
 	let { data }: { data: ProfilePageData } = $props();
@@ -150,14 +150,14 @@
 										category="crests"
 										value={summary.favorite_nation}
 										size={10}
-										alt={formatEnum(summary.favorite_nation, "NATION_")}
+										alt={nationName(summary.favorite_nation)}
 									/>
 								{/if}
 								Favorite Nation
 							</p>
 							<p class="text-[10px] font-bold text-bright">
 								{summary.favorite_nation
-									? formatEnum(summary.favorite_nation, "NATION_")
+									? nationName(summary.favorite_nation)
 									: "—"}
 							</p>
 						</div>

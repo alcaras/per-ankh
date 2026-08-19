@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MapTile } from "$lib/types/MapTile";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import { getCivilizationColor } from "$lib/config";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { improvementDisplayName } from "$lib/game-detail/helpers";
@@ -42,7 +42,7 @@
 
 	const headerLabel = $derived.by(() => {
 		if (cityName) return cityName;
-		if (tile.owner_nation) return formatEnum(tile.owner_nation, "NATION_");
+		if (tile.owner_nation) return nationName(tile.owner_nation);
 		return null;
 	});
 

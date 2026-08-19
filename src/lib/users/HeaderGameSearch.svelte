@@ -21,7 +21,7 @@
 	import {
 		formatGameTitle,
 		formatDate,
-		formatEnum,
+		nationName,
 	} from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
 
@@ -273,7 +273,7 @@
 								<span class="text-xs font-semibold text-tan">{titleFor(g)}</span
 								>
 								<span class="text-[10px] text-tan opacity-60">
-									{#if g.user_nation}{formatEnum(g.user_nation, "NATION_")} ·
+									{#if g.user_nation}{nationName(g.user_nation)} ·
 									{/if}{formatDate(g.save_date)}
 								</span>
 							</button>

@@ -15,7 +15,7 @@
 	import {
 		archetypeSpriteKey,
 		formatArchetype,
-		formatEnum,
+		nationName,
 	} from "$lib/utils/formatting";
 	import {
 		matchDisplayStatus,
@@ -448,7 +448,7 @@
 					category="crests"
 					value={aNation}
 					size={14}
-					alt={formatEnum(aNation, "NATION_")}
+					alt={nationName(aNation)}
 				/>
 			{/if}
 			{#if aArchetype}
@@ -474,7 +474,7 @@
 					category="crests"
 					value={bNation}
 					size={14}
-					alt={formatEnum(bNation, "NATION_")}
+					alt={nationName(bNation)}
 				/>
 			{/if}
 			{#if bArchetype}

@@ -8,7 +8,7 @@
 	import type { YieldHistory } from "$lib/types/YieldHistory";
 	import type { PlayerWonder } from "$lib/types/PlayerWonder";
 	import type { GameReligion } from "$lib/types/GameReligion";
-	import { formatEnum, stripMarkup } from "$lib/utils/formatting";
+	import { formatEnum, stripMarkup, nationName } from "$lib/utils/formatting";
 	import { TECH_NAMES } from "$lib/generated/tech-names";
 	import {
 		type TimelineEvent,
@@ -490,10 +490,10 @@
 											category="crests"
 											value={player.nation}
 											size={18}
-											alt={formatEnum(player.nation, "NATION_")}
+											alt={nationName(player.nation)}
 										/>
 									{/if}
-									{formatEnum(player.nation, "NATION_")}
+									{nationName(player.nation)}
 								</div>
 							</th>
 						{/each}
@@ -538,7 +538,7 @@
 														category="crests"
 														value={leader.nation}
 														size={12}
-														alt={formatEnum(leader.nation, "NATION_")}
+														alt={nationName(leader.nation)}
 													/>
 												{/if}
 												<span

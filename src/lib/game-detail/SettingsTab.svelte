@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { GameDetails } from "$lib/types/GameDetails";
 	import type { DetailPlayer } from "./helpers";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import { DIFFICULTY_NAMES } from "$lib/generated/difficulty-names";
 	import {
 		mapScriptLabel,
@@ -262,10 +262,10 @@
 										category="crests"
 										value={player.nation}
 										size={16}
-										alt={formatEnum(player.nation, "NATION_")}
+										alt={nationName(player.nation)}
 									/>
 								{/if}
-								{formatEnum(player.nation, "NATION_")}
+								{nationName(player.nation)}
 							</span>
 						</td>
 						<td class="border-b border-surface p-3 text-left text-tan"

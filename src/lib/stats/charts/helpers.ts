@@ -3,13 +3,16 @@
 
 import type { ChartOption } from "$lib/echarts";
 import { CHART_THEME } from "$lib/config";
-import { formatEnum } from "$lib/utils/formatting";
+import { formatEnum, nationName } from "$lib/utils/formatting";
 
 // Strip leaderless enum prefix for axis labels. The stats SQL returns
 // raw values (NATION_PERSIA, TRAIT_INTELLIGENT, etc.); the chart axes
 // need humanized text.
+
+// Nations are the exception: two of them aren't their token (NATION_HITTITE is
+// Hatti, NATION_TAMIL is Tamilakam), so axis labels take the shared helper.
 export function fmtNation(value: string): string {
-	return formatEnum(value, "NATION_");
+	return nationName(value);
 }
 export function fmtTrait(value: string): string {
 	return formatEnum(value, "TRAIT_");

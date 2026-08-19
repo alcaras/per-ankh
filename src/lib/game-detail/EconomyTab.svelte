@@ -26,7 +26,7 @@
 	import { CHART_THEME } from "$lib/config";
 	import Chart from "$lib/Chart.svelte";
 	import ChartContainer from "$lib/ChartContainer.svelte";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import EventRail, {
 		TOOLTIP_BORDER,
 		TOOLTIP_MUTED,
@@ -785,7 +785,7 @@
 									category="crests"
 									value={w.player.nation}
 									size={18}
-									alt={formatEnum(w.player.nation, "NATION_")}
+									alt={nationName(w.player.nation)}
 								/>
 							{/if}
 							<span class="font-bold" style="color: {w.player.color};"
@@ -830,7 +830,7 @@
 							category="crests"
 							value={eco.player.nation}
 							size={18}
-							alt={formatEnum(eco.player.nation, "NATION_")}
+							alt={nationName(eco.player.nation)}
 						/>
 					{/if}
 					<span class="font-bold" style="color: {eco.player.color};"
@@ -889,7 +889,7 @@
 									category="crests"
 									value={ledger.player.nation}
 									size={16}
-									alt={formatEnum(ledger.player.nation, "NATION_")}
+									alt={nationName(ledger.player.nation)}
 								/>
 							{/if}
 							<span

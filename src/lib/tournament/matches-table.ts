@@ -6,7 +6,7 @@ import type {
 	TournamentMatchPartStream,
 	UserMe,
 } from "$lib/api-cloud";
-import { formatEnum } from "$lib/utils/formatting";
+import { nationName } from "$lib/utils/formatting";
 import {
 	isMatchParticipant,
 	matchSlotDisplayName,
@@ -348,7 +348,7 @@ export function matchRowMatchesSearch(
 		(matchSlotDisplayName(m, side, slotLabels) ?? "").toLowerCase().includes(t);
 	const nationHit = (side: "a" | "b") => {
 		const n = matchSlotNation(m, side);
-		return n != null && formatEnum(n, "NATION_").toLowerCase().includes(t);
+		return n != null && nationName(n).toLowerCase().includes(t);
 	};
 	return (
 		nameHit("a") ||

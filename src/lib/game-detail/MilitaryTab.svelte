@@ -11,6 +11,7 @@
 		archetypeSpriteKey,
 		formatArchetype,
 		formatEnum,
+		nationName,
 	} from "$lib/utils/formatting";
 	import { CHART_THEME, getNationChartColor } from "$lib/config";
 	import { LAW_TO_CLASS } from "$lib/generated/law-classes";
@@ -568,9 +569,7 @@
 			legend: {
 				show: false,
 				data: playerHistory.map(
-					(p) =>
-						playerById.get(p.player_id)?.label ??
-						formatEnum(p.nation, "NATION_"),
+					(p) => playerById.get(p.player_id)?.label ?? nationName(p.nation),
 				),
 				selected: chartFilter,
 			},
@@ -595,7 +594,7 @@
 				const rp = playerById.get(player.player_id);
 				const fillColor = rp?.color ?? getNationChartColor(player.nation, i);
 				return {
-					name: rp?.label ?? formatEnum(player.nation, "NATION_"),
+					name: rp?.label ?? nationName(player.nation),
 					type: "line" as const,
 					data: player.history.map((h) => [h.turn, h.military_power]),
 					itemStyle: { color: rp?.color },
@@ -954,7 +953,7 @@
 							category="crests"
 							value={card.player.nation}
 							size={18}
-							alt={formatEnum(card.player.nation, "NATION_")}
+							alt={nationName(card.player.nation)}
 						/>
 					{/if}
 					{card.player.label}
@@ -1004,7 +1003,7 @@
 		<TableFilterColumn
 			bind:search={tableState.search}
 			count={`${unitPivotData.length} unit types`}
-			chips={selectedUnitNations.map((n) => formatEnum(n, "NATION_"))}
+			chips={selectedUnitNations.map((n) => nationName(n))}
 		>
 			{#snippet filters()}
 				<NationFilterSelect
@@ -1050,7 +1049,7 @@
 											category="crests"
 											value={player.nation}
 											size={14}
-											alt={formatEnum(player.nation, "NATION_")}
+											alt={nationName(player.nation)}
 										/>
 									{/if}
 									{player.label}

@@ -2,7 +2,7 @@
 	import type { CityStatistics } from "$lib/types/CityStatistics";
 	import type { PlayerNationEntry } from "$lib/parser/types";
 	import { Select } from "bits-ui";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import { getCivilizationColor } from "$lib/config";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import TableFilterColumn from "./TableFilterColumn.svelte";
@@ -152,7 +152,7 @@
 		<TableFilterColumn
 			bind:search={tableState.search}
 			count={`${filteredSortedCities.length} / ${cityStatistics.cities.length} cities`}
-			chips={selectedCityNations.map((n) => formatEnum(n, "NATION_"))}
+			chips={selectedCityNations.map((n) => nationName(n))}
 		>
 			{#snippet filters()}
 				<NationFilterSelect

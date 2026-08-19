@@ -4,7 +4,7 @@
 	import type { ChartOption } from "$lib/echarts";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import { Select } from "bits-ui";
-	import { formatEnum, stripMarkup } from "$lib/utils/formatting";
+	import { formatEnum, stripMarkup, nationName } from "$lib/utils/formatting";
 	import { CHART_THEME, getNationChartColor } from "$lib/config";
 	import TableFilterColumn from "./TableFilterColumn.svelte";
 	import {
@@ -61,9 +61,7 @@
 			legend: {
 				show: false,
 				data: playerHistory.map(
-					(p) =>
-						playerById.get(p.player_id)?.label ??
-						formatEnum(p.nation, "NATION_"),
+					(p) => playerById.get(p.player_id)?.label ?? nationName(p.nation),
 				),
 				selected: chartFilter,
 			},
@@ -94,7 +92,7 @@
 				const rp = playerById.get(player.player_id);
 				const color = rp?.color ?? getNationChartColor(player.nation, i);
 				return {
-					name: rp?.label ?? formatEnum(player.nation, "NATION_"),
+					name: rp?.label ?? nationName(player.nation),
 					type: "line",
 					data: player.history.map((h) => [h.turn, h.points]),
 					itemStyle: { color },

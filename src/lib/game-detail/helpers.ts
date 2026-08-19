@@ -12,12 +12,13 @@ import type { PlayerInfo } from "$lib/types/PlayerInfo";
 import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
-import { formatEnum, toRomanNumeral } from "$lib/utils/formatting";
+import { formatEnum, toRomanNumeral, nationName } from "$lib/utils/formatting";
 import { toRgba } from "$lib/utils/color";
 import { CHART_THEME, getChartColor, getNationChartColor } from "$lib/config";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 import { UNIT_STATS } from "$lib/generated/unit-stats";
 import { TECH_NAMES } from "$lib/generated/tech-names";
+import { NAME_TEXT } from "$lib/generated/name-text";
 import { IMPROVEMENT_NAMES } from "$lib/generated/improvement-names";
 import { SHRINE_TYPE, IMPROVEMENT_ICON } from "$lib/generated/science-yields";
 import { PROJECT_ICON } from "$lib/generated/project-icons";
@@ -222,6 +223,23 @@ export const YIELD_CHART_CONFIG: YieldChartConfig[] = [
 	},
 ];
 
+// ─── Character names ─────────────────────────────────────────────────
+
+/**
+ * The name Old World gives a character, from the save's `NAME_*` token.
+ *
+ * The token is an internal id, not a name: it only title-cases into the right
+ * name by coincidence, which it does for most of the base game and for none of
+ * Hatti (whose pool is `NAME_HITTITE_MALE03`-style indices). The baked table
+ * carries every name that resolves to something else — the Hatti pool, prefixed
+ * tokens (`NAME_TUTOR_ARISTOTLE` → Aristotle), hyphenated names
+ * (`NAME_SAMMU_RAMAT` → Sammu-ramat) — and `formatEnum` still covers the rest,
+ * including tokens from game content newer than the baked reference snapshot.
+ */
+function characterName(token: string): string {
+	return NAME_TEXT[token] ?? formatEnum(token, "NAME_");
+}
+
 // ─── Shared data-table styling (game-detail data tabs) ───────────────
 // Visual tokens matching the player games table: a dark blue-gray frame
 // holding surface rounded card rows under a surface-sunken toolbar-style header
@@ -242,7 +260,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		label: "Nation",
 		defaultVisible: true,
 		getValue: (c) => c.owner_nation,
-		format: (v) => formatEnum(v as string | null, "NATION_"),
+		format: (v) => nationName(v as string | null),
 		iconCategory: "crests",
 	},
 	{
@@ -252,7 +270,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		getValue: (c) => c.founder_nation,
 		// Blank (not "Unknown") when the founder can't be resolved — pre-2.6.0
 		// blobs ship no player_nations sidecar.
-		format: (v) => (v ? formatEnum(v as string, "NATION_") : ""),
+		format: (v) => (v ? nationName(v as string) : ""),
 		iconCategory: "crests",
 	},
 	{
@@ -320,7 +338,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		label: "Governor",
 		defaultVisible: false,
 		getValue: (c) => c.governor_name,
-		format: (v) => (v ? formatEnum(v as string, "NAME_") : "—"),
+		format: (v) => (v ? characterName(v as string) : "—"),
 	},
 	{
 		key: "unit_production_count",
@@ -859,7 +877,7 @@ export function resolvePlayers(
 	return order.map((id, ordinal) => {
 		const { playerName, nation } = byId.get(id)!;
 		const collides = (nationCounts.get(nation ?? "") ?? 0) > 1;
-		const base = formatEnum(nation, "NATION_");
+		const base = nationName(nation);
 		const name = playerName.length > 0 ? playerName : `#${id}`;
 		return {
 			playerId: id,
@@ -1047,15 +1065,16 @@ export function dynastyLeaders(
 /**
  * A ruler's first name, carrying their regnal numeral when they share a name
  * with an earlier ruler (`suffix > 1`) — the first of a name carries none,
- * matching Old World. The numeral is appended after `formatEnum` so its
- * trailing-digit strip can't eat it (and it's Roman letters anyway).
+ * matching Old World. The numeral is appended after the name resolves so
+ * `formatEnum`'s trailing-digit strip can't eat it (and it's Roman letters
+ * anyway).
  *
  * Null for a character the save left unnamed, so each surface supplies its
  * own fallback rather than inheriting `formatEnum`'s "Unknown".
  */
 export function rulerName(c: CharacterInfo): string | null {
 	if (!c.first_name) return null;
-	const name = formatEnum(c.first_name, "NAME_");
+	const name = characterName(c.first_name);
 	return c.suffix > 1 ? `${name} ${toRomanNumeral(c.suffix)}` : name;
 }
 
@@ -1285,7 +1304,7 @@ export function createYieldChartOption(
 			const rp = byId.get(playerYield.player_id);
 			const color = rp?.color ?? getPlayerColor(playerYield.nation, i);
 			return {
-				name: rp?.label ?? formatEnum(playerYield.nation, "NATION_"),
+				name: rp?.label ?? nationName(playerYield.nation),
 				type: "line",
 				data: playerYield.data.map((d: YieldDataPoint) => [
 					d.turn,
@@ -1317,7 +1336,7 @@ export function createLegitimacyChartOption(
 
 	const byId = new Map(players.map((p) => [p.playerId, p]));
 	const labelOf = (row: PlayerHistory): string =>
-		byId.get(row.player_id)?.label ?? formatEnum(row.nation, "NATION_");
+		byId.get(row.player_id)?.label ?? nationName(row.nation);
 
 	// Value x-axis with a small pad so the area fill doesn't clip at the edges.
 	const turns = playerHistory[0]?.history.map((h) => h.turn) ?? [];

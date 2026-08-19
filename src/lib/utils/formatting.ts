@@ -1,3 +1,5 @@
+import { NATION_NAMES } from "$lib/generated/nation-names";
+
 /**
  * Formats enum-style values from the backend by removing prefixes and applying title casing.
  *
@@ -29,6 +31,23 @@ export function formatEnum(
 
 	// Remove trailing numbers (e.g., "Garrison 1" -> "Garrison", "Poet 2" -> "Poet")
 	return formatted.replace(/\s+\d+$/, "");
+}
+
+/**
+ * The name Old World gives a nation, from its `NATION_*` token — the label to
+ * use everywhere a nation is shown.
+ *
+ * The token is an internal id, not the display name: `NATION_HITTITE` is
+ * **Hatti** in game ("Hittite" is the adjective) and `NATION_TAMIL` is
+ * **Tamilakam**. The other eleven nations title-case correctly, so the baked
+ * table carries only the two and `formatEnum` covers the rest — including any
+ * nation from game content newer than the baked reference snapshot. Nullish
+ * input still yields `formatEnum`'s "Unknown".
+ */
+export function nationName(nation: string | null | undefined): string {
+	return (
+		(nation ? NATION_NAMES[nation] : undefined) ?? formatEnum(nation, "NATION_")
+	);
 }
 
 /**
@@ -405,9 +424,9 @@ export function formatGameTitle(game: {
 		return game.game_name!;
 	}
 
-	// Format nation by removing NATION_ prefix and capitalizing
+	// Fall back to the nation's in-game name plus the turn count
 	const formattedNation = game.save_owner_nation
-		? formatEnum(game.save_owner_nation, "NATION_")
+		? nationName(game.save_owner_nation)
 		: null;
 
 	// Fallback: use nation and turns if available

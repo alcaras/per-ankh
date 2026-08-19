@@ -31,7 +31,7 @@
 		ProjectProducedInfo,
 	} from "$lib/parser/types";
 	import { Tabs } from "bits-ui";
-	import { formatEnum, formatDate } from "$lib/utils/formatting";
+	import { formatEnum, formatDate, nationName } from "$lib/utils/formatting";
 	import { mapScriptLabel } from "$lib/map-settings";
 	import {
 		PLAYER_CHART_KEYS,
@@ -336,13 +336,13 @@
 						category="crests"
 						value={humanNation}
 						size={14}
-						alt={formatEnum(humanNation, "NATION_")}
+						alt={nationName(humanNation)}
 					/>
 				{/if}
 				Player
 			</p>
 			<p class="text-lg font-bold" style="color: rgb(var(--color-bright));">
-				{formatEnum(humanNation, "NATION_")}
+				{nationName(humanNation)}
 			</p>
 		</div>
 
@@ -367,17 +367,13 @@
 						     empty (Old World writes "" for solo saves whose player
 						     never set a custom name) do we fall back to the
 						     uploader's account name, and only if they won. -->
-						{gameDetails.winner_name} ({formatEnum(
+						{gameDetails.winner_name} ({nationName(
 							gameDetails.winner_civilization,
-							"NATION_",
 						)})
 					{:else if userWon && userDisplayName}
-						{userDisplayName} ({formatEnum(
-							gameDetails.winner_civilization,
-							"NATION_",
-						)})
+						{userDisplayName} ({nationName(gameDetails.winner_civilization)})
 					{:else}
-						{formatEnum(gameDetails.winner_civilization, "NATION_")}
+						{nationName(gameDetails.winner_civilization)}
 					{/if}
 				{:else}
 					-

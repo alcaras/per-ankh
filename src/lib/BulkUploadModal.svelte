@@ -32,7 +32,7 @@
 		type PlayerChoice,
 	} from "$lib/parser/upload-helpers";
 	import { cloudApi, ApiError, DuplicateUploadError } from "$lib/api-cloud";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
 	import RadioGroup from "$lib/ui/RadioGroup.svelte";
 	import RadioItem from "$lib/ui/RadioItem.svelte";
@@ -468,7 +468,7 @@
 	// Display name for a player option: the in-game leader name, falling back to
 	// the nation, then an em-dash (mirrors the picker's prior fallback chain).
 	function displayName(p: PlayerChoice): string {
-		return p.player_name || formatEnum(p.nation, "NATION_") || "—";
+		return p.player_name || nationName(p.nation) || "—";
 	}
 
 	// "3 cities · 95 turns · Winner" — the per-option stats line.
@@ -609,7 +609,7 @@
 											>
 											{#if human.player_name && human.nation}
 												<span class="text-gray-400">
-													— {formatEnum(human.nation, "NATION_")}</span
+													— {nationName(human.nation)}</span
 												>
 											{/if}
 											<div class="text-xs text-gray-400">
@@ -627,7 +627,7 @@
 									{slotBLabel ?? "Slot B"} played as:
 									<span class="text-tan">
 										{slotBHuman?.player_name ||
-											formatEnum(slotBHuman?.nation ?? null, "NATION_") ||
+											nationName(slotBHuman?.nation ?? null) ||
 											"—"}
 									</span>
 									<span class="opacity-60">(auto-inferred)</span>
@@ -666,7 +666,7 @@
 											>
 											{#if human.player_name && human.nation}
 												<span class="text-gray-400">
-													— {formatEnum(human.nation, "NATION_")}</span
+													— {nationName(human.nation)}</span
 												>
 											{/if}
 											<div class="text-xs text-gray-400">

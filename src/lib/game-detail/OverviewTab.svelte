@@ -9,7 +9,7 @@
 	import type { ImprovementData } from "$lib/types/ImprovementData";
 	import type { GameReligion } from "$lib/types/GameReligion";
 	import type { PlayerWonder } from "$lib/types/PlayerWonder";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import {
 		type PlayerSummary,
 		type SpriteCategory,
@@ -196,8 +196,8 @@
 				// Save owner first, then other humans alphabetically, then AI alphabetically
 				if (a.isSaveOwner !== b.isSaveOwner) return a.isSaveOwner ? -1 : 1;
 				if (a.isHuman !== b.isHuman) return a.isHuman ? -1 : 1;
-				const aNation = formatEnum(a.nation, "NATION_");
-				const bNation = formatEnum(b.nation, "NATION_");
+				const aNation = nationName(a.nation);
+				const bNation = nationName(b.nation);
 				return aNation.localeCompare(bNation);
 			}),
 	);
@@ -358,7 +358,7 @@
 							category="crests"
 							value={player.nation}
 							size={24}
-							alt={formatEnum(player.nation, "NATION_")}
+							alt={nationName(player.nation)}
 						/>
 					{/if}
 					<div class="min-w-0 flex-1">
@@ -368,11 +368,11 @@
 									{player.playerName}
 								</span>
 								<span class="text-sm text-gray-400">
-									({formatEnum(player.nation, "NATION_")})
+									({nationName(player.nation)})
 								</span>
 							{:else}
 								<span class="text-lg font-bold" style="color: {borderColor};">
-									{formatEnum(player.nation, "NATION_")}
+									{nationName(player.nation)}
 								</span>
 								{#if player.isHuman}
 									<span class="text-sm text-gray-400">(Human)</span>

@@ -3,7 +3,7 @@
 	// Lives on the Economy tab under the worker-turn ledger: the ledger prices
 	// the work, this table is the inventory it bought.
 	import type { ImprovementData } from "$lib/types/ImprovementData";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import TableFilterColumn from "./TableFilterColumn.svelte";
 	import NationFilterSelect from "./NationFilterSelect.svelte";
@@ -145,7 +145,7 @@
 		<TableFilterColumn
 			bind:search={tableState.search}
 			count={`${improvementPivotData.length} improvements`}
-			chips={selectedImprovementNations.map((n) => formatEnum(n, "NATION_"))}
+			chips={selectedImprovementNations.map((n) => nationName(n))}
 		>
 			{#snippet filters()}
 				<NationFilterSelect
@@ -191,7 +191,7 @@
 											category="crests"
 											value={player.nation}
 											size={14}
-											alt={formatEnum(player.nation, "NATION_")}
+											alt={nationName(player.nation)}
 										/>
 									{/if}
 									{player.label}

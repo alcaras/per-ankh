@@ -9,7 +9,7 @@
 		CULTURE_LEVELS,
 		WONDER_CULTURE_PREREQ,
 	} from "$lib/generated/wonders";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { type DetailPlayer, improvementDisplayName } from "./helpers";
 
@@ -64,9 +64,7 @@
 							turn: built.completed_turn,
 							builderLabel:
 								player?.label ??
-								(built.nation
-									? formatEnum(built.nation, "NATION_")
-									: built.player_name),
+								(built.nation ? nationName(built.nation) : built.player_name),
 							builderColor: player?.color,
 							builderNation: player?.nation ?? built.nation,
 						};
