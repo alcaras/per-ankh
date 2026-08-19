@@ -236,7 +236,7 @@
 					     projected eventual total ("~" while results in flight can
 					     still swing it — see projected-totals.ts). -->
 					<div class="flex gap-1">
-						{#each hero.divisions[0]?.rounds ?? [] as _, i (i)}
+						{#each Array.from({ length: hero.divisions[0]?.rounds.length ?? 0 }, (_, i) => i) as i (i)}
 							<span
 								class="flex-1 text-center text-[10px] uppercase tracking-wide {hero.divisions.some(
 									(d) => d.rounds[i].current,
@@ -270,9 +270,9 @@
 											aria-valuenow={r.done}
 											aria-label="Matches reported — {d.label}"
 										>
-											{#each Array.from({ length: r.total }) as _, p (p)}
+											{#each Array.from({ length: r.total }, (_, p) => p < r.done) as reported, p (p)}
 												<span
-													class="h-1.5 flex-1 rounded-full {p < r.done
+													class="h-1.5 flex-1 rounded-full {reported
 														? 'bg-orange'
 														: 'bg-input'}"
 												></span>
@@ -314,10 +314,9 @@
 								aria-valuenow={hero.championship.reported}
 								aria-label="Matches reported — Championship"
 							>
-								{#each Array.from( { length: hero.championship.total }, ) as _, p (p)}
+								{#each Array.from({ length: hero.championship.total }, (_, p) => p < hero.championship.reported) as reported, p (p)}
 									<span
-										class="h-1.5 flex-1 rounded-full {p <
-										hero.championship.reported
+										class="h-1.5 flex-1 rounded-full {reported
 											? 'bg-orange'
 											: 'bg-input'}"
 									></span>
