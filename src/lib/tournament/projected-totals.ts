@@ -16,6 +16,11 @@
 // in practice the floater branches cancel (one more player advancing at 3-1
 // means one fewer game in the 2-2 bucket next round) and the qualifier count
 // comes out deterministic even when the match count doesn't.
+//
+// Cross-checked against the real pairing engine (pairSwissRound) over
+// randomized futures in cloud/src/tournament/projected-totals.test.ts — the
+// SvelteKit tree has no test runner, and that suite is where the engine is
+// importable.
 
 export interface SwissProjection {
 	// Matches still to be GENERATED in future rounds (excludes matches that
