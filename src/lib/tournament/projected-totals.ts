@@ -45,6 +45,13 @@ interface BranchState {
 
 const key = (r: Rec) => `${r.wins}-${r.losses}`;
 
+// Branch identity: two futures holding the same census with the same tallies
+// are interchangeable from here on, so only one needs walking. Every
+// cross-record game forks, and without collapsing on this k such games cost
+// 2^k branches instead of the k+1 distinct outcomes they actually produce.
+const signature = (b: BranchState) =>
+	`${[...b.census.entries()].sort().join()}|${b.matches}|${b.qualifiers}`;
+
 function bump(census: Map<string, number>, r: Rec, by: number) {
 	const k = key(r);
 	const next = (census.get(k) ?? 0) + by;
@@ -200,20 +207,30 @@ export function projectSwissDivision(
 	for (const [a, b] of pendingPairs) {
 		const same = a.wins === b.wins && a.losses === b.losses;
 		const forked: BranchState[] = [];
+		const seen = new Set<string>();
+		// Collapse duplicates as they land: a round's pending list repeats the
+		// same record pairing many times over, and the outcomes commute — only
+		// how many of them the higher record won reaches the next round.
+		const keep = (br: BranchState) => {
+			const sig = signature(br);
+			if (seen.has(sig)) return;
+			seen.add(sig);
+			forked.push(br);
+		};
 		for (const br of branches) {
 			const present = same
 				? (br.census.get(key(a)) ?? 0) >= 2
 				: (br.census.get(key(a)) ?? 0) >= 1 &&
 					(br.census.get(key(b)) ?? 0) >= 1;
 			if (!present) {
-				forked.push(br);
+				keep(br);
 				continue;
 			}
 			bump(br.census, a, -1);
 			bump(br.census, b, -1);
 			if (same) {
 				br.qualifiers += settle(br.census, a, b, config);
-				forked.push(br);
+				keep(br);
 			} else {
 				const win: BranchState = {
 					census: new Map(br.census),
@@ -222,7 +239,8 @@ export function projectSwissDivision(
 				};
 				win.qualifiers += settle(win.census, a, b, config);
 				br.qualifiers += settle(br.census, b, a, config);
-				forked.push(win, br);
+				keep(win);
+				keep(br);
 			}
 		}
 		branches = forked;
@@ -233,7 +251,7 @@ export function projectSwissDivision(
 		const seen = new Set<string>();
 		for (const b of branches) {
 			for (const nb of playRound(b, config)) {
-				const sig = `${[...nb.census.entries()].sort().join()}|${nb.matches}|${nb.qualifiers}`;
+				const sig = signature(nb);
 				if (!seen.has(sig)) {
 					seen.add(sig);
 					next.push(nb);
