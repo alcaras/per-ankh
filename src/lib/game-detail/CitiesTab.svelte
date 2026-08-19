@@ -2,7 +2,7 @@
 	import type { CityStatistics } from "$lib/types/CityStatistics";
 	import type { PlayerNationEntry } from "$lib/parser/types";
 	import { Select } from "bits-ui";
-	import { nationName } from "$lib/utils/formatting";
+	import { characterName, nationName } from "$lib/utils/formatting";
 	import { getCivilizationColor } from "$lib/config";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import TableFilterColumn from "./TableFilterColumn.svelte";
@@ -101,12 +101,16 @@
 
 		if (tableState.search) {
 			const term = tableState.search.toLowerCase();
+			// Nation and governor match the label the column shows, not the enum
+			// behind it — "Hatti" and "Muwattalli" are what a reader can type.
 			cities = cities.filter(
 				(city) =>
 					city.city_name.toLowerCase().includes(term) ||
-					(city.owner_nation?.toLowerCase().includes(term) ?? false) ||
+					(city.owner_nation != null &&
+						nationName(city.owner_nation).toLowerCase().includes(term)) ||
 					(city.family?.toLowerCase().includes(term) ?? false) ||
-					(city.governor_name?.toLowerCase().includes(term) ?? false),
+					(city.governor_name != null &&
+						characterName(city.governor_name).toLowerCase().includes(term)),
 			);
 		}
 

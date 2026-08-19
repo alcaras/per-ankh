@@ -337,7 +337,7 @@
 						</div>
 						{#if human.player_name}
 							<div class="text-xs text-gray-400">
-								{nationName(human.nation) ?? "—"}
+								{nationName(human.nation)}
 								{#if human.online_id}
 									<span class="ml-2 font-mono">
 										id:{human.online_id.slice(0, 8)}…

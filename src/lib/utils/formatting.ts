@@ -1,3 +1,4 @@
+import { NAME_TEXT } from "$lib/generated/name-text";
 import { NATION_NAMES } from "$lib/generated/nation-names";
 
 /**
@@ -48,6 +49,21 @@ export function nationName(nation: string | null | undefined): string {
 	return (
 		(nation ? NATION_NAMES[nation] : undefined) ?? formatEnum(nation, "NATION_")
 	);
+}
+
+/**
+ * The name Old World gives a character, from the save's `NAME_*` token.
+ *
+ * The token is an internal id, not a name: it only title-cases into the right
+ * name by coincidence, which it does for most of the base game and for none of
+ * Hatti (whose pool is `NAME_HITTITE_MALE03`-style indices). The baked table
+ * carries every name that resolves to something else — the Hatti pool, prefixed
+ * tokens (`NAME_TUTOR_ARISTOTLE` → Aristotle), hyphenated names
+ * (`NAME_SAMMU_RAMAT` → Sammu-ramat) — and `formatEnum` still covers the rest,
+ * including tokens from game content newer than the baked reference snapshot.
+ */
+export function characterName(token: string | null | undefined): string {
+	return (token ? NAME_TEXT[token] : undefined) ?? formatEnum(token, "NAME_");
 }
 
 /**

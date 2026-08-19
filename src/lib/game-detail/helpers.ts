@@ -12,13 +12,17 @@ import type { PlayerInfo } from "$lib/types/PlayerInfo";
 import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
-import { formatEnum, toRomanNumeral, nationName } from "$lib/utils/formatting";
+import {
+	formatEnum,
+	toRomanNumeral,
+	characterName,
+	nationName,
+} from "$lib/utils/formatting";
 import { toRgba } from "$lib/utils/color";
 import { CHART_THEME, getChartColor, getNationChartColor } from "$lib/config";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 import { UNIT_STATS } from "$lib/generated/unit-stats";
 import { TECH_NAMES } from "$lib/generated/tech-names";
-import { NAME_TEXT } from "$lib/generated/name-text";
 import { IMPROVEMENT_NAMES } from "$lib/generated/improvement-names";
 import { SHRINE_TYPE, IMPROVEMENT_ICON } from "$lib/generated/science-yields";
 import { PROJECT_ICON } from "$lib/generated/project-icons";
@@ -78,7 +82,7 @@ export type CityColumn = {
 	defaultVisible: boolean;
 	getValue: (city: CityRow) => string | number | boolean | null;
 	format?: (value: string | number | boolean | null, city: CityRow) => string;
-	sortValue?: (city: CityRow) => string | number;
+	sortValue?: (city: CityRow) => string | number | null;
 	// When set, the cell prefixes a SpriteIcon resolved from the raw getValue()
 	// enum (e.g. "crests" for NATION_*/FAMILY_*, "culture" for CULTURE_*).
 	iconCategory?: SpriteCategory;
@@ -223,23 +227,6 @@ export const YIELD_CHART_CONFIG: YieldChartConfig[] = [
 	},
 ];
 
-// ─── Character names ─────────────────────────────────────────────────
-
-/**
- * The name Old World gives a character, from the save's `NAME_*` token.
- *
- * The token is an internal id, not a name: it only title-cases into the right
- * name by coincidence, which it does for most of the base game and for none of
- * Hatti (whose pool is `NAME_HITTITE_MALE03`-style indices). The baked table
- * carries every name that resolves to something else — the Hatti pool, prefixed
- * tokens (`NAME_TUTOR_ARISTOTLE` → Aristotle), hyphenated names
- * (`NAME_SAMMU_RAMAT` → Sammu-ramat) — and `formatEnum` still covers the rest,
- * including tokens from game content newer than the baked reference snapshot.
- */
-function characterName(token: string): string {
-	return NAME_TEXT[token] ?? formatEnum(token, "NAME_");
-}
-
 // ─── Shared data-table styling (game-detail data tabs) ───────────────
 // Visual tokens matching the player games table: a dark blue-gray frame
 // holding surface rounded card rows under a surface-sunken toolbar-style header
@@ -339,6 +326,9 @@ export const CITY_COLUMNS: CityColumn[] = [
 		defaultVisible: false,
 		getValue: (c) => c.governor_name,
 		format: (v) => (v ? characterName(v as string) : "—"),
+		// Sort on the resolved name — the token orders the Hatti pool as
+		// NAME_HITTITE_MALE01…26, which reads as unsorted in the column.
+		sortValue: (c) => (c.governor_name ? characterName(c.governor_name) : null),
 	},
 	{
 		key: "unit_production_count",
