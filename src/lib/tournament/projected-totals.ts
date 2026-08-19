@@ -94,7 +94,11 @@ function sortedBuckets(census: Map<string, number>): Array<[Rec, number]> {
 function playRound(start: BranchState, config: Config): BranchState[] {
 	const buckets = sortedBuckets(start.census);
 	const total = buckets.reduce((acc, [, n]) => acc + n, 0);
-	if (total < 2) return [start];
+	// Only an empty field ends the walk. One active player still plays every
+	// remaining round — the engine hands the lone slot a bye each time, and
+	// those free wins can carry them to the advance threshold, so stopping at
+	// two would under-count qualifiers.
+	if (total === 0) return [start];
 
 	interface Frame {
 		next: Map<string, number>;
@@ -109,10 +113,17 @@ function playRound(start: BranchState, config: Config): BranchState[] {
 	if (total % 2 === 1) {
 		// Odd field: the worst-ranked active takes the bye — recorded as a free
 		// win, which can itself advance a player one short of the threshold.
+		//
 		// Approximation: the engine skips players who already had a bye
-		// (pickByeRecipient), which this census can't see — when the true
-		// recipient sits in a different bucket the walk drifts by at most one
-		// player-bucket. Even fields (the common case) never reach this.
+		// (pickByeRecipient), which a record census can't see. That only bites
+		// once the field has run out of never-byed players and someone takes a
+		// SECOND bye — until then the worst-ranked slot is a fresh player every
+		// round and this guess is exact. Byes are not rare on an even field:
+		// advancers and eliminated players don't leave in pairs, so parity
+		// flips mid-Swiss (a 28-player division byes in about half of its
+		// futures). It's the REPEAT that needs a field small enough to exhaust
+		// them — measured against the engine, none at n >= 6 under 3W/3L,
+		// including the odd 27 and 29 that take a bye every single round.
 		const [rec, n] = buckets[buckets.length - 1];
 		buckets[buckets.length - 1] = [rec, n - 1];
 		if (rec.wins + 1 >= config.winsToAdvance) first.qualifiers += 1;
