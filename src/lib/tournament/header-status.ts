@@ -95,9 +95,10 @@ export type HeaderHero =
 			// The single bar both lanes merge into — the divisions play Swiss
 			// apart and reunite in one championship bracket. Pills once the
 			// bracket is live; until then `total` is the PROJECTED bracket size
-			// (every advancer, single-elim → qualifiers − 1), surfaced as
-			// "N matches · awaiting Swiss". `exact` is false while Swiss results
-			// still in flight can change the qualifier count.
+			// (every advancer, single-elim → qualifiers − 1) at the midpoint of
+			// its envelope, surfaced as "N matches · awaiting Swiss". `exact` is
+			// false while Swiss results still in flight can change the qualifier
+			// count.
 			championship: {
 				reported: number;
 				total: number;
@@ -108,8 +109,10 @@ export type HeaderHero =
 			// PROJECTED eventual total — existing matches plus a census-walk
 			// projection of the remaining Swiss rounds and the qualifiers-sized
 			// championship bracket (see projected-totals.ts). The projection is a
-			// min/max envelope; `projectedExact` is false when results still in
-			// flight can swing the total (shown as "~N").
+			// min/max envelope and this is its MIDPOINT — "~N" reads as "about
+			// N", so naming the ceiling would keep the denominator high and
+			// progress reading behind. `projectedExact` is false while results
+			// still in flight can swing the total (shown as "~N").
 			playedOverall: number;
 			projectedTotal: number;
 			projectedExact: boolean;

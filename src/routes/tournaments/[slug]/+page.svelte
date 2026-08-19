@@ -503,8 +503,16 @@
 				).length;
 				const champMin = Math.max(0, qualifiersMin - 1 - champExisting);
 				const champMax = Math.max(0, qualifiersMax - 1 - champExisting);
+				const champMid = Math.round((champMin + champMax) / 2);
 				const projectedMin = playable.length + remainingMin + champMin;
 				const projectedMax = playable.length + remainingMax + champMax;
+				// "~N" reads as "about N", so show the middle of the envelope
+				// rather than its ceiling: a 28/28 field opens at 141–147, and
+				// naming the max would run the denominator 6 high and leave
+				// progress reading behind for most of the tournament. It can
+				// never read past 100% — projectedMin already counts every
+				// match that exists, so the midpoint is >= playedOverall.
+				const projectedTotal = Math.round((projectedMin + projectedMax) / 2);
 
 				// Swiss rounds generate per division, so the two can be split — one
 				// division finishing round N and starting N+1 while the other is
@@ -546,7 +554,9 @@
 					reported: champPlayable.filter((m) => m.status !== "pending").length,
 					// Until the bracket exists, size the merged bar by the projection
 					// so it renders as a stage-to-come rather than a done 0/0.
-					total: Math.max(champPlayable.length, champMax + champExisting),
+					// Midpoint of the envelope, for the same reason the overall
+					// tally uses one — this renders under the same "~N".
+					total: Math.max(champPlayable.length, champMid + champExisting),
 					active: t.status === "championship",
 					exact: champMin === champMax,
 				};
@@ -568,7 +578,7 @@
 						divisions,
 						championship,
 						playedOverall,
-						projectedTotal: projectedMax,
+						projectedTotal,
 						projectedExact: projectedMin === projectedMax,
 					};
 				}
@@ -588,7 +598,7 @@
 					divisions,
 					championship,
 					playedOverall,
-					projectedTotal: projectedMax,
+					projectedTotal,
 					projectedExact: projectedMin === projectedMax,
 				};
 			}
