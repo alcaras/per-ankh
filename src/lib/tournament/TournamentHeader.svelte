@@ -229,7 +229,7 @@
 						Sign-ups
 					</p>
 					<p class="text-sm text-tan">
-						<span class="text-base font-bold">{hero.signedUp}</span>
+						<span class="font-bold">{hero.signedUp}</span>
 						signed up
 						<span class="opacity-60">
 							· {hero.divisionAName}
@@ -274,14 +274,14 @@
 					<p class="text-xs uppercase tracking-wide text-tan opacity-50">
 						Progress
 					</p>
-					<p class="whitespace-nowrap text-sm font-bold text-tan">
+					<p class="whitespace-nowrap text-sm text-tan">
 						{hero.phaseLabel}
 					</p>
 				</div>
 				<!-- Two-row grid with a shared auto-sized label column, so both bars
 				     span exactly the same width regardless of label length. -->
 				<div
-					class="grid min-w-[16rem] flex-1 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2"
+					class="grid min-w-[16rem] flex-1 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-3"
 				>
 					<!-- Shared Swiss round labels, lit while some division is playing
 					     that round. Beside them, matches played so far against the
@@ -299,7 +299,7 @@
 						{/each}
 					</div>
 					<span
-						class="justify-self-end whitespace-nowrap text-xs italic text-tan opacity-70"
+						class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
 					>
 						{hero.playedOverall} of {hero.projectedExact
 							? ""
@@ -334,7 +334,7 @@
 							</span>
 						</div>
 						<span
-							class="justify-self-end whitespace-nowrap text-xs italic text-tan opacity-70"
+							class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
 						>
 							{#if d.total > 0}{d.reported} of {d.total} reported{/if}
 						</span>
@@ -364,7 +364,7 @@
 						>
 					</div>
 					<span
-						class="justify-self-end whitespace-nowrap text-xs italic text-tan opacity-70"
+						class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
 					>
 						{#if hero.championship.active}
 							{hero.championship.reported} of {hero.championship.total} reported
@@ -402,7 +402,9 @@
 						<SpriteIcon category="icons" value="ACHIEVEMENT" size={24} />
 					</span>
 					<div class="min-w-0">
-						<p class="text-xs uppercase tracking-wide text-tan">Champion</p>
+						<p class="text-xs uppercase tracking-wide text-tan opacity-50">
+							Champion
+						</p>
 						{#if hero.champion}
 							<p class="text-sm">
 								<ProfileLink
@@ -433,7 +435,9 @@
 							<SpriteIcon category="icons" value="GOAL_STARTED" size={22} />
 						</span>
 						<div class="min-w-0">
-							<p class="text-xs uppercase tracking-wide text-tan">Runner-up</p>
+							<p class="text-xs uppercase tracking-wide text-tan opacity-50">
+								Runner-up
+							</p>
 							<p class="text-sm">
 								<ProfileLink
 									userId={hero.finalistUserId}
