@@ -76,11 +76,6 @@ export type HeaderHero =
 	| {
 			kind: "in-progress";
 			phaseLabel: string;
-			// "Round 2" — or "Rounds 2–3" while the divisions' independently
-			// generated rounds are split (one finishes its round and starts the
-			// next before the other catches up).
-			roundLabel: string;
-			totalRounds: number;
 			// One Swiss lane per division: a cell per Swiss round, the division's
 			// OPEN round rendered as per-match pills and the others as solid
 			// fills (full for played rounds, empty for ungenerated ones). Byes

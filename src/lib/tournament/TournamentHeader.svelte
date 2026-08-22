@@ -220,10 +220,8 @@
 					<p class="text-xs uppercase tracking-wide text-tan opacity-50">
 						Progress
 					</p>
-					<p class="whitespace-nowrap text-sm text-tan">
-						<span class="opacity-70">{hero.phaseLabel} ·</span>
-						<span class="font-bold">{hero.roundLabel}</span>
-						<span class="opacity-70">of {hero.totalRounds}</span>
+					<p class="whitespace-nowrap text-sm font-bold text-tan">
+						{hero.phaseLabel}
 					</p>
 				</div>
 				<!-- Two-row grid with a shared auto-sized label column, so both bars

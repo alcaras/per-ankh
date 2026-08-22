@@ -544,7 +544,6 @@
 						reported: inSwiss ? (openRound?.done ?? 0) : 0,
 						total: inSwiss ? (openRound?.total ?? 0) : 0,
 						rounds,
-						open,
 					};
 				});
 				const champPlayable = playable.filter(
@@ -560,41 +559,13 @@
 					active: t.status === "championship",
 					exact: champMin === champMax,
 				};
-				if (t.status === "championship") {
-					const rounds = data.bracket.rounds;
-					const current = rounds.reduce(
-						(a, b) => (b.round_number > a.round_number ? b : a),
-						rounds[0],
-					);
-					const slotCount = data.bracket.slots.length;
-					const depth =
-						slotCount > 1 ? Math.ceil(Math.log2(slotCount)) : rounds.length;
-					const round = current?.round_number ?? 1;
-					return {
-						kind: "in-progress",
-						phaseLabel: "Championship",
-						roundLabel: `Round ${round}`,
-						totalRounds: Math.max(depth, round),
-						divisions,
-						championship,
-						playedOverall,
-						projectedTotal,
-						projectedExact: projectedMin === projectedMax,
-					};
-				}
-				const openRounds = divisions
-					.filter((d) => d.open > 0)
-					.map((d) => d.open);
-				const loRound = Math.min(...openRounds);
-				const hiRound = Math.max(...openRounds);
 				return {
 					kind: "in-progress",
-					phaseLabel: "Swiss",
-					roundLabel:
-						loRound !== hiRound
-							? `Rounds ${loRound}–${hiRound}`
-							: `Round ${hiRound}`,
-					totalRounds: t.swiss_max_rounds,
+					// The stage, and only the stage — the strip below names the
+					// rounds, lane by lane, which one figure can't: the divisions
+					// generate rounds independently and routinely sit on different
+					// ones.
+					phaseLabel: inSwiss ? "Swiss" : "Championship",
 					divisions,
 					championship,
 					playedOverall,
