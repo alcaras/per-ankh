@@ -121,3 +121,6 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Claude Code worktrees (created by --worktree and by `remote-control --spawn worktree`)
+.claude/worktrees/
