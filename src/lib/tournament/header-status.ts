@@ -76,11 +76,12 @@ export type HeaderHero =
 	| {
 			kind: "in-progress";
 			phaseLabel: string;
-			// One Swiss lane per division: a cell per Swiss round, the division's
-			// OPEN round rendered as per-match pills and the others as solid
-			// fills (full for played rounds, empty for ungenerated ones). Byes
-			// are excluded throughout. `label` renders beneath the lane;
-			// reported/total are the open round's counts for the side column.
+			// One Swiss lane per division: a cell per Swiss round, drawn as a
+			// fixed row of dots filled to done/total — collapsing to a solid
+			// line once the round is closed, and empty for a round not yet
+			// generated. Byes are excluded throughout. `label` renders beneath
+			// the lane; reported/total are the open round's counts for the side
+			// column.
 			divisions: Array<{
 				label: string;
 				reported: number;
@@ -88,8 +89,8 @@ export type HeaderHero =
 				rounds: Array<{ done: number; total: number; current: boolean }>;
 			}>;
 			// The single bar both lanes merge into — the divisions play Swiss
-			// apart and reunite in one championship bracket. Pills once the
-			// bracket is live; until then `total` is the PROJECTED bracket size
+			// apart and reunite in one championship bracket. Drawn as the lanes'
+			// dots; until the bracket is live `total` is the PROJECTED size
 			// (every advancer, single-elim → qualifiers − 1) at the midpoint of
 			// its envelope, surfaced as "N matches · awaiting Swiss". `exact` is
 			// false while Swiss results still in flight can change the qualifier

@@ -11,7 +11,6 @@
 	} from "$lib/api-cloud";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
-	import Progress from "$lib/ui/Progress.svelte";
 	import SignupPopover from "./SignupPopover.svelte";
 	import TransitionPopover from "./TransitionPopover.svelte";
 	import type { HeaderHero, HeaderStatusMeta } from "./header-status";
@@ -63,6 +62,32 @@
 		return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 	}
 
+	// Every cell of the progress strip draws the same number of dots, so a dot
+	// is a fraction of a round rather than a match: rounds hold different match
+	// counts (a 28-player division opens on 14, a 32-player one on 16), and one
+	// dot per match sized them differently cell to cell. The exact figures stay
+	// beside the lane and in the ARIA values; the dots carry the shape.
+	//
+	// The dots are a fixed 6px circle, spaced evenly across the cell rather
+	// than stretched to fill it — stretching is what made them read as dashes.
+	// Even spacing divides a cell into one slot per dot plus one, so the COUNT
+	// is what sets the gap: 24 leaves the dots a little over half a diameter
+	// apart, where 12 left them two apart and read as scattered. The solid line
+	// a closed round collapses to stays thinner (h-1), which is the width
+	// main's single progress bar had.
+	const DOTS_PER_ROUND = 24;
+
+	// Lit dots for one cell — nearest dot, but never rounding away either end:
+	// a reported match always lights one, and a full row always means a round
+	// with nothing outstanding.
+	function litDots(done: number, total: number, dots: number): number {
+		if (total <= 0) return 0;
+		const lit = Math.round((done / total) * dots);
+		if (done > 0 && lit === 0) return 1;
+		if (done < total && lit === dots) return dots - 1;
+		return lit;
+	}
+
 	const startsLabel = $derived(shortDate(tournament.starts_at));
 	const endedLabel = $derived(shortDate(tournament.completed_at));
 
@@ -91,6 +116,28 @@
 		return out;
 	});
 </script>
+
+<!-- One cell of the progress strip. A closed round — every match in it
+     reported — collapses to a solid line; until then it's the fixed dot row,
+     filled to done/total. `live` brightens the track of a round that has
+     opened, so an open round with nothing reported yet still reads apart from
+     the rounds still to come. -->
+{#snippet track(done: number, total: number, live: boolean, dots: number)}
+	{#if total > 0 && done === total}
+		<span class="h-1 flex-1 rounded-full bg-orange"></span>
+	{:else}
+		{@const lit = litDots(done, total, dots)}
+		{#each Array.from({ length: dots }, (_, p) => p < lit) as reported, p (p)}
+			<span
+				class="h-1.5 w-1.5 rounded-full {reported
+					? 'bg-orange'
+					: live
+						? 'bg-input-focus'
+						: 'bg-input'}"
+			></span>
+		{/each}
+	{/if}
+{/snippet}
 
 <header class="mb-3">
 	<!-- Meta panel: owner/admins, format, players, date — grouped. First block of
@@ -209,6 +256,13 @@
 				{/if}
 			</div>
 		{:else if hero.kind === "in-progress"}
+			<!-- The merged championship bar spans the full lane width, so it takes
+			     one round cell's worth of dots for every cell above it — which is
+			     what keeps its rhythm continuous with the lanes'. Spacing is even,
+			     so a cell of N dots divides into N + 1 slots; the bar spans every
+			     cell's slots but only has ends of its own once. -->
+			{@const champDots =
+				(hero.divisions[0]?.rounds.length ?? 1) * (DOTS_PER_ROUND + 1) - 1}
 			<div class="flex flex-wrap items-center gap-4">
 				<span
 					class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-full border border-white"
@@ -251,40 +305,26 @@
 							? ""
 							: "~"}{hero.projectedTotal} matches
 					</span>
-					<!-- One Swiss lane per division: a cell per round, the division's
-					     open round as per-match pills (filled as reports land), played
-					     rounds as solid fills, future rounds empty. The lanes merge
-					     into the single championship bar below. -->
+					<!-- One Swiss lane per division: a cell per round — a solid line
+					     once the round is closed, an empty dot row for a round still
+					     to come, and a dot row filling as reports land in between.
+					     The lanes merge into the championship bar. -->
 					{#each hero.divisions as d (d.label)}
 						<div class="flex flex-col gap-0.5">
 							<div class="flex items-center gap-1">
 								{#each d.rounds as r, i (i)}
-									{#if r.current}
-										<div
-											class="flex flex-1 gap-0.5"
-											role="progressbar"
-											aria-valuemin={0}
-											aria-valuemax={r.total}
-											aria-valuenow={r.done}
-											aria-label="Matches reported — {d.label}"
-										>
-											{#each Array.from({ length: r.total }, (_, p) => p < r.done) as reported, p (p)}
-												<span
-													class="h-1.5 flex-1 rounded-full {reported
-														? 'bg-orange'
-														: 'bg-input'}"
-												></span>
-											{/each}
-										</div>
-									{:else}
-										<div class="flex-1">
-											<Progress
-												value={r.done}
-												max={Math.max(r.total, 1)}
-												indicatorClass="bg-orange"
-											/>
-										</div>
-									{/if}
+									<div
+										class="flex flex-1 justify-evenly"
+										role="progressbar"
+										aria-valuemin={0}
+										aria-valuemax={r.total}
+										aria-valuenow={r.done}
+										aria-label={r.current
+											? `Matches reported — ${d.label}`
+											: undefined}
+									>
+										{@render track(r.done, r.total, r.current, DOTS_PER_ROUND)}
+									</div>
 								{/each}
 							</div>
 							<span
@@ -300,38 +340,27 @@
 						</span>
 					{/each}
 					<!-- The merged championship bar — the divisions reunite in one
-					     bracket. Pills once it's live; sized by the projected bracket
-					     until then. -->
+					     bracket. Same dots as the lanes, spanning their full width;
+					     sized by the projected bracket until it's live. -->
 					<div class="flex flex-col gap-0.5">
-						{#if hero.championship.active}
-							<div
-								class="flex gap-0.5"
-								role="progressbar"
-								aria-valuemin={0}
-								aria-valuemax={hero.championship.total}
-								aria-valuenow={hero.championship.reported}
-								aria-label="Matches reported — Championship"
-							>
-								{#each Array.from({ length: hero.championship.total }, (_, p) => p < hero.championship.reported) as reported, p (p)}
-									<span
-										class="h-1.5 flex-1 rounded-full {reported
-											? 'bg-orange'
-											: 'bg-input'}"
-									></span>
-								{/each}
-							</div>
-						{:else}
-							<Progress
-								value={hero.championship.reported}
-								max={Math.max(hero.championship.total, 1)}
-								indicatorClass="bg-orange"
-							/>
-						{/if}
+						<div
+							class="flex justify-evenly"
+							role="progressbar"
+							aria-valuemin={0}
+							aria-valuemax={hero.championship.total}
+							aria-valuenow={hero.championship.reported}
+							aria-label="Matches reported — Championship"
+						>
+							{@render track(
+								hero.championship.reported,
+								hero.championship.total,
+								hero.championship.active,
+								champDots,
+							)}
+						</div>
 						<span
-							class="text-center text-[10px] uppercase tracking-wide {hero
-								.championship.active
-								? 'font-bold text-orange'
-								: 'text-tan opacity-50'}">Championship</span
+							class="truncate text-center text-[10px] uppercase tracking-wide text-tan opacity-50"
+							>Championship</span
 						>
 					</div>
 					<span
@@ -341,7 +370,7 @@
 							{hero.championship.reported} of {hero.championship.total} reported
 						{:else if hero.championship.total > 0}
 							{hero.championship.exact ? "" : "~"}{hero.championship.total}
-							matches · awaiting Swiss
+							matches
 						{/if}
 					</span>
 				</div>
