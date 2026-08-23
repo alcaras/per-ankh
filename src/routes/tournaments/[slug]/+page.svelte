@@ -561,11 +561,6 @@
 				};
 				return {
 					kind: "in-progress",
-					// The stage, and only the stage — the strip below names the
-					// rounds, lane by lane, which one figure can't: the divisions
-					// generate rounds independently and routinely sit on different
-					// ones.
-					phaseLabel: inSwiss ? "Swiss" : "Championship",
 					divisions,
 					championship,
 					playedOverall,

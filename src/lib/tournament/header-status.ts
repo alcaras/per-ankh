@@ -75,7 +75,6 @@ export type HeaderHero =
 	  }
 	| {
 			kind: "in-progress";
-			phaseLabel: string;
 			// One Swiss lane per division: a cell per Swiss round, drawn as a
 			// fixed row of dots filled to done/total — collapsing to a solid
 			// line once the round is closed, and empty for a round not yet
