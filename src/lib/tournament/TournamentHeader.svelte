@@ -68,13 +68,15 @@
 	// dot per match sized them differently cell to cell. The exact figures stay
 	// beside the lane and in the ARIA values; the dots carry the shape.
 	//
-	// The dots are a fixed 6px circle, spaced evenly across the cell rather
+	// The dots are a fixed 4px circle, spaced evenly across the cell rather
 	// than stretched to fill it — stretching is what made them read as dashes.
 	// Even spacing divides a cell into one slot per dot plus one, so the COUNT
-	// is what sets the gap: 24 leaves the dots a little over half a diameter
-	// apart, where 12 left them two apart and read as scattered. The solid line
-	// a closed round collapses to stays thinner (h-1), which is the width
-	// main's single progress bar had.
+	// is what sets the gap: 24 keeps them close, where 12 left them two
+	// diameters apart and read as scattered. Size and count are tuned
+	// together — shrinking the circle widens that gap in diameters at a fixed
+	// count. The solid line a closed round collapses to is the same h-1
+	// weight, and so is the championship dash, so every mark in the strip
+	// reads at one thickness.
 	const DOTS_PER_ROUND = 24;
 
 	// Lit dots for one cell — nearest dot, but never rounding away either end:
@@ -129,7 +131,7 @@
 		{@const lit = litDots(done, total, dots)}
 		{#each Array.from({ length: dots }, (_, p) => p < lit) as reported, p (p)}
 			<span
-				class="h-1.5 w-1.5 rounded-full {reported
+				class="h-1 w-1 rounded-full {reported
 					? 'bg-orange'
 					: live
 						? 'bg-input-focus'
@@ -137,6 +139,24 @@
 			></span>
 		{/each}
 	{/if}
+{/snippet}
+
+<!-- The championship bar: one dash per bracket match, each stretching to fill
+     the width. The lanes' dots are a proportional fill — 124 of them for a
+     15-match bracket — so they read as a gauge; a bracket is few enough games
+     to account for exactly, and the halving rounds make the last few the ones
+     that matter. `live` matches the lanes: the bracket reads dimmer while it
+     is still a projection during Swiss. -->
+{#snippet dashes(done: number, total: number, live: boolean)}
+	{#each Array.from({ length: total }, (_, i) => i < done) as reported, i (i)}
+		<span
+			class="h-1 flex-1 rounded-full {reported
+				? 'bg-orange'
+				: live
+					? 'bg-input-focus'
+					: 'bg-input'}"
+		></span>
+	{/each}
 {/snippet}
 
 <header class="mb-3">
@@ -218,12 +238,6 @@
 			</div>
 		{:else if hero.kind === "signups"}
 			<div class="flex flex-wrap items-center gap-4">
-				<span
-					class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-full border border-white"
-					aria-hidden="true"
-				>
-					<SpriteIcon category="icons" value="PENDING_CRITICAL" size={22} />
-				</span>
 				<div class="min-w-0 flex-1">
 					<p class="text-xs uppercase tracking-wide text-tan opacity-50">
 						Sign-ups
@@ -256,112 +270,110 @@
 				{/if}
 			</div>
 		{:else if hero.kind === "in-progress"}
-			<!-- The merged championship bar spans the full lane width, so it takes
-			     one round cell's worth of dots for every cell above it — which is
-			     what keeps its rhythm continuous with the lanes'. Spacing is even,
-			     so a cell of N dots divides into N + 1 slots; the bar spans every
-			     cell's slots but only has ends of its own once. -->
-			{@const champDots =
-				(hero.divisions[0]?.rounds.length ?? 1) * (DOTS_PER_ROUND + 1) - 1}
 			<div class="flex flex-wrap items-center gap-4">
-				<span
-					class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-full border border-white"
-					aria-hidden="true"
-				>
-					<SpriteIcon category="icons" value="PENDING_CRITICAL" size={22} />
-				</span>
-				<div class="min-w-0 flex-shrink-0">
-					<p class="text-xs uppercase tracking-wide text-tan opacity-50">
-						Progress
-					</p>
-					<p class="whitespace-nowrap text-sm text-tan">
-						{hero.phaseLabel}
-					</p>
-				</div>
 				<!-- Two-row grid with a shared auto-sized label column, so both bars
-				     span exactly the same width regardless of label length. -->
+				     span exactly the same width regardless of label length. The
+				     Swiss rows drop out once the bracket is live, leaving the
+				     championship bar and the overall tally. -->
 				<div
-					class="grid min-w-[16rem] flex-1 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-3"
+					class="grid min-w-[16rem] flex-1 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-3 pl-1"
 				>
 					<!-- Shared Swiss round labels, lit while some division is playing
-					     that round. Beside them, matches played so far against the
-					     projected eventual total ("~" while results in flight can
-					     still swing it — see projected-totals.ts). -->
-					<div class="flex gap-1">
-						{#each Array.from({ length: hero.divisions[0]?.rounds.length ?? 0 }, (_, i) => i) as i (i)}
-							<span
-								class="flex-1 text-center text-[10px] uppercase tracking-wide {hero.divisions.some(
-									(d) => d.rounds[i].current,
-								)
-									? 'font-bold text-orange'
-									: 'text-tan opacity-50'}">Swiss {i + 1}</span
-							>
-						{/each}
-					</div>
+					     that round — or, once the bracket is the only row left, the
+					     championship's own name in their place. Beside them, matches
+					     played so far against the projected eventual total ("~" while
+					     results in flight can still swing it — see
+					     projected-totals.ts). -->
+					{#if hero.championship.active}
+						<span
+							class="truncate text-[10px] uppercase tracking-wide text-tan opacity-50"
+							>Championship</span
+						>
+					{:else}
+						<div class="flex gap-1">
+							{#each Array.from({ length: hero.divisions[0]?.rounds.length ?? 0 }, (_, i) => i) as i (i)}
+								<span
+									class="flex-1 text-center text-[10px] uppercase tracking-wide {hero.divisions.some(
+										(d) => d.rounds[i].current,
+									)
+										? 'font-bold text-orange'
+										: 'text-tan opacity-50'}">Swiss {i + 1}</span
+								>
+							{/each}
+						</div>
+					{/if}
 					<span
-						class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
+						class="col-start-2 justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
 					>
 						{hero.playedOverall} of {hero.projectedExact
 							? ""
 							: "~"}{hero.projectedTotal} matches
 					</span>
-					<!-- One Swiss lane per division: a cell per round — a solid line
-					     once the round is closed, an empty dot row for a round still
-					     to come, and a dot row filling as reports land in between.
-					     The lanes merge into the championship bar. -->
-					{#each hero.divisions as d (d.label)}
-						<div class="flex flex-col gap-0.5">
-							<div class="flex items-center gap-1">
-								{#each d.rounds as r, i (i)}
-									<div
-										class="flex flex-1 justify-evenly"
-										role="progressbar"
-										aria-valuemin={0}
-										aria-valuemax={r.total}
-										aria-valuenow={r.done}
-										aria-label={r.current
-											? `Matches reported — ${d.label}`
-											: undefined}
-									>
-										{@render track(r.done, r.total, r.current, DOTS_PER_ROUND)}
-									</div>
-								{/each}
+					{#if !hero.championship.active}
+						<!-- One Swiss lane per division: a cell per round — a solid line
+						     once the round is closed, an empty dot row for a round still
+						     to come, and a dot row filling as reports land in between.
+						     The lanes merge into the championship bar. -->
+						{#each hero.divisions as d (d.label)}
+							<div class="flex flex-col gap-0.5">
+								<div class="flex items-center gap-1">
+									{#each d.rounds as r, i (i)}
+										<div
+											class="flex flex-1 justify-evenly"
+											role="progressbar"
+											aria-valuemin={0}
+											aria-valuemax={r.total}
+											aria-valuenow={r.done}
+											aria-label={r.current
+												? `Matches reported — ${d.label}`
+												: undefined}
+										>
+											{@render track(
+												r.done,
+												r.total,
+												r.current,
+												DOTS_PER_ROUND,
+											)}
+										</div>
+									{/each}
+								</div>
+								<span
+									class="truncate text-center text-[10px] uppercase tracking-wide text-tan opacity-50"
+								>
+									{d.label}
+								</span>
 							</div>
 							<span
-								class="truncate text-center text-[10px] uppercase tracking-wide text-tan opacity-50"
+								class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
 							>
-								{d.label}
+								{#if d.total > 0}{d.reported} of {d.total} reported{/if}
 							</span>
-						</div>
-						<span
-							class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
-						>
-							{#if d.total > 0}{d.reported} of {d.total} reported{/if}
-						</span>
-					{/each}
+						{/each}
+					{/if}
 					<!-- The merged championship bar — the divisions reunite in one
-					     bracket. Same dots as the lanes, spanning their full width;
-					     sized by the projected bracket until it's live. -->
+					     bracket. Sized by the projected bracket until it's live, so
+					     during Swiss the dashes are the projection's count. -->
 					<div class="flex flex-col gap-0.5">
 						<div
-							class="flex justify-evenly"
+							class="flex gap-2"
 							role="progressbar"
 							aria-valuemin={0}
 							aria-valuemax={hero.championship.total}
 							aria-valuenow={hero.championship.reported}
 							aria-label="Matches reported — Championship"
 						>
-							{@render track(
+							{@render dashes(
 								hero.championship.reported,
 								hero.championship.total,
 								hero.championship.active,
-								champDots,
 							)}
 						</div>
-						<span
-							class="truncate text-center text-[10px] uppercase tracking-wide text-tan opacity-50"
-							>Championship</span
-						>
+						{#if !hero.championship.active}
+							<span
+								class="truncate text-center text-[10px] uppercase tracking-wide text-tan opacity-50"
+								>Championship</span
+							>
+						{/if}
 					</div>
 					<span
 						class="justify-self-end whitespace-nowrap text-[10px] italic text-tan opacity-70"
@@ -374,16 +386,16 @@
 						{/if}
 					</span>
 				</div>
-				<div class="flex flex-shrink-0 items-center gap-3">
-					{#if isAdmin && transitionReady && combined}
+				{#if isAdmin && transitionReady && combined}
+					<div class="flex flex-shrink-0 items-center gap-3">
 						<TransitionPopover
 							{tournament}
 							{combined}
 							{busy}
 							onConfirm={onConfirmTransition}
 						/>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			</div>
 		{:else if hero.kind === "complete"}
 			<!-- Two side-by-side cards spanning the full width: a wider champion
