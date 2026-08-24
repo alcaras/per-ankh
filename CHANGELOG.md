@@ -1,5 +1,50 @@
 # Changelog
 
+## [2026-08-23-8855eef] - 2026-08-23
+
+### Features
+
+- (tournament) project the whole tournament's eventual match count — [ee3c49d](https://github.com/becked/per-ankh/commit/ee3c49d55606a9c85bbcaf20e9426d95f82be835)
+- (tournament) per-division progress lanes in the overview hero — [a9384db](https://github.com/becked/per-ankh/commit/a9384db595d647f2aeec33f3955f36f20bde5fef)
+- (tournament) the progress strip draws one dot scale, solid once closed — [81399a0](https://github.com/becked/per-ankh/commit/81399a012653d186b06f7b516f4cb7e2a6528d14)
+- (tournament) the championship row counts its matches — [49841fd](https://github.com/becked/per-ankh/commit/49841fdef9aa04c71379295a438f7646efd6074d)
+- (parser) city religions, project counts, governor id, theologies — 2.15.0 — [2938b9a](https://github.com/becked/per-ankh/commit/2938b9aa16f2eea0b903d8fe715bf8ca4a6c8a2a)
+- (bake) governor, family, nation, theology, project science + knowledge tiers — [90614ee](https://github.com/becked/per-ankh/commit/90614eee1ed3b7fb88bd596b521f921742d2a7ac)
+- (techs) itemize governors, Sages, Babylonia, Dualism, Archives; mark leader changes and knowledge flips — [705eb39](https://github.com/becked/per-ankh/commit/705eb39686c476c5d38b00b5131bf516f9ae40ed)
+- (techs) price city discontent in the science breakdown — [7930aab](https://github.com/becked/per-ankh/commit/7930aab3cdac1b615166b4b3e42712a3570903c5)
+- (techs) knowledge shifts as tier-initial chips — [37bd375](https://github.com/becked/per-ankh/commit/37bd37524319aec36bdcf1e7c233cdc63b8eb1c5)
+- (techs) full ruler lines on the leader-change tooltip — [04a8061](https://github.com/becked/per-ankh/commit/04a80610705860b969db2e44562fda871cf48a81)
+- (bake) PROJECT_NAMES, the names the game gives its city projects — [4cfb331](https://github.com/becked/per-ankh/commit/4cfb331243c32dcaf515b50bdc9ed57d84ccf88a)
+- (bake) event-project science, and the grants a law or archetype pays per city — [be17b6c](https://github.com/becked/per-ankh/commit/be17b6c9767f6d1fc5bd5e2a3183bc7c10bb0d03)
+- (techs) price Philosophy's Forums and a Scholar's Archives — [fe3dcfd](https://github.com/becked/per-ankh/commit/fe3dcfded54e264c1312783ee07f1197543d5fed)
+- (parser) city damage and assimilation turns — 2.15.0 — [01e37eb](https://github.com/becked/per-ankh/commit/01e37eb3f9fbf08a3f1e2fd1c2967ce77b138041)
+- (techs) price city damage and assimilation in the science breakdown — [6d83db8](https://github.com/becked/per-ankh/commit/6d83db8889211da8da5ec664dc710ae63af4db3a)
+
+### Fixes
+
+- (display) characters and nations take the names the game gives them — [3326a74](https://github.com/becked/per-ankh/commit/3326a7431bbf774315bfebfc8624bea7cf9af7dc)
+- (cities) search and sort follow the name the column shows — [184a7b3](https://github.com/becked/per-ankh/commit/184a7b3662b7ad184249051e0c82a1f6fab42571)
+- (search) a game search matches the nation's in-game name — [98ef986](https://github.com/becked/per-ankh/commit/98ef98620866ecbcff0b78f3a018d1e1fc0b17eb)
+- (tournament) the census walk survives a pending pair it can't place — [f771c9b](https://github.com/becked/per-ankh/commit/f771c9bdc0d56265dad91ea10b49ea9e4aafd5bb)
+- (tournament) the progress hero's each blocks bind the value they render — [ba0fa60](https://github.com/becked/per-ankh/commit/ba0fa606512df4777a01d0b67a720ca8f4c82efb)
+- (tournament) the census walk plays out a lone survivor's byes — [304bc8f](https://github.com/becked/per-ankh/commit/304bc8fb701c0b5d778fd9c2cb62470d432bc699)
+- (tournament) the projected match total reads from the envelope's midpoint — [ad40be8](https://github.com/becked/per-ankh/commit/ad40be8ce042c364d6ff2033bfffa454d2e7933e)
+
+### Performance
+
+- (tournament) the census walk collapses duplicate pending-pair futures — [72cf697](https://github.com/becked/per-ankh/commit/72cf6977b3535dddf0476e78dc687430b707c893)
+
+### Other
+
+- (games) cover the nation-name search clause — [e3911bd](https://github.com/becked/per-ankh/commit/e3911bdc5352ee2a8673ff0ca7d6f7a4ae6f4c17)
+- (tournament) cross-check the match projection against the pairing engine — [8c76126](https://github.com/becked/per-ankh/commit/8c7612646ac51845b9d2162cdb6ae520c309f9aa)
+- (git) ignore Claude Code worktree checkouts — [5d83302](https://github.com/becked/per-ankh/commit/5d83302da20ee3727550f0af5fcf8b5a15a6b6a5)
+- (tournament) the progress hero names the stage, not the round — [b451750](https://github.com/becked/per-ankh/commit/b4517508fe0db69ef87f2a91c4d52063d5a0f812)
+- (tournament) the header's type scale reads the same in every state — [40b7382](https://github.com/becked/per-ankh/commit/40b738268bc5d71e47e7fe1669b4e77d51f23ff5)
+- (tournament) drop the unused in-progress phase label — [1041282](https://github.com/becked/per-ankh/commit/10412823b860be5dea76c58d4bc0574795538288)
+- (techs) leader-change tooltip adopts the Military rail's ruler style — [2e182cc](https://github.com/becked/per-ankh/commit/2e182cc5c328e2361fb34c1af82e1ca406a9d62f)
+- (game-detail) city projects take the name the game gives them — [90f53a9](https://github.com/becked/per-ankh/commit/90f53a9f34631f0dd5ac3ca5526e4a0a0103c4fc)
+
 ## [2026-08-18-392cd92] - 2026-08-18
 
 ### Features
