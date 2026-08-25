@@ -51,7 +51,12 @@ function playDivision(
 	n: number,
 	config: TournamentConfig,
 	rand: () => number,
-): { matches: number; qualifiers: number; byes: string[] } {
+): {
+	matches: number;
+	qualifiers: number;
+	byes: string[];
+	perRound: number[];
+} {
 	const slots: SlotRef[] = Array.from({ length: n }, (_, i) => ({
 		slot_id: `s${i}`,
 		phase: "swiss",
@@ -62,9 +67,11 @@ function playDivision(
 	}));
 	const played: MatchRef[] = [];
 	const byes: string[] = [];
+	const perRound: number[] = [];
 	let matches = 0;
 	for (let round = 1; round <= config.swiss_max_rounds; round++) {
 		const pairings = pairSwissRound(slots, played, round, config);
+		perRound.push(pairings.filter((p) => p.slot_b_id !== null).length);
 		for (const [i, p] of pairings.entries()) {
 			const isBye = p.slot_b_id === null;
 			if (isBye) byes.push(p.slot_a_id);
@@ -93,7 +100,7 @@ function playDivision(
 	const qualifiers = slots.filter(
 		(s) => computeRecord(s.slot_id, played, config).status === "advanced",
 	).length;
-	return { matches, qualifiers, byes };
+	return { matches, qualifiers, byes, perRound };
 }
 
 function observe(n: number, config: TournamentConfig, futures: number) {
@@ -103,15 +110,35 @@ function observe(n: number, config: TournamentConfig, futures: number) {
 	let qualMin = Infinity;
 	let qualMax = -Infinity;
 	let repeatByes = 0;
+	const roundMin = Array.from(
+		{ length: config.swiss_max_rounds },
+		() => Infinity,
+	);
+	const roundMax = Array.from(
+		{ length: config.swiss_max_rounds },
+		() => -Infinity,
+	);
 	for (let f = 0; f < futures; f++) {
 		const r = playDivision(n, config, rand);
 		matchMin = Math.min(matchMin, r.matches);
 		matchMax = Math.max(matchMax, r.matches);
 		qualMin = Math.min(qualMin, r.qualifiers);
 		qualMax = Math.max(qualMax, r.qualifiers);
+		for (const [i, c] of r.perRound.entries()) {
+			roundMin[i] = Math.min(roundMin[i], c);
+			roundMax[i] = Math.max(roundMax[i], c);
+		}
 		if (r.byes.length !== new Set(r.byes).size) repeatByes++;
 	}
-	return { matchMin, matchMax, qualMin, qualMax, repeatByes };
+	return {
+		matchMin,
+		matchMax,
+		qualMin,
+		qualMax,
+		repeatByes,
+		roundMin,
+		roundMax,
+	};
 }
 
 const OWCT: TournamentConfig = {
@@ -155,6 +182,18 @@ describe("projectSwissDivision vs the pairing engine", () => {
 				p.qualifiersMin,
 				p.qualifiersMax,
 			]);
+		});
+
+		// The per-round slice is what sizes a round cell the strip hasn't seen
+		// yet — one mark per projected match — so a loose bound there draws
+		// marks for games that will never be played. Tightness is asserted
+		// round by round, not just on the total: the totals can be exact while
+		// a round's own bound is not.
+		it(`projects an exactly tight envelope per round for ${n} players`, () => {
+			const p = project(n, OWCT);
+			const o = observe(n, OWCT, FUTURES);
+			expect(p.perRoundMin).toEqual(o.roundMin);
+			expect(p.perRoundMax).toEqual(o.roundMax);
 		});
 	}
 

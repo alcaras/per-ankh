@@ -75,17 +75,25 @@ export type HeaderHero =
 	  }
 	| {
 			kind: "in-progress";
-			// One Swiss lane per division: a cell per Swiss round, drawn as a
-			// fixed row of dots filled to done/total — collapsing to a solid
-			// line once the round is closed, and empty for a round not yet
-			// generated. Byes are excluded throughout. `label` renders beneath
-			// the lane; reported/total are the open round's counts for the side
-			// column.
+			// One Swiss lane per division: a cell per Swiss round, drawn as one
+			// mark per match filled to done/total — collapsing to a solid line
+			// once the round is closed. Byes are excluded throughout. `label`
+			// renders beneath the lane; reported/total are the open round's
+			// counts for the side column.
 			divisions: Array<{
 				label: string;
 				reported: number;
 				total: number;
-				rounds: Array<{ done: number; total: number; current: boolean }>;
+				rounds: Array<{
+					done: number;
+					total: number;
+					current: boolean;
+					// A round that hasn't been generated yet: `total` is the
+					// census walk's projection (midpoint of its envelope) rather
+					// than a count of matches that exist. Early exit drains the
+					// field, so it shrinks round over round and can be 0.
+					projected: boolean;
+				}>;
 			}>;
 			// The single bar both lanes merge into — the divisions play Swiss
 			// apart and reunite in one championship bracket. Drawn as the lanes'

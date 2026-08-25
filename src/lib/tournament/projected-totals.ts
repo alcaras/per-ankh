@@ -8,7 +8,9 @@
 // its outcome changes how many players leave the field that round, shifting
 // later rounds by a match. This walks every such branch and reports the
 // min/max envelope — for a real field the spread is 0 or 1, so the header can
-// show an exact number or a close "~N".
+// show an exact number or a close "~N". The same envelope comes back sliced
+// per round, which is what lets the header's progress strip draw one mark per
+// match for rounds that don't exist yet.
 //
 // The championship is single-elimination over every advancer ("no cap" — see
 // docs/tournament-rules.md), so its playable match count is exactly
@@ -31,6 +33,12 @@ export interface SwissProjection {
 	// already advanced.
 	qualifiersMin: number;
 	qualifiersMax: number;
+	// The same envelope sliced per round, in walk order — index 0 is the next
+	// round to be generated. The header sizes a round cell it hasn't seen yet
+	// from these; early exit drains the field as players clinch, so they fall
+	// away round over round and the last one can be 0.
+	perRoundMin: number[];
+	perRoundMax: number[];
 }
 
 interface Config {
@@ -46,6 +54,18 @@ interface BranchState {
 	census: Map<string, number>;
 	matches: number;
 	qualifiers: number;
+}
+
+// A branch carrying how its cumulative match count was spread over the future
+// rounds, as per-round bounds rather than one history. Two branches that
+// collapse on `signature` are interchangeable from here on but may have
+// reached the same total by different splits, so the collapse merges their
+// bounds elementwise — min with min, max with max — instead of discarding
+// one. Every later round then draws from the same set for both, which keeps
+// each round's marginal exact while the collapse keeps the walk cheap.
+interface TrackedBranch extends BranchState {
+	roundMin: number[];
+	roundMax: number[];
 }
 
 const key = (r: Rec) => `${r.wins}-${r.losses}`;
@@ -262,27 +282,54 @@ export function projectSwissDivision(
 		branches = forked;
 	}
 
+	// Per-round bounds only accrue over future rounds, so the pending-pair
+	// resolution above runs on plain branches and they pick up empty histories
+	// here.
+	let tracked: TrackedBranch[] = branches.map((b) => ({
+		...b,
+		roundMin: [],
+		roundMax: [],
+	}));
+
 	for (let r = 0; r < roundsLeft; r++) {
-		const next: BranchState[] = [];
-		const seen = new Set<string>();
-		for (const b of branches) {
+		const merged = new Map<string, TrackedBranch>();
+		for (const b of tracked) {
 			for (const nb of playRound(b, config)) {
-				const sig = signature(nb);
-				if (!seen.has(sig)) {
-					seen.add(sig);
-					next.push(nb);
+				// playRound reports the running total; this round's own count is
+				// what it added.
+				const count = nb.matches - b.matches;
+				const next: TrackedBranch = {
+					...nb,
+					roundMin: [...b.roundMin, count],
+					roundMax: [...b.roundMax, count],
+				};
+				const sig = signature(next);
+				const seen = merged.get(sig);
+				if (!seen) {
+					merged.set(sig, next);
+					continue;
+				}
+				for (let i = 0; i <= r; i++) {
+					seen.roundMin[i] = Math.min(seen.roundMin[i], next.roundMin[i]);
+					seen.roundMax[i] = Math.max(seen.roundMax[i], next.roundMax[i]);
 				}
 			}
 		}
-		branches = next;
+		tracked = [...merged.values()];
 	}
 
-	const matches = branches.map((b) => b.matches);
-	const quals = branches.map((b) => b.qualifiers);
+	const matches = tracked.map((b) => b.matches);
+	const quals = tracked.map((b) => b.qualifiers);
 	return {
 		remainingMin: Math.min(...matches),
 		remainingMax: Math.max(...matches),
 		qualifiersMin: Math.min(...quals),
 		qualifiersMax: Math.max(...quals),
+		perRoundMin: Array.from({ length: roundsLeft }, (_, i) =>
+			Math.min(...tracked.map((b) => b.roundMin[i])),
+		),
+		perRoundMax: Array.from({ length: roundsLeft }, (_, i) =>
+			Math.max(...tracked.map((b) => b.roundMax[i])),
+		),
 	};
 }

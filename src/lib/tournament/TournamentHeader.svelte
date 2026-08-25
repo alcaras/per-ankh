@@ -62,33 +62,32 @@
 		return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 	}
 
-	// Every cell of the progress strip draws the same number of dots, so a dot
-	// is a fraction of a round rather than a match: rounds hold different match
-	// counts (a 28-player division opens on 14, a 32-player one on 16), and one
-	// dot per match sized them differently cell to cell. The exact figures stay
-	// beside the lane and in the ARIA values; the dots carry the shape.
+	// Round cells are sized by their match count, so one mark is one match
+	// everywhere in the strip and a mark is the same width across a lane. A
+	// proportional gauge drew a fixed row of dots per cell instead, which
+	// invited exactly the counting it couldn't survive: four unlit dots for
+	// three outstanding matches.
 	//
-	// The dots are a fixed 4px circle, spaced evenly across the cell rather
-	// than stretched to fill it — stretching is what made them read as dashes.
-	// Even spacing divides a cell into one slot per dot plus one, so the COUNT
-	// is what sets the gap: 24 keeps them close, where 12 left them two
-	// diameters apart and read as scattered. Size and count are tuned
-	// together — shrinking the circle widens that gap in diameters at a fixed
-	// count. The solid line a closed round collapses to is the same h-1
-	// weight, and so is the championship dash, so every mark in the strip
-	// reads at one thickness.
-	const DOTS_PER_ROUND = 24;
+	// The weights are shared by both lanes and the round-label row above them,
+	// taken from the larger division's count for that round, so the columns
+	// stay aligned when the divisions are different sizes (a 28-player
+	// division opens on 14, a 32-player one on 16) — the two lanes then differ
+	// only in how wide their own marks are inside a shared cell. Early exit
+	// drains the field as players clinch, so later cells are genuinely
+	// narrower; the floor keeps the last one wide enough to carry its "Swiss
+	// 5" label and to stay visible when the walk projects no matches at all.
+	const MIN_ROUND_WEIGHT = 4;
 
-	// Lit dots for one cell — nearest dot, but never rounding away either end:
-	// a reported match always lights one, and a full row always means a round
-	// with nothing outstanding.
-	function litDots(done: number, total: number, dots: number): number {
-		if (total <= 0) return 0;
-		const lit = Math.round((done / total) * dots);
-		if (done > 0 && lit === 0) return 1;
-		if (done < total && lit === dots) return dots - 1;
-		return lit;
-	}
+	const roundWeights = $derived(
+		hero.kind === "in-progress"
+			? Array.from({ length: hero.divisions[0]?.rounds.length ?? 0 }, (_, i) =>
+					Math.max(
+						MIN_ROUND_WEIGHT,
+						...hero.divisions.map((d) => d.rounds[i]?.total ?? 0),
+					),
+				)
+			: [],
+	);
 
 	const startsLabel = $derived(shortDate(tournament.starts_at));
 	const endedLabel = $derived(shortDate(tournament.completed_at));
@@ -119,19 +118,25 @@
 	});
 </script>
 
-<!-- One cell of the progress strip. A closed round — every match in it
-     reported — collapses to a solid line; until then it's the fixed dot row,
-     filled to done/total. `live` brightens the track of a round that has
-     opened, so an open round with nothing reported yet still reads apart from
-     the rounds still to come. -->
-{#snippet track(done: number, total: number, live: boolean, dots: number)}
-	{#if total > 0 && done === total}
+<!-- One stretch of the progress strip — a Swiss round cell or the whole
+     championship bar: one mark per match, each stretching to fill its share of
+     the width. A closed stretch — every match in it reported — collapses to a
+     solid line. `live` brightens the track of a round that has opened, so an
+     open round with nothing reported yet still reads apart from the rounds
+     still to come; the championship passes it for the same reason, reading
+     dimmer while it is still a projection during Swiss. -->
+{#snippet marks(done: number, total: number, live: boolean)}
+	{#if total <= 0}
+		<!-- Nothing to draw a mark for — a round the walk says the field clinches
+		     before, or a bracket with no size yet. A hairline holds the cell so
+		     the strip reads as empty there rather than broken. -->
+		<span class="h-px flex-1 rounded-full bg-input"></span>
+	{:else if done === total}
 		<span class="h-1 flex-1 rounded-full bg-orange"></span>
 	{:else}
-		{@const lit = litDots(done, total, dots)}
-		{#each Array.from({ length: dots }, (_, p) => p < lit) as reported, p (p)}
+		{#each Array.from({ length: total }, (_, i) => i < done) as reported, i (i)}
 			<span
-				class="h-1 w-1 rounded-full {reported
+				class="h-1 flex-1 rounded-full {reported
 					? 'bg-orange'
 					: live
 						? 'bg-input-focus'
@@ -139,24 +144,6 @@
 			></span>
 		{/each}
 	{/if}
-{/snippet}
-
-<!-- The championship bar: one dash per bracket match, each stretching to fill
-     the width. The lanes' dots are a proportional fill — 124 of them for a
-     15-match bracket — so they read as a gauge; a bracket is few enough games
-     to account for exactly, and the halving rounds make the last few the ones
-     that matter. `live` matches the lanes: the bracket reads dimmer while it
-     is still a projection during Swiss. -->
-{#snippet dashes(done: number, total: number, live: boolean)}
-	{#each Array.from({ length: total }, (_, i) => i < done) as reported, i (i)}
-		<span
-			class="h-1 flex-1 rounded-full {reported
-				? 'bg-orange'
-				: live
-					? 'bg-input-focus'
-					: 'bg-input'}"
-		></span>
-	{/each}
 {/snippet}
 
 <header class="mb-3">
@@ -290,10 +277,11 @@
 							>Championship</span
 						>
 					{:else}
-						<div class="flex gap-1">
-							{#each Array.from({ length: hero.divisions[0]?.rounds.length ?? 0 }, (_, i) => i) as i (i)}
+						<div class="flex gap-2">
+							{#each roundWeights as weight, i (i)}
 								<span
-									class="flex-1 text-center text-[10px] uppercase tracking-wide {hero.divisions.some(
+									style="flex: {weight}"
+									class="truncate text-center text-[10px] uppercase tracking-wide {hero.divisions.some(
 										(d) => d.rounds[i].current,
 									)
 										? 'font-bold text-orange'
@@ -310,30 +298,29 @@
 							: "~"}{hero.projectedTotal} matches
 					</span>
 					{#if !hero.championship.active}
-						<!-- One Swiss lane per division: a cell per round — a solid line
-						     once the round is closed, an empty dot row for a round still
-						     to come, and a dot row filling as reports land in between.
-						     The lanes merge into the championship bar. -->
+						<!-- One Swiss lane per division: a cell per round, one mark per
+						     match — a solid line once the round is closed, an unlit row
+						     for a round still to come (the census walk's size for it),
+						     and a row filling as reports land in between. The lanes merge
+						     into the championship bar. -->
 						{#each hero.divisions as d (d.label)}
 							<div class="flex flex-col gap-0.5">
-								<div class="flex items-center gap-1">
+								<div class="flex items-center gap-2">
 									{#each d.rounds as r, i (i)}
 										<div
-											class="flex flex-1 justify-evenly"
+											class="flex items-center gap-0.5"
+											style="flex: {roundWeights[i]}"
 											role="progressbar"
 											aria-valuemin={0}
 											aria-valuemax={r.total}
 											aria-valuenow={r.done}
 											aria-label={r.current
 												? `Matches reported — ${d.label}`
-												: undefined}
+												: r.projected
+													? `Swiss ${i + 1} — ${r.total} matches projected`
+													: undefined}
 										>
-											{@render track(
-												r.done,
-												r.total,
-												r.current,
-												DOTS_PER_ROUND,
-											)}
+											{@render marks(r.done, r.total, r.current)}
 										</div>
 									{/each}
 								</div>
@@ -352,17 +339,17 @@
 					{/if}
 					<!-- The merged championship bar — the divisions reunite in one
 					     bracket. Sized by the projected bracket until it's live, so
-					     during Swiss the dashes are the projection's count. -->
+					     during Swiss the marks are the projection's count. -->
 					<div class="flex flex-col gap-0.5">
 						<div
-							class="flex gap-2"
+							class="flex items-center gap-2"
 							role="progressbar"
 							aria-valuemin={0}
 							aria-valuemax={hero.championship.total}
 							aria-valuenow={hero.championship.reported}
 							aria-label="Matches reported — Championship"
 						>
-							{@render dashes(
+							{@render marks(
 								hero.championship.reported,
 								hero.championship.total,
 								hero.championship.active,

@@ -28,7 +28,10 @@
 	import TournamentNextMatchPanel from "$lib/tournament/TournamentNextMatchPanel.svelte";
 	import TournamentUpNextPanel from "$lib/tournament/TournamentUpNextPanel.svelte";
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
-	import { projectSwissDivision } from "$lib/tournament/projected-totals";
+	import {
+		projectSwissDivision,
+		type SwissProjection,
+	} from "$lib/tournament/projected-totals";
 	import {
 		headerStatusMeta,
 		type HeaderHero,
@@ -454,6 +457,9 @@
 				let remainingMax = 0;
 				let qualifiersMin = 0;
 				let qualifiersMax = 0;
+				// Kept per division as well as summed: the lanes below size each
+				// not-yet-generated round cell from that division's own walk.
+				const swissProjections = {} as Record<"A" | "B", SwissProjection>;
 				for (const div of ["A", "B"] as const) {
 					const rows = data.standings.divisions[div].standings;
 					const recBySlot = new Map(rows.map((r) => [r.slot_id, r]));
@@ -491,6 +497,7 @@
 						},
 						rows.filter((r) => r.status === "advanced").length,
 					);
+					swissProjections[div] = p;
 					remainingMin += p.remainingMin;
 					remainingMax += p.remainingMax;
 					qualifiersMin += p.qualifiersMin;
@@ -517,8 +524,8 @@
 				// Swiss rounds generate per division, so the two can be split — one
 				// division finishing round N and starting N+1 while the other is
 				// still playing N. Each division gets its own lane: a cell per
-				// Swiss round, its OWN open round rendered as per-match pills, the
-				// rest as fills. The lanes merge into the single championship bar.
+				// Swiss round, every cell drawn as one mark per match. The lanes
+				// merge into the single championship bar.
 				const swiss = data.matches.filter((m) => m.phase === "swiss");
 				const inSwiss = t.status === "swiss";
 				const divisions = (["A", "B"] as const).map((div) => {
@@ -527,14 +534,29 @@
 						(acc, m) => Math.max(acc, m.round_number ?? 0),
 						0,
 					);
+					const proj = swissProjections[div];
 					const rounds = Array.from({ length: t.swiss_max_rounds }, (_, i) => {
 						const inRound = divMatches.filter(
 							(m) => m.round_number === i + 1 && m.status !== "bye",
 						);
+						// Rounds past the last generated one hold no matches to count,
+						// so they take the census walk's size for that round —
+						// midpoint of its envelope, for the same reason the overall
+						// tally shows one. Index 0 of the walk is round `open` + 1.
+						const ahead = i - open;
+						const size =
+							ahead >= 0
+								? Math.round(
+										((proj.perRoundMin[ahead] ?? 0) +
+											(proj.perRoundMax[ahead] ?? 0)) /
+											2,
+									)
+								: inRound.length;
 						return {
 							done: inRound.filter((m) => m.status !== "pending").length,
-							total: inRound.length,
+							total: size,
 							current: inSwiss && i + 1 === open,
+							projected: ahead >= 0,
 						};
 					});
 					const openRound = rounds[open - 1];
