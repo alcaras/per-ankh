@@ -1,9 +1,10 @@
 <script lang="ts">
-	// The overview-only body of the tournament header: the meta strip (owner /
-	// format / players / dates) and the per-status hero (setup CTA, sign-ups,
-	// in-progress bar, champion cards). The shared header row above it — trail,
-	// status badge, view toggle, signup, action cluster — now lives in the [slug]
-	// layout; the overview page renders this component as its first content block.
+	// The overview-only body of the tournament header: the meta strip
+	// (description / admins / date / players) and the per-status hero
+	// (setup CTA, sign-ups, in-progress bar, champion cards). The shared header
+	// row above it — trail, status badge, view toggle, signup, action cluster —
+	// now lives in the [slug] layout; the overview page renders this component as
+	// its first content block.
 	import type {
 		CombinedQualifier,
 		TournamentDetail,
@@ -11,6 +12,7 @@
 	} from "$lib/api-cloud";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import PlayerAvatar from "./PlayerAvatar.svelte";
 	import SignupPopover from "./SignupPopover.svelte";
 	import TransitionPopover from "./TransitionPopover.svelte";
 	import type {
@@ -118,30 +120,34 @@
 	const startsLabel = $derived(shortDate(tournament.starts_at));
 	const endedLabel = $derived(shortDate(tournament.completed_at));
 
-	// Meta strip text segments after the owner/admins block. Built in order;
-	// each renders with a leading divider so the strip reads "owner │ format │
-	// players │ description │ date" with separators only between present items.
-	const metaSegments = $derived.by(() => {
-		const out: { text: string; italic?: boolean }[] = [
-			{ text: "Swiss → Championship" },
-		];
-		if (
-			(statusMeta.key === "in-progress" || statusMeta.key === "complete") &&
-			playerCount > 0
-		) {
-			out.push({
-				text: `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
-			});
-		}
-		if (tournament.description)
-			out.push({ text: tournament.description, italic: true });
-		if (statusMeta.key === "complete") {
-			if (endedLabel) out.push({ text: `Ended ${endedLabel}` });
-		} else if (startsLabel) {
-			out.push({ text: `Starts ${startsLabel}` });
-		}
-		return out;
+	// Top right of the meta panel: when the tournament starts, or when it ended
+	// once it's over.
+	const dateLabel = $derived.by(() => {
+		if (statusMeta.key === "complete")
+			return endedLabel ? `Ended ${endedLabel}` : null;
+		return startsLabel ? `Starts ${startsLabel}` : null;
 	});
+
+	// Roster size, under the date. Only once the tournament is running or
+	// complete — setup and sign-ups surface their own count in the hero.
+	const playersLabel = $derived(
+		(statusMeta.key === "in-progress" || statusMeta.key === "complete") &&
+			playerCount > 0
+			? `${playerCount} ${playerCount === 1 ? "player" : "players"}`
+			: null,
+	);
+
+	// One admin row, owner first and the rest alphabetized behind them: the
+	// owner is an admin too, and who created the tournament matters less on the
+	// overview than who can be asked about it. The API keeps the creator out of
+	// `admins`, so ordering is a concat, not a sort key.
+	const coAdmins = $derived(
+		[...tournament.admins].sort((a, b) =>
+			a.display_name.localeCompare(b.display_name),
+		),
+	);
+
+	const adminsLabel = $derived(coAdmins.length > 0 ? "Admins:" : "Admin:");
 </script>
 
 <!-- One stretch of the progress strip — a Swiss round cell or the whole
@@ -173,44 +179,48 @@
 {/snippet}
 
 <header class="mb-3">
-	<!-- Meta panel: owner/admins, format, players, date — grouped. First block of
-	     the overview body; the shared header row (trail/toggle/actions) sits above
-	     it in the [slug] layout. -->
+	<!-- Meta panel: what the tournament is, then who runs it, on the left; when
+	     and how big on the right. First block of the overview body; the shared
+	     header row (trail/toggle/actions) sits above it in the [slug] layout.
+	     Admins carry their Discord avatar here as players do on every other
+	     surface that names one — PlayerAvatar, same as brackets and standings. -->
 	<div
 		class="rounded-lg p-3"
 		style="background-color: rgb(var(--color-surface));"
 	>
-		<div
-			class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-tan opacity-80"
-		>
-			{#if tournament.owner}
-				<span class="flex items-center gap-1">
-					<img
-						src={tournament.owner.avatar_url}
-						alt=""
-						class="h-4 w-4 rounded-full"
-					/>
-					<span
-						><span class="opacity-70">Owner:</span>
-						{tournament.owner.display_name}</span
-					>
-				</span>
-				{#if tournament.admins.length > 0}
-					<span class="opacity-40">│</span>
-					<span>
-						<span class="opacity-70"
-							>{tournament.admins.length === 1 ? "Admin:" : "Admins:"}</span
-						>
-						{tournament.admins.map((a) => a.display_name).join(", ")}
-					</span>
-				{/if}
+		<div class="flex flex-col gap-1 text-sm text-tan opacity-80">
+			{#if tournament.description || dateLabel}
+				<div class="flex items-baseline gap-3">
+					{#if tournament.description}
+						<span class="min-w-0 text-white">{tournament.description}</span>
+					{/if}
+					{#if dateLabel}
+						<span class="ml-auto whitespace-nowrap italic">{dateLabel}</span>
+					{/if}
+				</div>
 			{/if}
-			{#each metaSegments as seg, i (seg.text)}
-				{#if i > 0 || tournament.owner}
-					<span class="opacity-40">│</span>
-				{/if}
-				<span class:italic={seg.italic}>{seg.text}</span>
-			{/each}
+			{#if tournament.owner || playersLabel}
+				<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+					{#if tournament.owner}
+						<span class="opacity-70">{adminsLabel}</span>
+						<span class="flex items-center gap-1">
+							<PlayerAvatar avatarUrl={tournament.owner.avatar_url} />
+							{tournament.owner.display_name}
+						</span>
+						<!-- Below `md` the co-admins are simply not shown: the row keeps
+						     the owner alone, and nothing stands in for the rest. -->
+						{#each coAdmins as admin, i (i)}
+							<span class="hidden items-center gap-1 md:flex">
+								<PlayerAvatar avatarUrl={admin.avatar_url} />
+								{admin.display_name}
+							</span>
+						{/each}
+					{/if}
+					{#if playersLabel}
+						<span class="ml-auto whitespace-nowrap italic">{playersLabel}</span>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 
