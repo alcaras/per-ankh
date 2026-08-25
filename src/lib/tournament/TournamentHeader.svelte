@@ -293,7 +293,20 @@
 					     championship's own name in their place. Beside them, matches
 					     played so far against the projected eventual total ("~" while
 					     results in flight can still swing it — see
-					     projected-totals.ts). -->
+					     projected-totals.ts).
+
+					     Only the first cell carries the word. Cells are sized by match
+					     count, so the last round's is a fraction of the first's, while
+					     "Swiss 5" is the same width wherever it sits — a phrase in
+					     every cell clipped from the right end inward long before the
+					     strip itself ran out of room (a 28-player division lost
+					     "Swiss 5" at a 660px viewport, a 40-player one at 680px).
+					     Naming the phase once puts the only phrase in the widest cell —
+					     round 1's by construction, since early exit only drains the
+					     field and no later round can hold more matches — and leaves the
+					     rest needing a digit's width rather than a phrase's. Not
+					     absolute: a field small enough for MIN_ROUND_WEIGHT to equalize
+					     every cell clips that one remaining word below ~415px. -->
 					{#if hero.championship.active}
 						<span
 							class="truncate text-[10px] uppercase tracking-wide text-tan opacity-50"
@@ -308,7 +321,8 @@
 										(d) => d.rounds[i].current,
 									)
 										? 'font-bold text-orange'
-										: 'text-tan opacity-50'}">Swiss {i + 1}</span
+										: 'text-tan opacity-50'}"
+									>{i === 0 ? "Swiss 1" : i + 1}</span
 								>
 							{/each}
 						</div>
