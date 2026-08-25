@@ -43,10 +43,107 @@ function project(n: number, config: TournamentConfig) {
 	);
 }
 
-// Play a whole division through the real engine, deciding each match by coin
-// flip, and report what actually happened: playable matches (byes excluded,
-// matching the projection's units) and how many players reached the win
-// threshold.
+type Rec = { wins: number; losses: number };
+
+function swissSlots(n: number): SlotRef[] {
+	return Array.from({ length: n }, (_, i) => ({
+		slot_id: `s${i}`,
+		phase: "swiss",
+		division: "A",
+		swiss_seed: i + 1,
+		championship_seed: null,
+		withdrawn: false,
+	}));
+}
+
+// Pair one round through the real engine and append it to `played`, deciding
+// each match by coin flip. `decide` false leaves the playable matches pending
+// instead — the state the header renders from for most of a tournament's life,
+// where the open round is generated but not yet reported. Returns the playable
+// (bye-excluded, matching the projection's units) count and the bye recipients.
+function dealRound(
+	slots: SlotRef[],
+	played: MatchRef[],
+	round: number,
+	config: TournamentConfig,
+	rand: () => number,
+	decide = true,
+): { playable: number; byes: string[] } {
+	const pairings = pairSwissRound(slots, played, round, config);
+	const byes: string[] = [];
+	let playable = 0;
+	for (const [i, p] of pairings.entries()) {
+		const isBye = p.slot_b_id === null;
+		if (isBye) byes.push(p.slot_a_id);
+		else playable++;
+		played.push({
+			match_id: `m${round}-${i}`,
+			round_id: `r${round}`,
+			round_number: round,
+			phase: "swiss",
+			division: "A",
+			slot_a_id: p.slot_a_id,
+			slot_b_id: p.slot_b_id,
+			map_pool_id: null,
+			map_script: null,
+			// Byes are written status='bye' with the lone slot as winner
+			// (buildSwissRoundStatements), which computeRecord scores as a win.
+			status: isBye ? "bye" : decide ? "complete" : "pending",
+			winner_slot_id: isBye
+				? p.slot_a_id
+				: decide
+					? rand() < 0.5
+						? p.slot_a_id
+						: p.slot_b_id!
+					: null,
+		});
+	}
+	return { playable, byes };
+}
+
+// The two census arguments the header passes: W-L for every still-active slot,
+// and how many have already clinched. Both come from DECIDED matches only — a
+// generated-but-unreported round travels separately as pending pairs.
+function censusFrom(
+	slots: SlotRef[],
+	played: MatchRef[],
+	config: TournamentConfig,
+): { active: Rec[]; alreadyQualified: number } {
+	const decided = played.filter((m) => m.status !== "pending");
+	const records = slots.map((s) => computeRecord(s.slot_id, decided, config));
+	return {
+		active: records
+			.filter((r) => r.status === "active")
+			.map((r) => ({ wins: r.wins, losses: r.losses })),
+		alreadyQualified: records.filter((r) => r.status === "advanced").length,
+	};
+}
+
+// The open round's unreported pairings, as the record pairs the header builds
+// from the standings rows.
+function pendingPairsOf(
+	slots: SlotRef[],
+	played: MatchRef[],
+	config: TournamentConfig,
+): Array<[Rec, Rec]> {
+	const decided = played.filter((m) => m.status !== "pending");
+	const recordOf = new Map(
+		slots.map((s) => [s.slot_id, computeRecord(s.slot_id, decided, config)]),
+	);
+	return played
+		.filter((m) => m.status === "pending" && m.slot_b_id !== null)
+		.map((m) => {
+			const a = recordOf.get(m.slot_a_id)!;
+			const b = recordOf.get(m.slot_b_id!)!;
+			return [
+				{ wins: a.wins, losses: a.losses },
+				{ wins: b.wins, losses: b.losses },
+			] as [Rec, Rec];
+		});
+}
+
+// Play a whole division through the real engine and report what actually
+// happened: playable matches and how many players reached the win threshold.
 function playDivision(
 	n: number,
 	config: TournamentConfig,
@@ -57,45 +154,16 @@ function playDivision(
 	byes: string[];
 	perRound: number[];
 } {
-	const slots: SlotRef[] = Array.from({ length: n }, (_, i) => ({
-		slot_id: `s${i}`,
-		phase: "swiss",
-		division: "A",
-		swiss_seed: i + 1,
-		championship_seed: null,
-		withdrawn: false,
-	}));
+	const slots = swissSlots(n);
 	const played: MatchRef[] = [];
 	const byes: string[] = [];
 	const perRound: number[] = [];
 	let matches = 0;
 	for (let round = 1; round <= config.swiss_max_rounds; round++) {
-		const pairings = pairSwissRound(slots, played, round, config);
-		perRound.push(pairings.filter((p) => p.slot_b_id !== null).length);
-		for (const [i, p] of pairings.entries()) {
-			const isBye = p.slot_b_id === null;
-			if (isBye) byes.push(p.slot_a_id);
-			else matches++;
-			played.push({
-				match_id: `m${round}-${i}`,
-				round_id: `r${round}`,
-				round_number: round,
-				phase: "swiss",
-				division: "A",
-				slot_a_id: p.slot_a_id,
-				slot_b_id: p.slot_b_id,
-				map_pool_id: null,
-				map_script: null,
-				// Byes are written status='bye' with the lone slot as winner
-				// (buildSwissRoundStatements), which computeRecord scores as a win.
-				status: isBye ? "bye" : "complete",
-				winner_slot_id: isBye
-					? p.slot_a_id
-					: rand() < 0.5
-						? p.slot_a_id
-						: p.slot_b_id!,
-			});
-		}
+		const r = dealRound(slots, played, round, config, rand);
+		perRound.push(r.playable);
+		byes.push(...r.byes);
+		matches += r.playable;
 	}
 	const qualifiers = slots.filter(
 		(s) => computeRecord(s.slot_id, played, config).status === "advanced",
@@ -139,6 +207,60 @@ function observe(n: number, config: TournamentConfig, futures: number) {
 		roundMin,
 		roundMax,
 	};
+}
+
+// Resume a division from a mid-tournament state and report what the rounds
+// still to come actually held, across many futures. `cut` decided rounds are
+// played once with a fixed seed to build the state; with `openPending`, round
+// `cut + 1` is generated on top of it and left unreported. Returns the
+// projection made from that state alongside the observed per-round envelope,
+// in the same walk order (index 0 is the next round to be generated).
+function observeFrom(
+	n: number,
+	config: TournamentConfig,
+	cut: number,
+	openPending: boolean,
+	futures: number,
+) {
+	const slots = swissSlots(n);
+	const base: MatchRef[] = [];
+	const setup = lcg(n * 104729 + cut * 31 + 7);
+	for (let round = 1; round <= cut; round++)
+		dealRound(slots, base, round, config, setup);
+	const openRound = openPending ? cut + 1 : cut;
+	if (openPending) dealRound(slots, base, openRound, config, setup, false);
+
+	const { active, alreadyQualified } = censusFrom(slots, base, config);
+	const roundsLeft = config.swiss_max_rounds - openRound;
+	const projection = projectSwissDivision(
+		active,
+		pendingPairsOf(slots, base, config),
+		roundsLeft,
+		{
+			winsToAdvance: config.swiss_wins_to_advance,
+			lossesToEliminate: config.swiss_losses_to_eliminate,
+		},
+		alreadyQualified,
+	);
+
+	const roundMin = Array.from({ length: roundsLeft }, () => Infinity);
+	const roundMax = Array.from({ length: roundsLeft }, () => -Infinity);
+	const rand = lcg(n * 7919 + cut * 131 + (openPending ? 3 : 1));
+	for (let f = 0; f < futures; f++) {
+		const played = base.map((m) => ({ ...m }));
+		for (const m of played) {
+			if (m.status !== "pending") continue;
+			m.status = "complete";
+			m.winner_slot_id = rand() < 0.5 ? m.slot_a_id : m.slot_b_id;
+		}
+		for (let round = openRound + 1; round <= config.swiss_max_rounds; round++) {
+			const { playable } = dealRound(slots, played, round, config, rand);
+			const i = round - openRound - 1;
+			roundMin[i] = Math.min(roundMin[i], playable);
+			roundMax[i] = Math.max(roundMax[i], playable);
+		}
+	}
+	return { projection, roundMin, roundMax };
 }
 
 const OWCT: TournamentConfig = {
@@ -205,8 +327,48 @@ describe("projectSwissDivision vs the pairing engine", () => {
 			expect(o.matchMax).toBeLessThanOrEqual(p.remainingMax);
 			expect(o.qualMin).toBeGreaterThanOrEqual(p.qualifiersMin);
 			expect(o.qualMax).toBeLessThanOrEqual(p.qualifiersMax);
+			// Per round too — the strip draws these one mark at a time under any
+			// config, not just OWCT. Bracketing rather than tightness: seven
+			// rounds is a big enough space of futures that 300 samples don't
+			// reliably reach the extreme of every round, and a deeper config is
+			// where the envelope genuinely widens past 1 (4W/4L at n=20 spreads
+			// its last round by 2), so the floor the strip draws matters most
+			// here.
+			for (const [i, v] of p.perRoundMin.entries())
+				expect(v).toBeLessThanOrEqual(o.roundMin[i]);
+			for (const [i, v] of p.perRoundMax.entries())
+				expect(v).toBeGreaterThanOrEqual(o.roundMax[i]);
 		}
 	});
+});
+
+describe("projectSwissDivision — resumed mid-tournament", () => {
+	// The call the header actually makes. `project()` above always starts from
+	// an empty field: no pending pairs, nobody advanced, every round still to
+	// come. The header is never in that state — by the time it renders a strip
+	// there are decided rounds behind it, an open round generated but not fully
+	// reported, and players who have already clinched. The per-round slice is
+	// what sizes the cells on screen, so it has to be tight from THERE, not
+	// only from round zero.
+	for (const n of [16, 24, 28, 30]) {
+		for (let cut = 1; cut < OWCT.swiss_max_rounds; cut++) {
+			it(`projects a tight per-round envelope for ${n} players resumed after round ${cut}`, () => {
+				const o = observeFrom(n, OWCT, cut, false, FUTURES);
+				expect(o.projection.perRoundMin).toEqual(o.roundMin);
+				expect(o.projection.perRoundMax).toEqual(o.roundMax);
+			});
+
+			// Same, with the open round generated and unreported — every one of
+			// its playable matches is a pending pair the walk must resolve
+			// before it can size the rounds after it.
+			if (cut + 1 >= OWCT.swiss_max_rounds) continue;
+			it(`projects a tight per-round envelope for ${n} players with round ${cut + 1} unreported`, () => {
+				const o = observeFrom(n, OWCT, cut, true, FUTURES);
+				expect(o.projection.perRoundMin).toEqual(o.roundMin);
+				expect(o.projection.perRoundMax).toEqual(o.roundMax);
+			});
+		}
+	}
 });
 
 describe("projectSwissDivision — the lone-survivor bye", () => {
@@ -328,10 +490,7 @@ describe("projectSwissDivision — pending matches", () => {
 				[
 					{ wins: 1, losses: 0 },
 					{ wins: 0, losses: 1 },
-				] as [
-					{ wins: number; losses: number },
-					{ wins: number; losses: number },
-				],
+				] as [Rec, Rec],
 		);
 		const p = projectSwissDivision(active, pairs, 3, config, 0);
 		expect(p.remainingMin).toBeGreaterThan(0);

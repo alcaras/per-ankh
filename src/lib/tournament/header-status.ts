@@ -61,6 +61,20 @@ export function headerStatusMeta(
 	}
 }
 
+// One Swiss round cell of a lane — the unit the strip draws one mark per match
+// for, and the unit the header names for assistive tech.
+export interface HeaderHeroRound {
+	done: number;
+	total: number;
+	current: boolean;
+	// A round that hasn't been generated yet: `total` is the census walk's
+	// projection for that round — the floor of its envelope, so the strip never
+	// draws a mark for a match that may not be played — rather than a count of
+	// matches that exist. Early exit drains the field, so it shrinks round over
+	// round and can be 0.
+	projected: boolean;
+}
+
 // The hero strip's per-state content. The page computes this from its loaded
 // matches/bracket/standings; the header component renders it.
 export type HeaderHero =
@@ -84,16 +98,7 @@ export type HeaderHero =
 				label: string;
 				reported: number;
 				total: number;
-				rounds: Array<{
-					done: number;
-					total: number;
-					current: boolean;
-					// A round that hasn't been generated yet: `total` is the
-					// census walk's projection (midpoint of its envelope) rather
-					// than a count of matches that exist. Early exit drains the
-					// field, so it shrinks round over round and can be 0.
-					projected: boolean;
-				}>;
+				rounds: HeaderHeroRound[];
 			}>;
 			// The single bar both lanes merge into — the divisions play Swiss
 			// apart and reunite in one championship bracket. Drawn as the lanes'
@@ -111,11 +116,11 @@ export type HeaderHero =
 			// Whole-tournament tally (byes excluded): matches played so far vs the
 			// PROJECTED eventual total — existing matches plus a census-walk
 			// projection of the remaining Swiss rounds and the qualifiers-sized
-			// championship bracket (see projected-totals.ts). The projection is a
-			// min/max envelope and this is its MIDPOINT — "~N" reads as "about
-			// N", so naming the ceiling would keep the denominator high and
-			// progress reading behind. `projectedExact` is false while results
-			// still in flight can swing the total (shown as "~N").
+			// championship bracket (see projected-totals.ts). This is exactly the
+			// sum of what the strip draws, round cell by round cell plus the
+			// championship bar, so counting marks and reading the denominator
+			// agree. `projectedExact` is false while results still in flight can
+			// swing the total (shown as "~N").
 			playedOverall: number;
 			projectedTotal: number;
 			projectedExact: boolean;

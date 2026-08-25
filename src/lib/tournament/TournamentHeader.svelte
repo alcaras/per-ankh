@@ -13,7 +13,11 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import SignupPopover from "./SignupPopover.svelte";
 	import TransitionPopover from "./TransitionPopover.svelte";
-	import type { HeaderHero, HeaderStatusMeta } from "./header-status";
+	import type {
+		HeaderHero,
+		HeaderHeroRound,
+		HeaderStatusMeta,
+	} from "./header-status";
 
 	interface Props {
 		tournament: TournamentDetail;
@@ -74,20 +78,39 @@
 	// division opens on 14, a 32-player one on 16) — the two lanes then differ
 	// only in how wide their own marks are inside a shared cell. Early exit
 	// drains the field as players clinch, so later cells are genuinely
-	// narrower; the floor keeps the last one wide enough to carry its "Swiss
-	// 5" label and to stay visible when the walk projects no matches at all.
+	// narrower; the floor is what keeps a cell visible when the walk projects
+	// no matches at all for it (a 4-player division's round 5 projects 0). At
+	// the division sizes the rules doc names it never binds — a 28-player
+	// division's last round weighs 5.
 	const MIN_ROUND_WEIGHT = 4;
 
+	// Both divisions carry a cell per Swiss round, so indexing either by `i`
+	// is safe for the length taken from the first.
 	const roundWeights = $derived(
 		hero.kind === "in-progress"
 			? Array.from({ length: hero.divisions[0]?.rounds.length ?? 0 }, (_, i) =>
 					Math.max(
 						MIN_ROUND_WEIGHT,
-						...hero.divisions.map((d) => d.rounds[i]?.total ?? 0),
+						...hero.divisions.map((d) => d.rounds[i].total),
 					),
 				)
 			: [],
 	);
+
+	// Every round cell is its own progressbar, so every one carries a name —
+	// a closed round is as much a thing a screen reader lands on as the open
+	// one, and an unnamed progressbar announces only its numbers.
+	function roundAriaLabel(
+		r: HeaderHeroRound,
+		index: number,
+		laneLabel: string,
+	): string {
+		if (r.current) return `Matches reported — ${laneLabel}`;
+		const matches = `${r.total} ${r.total === 1 ? "match" : "matches"}`;
+		return r.projected
+			? `Swiss ${index + 1} — ${matches} projected`
+			: `Swiss ${index + 1} — ${r.done} of ${matches} reported`;
+	}
 
 	const startsLabel = $derived(shortDate(tournament.starts_at));
 	const endedLabel = $derived(shortDate(tournament.completed_at));
@@ -314,11 +337,7 @@
 											aria-valuemin={0}
 											aria-valuemax={r.total}
 											aria-valuenow={r.done}
-											aria-label={r.current
-												? `Matches reported — ${d.label}`
-												: r.projected
-													? `Swiss ${i + 1} — ${r.total} matches projected`
-													: undefined}
+											aria-label={roundAriaLabel(r, i, d.label)}
 										>
 											{@render marks(r.done, r.total, r.current)}
 										</div>

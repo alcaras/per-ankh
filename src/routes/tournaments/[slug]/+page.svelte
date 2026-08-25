@@ -455,11 +455,24 @@
 				// with "~".
 				let remainingMin = 0;
 				let remainingMax = 0;
+				// The strip draws a not-yet-generated round at the FLOOR of that
+				// round's own envelope, and the tally's denominator is the sum of
+				// what the strip draws — a reader who counts marks and a reader who
+				// reads the denominator have to land on the same number, which is
+				// the miscount this strip exists to fix. Summing the envelope
+				// instead would disagree either way: the per-round floors are
+				// elementwise, so their sum is <= remainingMin <= any midpoint.
+				let remainingFloor = 0;
 				let qualifiersMin = 0;
 				let qualifiersMax = 0;
 				// Kept per division as well as summed: the lanes below size each
-				// not-yet-generated round cell from that division's own walk.
-				const swissProjections = {} as Record<"A" | "B", SwissProjection>;
+				// not-yet-generated round cell from that division's own walk, and
+				// index it by the same `open` round the walk was built from — the
+				// walk's index 0 IS round `open` + 1, so the two must agree.
+				const swissProjections = {} as Record<
+					"A" | "B",
+					{ proj: SwissProjection; open: number }
+				>;
 				for (const div of ["A", "B"] as const) {
 					const rows = data.standings.divisions[div].standings;
 					const recBySlot = new Map(rows.map((r) => [r.slot_id, r]));
@@ -495,11 +508,17 @@
 							winsToAdvance: t.swiss_wins_to_advance,
 							lossesToEliminate: t.swiss_losses_to_eliminate,
 						},
-						rows.filter((r) => r.status === "advanced").length,
+						// Withdrawn advancers are NOT qualifiers: an admin-withdrawn
+						// player won't play the bracket, and handleTransitionChampionship
+						// excludes them from the seed list even when they clinched the
+						// win threshold. Counting them here would over-size the
+						// championship bar and run the tally one high per withdrawal.
+						rows.filter((r) => r.status === "advanced" && !r.withdrawn).length,
 					);
-					swissProjections[div] = p;
+					swissProjections[div] = { proj: p, open: currentRound };
 					remainingMin += p.remainingMin;
 					remainingMax += p.remainingMax;
+					remainingFloor += p.perRoundMin.reduce((acc, n) => acc + n, 0);
 					qualifiersMin += p.qualifiersMin;
 					qualifiersMax += p.qualifiersMax;
 				}
@@ -511,15 +530,19 @@
 				const champMin = Math.max(0, qualifiersMin - 1 - champExisting);
 				const champMax = Math.max(0, qualifiersMax - 1 - champExisting);
 				const champMid = Math.round((champMin + champMax) / 2);
+				// The envelope, kept to decide whether the total is pinned down
+				// ("~N" while it isn't).
 				const projectedMin = playable.length + remainingMin + champMin;
 				const projectedMax = playable.length + remainingMax + champMax;
-				// "~N" reads as "about N", so show the middle of the envelope
-				// rather than its ceiling: a 28/28 field opens at 141–147, and
-				// naming the max would run the denominator 6 high and leave
-				// progress reading behind for most of the tournament. It can
-				// never read past 100% — projectedMin already counts every
-				// match that exists, so the midpoint is >= playedOverall.
-				const projectedTotal = Math.round((projectedMin + projectedMax) / 2);
+				// The denominator itself is exactly what the strip draws: every
+				// match that exists, plus each projected round at its floor, plus
+				// the championship bar's own size. Counting the marks and reading
+				// the denominator now land on the same number. It can never read
+				// past 100% — playable.length alone already covers playedOverall —
+				// and when the envelope is closed every per-round floor is that
+				// round's exact count, so an exact tournament still shows an exact
+				// total.
+				const projectedTotal = playable.length + remainingFloor + champMid;
 
 				// Swiss rounds generate per division, so the two can be split — one
 				// division finishing round N and starting N+1 while the other is
@@ -530,28 +553,23 @@
 				const inSwiss = t.status === "swiss";
 				const divisions = (["A", "B"] as const).map((div) => {
 					const divMatches = swiss.filter((m) => m.division === div);
-					const open = divMatches.reduce(
-						(acc, m) => Math.max(acc, m.round_number ?? 0),
-						0,
-					);
-					const proj = swissProjections[div];
+					const { proj, open } = swissProjections[div];
 					const rounds = Array.from({ length: t.swiss_max_rounds }, (_, i) => {
 						const inRound = divMatches.filter(
 							(m) => m.round_number === i + 1 && m.status !== "bye",
 						);
 						// Rounds past the last generated one hold no matches to count,
-						// so they take the census walk's size for that round —
-						// midpoint of its envelope, for the same reason the overall
-						// tally shows one. Index 0 of the walk is round `open` + 1.
+						// so they take the census walk's size for that round — the FLOOR
+						// of its envelope. A mark is countable now: drawing anything
+						// above the floor puts a mark on the strip for a match that may
+						// never be played, which is the miscount this strip exists to
+						// fix. The floor can only under-draw, and a cell GAINING a mark
+						// when its round generates reads as the field filling in, where
+						// losing one reads as a game disappearing. Index 0 of the walk
+						// is round `open` + 1, and `ahead` can't run off the end — the
+						// walk was built with exactly `swiss_max_rounds - open` rounds.
 						const ahead = i - open;
-						const size =
-							ahead >= 0
-								? Math.round(
-										((proj.perRoundMin[ahead] ?? 0) +
-											(proj.perRoundMax[ahead] ?? 0)) /
-											2,
-									)
-								: inRound.length;
+						const size = ahead >= 0 ? proj.perRoundMin[ahead] : inRound.length;
 						return {
 							done: inRound.filter((m) => m.status !== "pending").length,
 							total: size,
@@ -575,8 +593,10 @@
 					reported: champPlayable.filter((m) => m.status !== "pending").length,
 					// Until the bracket exists, size the merged bar by the projection
 					// so it renders as a stage-to-come rather than a done 0/0.
-					// Midpoint of the envelope, for the same reason the overall
-					// tally uses one — this renders under the same "~N".
+					// Midpoint of the envelope: unlike a Swiss round, the bracket is
+					// one stretch rather than a row of cells, so there is no floor to
+					// sum — and the tally counts this same number, so the bar and the
+					// denominator agree whatever it is.
 					total: Math.max(champPlayable.length, champMid + champExisting),
 					active: t.status === "championship",
 					exact: champMin === champMax,
