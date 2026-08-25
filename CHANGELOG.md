@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-08-25-dafb60f] - 2026-08-25
+
+### Other
+
+- (tournament) the overview header says who and when, not what format — [dafb60f](https://github.com/becked/per-ankh/commit/dafb60ff48f6638441b13240ee58d3fff415a344)
+
 ## [2026-08-25-5a7fcc6] - 2026-08-25
 
 ### Features
