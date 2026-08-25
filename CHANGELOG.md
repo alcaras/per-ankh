@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026-08-25-5a7fcc6] - 2026-08-25
+
+### Features
+
+- (tournament) the progress strip draws one mark per match — [62ee081](https://github.com/becked/per-ankh/commit/62ee0817f4467b97a6adb1b2c0f18baca5b235dc)
+
+### Fixes
+
+- (tournament) the strip's marks and its tally are the same number — [c23f341](https://github.com/becked/per-ankh/commit/c23f341ffe233f23fa6c217cee633eaf6104f091)
+- (tournament) name the Swiss phase once and tick the rest — [c233362](https://github.com/becked/per-ankh/commit/c2333624353c43e7965f759b50804f66a86e300f)
+- (tournament) the championship bar draws its floor too — [9f14695](https://github.com/becked/per-ankh/commit/9f1469574b6ee7cf89b441accf5c360250eeeaa8)
+
+### Other
+
+- (tournament) the strip's comments say what the strip does — [5a7fcc6](https://github.com/becked/per-ankh/commit/5a7fcc6d096113c8af2a2366e2199d8c0bc390ca)
+
 ## [2026-08-23-8855eef] - 2026-08-23
 
 ### Features
