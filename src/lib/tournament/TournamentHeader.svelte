@@ -67,21 +67,24 @@
 	}
 
 	// Round cells are sized by their match count, so one mark is one match
-	// everywhere in the strip and a mark is the same width across a lane. A
-	// proportional gauge drew a fixed row of dots per cell instead, which
-	// invited exactly the counting it couldn't survive: four unlit dots for
-	// three outstanding matches.
+	// everywhere in the strip. A proportional gauge drew a fixed row of dots
+	// per cell instead, which invited exactly the counting it couldn't
+	// survive: four unlit dots for three outstanding matches.
 	//
 	// The weights are shared by both lanes and the round-label row above them,
 	// taken from the larger division's count for that round, so the columns
 	// stay aligned when the divisions are different sizes (a 28-player
 	// division opens on 14, a 32-player one on 16) — the two lanes then differ
-	// only in how wide their own marks are inside a shared cell. Early exit
-	// drains the field as players clinch, so later cells are genuinely
-	// narrower; the floor is what keeps a cell visible when the walk projects
-	// no matches at all for it (a 4-player division's round 5 projects 0). At
-	// the division sizes the rules doc names it never binds — a 28-player
-	// division's last round weighs 5.
+	// only in how wide their own marks are inside a shared cell. So a mark
+	// holds one width only along the lane that sets the weights: at 30/26 the
+	// smaller lane's marks run 15/13, 15/13, 15/13, 11/9 and 5/4 of the larger
+	// lane's, up to a quarter fatter in the same column. Early exit drains the
+	// field as players clinch, so later cells are genuinely narrower; the floor
+	// is what keeps a cell visible when the walk projects no matches at all for
+	// it (a 4-player division's round 5 projects 0). It binds below 21 players
+	// — always at 16 and under, results-dependent from 17 to 20 — and never at
+	// 21 or more, so at the sizes the rules doc names it can't fire: a
+	// 28-player division's last round weighs 5.
 	const MIN_ROUND_WEIGHT = 4;
 
 	// Both divisions carry a cell per Swiss round, so indexing either by `i`
