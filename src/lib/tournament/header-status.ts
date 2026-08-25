@@ -103,7 +103,7 @@ export type HeaderHero =
 			// The single bar both lanes merge into — the divisions play Swiss
 			// apart and reunite in one championship bracket. Drawn as the lanes'
 			// dots; until the bracket is live `total` is the PROJECTED size
-			// (every advancer, single-elim → qualifiers − 1) at the midpoint of
+			// (every advancer, single-elim → qualifiers − 1) at the FLOOR of
 			// its envelope, surfaced as "N matches · awaiting Swiss". `exact` is
 			// false while Swiss results still in flight can change the qualifier
 			// count.

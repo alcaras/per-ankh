@@ -529,7 +529,6 @@
 				).length;
 				const champMin = Math.max(0, qualifiersMin - 1 - champExisting);
 				const champMax = Math.max(0, qualifiersMax - 1 - champExisting);
-				const champMid = Math.round((champMin + champMax) / 2);
 				// The envelope, kept to decide whether the total is pinned down
 				// ("~N" while it isn't).
 				const projectedMin = playable.length + remainingMin + champMin;
@@ -542,7 +541,7 @@
 				// and when the envelope is closed every per-round floor is that
 				// round's exact count, so an exact tournament still shows an exact
 				// total.
-				const projectedTotal = playable.length + remainingFloor + champMid;
+				const projectedTotal = playable.length + remainingFloor + champMin;
 
 				// Swiss rounds generate per division, so the two can be split — one
 				// division finishing round N and starting N+1 while the other is
@@ -592,12 +591,15 @@
 				const championship = {
 					reported: champPlayable.filter((m) => m.status !== "pending").length,
 					// Until the bracket exists, size the merged bar by the projection
-					// so it renders as a stage-to-come rather than a done 0/0.
-					// Midpoint of the envelope: unlike a Swiss round, the bracket is
-					// one stretch rather than a row of cells, so there is no floor to
-					// sum — and the tally counts this same number, so the bar and the
-					// denominator agree whatever it is.
-					total: Math.max(champPlayable.length, champMid + champExisting),
+					// so it renders as a stage-to-come rather than a done 0/0. The FLOOR
+					// of the envelope, for the same reason a projected Swiss round takes
+					// one: every mark here is countable too, so drawing above the floor
+					// puts one on the strip for a match that may never be played. The
+					// midpoint rounds up on an odd spread, so the bar drew the CEILING
+					// and shed a mark whenever Swiss settled lower — a 30/26 field drew
+					// 28 through three rounds and finished on 27. The tally counts this
+					// same number, so the bar and the denominator agree.
+					total: Math.max(champPlayable.length, champMin + champExisting),
 					active: t.status === "championship",
 					exact: champMin === champMax,
 				};
