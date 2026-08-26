@@ -1,11 +1,14 @@
-// Drift test: cloud/src/momentum.ts must stay a mirror of the frontend's
-// src/lib/game-detail/momentum.ts (same pattern as canonical-map-options —
-// the two sides must not evolve separately). Compares the exported functions'
-// source text and their behaviour on a synthetic duel; helper drift shows up
-// in the behavioural comparison.
+// Regeneration test: cloud/src/momentum.ts is GENERATED from the frontend's
+// src/lib/game-detail/momentum.ts by scripts/momentum-mirror.ts — re-run the
+// transform here and assert the on-disk mirror matches byte-for-byte, the
+// same guarantee the generated weights table has. The rest are model
+// invariants the scorer must hold regardless of the fitted numbers.
+// (`node:fs` / `import.meta.url` typed by test-node.d.ts — the worker
+// tsconfig has no Node types; this file runs on Vitest's Node pool.)
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { mirrorMomentumSource } from "../../scripts/momentum-mirror";
 import { momentumCurve as cloudCurve, type MomentumInput } from "./momentum";
-import { momentumCurve as frontCurve } from "../../src/lib/game-detail/momentum";
 
 function fixture(): MomentumInput {
 	const data = (base: number) =>
@@ -52,15 +55,13 @@ function fixture(): MomentumInput {
 }
 
 describe("momentum mirror", () => {
-	it("exports byte-identical function source", () => {
-		expect(cloudCurve.toString()).toBe(frontCurve.toString());
-	});
-
-	it("scores a synthetic duel identically", () => {
-		const a = cloudCurve(fixture());
-		const b = frontCurve(fixture());
-		expect(a).not.toBeNull();
-		expect(a).toEqual(b);
+	it("is exactly what the transform produces from the frontend scorer", () => {
+		const front = readFileSync(
+			new URL("../../src/lib/game-detail/momentum.ts", import.meta.url),
+			"utf8",
+		);
+		const mirror = readFileSync(new URL("./momentum.ts", import.meta.url), "utf8");
+		expect(mirror).toBe(mirrorMomentumSource(front));
 	});
 
 	it("is antisymmetric — swapping sides gives 1 − p", () => {

@@ -27,8 +27,10 @@
 // OUTPUT: src/lib/generated/momentum.ts AND cloud/src/generated/momentum.ts
 // (identical, the law-classes dual-emit pattern): bucket weights, the
 // smoothed SD table, and MOMENTUM_MODEL_VERSION. The scoring code that
-// consumes these lives in src/lib/game-detail/momentum.ts with a byte-mirror
-// in cloud/src/momentum.ts.
+// consumes these lives in src/lib/game-detail/momentum.ts; its Worker mirror
+// cloud/src/momentum.ts is also GENERATED here (scripts/momentum-mirror.ts is
+// the transform), so the two can't drift. `--mirror-only` regenerates just
+// the mirror, no corpus needed.
 //
 // The spec's validation suite runs here and FAILS THE BAKE on violation:
 //   - Gotcha 5: map_tiles' positional index must equal tile_xml_id (checked
@@ -49,12 +51,24 @@ import { fileURLToPath } from "node:url";
 
 import { format as prettierFormat, resolveConfig } from "prettier";
 
+import { mirrorMomentumSource } from "./momentum-mirror";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 const OUTPUTS = [
 	resolve(REPO_ROOT, "src/lib/generated/momentum.ts"),
 	resolve(REPO_ROOT, "cloud/src/generated/momentum.ts"),
 ];
+const SCORER = resolve(REPO_ROOT, "src/lib/game-detail/momentum.ts");
+const MIRROR_OUT = resolve(REPO_ROOT, "cloud/src/momentum.ts");
+
+async function emitMirror(): Promise<void> {
+	const front = await readFile(SCORER, "utf-8");
+	await writeFile(MIRROR_OUT, mirrorMomentumSource(front));
+	console.log(
+		`bake-momentum: mirrored ${SCORER.replace(REPO_ROOT + "/", "")} → ${MIRROR_OUT.replace(REPO_ROOT + "/", "")}`,
+	);
+}
 
 // Bump when the model form changes (dimensions, buckets, standardisation) —
 // refits on a new corpus keep the version and change the fitted numbers.
@@ -306,6 +320,10 @@ function fitLogistic(X: number[][], y: number[]): number[] {
 // ---------- Main ----------
 
 async function main(): Promise<void> {
+	if (process.argv.includes("--mirror-only")) {
+		await emitMirror();
+		return;
+	}
 	const dir = corpusDir();
 	const files = (await readdir(dir)).filter((f) => f.endsWith(".json"));
 	const duels: Duel[] = [];
@@ -581,6 +599,7 @@ async function main(): Promise<void> {
 		await mkdir(dirname(out), { recursive: true });
 		await writeFile(out, formatted);
 	}
+	await emitMirror();
 	console.log(
 		`bake-momentum: ${duels.length} duels, buckets n=[${bucketNs.join(", ")}], ` +
 			`AUC@30/50/70% = ${aucAt(0.3)}/${aucAt(0.5)}/${aucAt(0.7)} → ${OUTPUTS.map((o) => o.replace(REPO_ROOT + "/", "")).join(", ")}`,

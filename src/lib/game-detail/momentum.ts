@@ -4,9 +4,10 @@
 //
 // Consumes the fitted weights/scales from $lib/generated/momentum (baked by
 // scripts/bake-momentum.ts, where the model and its data gotchas are
-// documented). Everything here is pure arithmetic over blob fields; the same
-// file is byte-mirrored at cloud/src/momentum.ts for the Worker's derive step,
-// with a drift test keeping the two identical — change one, copy to the other.
+// documented). Everything here is pure arithmetic over blob fields; the
+// Worker's mirror at cloud/src/momentum.ts is GENERATED from this file
+// (`npm run bake:momentum -- --mirror-only`), and a regeneration test keeps
+// the on-disk mirror exactly what the transform produces.
 //
 // Honesty note for any consumer: this is a retrospective reading of a
 // finished match, not a forecast. Weights are fitted over the corpus and the
