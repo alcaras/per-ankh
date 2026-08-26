@@ -2289,6 +2289,19 @@ export interface RecommendedOpponent {
 	// Rated games the pair has already played against each other.
 	meetings: number;
 	badges: OpponentBadge[];
+	// A map from the community atlas' pool that neither has played in the last
+	// six months, resolved by the Worker to a name, its setup and a deep link.
+	// Null when the recommender had no pool to pick from.
+	map: SuggestedMap | null;
+}
+
+export interface SuggestedMap {
+	// The script's name, e.g. "Coastal Rain Basin".
+	label: string;
+	// How it is set up: "Duel · wide · point-sym off · mirror".
+	setting: string;
+	// Deep link into owtournamentatlas.
+	url: string;
 }
 
 export type OpponentBadge = "active_this_week" | "new_here" | "bridges_circles";

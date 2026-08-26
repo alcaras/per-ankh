@@ -15,6 +15,7 @@
 	// shuffled order the rebuild stored, which is why nothing here is numbered.
 	import { resolve } from "$app/paths";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import CopyButton from "$lib/tournament/CopyButton.svelte";
 	import type {
 		OpponentBadge,
 		RecommendedOpponent,
@@ -54,6 +55,20 @@
 	// It steps aside entirely for "No mutual opponents", which already implies
 	// the two have never met (the graph distance behind it is at least three),
 	// rather than saying the weaker half of the same thing twice.
+	// The message to send them, ready to paste. The point of the whole card is
+	// to get from "here is someone to play" to a game being arranged, and the
+	// step that actually stalls is composing the opening line — so it is written
+	// here, map and all, and the viewer only has to paste it.
+	//
+	// The setting is trimmed to its first two parts ("Duel · wide"): the full
+	// string carries point-symmetry and mirror flags that the atlas link answers
+	// better than a chat message can.
+	function dmFor(o: RecommendedOpponent): string {
+		if (!o.map) return "Fancy a game?";
+		const setting = o.map.setting.split(" · ").slice(0, 2).join(" · ");
+		return `Fancy a game? Per-Ankh suggests ${o.map.label} (${setting}) — ${o.map.url}`;
+	}
+
 	function labelsFor(o: RecommendedOpponent): string[] {
 		const bridges = o.badges.includes("bridges_circles");
 		const history =
@@ -83,6 +98,38 @@
 		<path
 			d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"
 		/>
+	</svg>
+{/snippet}
+
+{#snippet copyMark()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-4 w-4"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+		/>
+	</svg>
+{/snippet}
+
+{#snippet checkMark()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-4 w-4 text-orange"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 	</svg>
 {/snippet}
 
@@ -122,8 +169,29 @@
 						</span>
 					{/each}
 				</div>
+
+				{#if o.map}
+					<div class="mt-1 truncate text-xs text-tan opacity-70">
+						{o.map.label}
+						<span class="opacity-70"
+							>· {o.map.setting.split(" · ").slice(0, 2).join(" · ")}</span
+						>
+					</div>
+				{/if}
 			</div>
 		</ProfileLink>
+
+		<!-- Copy the opening message, map and link included. -->
+		<CopyButton
+			text={() => dmFor(o)}
+			label="Copy a message to {o.display_name}"
+			title="Copy a message to {o.display_name}"
+			class="inline-flex shrink-0 items-center rounded border border-tan p-1.5 text-tan transition-colors hover:border-orange hover:text-orange"
+		>
+			{#snippet children(copied)}
+				{#if copied}{@render checkMark()}{:else}{@render copyMark()}{/if}
+			{/snippet}
+		</CopyButton>
 
 		<!-- Their Discord profile. The mark alone, no label: it lands on the
 		     profile rather than in a DM — Discord publishes no compose URL, and

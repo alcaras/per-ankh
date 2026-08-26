@@ -8,6 +8,9 @@ import {
 	type RecommendationCandidate,
 } from "./recommend";
 import type { Duel } from "./glicko2";
+import type { RecommendationDuel } from "./recommend";
+import { ATLAS_POOL } from "../generated/atlas-pool";
+import { canonicalMapScript } from "../tournament/canonical-maps";
 
 const TODAY = "2026-08-26";
 const RECENT = "2026-08-20";
@@ -290,6 +293,46 @@ describe("buildRecommendations", () => {
 		for (const p of players) {
 			expect(idsFor(lists, p.userId)).toHaveLength(RECOMMENDATION_COUNT);
 		}
+	});
+
+	it("suggests a different map on every row it can", () => {
+		// The pool holds several configurations of some scripts and one of
+		// others, so picking per pair in isolation returns the popular scripts
+		// over and over. Nobody here has played anything, so every row is free
+		// to be a fresh script and they should all differ.
+		const players = [player("me"), ...pool(12)];
+		const lists = buildRecommendations({ players, duels: [], today: TODAY });
+
+		const mine = lists.get("me") ?? [];
+		expect(mine.every((r) => r.mapAnchor !== null)).toBe(true);
+
+		const scripts = mine.map((r) =>
+			canonicalMapScript(
+				ATLAS_POOL.find((m) => m.anchor === r.mapAnchor)!.script,
+			),
+		);
+		expect(new Set(scripts).size).toBe(scripts.length);
+	});
+
+	it("avoids a map either of them has played lately", () => {
+		// Every duel on one script, recent — nobody should be sent back to it
+		// while eighteen other configurations are untouched.
+		const players = [player("me"), player("rival")];
+		const duels: RecommendationDuel[] = [
+			{
+				date: "2026-08-01",
+				p1: "me",
+				p2: "rival",
+				winner: "me",
+				script: canonicalMapScript(ATLAS_POOL[0].script),
+			},
+		];
+		const lists = buildRecommendations({ players, duels, today: TODAY });
+		const rec = (lists.get("me") ?? [])[0];
+
+		const playedScript = canonicalMapScript(ATLAS_POOL[0].script);
+		const suggested = ATLAS_POOL.find((m) => m.anchor === rec.mapAnchor)!;
+		expect(canonicalMapScript(suggested.script)).not.toBe(playedScript);
 	});
 
 	it("is deterministic — same inputs, same lists in the same order", () => {

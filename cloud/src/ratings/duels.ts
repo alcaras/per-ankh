@@ -19,6 +19,7 @@
 // casually *and* archived into a tournament, counts once. All bulk D1 — no R2,
 // no per-game round trips.
 
+import { canonicalMapScript } from "../tournament/canonical-maps";
 import type { Duel } from "./glicko2";
 
 export interface ResolvedDuel extends Duel {
@@ -26,6 +27,11 @@ export interface ResolvedDuel extends Duel {
 	// for a tournament match reported with no save attached.
 	key: string;
 	source: "tournament" | "casual";
+	// The map script they played it on, canonicalised so the two spellings the
+	// two sources use compare equal (canonicalMapScript). Null when the record
+	// doesn't say — an old game row, or a tournament match with no map set.
+	// Read by the map suggestion, not by the rating engine.
+	script: string | null;
 }
 
 export interface DuelExtraction {
@@ -72,7 +78,7 @@ async function tournamentDuels(db: D1Database): Promise<ResolvedDuel[]> {
 	const rows = await db
 		.prepare(
 			`SELECT m.match_id, m.slot_a_id, m.slot_a_user_id, m.slot_b_user_id,
-			        m.winner_slot_id,
+			        m.winner_slot_id, m.map_script,
 			        substr(COALESCE(m.reported_at, m.created_at), 1, 10) AS dt,
 			        g.xml_game_id
 			   FROM tournament_matches m
@@ -88,6 +94,7 @@ async function tournamentDuels(db: D1Database): Promise<ResolvedDuel[]> {
 			slot_a_user_id: string;
 			slot_b_user_id: string;
 			winner_slot_id: string;
+			map_script: string | null;
 			dt: string | null;
 			xml_game_id: string | null;
 		}>();
@@ -104,6 +111,7 @@ async function tournamentDuels(db: D1Database): Promise<ResolvedDuel[]> {
 			winner:
 				r.winner_slot_id === r.slot_a_id ? r.slot_a_user_id : r.slot_b_user_id,
 			source: "tournament",
+			script: r.map_script ? canonicalMapScript(r.map_script) : null,
 		});
 	}
 	return out;
@@ -113,6 +121,7 @@ interface HumanSlotRow {
 	game_id: string;
 	xml_game_id: string;
 	uploader_user_id: string | null;
+	map_class: string | null;
 	dt: string | null;
 	is_uploader: number;
 	is_winner: number;
@@ -131,7 +140,7 @@ async function casualDuels(
 	const rows = await db
 		.prepare(
 			`SELECT ps.game_id, ps.is_uploader, ps.is_winner, ps.online_id,
-			        g.xml_game_id, g.user_id AS uploader_user_id,
+			        g.xml_game_id, g.user_id AS uploader_user_id, g.map_class,
 			        substr(COALESCE(g.save_date, g.created_at), 1, 10) AS dt
 			   FROM player_summaries ps
 			   JOIN games g ON g.game_id = ps.game_id
@@ -182,6 +191,9 @@ async function casualDuels(
 			p2: resolved[1].userId,
 			winner: winner.userId,
 			source: "casual",
+			script: slots[0].map_class
+				? canonicalMapScript(slots[0].map_class)
+				: null,
 		});
 	}
 	return out;

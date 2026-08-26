@@ -38,6 +38,8 @@ import { g, expectedScore, SCALE, type Duel } from "./glicko2";
 // generic seeded mulberry32 that the pairing and map-assignment algorithms
 // already use for exactly this reason — a shuffle a test can reproduce.
 import { createRng, shuffle } from "../tournament/rng";
+import { MAP_MEMORY_DAYS, pickMap } from "./pick-map";
+import { canonicalMapScript } from "../tournament/canonical-maps";
 
 // Ten. Enough that the list survives a few of them being busy, few enough to
 // read in one go and to keep any single player from being everyone's answer.
@@ -133,7 +135,21 @@ export interface Recommendation {
 	opponentUserId: string;
 	meetings: number;
 	badges: OpponentBadge[];
+	// A map from the atlas pool neither has played lately, by its atlas anchor.
+	// Null when the pool is empty.
+	mapAnchor: string | null;
 }
+
+// A duel, plus the map script it was played on where the record knows it. The
+// rating engine takes plain Duels; the map suggestion needs this one field, and
+// it is optional so a test can leave it out.
+export interface RecommendationDuel extends Duel {
+	script?: string | null;
+}
+
+// One shared empty map for players with no recent games, rather than a fresh
+// allocation per candidate.
+const EMPTY_PLAYS: ReadonlyMap<string, number> = new Map();
 
 function daysBetween(from: string, to: string): number {
 	const a = Date.parse(`${from}T00:00:00Z`);
@@ -191,7 +207,7 @@ function distancesFrom(
  */
 export function buildRecommendations(args: {
 	players: readonly RecommendationCandidate[];
-	duels: readonly Duel[];
+	duels: readonly RecommendationDuel[];
 	today: string;
 }): Map<string, Recommendation[]> {
 	const { players, duels, today } = args;
@@ -202,6 +218,7 @@ export function buildRecommendations(args: {
 	const adjacency = new Map<string, Set<string>>();
 	const meetings = new Map<string, number>();
 	const recentMeetings = new Map<string, number>();
+	const scriptPlays = new Map<string, Map<string, number>>();
 	for (const d of duels) {
 		if (!byId.has(d.p1) || !byId.has(d.p2)) continue;
 		for (const [a, b] of [
@@ -214,8 +231,23 @@ export function buildRecommendations(args: {
 		}
 		const key = pairKey(d.p1, d.p2);
 		meetings.set(key, (meetings.get(key) ?? 0) + 1);
-		if (daysBetween(d.date, today) <= NOVELTY_WINDOW_DAYS) {
+		const age = daysBetween(d.date, today);
+		if (age <= NOVELTY_WINDOW_DAYS) {
 			recentMeetings.set(key, (recentMeetings.get(key) ?? 0) + 1);
+		}
+		// What each of them has played on lately, for the map suggestion. Drawn
+		// from the rated duels rather than every game either has uploaded: the
+		// suggestion is for a game between these two, so their multiplayer
+		// history is the relevant one, and it is the corpus already in hand.
+		if (d.script && age <= MAP_MEMORY_DAYS) {
+			for (const uid of [d.p1, d.p2]) {
+				let byScript = scriptPlays.get(uid);
+				if (!byScript) {
+					byScript = new Map();
+					scriptPlays.set(uid, byScript);
+				}
+				byScript.set(d.script, (byScript.get(d.script) ?? 0) + 1);
+			}
 		}
 	}
 
@@ -308,6 +340,8 @@ export function buildRecommendations(args: {
 					opponentUserId: candidateId,
 					meetings: meetings.get(key) ?? 0,
 					badges,
+					// Filled in below, once this list's ten are known.
+					mapAnchor: null,
 				},
 			});
 		}
@@ -378,13 +412,33 @@ export function buildRecommendations(args: {
 		// information: the list is ten people, not a ranking of ten people. The
 		// seed is the viewer and the day, so a reload does not reshuffle and a
 		// test can reproduce it.
-		out.set(
-			viewer.userId,
-			shuffle(
-				chosen.map((c) => c.rec),
-				createRng(`${viewer.userId}:${today}`),
-			),
+		const list = shuffle(
+			chosen.map((c) => c.rec),
+			createRng(`${viewer.userId}:${today}`),
 		);
+
+		// A map each, assigned only now that the ten are settled — an opponent
+		// who didn't make the list shouldn't have used up a script. `used`
+		// spreads the scripts across the page, which is worth more than the
+		// symmetry it costs: two players comparing pages may find their matchup
+		// listed under different maps, where a page of nine DOTAs is wrong in
+		// front of everyone, every time. The per-pair seed still decides the
+		// pick wherever the spread rule leaves a choice, so a reload doesn't
+		// reroll anything.
+		const used = new Set<string>();
+		for (const rec of list) {
+			const map = pickMap(
+				scriptPlays.get(viewer.userId) ?? EMPTY_PLAYS,
+				scriptPlays.get(rec.opponentUserId) ?? EMPTY_PLAYS,
+				createRng(`map:${pairKey(viewer.userId, rec.opponentUserId)}:${today}`),
+				used,
+			);
+			if (!map) continue;
+			rec.mapAnchor = map.anchor;
+			used.add(canonicalMapScript(map.script));
+		}
+
+		out.set(viewer.userId, list);
 	}
 
 	return out;

@@ -121,8 +121,8 @@ export async function rebuildRatings(
 
 	const insertRecommendation = db.prepare(
 		`INSERT INTO user_recommended_opponents
-		   (user_id, position, opponent_user_id, meetings, badges)
-		 VALUES (?, ?, ?, ?, ?)`,
+		   (user_id, position, opponent_user_id, meetings, badges, map_anchor)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
 	);
 	const recommendationStatements: D1PreparedStatement[] = [
 		db.prepare("DELETE FROM user_recommended_opponents"),
@@ -139,6 +139,7 @@ export async function rebuildRatings(
 					rec.opponentUserId,
 					rec.meetings,
 					JSON.stringify(rec.badges),
+					rec.mapAnchor,
 				),
 			);
 		});
