@@ -13,6 +13,7 @@
 	import { isNewer } from "$lib/utils/semver";
 	import { ensureUrlScheme } from "$lib/utils/url";
 	import { toast } from "$lib/ui/toast";
+	import { profileHref } from "$lib/utils/profile-href";
 	import type { Snippet } from "svelte";
 	import type { PageData } from "./$types";
 
@@ -25,6 +26,13 @@
 	// BulkReparseModal is generic over the list, so a single-element array
 	// reuses the same download → parse → upload pipeline.
 	let reparseGames = $state<GameListItem[] | null>(null);
+
+	// The reader's own Opponents tab, so "their Opponents tab" below links to
+	// the thing it names. profileHref decides slug-vs-permalink; the tab is a
+	// search param on whichever it picks.
+	const opponentsHref = $derived(
+		`${profileHref({ user_id: data.user.user_id, slug: data.user.slug })}?tab=opponents`,
+	);
 
 	// The boolean preferences — optimistic toggles backed by the worker,
 	// mirroring the lock toggle in GameActions: flip immediately, revert on
@@ -270,10 +278,13 @@
 {/snippet}
 
 {#snippet openToMatchesCopy()}
-	Other players looking for a game may see you suggested as an opponent on their <a
-		href={resolve("/opponents")}
-		class="text-orange transition-colors hover:text-tan">Opponents</a
-	> page. Turn this off to be left out of everyone's suggestions — you'll still get
+	Other players looking for a game may see you suggested as an opponent on their
+	<!-- profileHref returns a resolve() result, and the tab is a search param on
+	     it; the rule can't see through the call. -->
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+	<a href={opponentsHref} class="text-orange transition-colors hover:text-tan"
+		>Opponents</a
+	> tab. Turn this off to be left out of everyone's suggestions — you'll still get
 	your own.
 {/snippet}
 
