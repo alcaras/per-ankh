@@ -192,11 +192,21 @@ export function platformLabel(platform: string): string {
 // clock face still follows the viewer (see viewerClockOptions).
 export const TIME_LOCALE = "en-US";
 
-// UTC is the tournament's canonical scheduling clock and always reads 24-hour,
-// whatever face the viewer's locale prefers. "14:30 UTC" is how a match is
-// agreed, announced, and cast, so rendering the same instant as "2:30 PM UTC"
-// would put a second spelling on the one value everybody quotes. The viewer's
-// own face is for the LOCAL half, where it answers "when is that for me".
+// The face for the CANONICAL UTC clock: the UTC position of a zone toggle, and
+// the UTC half of a dual render. "14:30 UTC" is how a match is agreed,
+// announced, and cast, so that half reads 24-hour whatever face the viewer's
+// locale prefers — otherwise the one value everybody quotes acquires a second
+// spelling. The viewer's own face belongs to the LOCAL half, where it answers
+// "when is that for me".
+//
+// Scoped to the canonical clock, NOT to the string "UTC": a viewer whose own
+// zone is UTC and whose locale is 12-hour gets "2:30 PM UTC" from the LOCAL
+// half, and that is correct. They asked for their clock, and UTC is its honest
+// label — sitting where "PDT" or "GMT+9" would for anyone else. Deciding it by
+// the label instead would mean guessing: London reads "GMT" half the year,
+// Reykjavik and Accra read "GMT" always, Lisbon reads "GMT+0", all at offset
+// zero, so any test that catches those overreaches and any test that spares
+// them catches only machines literally set to UTC.
 const UTC_CLOCK_OPTIONS: Intl.DateTimeFormatOptions = {
 	hour: "2-digit",
 	minute: "2-digit",
@@ -211,17 +221,25 @@ let cached12Hour: boolean | undefined;
 /**
  * Whether the viewer's locale writes clock times on a 12-hour face ("7:30 PM")
  * rather than a 24-hour one ("19:30"). Asking Intl for the viewer's own hour
- * cycle gets the regional split right — en-US/AU/NZ/IN/PH read 12-hour, while
- * en-GB/IE/ZA and the non-English locales read 24-hour — where the hardcoded
- * 24-hour face these helpers used to force left 12-hour readers misreading
- * every tournament time. Governs LOCAL times only; UTC keeps its own 24-hour
- * face (see UTC_CLOCK_OPTIONS).
+ * cycle gets the split right where a hardcoded 24-hour face left 12-hour
+ * readers misreading every tournament time. The split is regional, not
+ * English-vs-not: en-US/AU/NZ/IN/PH read 12-hour and so do es-MX, ko-KR, ar-EG
+ * and hi-IN, while en-GB/IE/ZA sit with ja-JP, de-DE and fr-FR on 24-hour.
+ * Governs LOCAL times only; UTC keeps its own 24-hour face (see
+ * UTC_CLOCK_OPTIONS).
  *
  * Exported for the schedule editor's TimeField, which takes the face as a prop
  * rather than an option bag — and which enters a local time, so it follows the
  * viewer like every other local clock.
  */
 export function viewerUses12Hour(): boolean {
+	// There is no viewer to ask during SSR, and the Worker resolves en-US/UTC —
+	// so probing there would render every local time on a 12-hour face for
+	// everyone, including the "2:30 PM UTC" that UTC_CLOCK_OPTIONS exists to
+	// prevent, and including readers whose own clock is 24-hour. The canonical
+	// face is the honest first paint; hydration upgrades the viewers who do read
+	// 12-hour. Same `document` probe the zone cookie uses (zone-preference.ts).
+	if (typeof document === "undefined") return false;
 	return (cached12Hour ??=
 		new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions()
 			.hour12 === true);

@@ -376,8 +376,7 @@
 		return cells;
 	});
 
-	// Compact matchup for calendar chips; the chip's time comes from the shared
-	// formatScheduledTimeInZone, so it carries the same clock face as the table.
+	// Compact matchup for calendar chips.
 	function shortMatchup(m: TournamentMatch): string {
 		return matchupLabel(
 			m,

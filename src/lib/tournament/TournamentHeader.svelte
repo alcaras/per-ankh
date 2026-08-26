@@ -12,6 +12,7 @@
 	} from "$lib/api-cloud";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import { TIME_LOCALE } from "$lib/utils/formatting";
 	import PlayerAvatar from "./PlayerAvatar.svelte";
 	import SignupPopover from "./SignupPopover.svelte";
 	import TransitionPopover from "./TransitionPopover.svelte";
@@ -60,12 +61,22 @@
 		onConfirmTransition,
 	}: Props = $props();
 
-	// Date-only display ("May 30"); the stored value is a full instant.
-	function shortDate(iso: string | null): string | null {
+	// Date-only display ("May 30"); the stored value is a full instant. Pinned to
+	// TIME_LOCALE like every other date surface — the viewer's own locale would
+	// print "30. Mai" in the middle of an otherwise English header.
+	//
+	// `timeZone` names the clock the day is read on, and the two callers need
+	// different ones because the two columns are written differently. Both are
+	// documented in migration 0020.
+	function shortDate(iso: string | null, timeZone?: string): string | null {
 		if (!iso) return null;
 		const d = new Date(iso);
 		if (Number.isNaN(d.getTime())) return null;
-		return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+		return d.toLocaleDateString(TIME_LOCALE, {
+			timeZone,
+			month: "short",
+			day: "numeric",
+		});
 	}
 
 	// Round cells are sized by their match count, so one mark is one match
@@ -117,7 +128,17 @@
 			: `Swiss ${index + 1} — ${r.done} of ${matches} reported`;
 	}
 
-	const startsLabel = $derived(shortDate(tournament.starts_at));
+	// starts_at is a calendar date the admin picked, stored as midnight UTC
+	// (TournamentOverviewPanel), so only a UTC read gives back the day they
+	// chose — reading it on the viewer's clock moved the header to the day
+	// before for everyone west of UTC ("2026-07-01T00:00:00.000Z" → "Jun 30").
+	const startsLabel = $derived(shortDate(tournament.starts_at, "UTC"));
+	// completed_at is stamped by SQLite datetime('now') and arrives as a bare
+	// "2026-08-22 22:18:35" — a UTC wall clock with no zone marker, which
+	// `new Date` reads as LOCAL. The local render is what puts that wall clock
+	// back on screen intact; passing "UTC" here would shift it a second time
+	// and land east-of-UTC viewers on the day before. Deliberately unzoned
+	// until the column carries a real instant.
 	const endedLabel = $derived(shortDate(tournament.completed_at));
 
 	// Top right of the meta panel: when the tournament starts, or when it ended
