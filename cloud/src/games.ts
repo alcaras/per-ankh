@@ -621,12 +621,6 @@ function buildGamePlayerTurnStatements(
 			finalTurn,
 			yieldHistory: yieldHistory,
 			playerHistory: blob.player_history as never,
-			mapTiles: (blob.map_tiles ?? []) as { is_city_center?: boolean }[],
-			tileOwnership: (blob.tile_ownership_history ?? []) as {
-				tile_xml_id: number;
-				turn: number;
-				owner_player_xml_id: number | null;
-			}[],
 		});
 		if (curve) {
 			for (const pt of curve.points) {

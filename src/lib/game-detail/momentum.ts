@@ -11,8 +11,8 @@
 //
 // Honesty note for any consumer: this is a retrospective reading of a
 // finished match, not a forecast. Weights are fitted over the corpus and the
-// progress buckets need the final turn. Present it as "who was winning", not
-// "who would have won".
+// progress interpolation needs the final turn. Present it as "who was
+// winning", not "who would have won".
 
 import {
 	MOMENTUM_BUCKETS,
@@ -43,13 +43,6 @@ export interface MomentumInput {
 		player_id: number;
 		history: { turn: number; military_power: number | null }[];
 	}[];
-	/** Positional — the index IS the tile_xml_id (validated at bake time). */
-	mapTiles: { is_city_center?: boolean }[];
-	tileOwnership: {
-		tile_xml_id: number;
-		turn: number;
-		owner_player_xml_id: number | null;
-	}[];
 }
 
 export interface MomentumPoint {
@@ -59,16 +52,17 @@ export interface MomentumPoint {
 	/** Per-dimension contribution to the current log-odds; Σ lv = log-odds. */
 	lv: number[];
 	/**
-	 * Per-dimension contribution to the move since the previous point, with
-	 * weight and scale held fixed at the later turn — an unchanged stat
-	 * contributes exactly 0 (differencing lv instead folds in normaliser
-	 * drift and invents phantom changes).
+	 * Per-dimension contribution to the move since the previous point — the
+	 * exact difference of lv, so Σ ch = Δ log-odds identically and the panel
+	 * header can never disagree with the bars. A tied stat contributes
+	 * exactly 0; a constant nonzero lead contributes only the small, smooth
+	 * drift of the interpolated weights and per-turn scales.
 	 */
 	ch: number[];
 	/** Raw A−B leads, MOMENTUM_DIMS order — for the detail panel. */
 	raw: number[];
 	/**
-	 * Each side's own numbers at this turn — cities, growth, orders, science,
+	 * Each side's own numbers at this turn — growth, orders, science,
 	 * military power — for the "key stats" table. Not model inputs (the model
 	 * sees only differences); kept raw so the reader can check the arithmetic.
 	 */
@@ -109,35 +103,6 @@ function powerSeries(input: MomentumInput, playerId: number): ByTurn {
 	return byTurn;
 }
 
-/** Per-turn city counts reconstructed from the tile ownership timeline. */
-function citySeries(input: MomentumInput): Map<number, ByTurn> | null {
-	if (input.mapTiles.length === 0 || input.tileOwnership.length === 0)
-		return null;
-	const byTile = new Map<number, { turn: number; owner: number | null }[]>();
-	for (const e of input.tileOwnership) {
-		const rows = byTile.get(e.tile_xml_id) ?? [];
-		rows.push({ turn: e.turn, owner: e.owner_player_xml_id });
-		byTile.set(e.tile_xml_id, rows);
-	}
-	const out = new Map<number, ByTurn>();
-	input.mapTiles.forEach((tile, index) => {
-		if (!tile.is_city_center) return;
-		const rows = byTile.get(index);
-		if (!rows) return;
-		rows.sort((x, y) => x.turn - y.turn);
-		let owner: number | null = null;
-		let k = 0;
-		for (let t = 1; t <= input.finalTurn; t++) {
-			while (k < rows.length && rows[k].turn <= t) owner = rows[k++].owner;
-			if (owner == null) continue;
-			const per = out.get(owner) ?? new Map<number, number>();
-			per.set(t, (per.get(t) ?? 0) + 1);
-			out.set(owner, per);
-		}
-	});
-	return out;
-}
-
 // ---------- Features / standardisation / scoring ----------
 
 function featsAt(
@@ -145,16 +110,11 @@ function featsAt(
 	yb: Map<string, ByTurn>,
 	ma: ByTurn,
 	mb: ByTurn,
-	ca: ByTurn | undefined,
-	cb: ByTurn | undefined,
 	T: number,
 ): number[] | null {
 	const pa = ma.get(T);
 	const pb = mb.get(T);
 	if (pa == null || pb == null) return null;
-	const citiesA = ca?.get(T);
-	const citiesB = cb?.get(T);
-	if (citiesA == null || citiesB == null) return null;
 	const ordersA = ya.get("YIELD_ORDERS")?.get(T);
 	const ordersB = yb.get("YIELD_ORDERS")?.get(T);
 	const sciA = ya.get("YIELD_SCIENCE")?.get(T);
@@ -173,9 +133,8 @@ function featsAt(
 		const vb = yb.get(key)?.get(T) ?? 0;
 		eco += va > vb ? 1 : va < vb ? -1 : 0;
 	}
-	// MOMENTUM_DIMS order: cities, growth, orders, science, eco, mil.
+	// MOMENTUM_DIMS order: growth, orders, science, eco, mil.
 	return [
-		citiesA - citiesB,
 		growth,
 		ordersA - ordersB,
 		sciA - sciB,
@@ -200,12 +159,29 @@ function zOf(raw: number[], T: number): number[] {
 	return raw.map((v, j) => v / s[MOMENTUM_DIMS[j]]);
 }
 
-function weightsAt(progress: number): readonly number[] | null {
-	for (let i = 0; i < MOMENTUM_BUCKETS.length; i++) {
-		const [lo, hi] = MOMENTUM_BUCKETS[i];
-		if (progress >= lo && progress < hi) return MOMENTUM_WEIGHTS[i];
+// The weights are FITTED per progress bucket but SCORED with piecewise-linear
+// interpolation between the bucket centres (clamped flat outside them) — a
+// hard switch at the bucket edges puts four structural jumps into every
+// game's curve that read as battles. Thin (null) buckets are skipped.
+const WEIGHT_CENTRES: { c: number; w: readonly number[] }[] =
+	MOMENTUM_BUCKETS.flatMap(([lo, hi], i) => {
+		const w = MOMENTUM_WEIGHTS[i];
+		return w ? [{ c: (lo + hi) / 2, w }] : [];
+	});
+
+function weightsAt(progress: number): number[] | null {
+	if (WEIGHT_CENTRES.length === 0) return null;
+	const first = WEIGHT_CENTRES[0];
+	if (progress <= first.c) return [...first.w];
+	for (let i = 1; i < WEIGHT_CENTRES.length; i++) {
+		const hi = WEIGHT_CENTRES[i];
+		if (progress <= hi.c) {
+			const lo = WEIGHT_CENTRES[i - 1];
+			const t = (progress - lo.c) / (hi.c - lo.c);
+			return lo.w.map((v, j) => v + t * (hi.w[j] - v));
+		}
 	}
-	return MOMENTUM_WEIGHTS[MOMENTUM_WEIGHTS.length - 1];
+	return [...WEIGHT_CENTRES[WEIGHT_CENTRES.length - 1].w];
 }
 
 /**
@@ -219,18 +195,8 @@ export function momentumCurve(input: MomentumInput): MomentumCurve | null {
 	const yb = yieldSeries(input, input.b);
 	const ma = powerSeries(input, input.a);
 	const mb = powerSeries(input, input.b);
-	const cities = citySeries(input);
-	if (!cities) return null;
-	const ca = cities.get(input.a);
-	const cb = cities.get(input.b);
 
-	const side = (
-		y: Map<string, ByTurn>,
-		m: ByTurn,
-		c: ByTurn | undefined,
-		t: number,
-	): number[] => [
-		c?.get(t) ?? 0,
+	const side = (y: Map<string, ByTurn>, m: ByTurn, t: number): number[] => [
 		y.get("YIELD_GROWTH")?.get(t) ?? 0,
 		y.get("YIELD_ORDERS")?.get(t) ?? 0,
 		y.get("YIELD_SCIENCE")?.get(t) ?? 0,
@@ -239,32 +205,31 @@ export function momentumCurve(input: MomentumInput): MomentumCurve | null {
 	const pts: { turn: number; raw: number[]; sa: number[]; sb: number[] }[] =
 		[];
 	for (let t = 2; t <= input.finalTurn; t++) {
-		const raw = featsAt(ya, yb, ma, mb, ca, cb, t);
+		const raw = featsAt(ya, yb, ma, mb, t);
 		if (raw)
 			pts.push({
 				turn: t,
 				raw,
-				sa: side(ya, ma, ca, t),
-				sb: side(yb, mb, cb, t),
+				sa: side(ya, ma, t),
+				sb: side(yb, mb, t),
 			});
 	}
 	if (pts.length < 5) return null;
 
 	const points: MomentumPoint[] = [];
-	for (let i = 0; i < pts.length; i++) {
-		const { turn, raw, sa, sb } = pts[i];
+	let prevLv: number[] | null = null;
+	for (const { turn, raw, sa, sb } of pts) {
 		const w = weightsAt(turn / input.finalTurn);
 		if (!w) continue;
 		const z = zOf(raw, turn);
 		const lv = z.map((v, j) => w[j] * v);
 		const logOdds = lv.reduce((s, v) => s + v, 0);
-		// Change: weight and scale fixed at the LATER turn (see header).
-		let ch = new Array<number>(MOMENTUM_DIMS.length).fill(0);
-		if (i > 0) {
-			const prev = pts[i - 1];
-			const s1 = sdAt(turn);
-			ch = raw.map((v, j) => w[j] * ((v - prev.raw[j]) / s1[MOMENTUM_DIMS[j]]));
-		}
+		// Change: the exact difference of lv (see the MomentumPoint doc).
+		const prev = prevLv;
+		const ch = prev
+			? lv.map((v, j) => v - prev[j])
+			: new Array<number>(MOMENTUM_DIMS.length).fill(0);
+		prevLv = lv;
 		points.push({
 			turn,
 			p: 1 / (1 + Math.exp(-logOdds)),

@@ -2,16 +2,28 @@
 // local corpus of game blobs, and bake the fitted weights + per-turn scales
 // into generated modules for both the frontend and the Worker.
 //
-// The model, its maths, and the six data gotchas it must respect are specified
+// The model, its maths, and the data gotchas it must respect are specified
 // in owglick's docs/momentum-model.md; this script is that spec rebuilt for
-// per-ankh's blobs. In brief: six per-turn dimensions (cities, growth,
-// orders, science, eco, military), each stored as the A−B difference (kills
-// the bigger-empire-has-more-of-everything collinearity), standardised by the
+// per-ankh's blobs. In brief: five per-turn dimensions (growth, orders,
+// science, eco, military), each stored as the A−B difference (kills the
+// bigger-empire-has-more-of-everything collinearity), standardised by the
 // corpus SD at that turn (smoothed ±7 turns), scored by an antisymmetric
 // no-intercept logistic fitted separately per game-progress bucket — because
 // growth front-loads and military back-loads, one fixed weighting misreads
-// both ends of every match. Cities is retained despite being ~redundant with
-// growth (r ≈ +0.65) because it is independently interpretable.
+// both ends of every match. The SCORER interpolates the weight vector
+// piecewise-linearly between bucket centres (a hard switch at the edges puts
+// four structural jumps into every curve), so every metric this bake cites
+// is evaluated through that same interpolation — the model as scored, not as
+// fitted. The L2 strength is chosen by k-fold cross-validation GROUPED BY
+// GAME: every turn of a game carries the same label, so row-level counts
+// wildly overstate the independent evidence (~384 matches, not tens of
+// thousands of rows).
+//
+// v2 dropped the cities dimension: its fitted weights were sign-flipping
+// suppressors for growth (r ≈ +0.65), and it alone required the fragile
+// tile-ownership city reconstruction — which was also blind to razed cities
+// (only end-state city centres exist in map_tiles), undercounting exactly
+// the event the chart most needs to show.
 //
 // SOURCES (local-only): a directory of per-ankh game blobs (the JSON the
 // /v1/games/:id endpoint serves), pointed at by MOMENTUM_CORPUS_DIR in .env.
@@ -32,14 +44,17 @@
 // the transform), so the two can't drift. `--mirror-only` regenerates just
 // the mirror, no corpus needed.
 //
-// The spec's validation suite runs here and FAILS THE BAKE on violation:
-//   - Gotcha 5: map_tiles' positional index must equal tile_xml_id (checked
-//     via founded_turn + 1 against each city centre's first ownership entry).
+// The validation suite runs here and FAILS THE BAKE on violation:
 //   - Coverage: the median first scored turn must be early (Gotcha 1 — an
 //     absent eco yield is zero income, not missing data).
 //   - Shape: growth's weight must peak in an earlier bucket than military's
 //     (the front-load/back-load signature; a corpus that fails this is
 //     mis-parsed, not differently balanced).
+//   - Calibration: the UI renders these probabilities as percentages, and
+//     calibration — not discrimination — is the property that claims. On
+//     pooled held-out CV predictions the Brier score must beat always-50%
+//     and the 10-bin expected calibration error must stay near sampling
+//     noise (thresholds documented at the check).
 //
 // Run: npm run bake:momentum
 
@@ -72,9 +87,10 @@ async function emitMirror(): Promise<void> {
 
 // Bump when the model form changes (dimensions, buckets, standardisation) —
 // refits on a new corpus keep the version and change the fitted numbers.
-const MODEL_VERSION = 1;
+// v2: dropped cities, interpolated weights, CV-chosen L2 (see header).
+const MODEL_VERSION = 2;
 
-const DIMS = ["cities", "growth", "orders", "science", "eco", "mil"] as const;
+const DIMS = ["growth", "orders", "science", "eco", "mil"] as const;
 const ECO5 = [
 	"YIELD_MONEY",
 	"YIELD_FOOD",
@@ -91,7 +107,13 @@ const BUCKETS: [number, number][] = [
 	[0.7, 0.85],
 	[0.85, 1.01],
 ];
-const L2 = 2.0;
+// L2 candidates for the grouped cross-validation; the winner is refit on the
+// full corpus and stamped into the generated header.
+const L2_GRID = [0.5, 1, 2, 4, 8];
+const CV_FOLDS = 5;
+// Held-out evaluation grid: one prediction per game per progress point, so
+// games weigh equally and within-game autocorrelation can't inflate n.
+const EVAL_PROGRESS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
 const MIN_BUCKET_N = 40;
 
 // ---------- Corpus loading ----------
@@ -114,18 +136,6 @@ interface Blob {
 		player_id: number;
 		history: { turn: number; military_power: number | null }[];
 	}[];
-	map_tiles?: { is_city_center?: boolean }[];
-	tile_ownership_history?: {
-		tile_xml_id: number;
-		turn: number;
-		owner_player_xml_id: number | null;
-	}[];
-	city_statistics?: {
-		cities: {
-			founded_turn: number;
-			first_owner_player_xml_id: number | null;
-		}[];
-	};
 }
 
 function corpusDir(): string {
@@ -144,45 +154,15 @@ function corpusDir(): string {
 
 type Series = Map<number, Map<string, Map<number, number>>>; // player → yield → turn → rate
 type PowerSeries = Map<number, Map<number, number>>; // player → turn → power
-type CitySeries = Map<number, Map<number, number>>; // player → turn → cities
 
 interface Duel {
+	/** Stable identity for deterministic fold assignment. */
+	id: string;
 	a: number;
 	b: number;
 	winner: number;
 	end: number;
 	pts: { turn: number; f: Record<string, number> }[];
-}
-
-function citySeries(d: Blob, maxTurn: number): CitySeries | null {
-	const tiles = d.map_tiles ?? [];
-	const hist = d.tile_ownership_history ?? [];
-	if (tiles.length === 0 || hist.length === 0) return null;
-	// map_tiles is positional and its index IS the tile_xml_id used by the
-	// ownership history (Gotcha 5, validated corpus-wide in main()).
-	const byTile = new Map<number, { turn: number; owner: number | null }[]>();
-	for (const e of hist) {
-		const rows = byTile.get(e.tile_xml_id) ?? [];
-		rows.push({ turn: e.turn, owner: e.owner_player_xml_id });
-		byTile.set(e.tile_xml_id, rows);
-	}
-	const out: CitySeries = new Map();
-	tiles.forEach((tile, index) => {
-		if (!tile.is_city_center) return;
-		const rows = byTile.get(index);
-		if (!rows) return;
-		rows.sort((x, y) => x.turn - y.turn);
-		let owner: number | null = null;
-		let k = 0;
-		for (let t = 1; t <= maxTurn; t++) {
-			while (k < rows.length && rows[k].turn <= t) owner = rows[k++].owner;
-			if (owner == null) continue;
-			const per = out.get(owner) ?? new Map<number, number>();
-			per.set(t, (per.get(t) ?? 0) + 1);
-			out.set(owner, per);
-		}
-	});
-	return out;
 }
 
 /** Raw A−B features at turn T, or null when orders/science lack data. */
@@ -191,17 +171,12 @@ function featsAt(
 	b: number,
 	M: PowerSeries,
 	Y: Series,
-	C: CitySeries,
 	T: number,
 ): Record<string, number> | null {
 	const pa = M.get(a)?.get(T);
 	const pb = M.get(b)?.get(T);
 	if (pa == null || pb == null) return null;
-	const ca = C.get(a)?.get(T);
-	const cb = C.get(b)?.get(T);
-	if (ca == null || cb == null) return null;
 	const out: Record<string, number> = {
-		cities: ca - cb,
 		// Growth (the food→population engine) is the strongest single dimension
 		// and a leading indicator of the others. Absent = zero income, like eco.
 		growth:
@@ -232,7 +207,7 @@ function featsAt(
 	return out;
 }
 
-function prepGame(d: Blob): Duel | null {
+function prepGame(d: Blob, file: string): Duel | null {
 	const humans = (d.player_roster ?? []).filter((p) => p.is_human);
 	if (humans.length !== 2) return null;
 	const winner = d.match_metadata?.winner?.winner_player_xml_id;
@@ -257,19 +232,17 @@ function prepGame(d: Blob): Duel | null {
 			if (p.military_power != null) byTurn.set(p.turn, p.military_power);
 		M.set(row.player_id, byTurn);
 	}
-	const C = citySeries(d, end);
-	if (!C) return null;
 
 	const pts: Duel["pts"] = [];
 	for (let t = 2; t <= end; t++) {
-		const f = featsAt(a, b, M, Y, C, t);
+		const f = featsAt(a, b, M, Y, t);
 		if (f) pts.push({ turn: t, f });
 	}
 	if (pts.length < 5) return null;
-	return { a, b, winner, end, pts };
+	return { id: d.match_metadata?.xml_game_id ?? file, a, b, winner, end, pts };
 }
 
-// ---------- Tiny linear algebra (5×5) ----------
+// ---------- Tiny linear algebra (n×n) ----------
 
 function solve(A: number[][], g: number[]): number[] | null {
 	const n = g.length;
@@ -290,7 +263,7 @@ function solve(A: number[][], g: number[]): number[] | null {
 }
 
 /** Newton/IRLS logistic, no intercept, L2-regularised. */
-function fitLogistic(X: number[][], y: number[]): number[] {
+function fitLogistic(X: number[][], y: number[], l2: number): number[] {
 	const k = X[0].length;
 	let w = new Array<number>(k).fill(0);
 	for (let it = 0; it < 60; it++) {
@@ -306,8 +279,8 @@ function fitLogistic(X: number[][], y: number[]): number[] {
 			}
 		}
 		for (let r = 0; r < k; r++) {
-			H[r][r] += L2;
-			gd[r] -= L2 * w[r];
+			H[r][r] += l2;
+			gd[r] -= l2 * w[r];
 		}
 		const step = solve(H, gd);
 		if (!step) break;
@@ -330,8 +303,6 @@ async function main(): Promise<void> {
 	// A match both players uploaded appears as two blobs with one
 	// xml_game_id — keep the longer upload so each match counts once.
 	const byMatch = new Map<string, { turns: number; duel: Duel }>();
-	let tileChecksOk = 0;
-	let tileChecksTotal = 0;
 	let read = 0;
 
 	for (const f of files) {
@@ -343,27 +314,7 @@ async function main(): Promise<void> {
 		}
 		read++;
 
-		// Gotcha 5 validation: each city centre's first ownership turn should be
-		// founded_turn + 1 for SOME city (positional index == tile id). Sampled
-		// per game; asserted corpus-wide below.
-		const founded = new Set(
-			(d.city_statistics?.cities ?? []).map((c) => c.founded_turn + 1),
-		);
-		const hist = d.tile_ownership_history ?? [];
-		const firstOwn = new Map<number, number>();
-		for (const e of hist) {
-			const prev = firstOwn.get(e.tile_xml_id);
-			if (prev == null || e.turn < prev) firstOwn.set(e.tile_xml_id, e.turn);
-		}
-		(d.map_tiles ?? []).forEach((tile, index) => {
-			if (!tile.is_city_center) return;
-			const t = firstOwn.get(index);
-			if (t == null) return;
-			tileChecksTotal++;
-			if (founded.has(t)) tileChecksOk++;
-		});
-
-		const duel = prepGame(d);
+		const duel = prepGame(d, f);
 		if (!duel) continue;
 		const xid = d.match_metadata?.xml_game_id;
 		const turns = duel.end;
@@ -375,15 +326,13 @@ async function main(): Promise<void> {
 		}
 	}
 	duels.push(...[...byMatch.values()].map((v) => v.duel));
+	// Stable order → deterministic CV folds (i % CV_FOLDS below): the same
+	// corpus always produces the same fit, whatever the directory order.
+	duels.sort((x, y) => x.id.localeCompare(y.id));
 	console.log(
 		`bake-momentum: ${read} blobs read, ${duels.length} deduped duels`,
 	);
 
-	if (tileChecksTotal > 0 && tileChecksOk / tileChecksTotal < 0.9) {
-		throw new Error(
-			`bake-momentum: Gotcha-5 tile-index validation failed — ${tileChecksOk}/${tileChecksTotal} city centres matched founded_turn+1. The map_tiles index ↔ tile_xml_id assumption does not hold on this corpus.`,
-		);
-	}
 	if (duels.length < 100) {
 		throw new Error(
 			`bake-momentum: only ${duels.length} usable duels (of ${read} blobs) — too thin to fit.`,
@@ -457,34 +406,127 @@ async function main(): Promise<void> {
 	};
 
 	// Fit per bucket, both orientations (antisymmetry: f(−x) = 1 − f(x)).
-	const weights: (number[] | null)[] = [];
-	const bucketNs: number[] = [];
-	for (const [lo, hi] of BUCKETS) {
-		const X: number[][] = [];
-		const y: number[] = [];
-		for (const g of duels) {
-			const label = g.winner === g.a ? 1 : 0;
-			for (const { turn, f } of g.pts) {
-				const prog = turn / g.end;
-				if (prog >= lo && prog < hi) {
-					X.push(zOf(f, turn));
-					y.push(label);
+	const fitBuckets = (train: Duel[], l2: number): (number[] | null)[] => {
+		const out: (number[] | null)[] = [];
+		for (const [lo, hi] of BUCKETS) {
+			const X: number[][] = [];
+			const y: number[] = [];
+			for (const g of train) {
+				const label = g.winner === g.a ? 1 : 0;
+				for (const { turn, f } of g.pts) {
+					const prog = turn / g.end;
+					if (prog >= lo && prog < hi) {
+						X.push(zOf(f, turn));
+						y.push(label);
+					}
 				}
 			}
+			if (y.length < MIN_BUCKET_N) {
+				out.push(null);
+				continue;
+			}
+			const Xa = [...X, ...X.map((row) => row.map((v) => -v))];
+			const ya = [...y, ...y.map((v) => 1 - v)];
+			out.push(fitLogistic(Xa, ya, l2));
 		}
-		bucketNs.push(y.length);
-		if (y.length < MIN_BUCKET_N) {
-			weights.push(null);
-			continue;
+		return out;
+	};
+
+	// The scorer's piecewise-linear interpolation between bucket centres —
+	// every metric below evaluates the model AS SCORED, not as fitted.
+	const interpAt = (
+		ws: (number[] | null)[],
+		progress: number,
+	): number[] | null => {
+		const centres = BUCKETS.flatMap(([lo, hi], i) => {
+			const w = ws[i];
+			return w ? [{ c: (lo + hi) / 2, w }] : [];
+		});
+		if (centres.length === 0) return null;
+		if (progress <= centres[0].c) return centres[0].w;
+		for (let i = 1; i < centres.length; i++) {
+			if (progress <= centres[i].c) {
+				const lo = centres[i - 1];
+				const t = (progress - lo.c) / (centres[i].c - lo.c);
+				return lo.w.map((v, j) => v + t * (centres[i].w[j] - v));
+			}
 		}
-		const Xa = [...X, ...X.map((row) => row.map((v) => -v))];
-		const ya = [...y, ...y.map((v) => 1 - v)];
-		weights.push(fitLogistic(Xa, ya).map((v) => Math.round(v * 10000) / 10000));
+		return centres[centres.length - 1].w;
+	};
+
+	// P(a wins) at the game point nearest a progress fraction, or null.
+	const predictAt = (
+		ws: (number[] | null)[],
+		g: Duel,
+		prog: number,
+	): number | null => {
+		const T = Math.round(g.end * prog);
+		const pt = g.pts.find((p) => p.turn >= T);
+		if (!pt) return null;
+		const w = interpAt(ws, pt.turn / g.end);
+		if (!w) return null;
+		const s = zOf(pt.f, pt.turn).reduce((acc, v, j) => acc + v * w[j], 0);
+		return 1 / (1 + Math.exp(-s));
+	};
+
+	// L2 by k-fold CV GROUPED BY GAME: every turn of a game carries the same
+	// label, so the regulariser must be calibrated against ~independent
+	// matches, not tens of thousands of autocorrelated rows. (The SD
+	// normaliser stays corpus-wide — a per-turn scale, not a fitted
+	// parameter.) Selection metric: mean per-game held-out log loss over the
+	// progress grid, games weighted equally.
+	const foldOf = (i: number): number => i % CV_FOLDS;
+	let bestL2 = L2_GRID[0];
+	let bestLoss = Infinity;
+	for (const l2 of L2_GRID) {
+		const gameLosses: number[] = [];
+		for (let f = 0; f < CV_FOLDS; f++) {
+			const ws = fitBuckets(
+				duels.filter((_, i) => foldOf(i) !== f),
+				l2,
+			);
+			duels.forEach((g, i) => {
+				if (foldOf(i) !== f) return;
+				const y = g.winner === g.a ? 1 : 0;
+				const losses: number[] = [];
+				for (const prog of EVAL_PROGRESS) {
+					const p = predictAt(ws, g, prog);
+					if (p == null) continue;
+					const c = Math.min(1 - 1e-9, Math.max(1e-9, p));
+					losses.push(-(y * Math.log(c) + (1 - y) * Math.log(1 - c)));
+				}
+				if (losses.length > 0)
+					gameLosses.push(losses.reduce((s, v) => s + v, 0) / losses.length);
+			});
+		}
+		const mean = gameLosses.reduce((s, v) => s + v, 0) / gameLosses.length;
+		console.log(
+			`bake-momentum: CV L2=${l2} → held-out log loss ${mean.toFixed(4)}`,
+		);
+		if (mean < bestLoss) {
+			bestLoss = mean;
+			bestL2 = l2;
+		}
 	}
 
+	// Final weights: every bucket refit on the full corpus at the chosen L2.
+	const weights = fitBuckets(duels, bestL2).map((w) =>
+		w ? w.map((v) => Math.round(v * 10000) / 10000) : null,
+	);
+	const bucketNs = BUCKETS.map(([lo, hi]) =>
+		duels.reduce(
+			(s, g) =>
+				s +
+				g.pts.filter((p) => {
+					const prog = p.turn / g.end;
+					return prog >= lo && prog < hi;
+				}).length,
+			0,
+		),
+	);
+
 	// Shape check: growth must peak earlier than military, or the corpus is
-	// mis-parsed (front-load/back-load is the model's signature; cities is
-	// retained but redundant with growth, so it no longer anchors the check).
+	// mis-parsed (front-load/back-load is the model's signature).
 	const peak = (dim: number): number => {
 		let best = 0;
 		let bestV = -Infinity;
@@ -504,26 +546,37 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// In-sample AUC at fixed progress points, for the PR body / sanity.
-	const aucAt = (prog: number): string => {
-		const scores: [number, number][] = [];
-		for (const g of duels) {
-			const T = Math.round(g.end * prog);
-			const pt = g.pts.find((p) => p.turn >= T);
-			if (!pt) continue;
-			const bi = BUCKETS.findIndex(
-				([lo, hi]) => pt.turn / g.end >= lo && pt.turn / g.end < hi,
-			);
-			const w = weights[bi === -1 ? BUCKETS.length - 1 : bi];
-			if (!w) continue;
-			const zz = zOf(pt.f, pt.turn);
-			const s = zz.reduce((acc, v, j) => acc + v * w[j], 0);
-			scores.push([s, g.winner === g.a ? 1 : 0]);
-		}
+	// One more CV pass at the chosen L2, pooling every held-out prediction —
+	// the out-of-sample numbers the generated header cites, and the
+	// calibration validation's input.
+	const heldGrid: { y: number; p: number }[] = [];
+	const heldAt = new Map<number, { y: number; p: number }[]>();
+	for (let f = 0; f < CV_FOLDS; f++) {
+		const ws = fitBuckets(
+			duels.filter((_, i) => foldOf(i) !== f),
+			bestL2,
+		);
+		duels.forEach((g, i) => {
+			if (foldOf(i) !== f) return;
+			const y = g.winner === g.a ? 1 : 0;
+			for (const prog of EVAL_PROGRESS) {
+				const p = predictAt(ws, g, prog);
+				if (p != null) heldGrid.push({ y, p });
+			}
+			for (const prog of [0.3, 0.5, 0.7]) {
+				const p = predictAt(ws, g, prog);
+				if (p == null) continue;
+				const arr = heldAt.get(prog) ?? [];
+				arr.push({ y, p });
+				heldAt.set(prog, arr);
+			}
+		});
+	}
+	const auc = (rows: { y: number; p: number }[]): string => {
+		const pos = rows.filter((r) => r.y === 1).map((r) => r.p);
+		const neg = rows.filter((r) => r.y === 0).map((r) => r.p);
 		let concordant = 0;
 		let pairs = 0;
-		const pos = scores.filter(([, l]) => l === 1).map(([s]) => s);
-		const neg = scores.filter(([, l]) => l === 0).map(([s]) => s);
 		for (const p of pos)
 			for (const n of neg) {
 				pairs++;
@@ -532,6 +585,35 @@ async function main(): Promise<void> {
 			}
 		return pairs > 0 ? (concordant / pairs).toFixed(3) : "n/a";
 	};
+	const aucAt = (prog: number): string => auc(heldAt.get(prog) ?? []);
+	const brier =
+		heldGrid.reduce((s, r) => s + (r.p - r.y) ** 2, 0) / heldGrid.length;
+	// 10 equal-width bins; ECE = Σ (n_b/N)·|mean p − empirical win rate|.
+	const bins = Array.from({ length: 10 }, () => ({ n: 0, p: 0, y: 0 }));
+	for (const r of heldGrid) {
+		const b = bins[Math.min(9, Math.floor(r.p * 10))];
+		b.n++;
+		b.p += r.p;
+		b.y += r.y;
+	}
+	const ece = bins.reduce(
+		(s, b) =>
+			b.n === 0
+				? s
+				: s + (b.n / heldGrid.length) * Math.abs(b.p / b.n - b.y / b.n),
+		0,
+	);
+	// Calibration hard-fail: the UI renders p as a percentage, so calibration
+	// — not discrimination — is the property it claims. Brier ≥ 0.25 means
+	// the scores are no better than always saying 50%. The ECE bound is ~4×
+	// the binning noise floor at this corpus size (10 bins × ~350 held-out
+	// points → per-bin std ≈ 0.03), so a trip means genuine systematic
+	// miscalibration, not sampling jitter.
+	if (brier >= 0.25 || ece > 0.08) {
+		throw new Error(
+			`bake-momentum: calibration check failed — held-out Brier ${brier.toFixed(3)} (must be < 0.25), ECE ${ece.toFixed(3)} (must be ≤ 0.08). The rendered percentages would systematically mislead.`,
+		);
+	}
 
 	// ---------- Emit ----------
 	const lines: string[] = [];
@@ -539,13 +621,16 @@ async function main(): Promise<void> {
 	lines.push("// Run `npm run bake:momentum` to refit on a local corpus.");
 	lines.push("//");
 	lines.push(
-		`// Fitted on ${duels.length} finished duels (${read} blobs scanned).`,
+		`// Fitted on ${duels.length} finished duels (${read} blobs scanned);`,
 	);
 	lines.push(
-		`// Gotcha-5 tile-index validation: ${tileChecksOk}/${tileChecksTotal} city centres matched.`,
+		`// L2=${bestL2} chosen by ${CV_FOLDS}-fold cross-validation grouped by game.`,
 	);
 	lines.push(
-		`// In-sample AUC at 30/50/70% of game: ${aucAt(0.3)} / ${aucAt(0.5)} / ${aucAt(0.7)}.`,
+		`// Held-out AUC at 30/50/70% of game: ${aucAt(0.3)} / ${aucAt(0.5)} / ${aucAt(0.7)} (pooled CV predictions).`,
+	);
+	lines.push(
+		`// Held-out calibration over a 10–90% progress grid: Brier ${brier.toFixed(3)}, ECE ${ece.toFixed(3)}.`,
 	);
 	lines.push("");
 	lines.push(
@@ -559,6 +644,10 @@ async function main(): Promise<void> {
 	lines.push("");
 	lines.push(
 		"/** Progress buckets over T / final turn, half-open [lo, hi). */",
+	);
+	lines.push(
+		"// Weights are FITTED per bucket; the scorer interpolates them",
+		"// piecewise-linearly between bucket centres (no cliffs at the edges).",
 	);
 	lines.push(
 		`export const MOMENTUM_BUCKETS: readonly [number, number][] = ${JSON.stringify(BUCKETS)};`,
@@ -601,8 +690,9 @@ async function main(): Promise<void> {
 	}
 	await emitMirror();
 	console.log(
-		`bake-momentum: ${duels.length} duels, buckets n=[${bucketNs.join(", ")}], ` +
-			`AUC@30/50/70% = ${aucAt(0.3)}/${aucAt(0.5)}/${aucAt(0.7)} → ${OUTPUTS.map((o) => o.replace(REPO_ROOT + "/", "")).join(", ")}`,
+		`bake-momentum: ${duels.length} duels, buckets n=[${bucketNs.join(", ")}], L2=${bestL2}, ` +
+			`held-out AUC@30/50/70% = ${aucAt(0.3)}/${aucAt(0.5)}/${aucAt(0.7)}, ` +
+			`Brier ${brier.toFixed(3)}, ECE ${ece.toFixed(3)} → ${OUTPUTS.map((o) => o.replace(REPO_ROOT + "/", "")).join(", ")}`,
 	);
 	console.log(
 		"weights per bucket:",

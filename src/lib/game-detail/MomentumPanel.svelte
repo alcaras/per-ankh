@@ -34,7 +34,6 @@
 	);
 
 	const DIM_LABELS: Record<string, string> = {
-		cities: "cities",
 		growth: "growth",
 		orders: "orders",
 		science: "science",
@@ -152,11 +151,10 @@
 
 	// Key stats: each side's own numbers, leader-per-row coloured.
 	const STAT_ROWS: { label: string; index: number; dp: number }[] = [
-		{ label: "cities", index: 0, dp: 0 },
-		{ label: "growth", index: 1, dp: 1 },
-		{ label: "orders", index: 2, dp: 1 },
-		{ label: "science", index: 3, dp: 1 },
-		{ label: "power", index: 4, dp: 0 },
+		{ label: "growth", index: 0, dp: 1 },
+		{ label: "orders", index: 1, dp: 1 },
+		{ label: "science", index: 2, dp: 1 },
+		{ label: "power", index: 3, dp: 0 },
 	];
 	const fmtStat = (v: number, dp: number): string =>
 		dp ? v.toFixed(1) : Math.round(v).toLocaleString("en-US");
@@ -167,8 +165,8 @@
 	// destroyed.
 	const battleEvents = $derived.by(() => {
 		if (!prev) return [];
-		const da = pt.sa[4] - prev.sa[4];
-		const db = pt.sb[4] - prev.sb[4];
+		const da = pt.sa[3] - prev.sa[3];
+		const db = pt.sb[3] - prev.sb[3];
 		const out: { kind: string; who: string | null; text: string }[] = [];
 		const f = (v: number): string => `${v > 0 ? "+" : ""}${Math.round(v)}`;
 		if (da < -25 && db < -25) {

@@ -159,7 +159,6 @@
 					playerResources={game.player_resources}
 					familyOpinionHistory={game.family_opinion_history}
 					projectsProduced={game.projects_produced}
-					rawMapTiles={game.map_tiles}
 					userNation={game.user_nation ?? null}
 					userDisplayName={game.user_display_name ?? null}
 					userWon={game.user_won ?? null}

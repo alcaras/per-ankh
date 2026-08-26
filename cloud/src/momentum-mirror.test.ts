@@ -25,8 +25,18 @@ function fixture(): MomentumInput {
 			{ player_id: 1, yield_type: "YIELD_ORDERS", data: data(8) },
 			{ player_id: 0, yield_type: "YIELD_SCIENCE", data: data(12) },
 			{ player_id: 1, yield_type: "YIELD_SCIENCE", data: data(12) },
+			// All five eco resources, split leads — the eco tally must see
+			// every member of ECO5, not just money.
 			{ player_id: 0, yield_type: "YIELD_MONEY", data: data(5) },
 			{ player_id: 1, yield_type: "YIELD_MONEY", data: data(4) },
+			{ player_id: 0, yield_type: "YIELD_FOOD", data: data(7) },
+			{ player_id: 1, yield_type: "YIELD_FOOD", data: data(9) },
+			{ player_id: 0, yield_type: "YIELD_IRON", data: data(3) },
+			{ player_id: 1, yield_type: "YIELD_IRON", data: data(2) },
+			{ player_id: 0, yield_type: "YIELD_STONE", data: data(2) },
+			{ player_id: 1, yield_type: "YIELD_STONE", data: data(6) },
+			{ player_id: 0, yield_type: "YIELD_WOOD", data: data(4) },
+			{ player_id: 1, yield_type: "YIELD_WOOD", data: data(1) },
 			{ player_id: 0, yield_type: "YIELD_GROWTH", data: data(20) },
 			{ player_id: 1, yield_type: "YIELD_GROWTH", data: data(15) },
 		],
@@ -46,11 +56,49 @@ function fixture(): MomentumInput {
 				})),
 			},
 		],
-		mapTiles: [{ is_city_center: true }, { is_city_center: true }, {}],
-		tileOwnership: [
-			{ tile_xml_id: 0, turn: 2, owner_player_xml_id: 0 },
-			{ tile_xml_id: 1, turn: 2, owner_player_xml_id: 1 },
+	};
+}
+
+/** A long duel where every raw lead is held perfectly constant. */
+function constantLeadFixture(): MomentumInput {
+	const flat = (rate: number) =>
+		Array.from({ length: 99 }, (_, i) => ({ turn: i + 2, rate }));
+	const yields = (
+		player: number,
+		v: Record<string, number>,
+	): MomentumInput["yieldHistory"] =>
+		Object.entries(v).map(([yield_type, rate]) => ({
+			player_id: player,
+			yield_type,
+			data: flat(rate),
+		}));
+	return {
+		a: 0,
+		b: 1,
+		finalTurn: 100,
+		yieldHistory: [
+			...yields(0, {
+				YIELD_ORDERS: 12,
+				YIELD_SCIENCE: 30,
+				YIELD_GROWTH: 25,
+				YIELD_MONEY: 10,
+				YIELD_FOOD: 10,
+			}),
+			...yields(1, {
+				YIELD_ORDERS: 10,
+				YIELD_SCIENCE: 24,
+				YIELD_GROWTH: 20,
+				YIELD_MONEY: 8,
+				YIELD_FOOD: 12,
+			}),
 		],
+		playerHistory: [0, 1].map((player_id) => ({
+			player_id,
+			history: Array.from({ length: 99 }, (_, i) => ({
+				turn: i + 2,
+				military_power: player_id === 0 ? 120 : 100,
+			})),
+		})),
 	};
 }
 
@@ -74,8 +122,9 @@ describe("momentum mirror", () => {
 		}
 	});
 
-	it("an unchanged stat contributes exactly zero change", () => {
-		// Science is identical for both sides every turn → its ch is 0.00.
+	it("a tied stat contributes exactly zero change", () => {
+		// Science is identical for both sides every turn → lv is 0 at every
+		// point, so its exact difference ch is 0.00 too.
 		const curve = cloudCurve(fixture())!;
 		const sci = curve.dims.indexOf("science");
 		for (const pt of curve.points.slice(1)) {
@@ -90,6 +139,32 @@ describe("momentum mirror", () => {
 			const sum = pt.lv.reduce((s, v) => s + v, 0);
 			// lv is rounded to 2dp per dimension for display.
 			expect(sum).toBeCloseTo(logOdds, 1);
+		}
+	});
+
+	it("change decomposition sums to the move in log-odds", () => {
+		// ch is the exact difference of lv, so the panel's bars can never
+		// disagree with its header — Σch = Δlog-odds up to display rounding.
+		const curve = cloudCurve(fixture())!;
+		for (let i = 1; i < curve.points.length; i++) {
+			const pt = curve.points[i];
+			const prev = curve.points[i - 1];
+			const delta =
+				Math.log(pt.p / (1 - pt.p)) - Math.log(prev.p / (1 - prev.p));
+			const sum = pt.ch.reduce((s, v) => s + v, 0);
+			expect(sum).toBeCloseTo(delta, 1);
+		}
+	});
+
+	it("a constant lead never produces a jump", () => {
+		// The regression the interpolated weights exist to prevent: with every
+		// raw lead held constant for 100 turns, no single turn may move the
+		// probability sharply — the hard bucket switch used to leap ~13 points
+		// at exactly 70% of the game.
+		const curve = cloudCurve(constantLeadFixture())!;
+		for (let i = 1; i < curve.points.length; i++) {
+			const jump = Math.abs(curve.points[i].p - curve.points[i - 1].p);
+			expect(jump).toBeLessThan(0.03);
 		}
 	});
 });
