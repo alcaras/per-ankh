@@ -141,11 +141,19 @@
 	// until the column carries a real instant.
 	const endedLabel = $derived(shortDate(tournament.completed_at));
 
-	// Top right of the meta panel: when the tournament starts, or when it ended
-	// once it's over.
+	// Top right of the meta panel: when the tournament starts, or when it started
+	// / ended once that's in the past.
+	//
+	// The tense follows the STATUS, not a comparison of starts_at to now.
+	// starts_at is an announcement, not an observation: a tournament still in
+	// setup on a date that has already passed hasn't started, it's overdue, and
+	// a date-only test would call that "Started" — a lie. Leaving it future-tense
+	// is also the signal to an admin that the announced date needs updating.
 	const dateLabel = $derived.by(() => {
 		if (statusMeta.key === "complete")
 			return endedLabel ? `Ended ${endedLabel}` : null;
+		if (statusMeta.key === "in-progress")
+			return startsLabel ? `Started ${startsLabel}` : null;
 		return startsLabel ? `Starts ${startsLabel}` : null;
 	});
 
