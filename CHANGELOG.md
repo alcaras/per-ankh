@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-08-26-27fd762] - 2026-08-26
+
+### Features
+
+- (tournament) local match times follow the viewer's clock face — [4ef3f1e](https://github.com/becked/per-ankh/commit/4ef3f1e27b3a220431a73b917560b0617053ec2d)
+- (tournament) the header's date says whether the tournament has started — [27fd762](https://github.com/becked/per-ankh/commit/27fd76248c5b473d8af1ec7b5e592039991a6746)
+
+### Fixes
+
+- (tournament) dates and times read on the clock they were written on — [efbabfc](https://github.com/becked/per-ankh/commit/efbabfcbe29a5de851d0d92c82dc76bf0fe43b89)
+
 ## [2026-08-25-dafb60f] - 2026-08-25
 
 ### Other
