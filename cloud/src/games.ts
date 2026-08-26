@@ -43,6 +43,7 @@ import { buildAvatarUrl } from "./auth";
 import { displayNameSql } from "./identity";
 import { captureOnlineIds } from "./online-ids";
 import { momentumCurve } from "./momentum";
+import { MOMENTUM_MODEL_VERSION } from "./generated/momentum";
 import { beginR2Op, logError, logWarn, setLogField } from "./log";
 import { isTournamentAdmin } from "./tournament/authz";
 import { maybeAdvanceAfterMatchReport } from "./tournament/admin";
@@ -629,10 +630,12 @@ function buildGamePlayerTurnStatements(
 		});
 		if (curve) {
 			for (const pt of curve.points) {
-				ensureRow(humans[0].player_index, pt.turn).momentum =
-					Math.round(pt.p * 1000) / 1000;
-				ensureRow(humans[1].player_index, pt.turn).momentum =
-					Math.round((1 - pt.p) * 1000) / 1000;
+				const rowA = ensureRow(humans[0].player_index, pt.turn);
+				rowA.momentum = Math.round(pt.p * 1000) / 1000;
+				rowA.momentum_version = MOMENTUM_MODEL_VERSION;
+				const rowB = ensureRow(humans[1].player_index, pt.turn);
+				rowB.momentum = Math.round((1 - pt.p) * 1000) / 1000;
+				rowB.momentum_version = MOMENTUM_MODEL_VERSION;
 			}
 		}
 	}
@@ -674,6 +677,7 @@ function buildGamePlayerTurnStatements(
 		"legitimacy",
 		"points",
 		"momentum",
+		"momentum_version",
 	];
 
 	const allRows = Array.from(rowsByKey.values());
