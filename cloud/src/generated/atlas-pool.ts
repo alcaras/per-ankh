@@ -3,9 +3,10 @@
 // joined to src/data/atlas-dist.json). Re-run when the atlas pool changes.
 
 // One map the community plays: the script it runs, how it is set up, and
-// the anchor that addresses it on the atlas. `script` is the raw Old
-// World value — canonicalMapScript() in ../tournament/canonical-maps is
-// what makes it comparable with the script recorded on a game.
+// the anchor that addresses it on the atlas. `script` is the zType Old
+// World declares — the same string games.map_class and
+// tournament_matches.map_script carry, so it compares directly against
+// a player's history.
 export interface AtlasPoolMap {
 	anchor: string;
 	script: string;
@@ -28,25 +29,25 @@ export const ATLAS_POOL: readonly AtlasPoolMap[] = [
 	},
 	{
 		anchor: "sq-duel-sm-seas-aridp-ps",
-		script: "MAPCLASS_MapScriptAridPlateau",
+		script: "MAPCLASS_AridPlateau",
 		label: "Arid Plateau",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-lg-seas-aridp-ps",
-		script: "MAPCLASS_MapScriptAridPlateau",
+		script: "MAPCLASS_AridPlateau",
 		label: "Arid Plateau",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "wide-duel-crb",
-		script: "MAPCLASS_MapScriptCoastalRainBasin",
+		script: "MAPCLASS_CoastalRainBasin",
 		label: "Coastal Rain Basin",
 		setting: "Duel · wide · point-sym off · mirror",
 	},
 	{
 		anchor: "sq-duel-crb-ps",
-		script: "MAPCLASS_MapScriptCoastalRainBasin",
+		script: "MAPCLASS_CoastalRainBasin",
 		label: "Coastal Rain Basin",
 		setting: "Duel · square · point-sym on · mirror",
 	},

@@ -41,6 +41,14 @@ export interface ResolvedDuel extends Duel {
 	// badge must not be derived from a game nobody outside the pair can see
 	// (recommend.ts).
 	isPublic: boolean;
+	// The map script they played it on, as the record carries it. The two
+	// sources read it from different columns — tournament_matches.map_script and
+	// games.map_class — and since migration 0045 both hold the zType Old World
+	// declares, which is also what the baked atlas pool stores, so the three
+	// compare directly. Null when the record doesn't say: an old game row, or a
+	// tournament match with no map set. Read by the map suggestion, not by the
+	// rating engine.
+	script: string | null;
 }
 
 export interface DuelExtraction {
@@ -97,7 +105,7 @@ async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 	const rows = await db
 		.prepare(
 			`SELECT m.match_id, m.slot_a_id, m.slot_a_user_id, m.slot_b_user_id,
-			        m.winner_slot_id,
+			        m.winner_slot_id, m.map_script,
 			        substr(COALESCE(m.reported_at, m.created_at), 1, 10) AS dt,
 			        g.xml_game_id
 			   FROM tournament_matches m
@@ -113,6 +121,7 @@ async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 			slot_a_user_id: string;
 			slot_b_user_id: string;
 			winner_slot_id: string;
+			map_script: string | null;
 			dt: string | null;
 			xml_game_id: string | null;
 		}>();
@@ -129,6 +138,7 @@ async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 			winner:
 				r.winner_slot_id === r.slot_a_id ? r.slot_a_user_id : r.slot_b_user_id,
 			isPublic: true,
+			script: r.map_script || null,
 		});
 	}
 	return out;
@@ -138,6 +148,7 @@ interface HumanSlotRow {
 	game_id: string;
 	xml_game_id: string;
 	uploader_user_id: string | null;
+	map_class: string | null;
 	dt: string | null;
 	is_public: number;
 	is_uploader: number;
@@ -158,6 +169,7 @@ async function casualDuels(
 		.prepare(
 			`SELECT ps.game_id, ps.is_uploader, ps.is_winner, ps.online_id,
 			        g.xml_game_id, g.user_id AS uploader_user_id, g.is_public,
+			        g.map_class,
 			        substr(COALESCE(g.save_date, g.created_at), 1, 10) AS dt
 			   FROM player_summaries ps
 			   JOIN games g ON g.game_id = ps.game_id
@@ -209,6 +221,7 @@ async function casualDuels(
 			p2: resolved[1].userId,
 			winner: winner.userId,
 			isPublic: slots[0].is_public === 1,
+			script: slots[0].map_class || null,
 		});
 	}
 	return out;

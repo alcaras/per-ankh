@@ -17,6 +17,7 @@
 	import { resolve } from "$app/paths";
 	import DiscordMark from "$lib/ui/DiscordMark.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import CopyButton from "$lib/tournament/CopyButton.svelte";
 	import type {
 		OpponentBadge,
 		RecommendedOpponent,
@@ -52,6 +53,20 @@
 	// a stranger's name reads as a fact about them — that they have never played
 	// at all — which is both wrong and the opposite of a recommendation.
 	// "First meeting" can only be about the two of you.
+	// The message to send them, ready to paste. The point of the whole card is
+	// to get from "here is someone to play" to a game being arranged, and the
+	// step that actually stalls is composing the opening line — so it is written
+	// here, map and all, and the viewer only has to paste it.
+	//
+	// The setting is trimmed to its first two parts ("Duel · wide"): the full
+	// string carries point-symmetry and mirror flags that the atlas link answers
+	// better than a chat message can.
+	function dmFor(o: RecommendedOpponent): string {
+		if (!o.map) return "Fancy a game?";
+		const setting = o.map.setting.split(" · ").slice(0, 2).join(" · ");
+		return `Fancy a game? Per-Ankh suggests ${o.map.label} (${setting}) — ${o.map.url}`;
+	}
+
 	function labelsFor(o: RecommendedOpponent): string[] {
 		const history =
 			o.meetings === 0
@@ -64,6 +79,44 @@
 		return [history, ...o.badges.map((b) => BADGE_LABELS[b])];
 	}
 </script>
+
+<!-- The copy/copied pair, drawn the way every other copy affordance in the app
+     draws it — same path, same 3.5 — so a reader who has used the one in the
+     account settings or a match popover recognises this one. The glyphs are
+     inline here because that is this repo's idiom for chrome icons; they are
+     now the third copy, which is worth extracting, but not from inside a
+     change about suggesting maps. -->
+{#snippet copyMark()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-4 w-4"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+		/>
+	</svg>
+{/snippet}
+
+{#snippet checkMark()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-4 w-4 text-orange"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+	</svg>
+{/snippet}
 
 {#snippet opponentCard(o: RecommendedOpponent)}
 	<!-- Bottom-aligned, not centred: the badge row is the last thing in the
@@ -113,8 +166,29 @@
 						</span>
 					{/each}
 				</div>
+
+				{#if o.map}
+					<div class="mt-1 truncate text-xs text-tan opacity-70">
+						{o.map.label}
+						<span class="opacity-70"
+							>· {o.map.setting.split(" · ").slice(0, 2).join(" · ")}</span
+						>
+					</div>
+				{/if}
 			</div>
 		</div>
+
+		<!-- Copy the opening message, map and link included. -->
+		<CopyButton
+			text={() => dmFor(o)}
+			label="Copy a message to {o.display_name}"
+			title="Copy a message to {o.display_name}"
+			class="inline-flex shrink-0 items-center rounded border border-tan p-1.5 text-tan transition-colors hover:border-orange hover:text-orange"
+		>
+			{#snippet children(copied)}
+				{#if copied}{@render checkMark()}{:else}{@render copyMark()}{/if}
+			{/snippet}
+		</CopyButton>
 
 		<!-- Their Discord profile, in the blurple the home page signs in with —
 		     same brand call to action, so the one Discord control on a page always

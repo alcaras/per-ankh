@@ -14,7 +14,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { KNOWN_MAP_SCRIPTS } from "../../src/lib/tournament/map-scripts";
+import { KNOWN_MAP_SCRIPTS } from "../../src/lib/tournament/map-scripts-table";
 import { slugify } from "../../src/lib/utils/slug";
 import { resolveAtlas } from "./paths";
 
@@ -30,7 +30,9 @@ export interface AtlasPoolEntry {
 	// The map's atlas URL anchor — slugify(compact label), the same value
 	// atlasAnchor() produces at runtime in $lib/tournament/map-script-options.
 	anchor: string;
-	// The Old World map script it runs, e.g. MAPCLASS_MapScriptCoastalRainBasin.
+	// The zType Old World declares for the script it runs, e.g.
+	// MAPCLASS_CoastalRainBasin — the same string a save's MapClass and a
+	// tournament match's map_script carry (migration 0045).
 	script: string;
 	// The script's display name, as the atlas groups by ("Coastal Rain Basin").
 	label: string;
@@ -92,7 +94,9 @@ function cfgLabelShort(c: AtlasConfig, multiVariant: Set<string>): string {
 // "Coastal Rain Basin"); Old World names it MAPCLASS_MapScriptDota. Every group
 // in the pool resolves against one of the two names per-ankh already keeps for
 // each script — its label or its abbreviation — so the join is derived rather
-// than a hand-written alias table that would silently rot.
+// than a hand-written alias table that would silently rot. The value it yields
+// is the script's zType, which is what makes a baked pool entry comparable with
+// a save's map_class without any normalisation in between.
 function scriptForGroup(group: string): string {
 	const wanted = group.toLowerCase();
 	const match = KNOWN_MAP_SCRIPTS.find(
@@ -102,8 +106,8 @@ function scriptForGroup(group: string): string {
 	if (!match) {
 		throw new Error(
 			`atlas script group "${group}" matches no label or abbrev in ` +
-				`src/lib/tournament/map-scripts.ts — the atlas added a script, or ` +
-				`renamed one. Add it there first.`,
+				`src/lib/tournament/map-scripts-table.ts — the atlas added a ` +
+				`script, or renamed one. Add it there first.`,
 		);
 	}
 	return match.value;

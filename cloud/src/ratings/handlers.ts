@@ -9,6 +9,7 @@
 // crosses this line.
 
 import { buildAvatarUrl } from "../auth";
+import { ATLAS_BASE_URL, ATLAS_POOL } from "../generated/atlas-pool";
 import { isSiteAdmin, type AdminAuthEnv } from "../admin";
 import type { EventsEnv, QueryableD1 } from "../d1";
 import { displayNameSql } from "../identity";
@@ -41,6 +42,24 @@ interface OpponentRow {
 	avatar_hash: string | null;
 	meetings: number;
 	badges: string;
+	map_anchor: string | null;
+}
+
+// Anchor -> the baked pool entry, so a stored suggestion is resolved to a name
+// and a link at read time. A row whose anchor is no longer in the pool (the
+// atlas dropped the map between a rebuild and now) simply loses its map rather
+// than rendering a dead link.
+const POOL_BY_ANCHOR = new Map(ATLAS_POOL.map((m) => [m.anchor, m]));
+
+function mapFor(anchor: string | null) {
+	if (!anchor) return null;
+	const m = POOL_BY_ANCHOR.get(anchor);
+	if (!m) return null;
+	return {
+		label: m.label,
+		setting: m.setting,
+		url: `${ATLAS_BASE_URL}#${m.anchor}`,
+	};
 }
 
 // GET /v1/users/me/opponents — the signed-in viewer's ten suggested opponents,
@@ -65,7 +84,7 @@ export async function handleMyOpponents(
 	const rows = await env.SHARE_DB.prepare(
 		`SELECT o.opponent_user_id AS user_id, u.discord_id,
 		        ${displayNameSql("u")} AS display_name, u.slug, u.avatar_hash,
-		        o.meetings, o.badges
+		        o.meetings, o.badges, o.map_anchor
 		   FROM user_recommended_opponents o
 		   JOIN users u ON u.user_id = o.opponent_user_id
 		  WHERE o.user_id = ?
@@ -98,6 +117,12 @@ export async function handleMyOpponents(
 				discord_url: `https://discord.com/users/${r.discord_id}`,
 				meetings: r.meetings,
 				badges: JSON.parse(r.badges) as OpponentBadge[],
+				// A map neither of them has played lately, ready to link and to
+				// paste into a message. Resolved here rather than shipping the
+				// anchor for the page to look up: the page has no copy of the
+				// pool, and this keeps the one it renders and the one the
+				// recommender picked from the same table.
+				map: mapFor(r.map_anchor),
 			})),
 			rated: rated !== null,
 		},

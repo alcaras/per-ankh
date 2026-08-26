@@ -216,6 +216,7 @@ describe("GET /v1/users/me/opponents", () => {
 				"badges",
 				"discord_url",
 				"display_name",
+				"map",
 				"meetings",
 				"slug",
 				"user_id",

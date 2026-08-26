@@ -45,9 +45,10 @@ async function main(): Promise<void> {
 		`// Source: owtournamentatlas' published pool (src/pages/index.astro POOL,\n` +
 		`// joined to src/data/atlas-dist.json). Re-run when the atlas pool changes.\n\n` +
 		`// One map the community plays: the script it runs, how it is set up, and\n` +
-		`// the anchor that addresses it on the atlas. \`script\` is the raw Old\n` +
-		`// World value — canonicalMapScript() in ../tournament/canonical-maps is\n` +
-		`// what makes it comparable with the script recorded on a game.\n` +
+		`// the anchor that addresses it on the atlas. \`script\` is the zType Old\n` +
+		`// World declares — the same string games.map_class and\n` +
+		`// tournament_matches.map_script carry, so it compares directly against\n` +
+		`// a player's history.\n` +
 		`export interface AtlasPoolMap {\n` +
 		`\tanchor: string;\n` +
 		`\tscript: string;\n` +
