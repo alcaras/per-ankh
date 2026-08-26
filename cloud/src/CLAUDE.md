@@ -12,6 +12,10 @@ The friction on past contributions was consistency, not correctness. Before addi
 - **Typed return contracts must match what's actually serialized.** Don't declare a handler returns `TournamentMatch` while it returns an un-serialized DB row — return `serializeMatch(...)` output or narrow the declared type.
 - **Wire new things into every registration point a sibling uses** — the seed planner/CLI, all call sites, not just the primary path.
 
+## Generated files
+
+`cloud/src/generated/*` and `cloud/src/momentum.ts` are written by `scripts/bake-*.ts` — never edit them by hand. `momentum.ts` mirrors the frontend scorer `src/lib/game-detail/momentum.ts`; edit that file and regenerate with `npm run bake:momentum -- --mirror-only` (a regeneration test fails on drift).
+
 ## Worker tests
 
 Two-project Vitest setup (`cloud/vitest.config.mts`):
