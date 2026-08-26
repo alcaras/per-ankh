@@ -56,6 +56,7 @@
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
 	import { toast } from "$lib/ui/toast";
 	import type { Measurable } from "$lib/ui/types";
+	import { formatScheduledTimeInZone } from "$lib/utils/formatting";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -375,19 +376,8 @@
 		return cells;
 	});
 
-	// Compact time ("HH:MM" in the active zone) and matchup for calendar chips.
-	function chipTime(iso: string | null): string {
-		if (!iso) return "";
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return "";
-		return d.toLocaleTimeString("en-CA", {
-			timeZone: clock.zone === "utc" ? "UTC" : undefined,
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: false,
-		});
-	}
-
+	// Compact matchup for calendar chips; the chip's time comes from the shared
+	// formatScheduledTimeInZone, so it carries the same clock face as the table.
 	function shortMatchup(m: TournamentMatch): string {
 		return matchupLabel(
 			m,
@@ -714,7 +704,10 @@
 											onclick={(e) => pick(np.match.match_id, e)}
 										>
 											<span class="font-bold"
-												>{chipTime(np.part.scheduled_at)}{#if np.split}<span
+												>{formatScheduledTimeInZone(
+													np.part.scheduled_at,
+													clock.zone,
+												)}{#if np.split}<span
 														class="ml-1 font-normal opacity-60"
 														>· Pt {np.partNumber}</span
 													>{/if}</span

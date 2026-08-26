@@ -70,6 +70,8 @@
 	import {
 		formatRelativeToNow,
 		formatScheduledUtc,
+		TIME_LOCALE,
+		viewerUses12Hour,
 	} from "$lib/utils/formatting";
 	import { DatePicker, TimeField } from "bits-ui";
 	import {
@@ -310,10 +312,16 @@
 				</div>
 			</DatePicker.Root>
 
+			<!-- This field enters a LOCAL time (see the tz label beside it), so it
+			     wears the viewer's own clock face like every other local time — an
+			     admin who reads "7:30 PM" shouldn't have to convert to type one. The
+			     canonical 24-hour UTC instant is what the preview line below spells
+			     out. The date field keeps its own en-CA locale — that one is
+			     load-bearing, for ISO segment order (2026-05-30, not 05/30/2026). -->
 			<TimeField.Root
-				locale="en-CA"
+				locale={TIME_LOCALE}
 				granularity="minute"
-				hourCycle={24}
+				hourCycle={viewerUses12Hour() ? 12 : 24}
 				value={part.time}
 				placeholder={timePlaceholder}
 				onValueChange={(v) => (part.time = v instanceof Time ? v : undefined)}

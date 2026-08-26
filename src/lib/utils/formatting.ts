@@ -184,6 +184,63 @@ export function platformLabel(platform: string): string {
 	);
 }
 
+// Display locale for every scheduled-time surface. Pinned rather than following
+// the viewer: the app is English throughout, so the viewer's own locale would
+// translate month names ("30. Mai") in the middle of an otherwise English page.
+// en-US also renders the meridiem as "PM" — en-CA, which these helpers used to
+// pass, writes "7:30 p.m.". Only the LANGUAGE is fixed here; a LOCAL time's
+// clock face still follows the viewer (see viewerClockOptions).
+export const TIME_LOCALE = "en-US";
+
+// UTC is the tournament's canonical scheduling clock and always reads 24-hour,
+// whatever face the viewer's locale prefers. "14:30 UTC" is how a match is
+// agreed, announced, and cast, so rendering the same instant as "2:30 PM UTC"
+// would put a second spelling on the one value everybody quotes. The viewer's
+// own face is for the LOCAL half, where it answers "when is that for me".
+const UTC_CLOCK_OPTIONS: Intl.DateTimeFormatOptions = {
+	hour: "2-digit",
+	minute: "2-digit",
+	hour12: false,
+};
+
+// Resolved once per session: a full match table formats a time per row, and
+// constructing a throwaway Intl.DateTimeFormat for each would double the
+// formatter churn. A viewer's clock face can't change mid-session.
+let cached12Hour: boolean | undefined;
+
+/**
+ * Whether the viewer's locale writes clock times on a 12-hour face ("7:30 PM")
+ * rather than a 24-hour one ("19:30"). Asking Intl for the viewer's own hour
+ * cycle gets the regional split right — en-US/AU/NZ/IN/PH read 12-hour, while
+ * en-GB/IE/ZA and the non-English locales read 24-hour — where the hardcoded
+ * 24-hour face these helpers used to force left 12-hour readers misreading
+ * every tournament time. Governs LOCAL times only; UTC keeps its own 24-hour
+ * face (see UTC_CLOCK_OPTIONS).
+ *
+ * Exported for the schedule editor's TimeField, which takes the face as a prop
+ * rather than an option bag — and which enters a local time, so it follows the
+ * viewer like every other local clock.
+ */
+export function viewerUses12Hour(): boolean {
+	return (cached12Hour ??=
+		new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions()
+			.hour12 === true);
+}
+
+// The hour/minute half of a LOCAL scheduled time, on the viewer's own clock
+// face. hour12 is passed explicitly because TIME_LOCALE is pinned — en-US would
+// otherwise force a 12-hour face on everyone. The 12-hour face uses "numeric"
+// so it reads "7:30 PM" rather than a zero-padded "07:30 PM"; the 24-hour face
+// keeps the padding that lines a column of times up.
+function viewerClockOptions(): Intl.DateTimeFormatOptions {
+	const h12 = viewerUses12Hour();
+	return {
+		hour: h12 ? "numeric" : "2-digit",
+		minute: "2-digit",
+		hour12: h12,
+	};
+}
+
 /**
  * Whether an instant's year, read in the given timezone, differs from the
  * current year in that same zone. Schedule displays normally omit the year (it's
@@ -197,7 +254,7 @@ export function platformLabel(platform: string): string {
  */
 function isDifferentYear(d: Date, timeZone: string | undefined): boolean {
 	const yearOf = (x: Date) =>
-		x.toLocaleDateString("en-US", { timeZone, year: "numeric" });
+		x.toLocaleDateString(TIME_LOCALE, { timeZone, year: "numeric" });
 	return yearOf(d) !== yearOf(new Date());
 }
 
@@ -212,17 +269,18 @@ function isDifferentYear(d: Date, timeZone: string | undefined): boolean {
  */
 export function shortTimeZoneName(date: Date = new Date()): string {
 	return (
-		new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
+		new Intl.DateTimeFormat(TIME_LOCALE, { timeZoneName: "short" })
 			.formatToParts(date)
 			.find((p) => p.type === "timeZoneName")?.value ?? ""
 	);
 }
 
 /**
- * Formats an ISO instant as a UTC date + 24h time for display, e.g.
- * "May 30, 14:30". Tournament match scheduling is entered and shown in UTC
- * (localization is a later iteration); callers append a " UTC" label. The year
- * is shown only when it isn't the current year (see {@link isDifferentYear}).
+ * Formats an ISO instant as a UTC date + 24-hour time for display, e.g.
+ * "May 30, 14:30" — the canonical face for every viewer, 12-hour locales
+ * included (see {@link UTC_CLOCK_OPTIONS}). Callers append a " UTC" label. The
+ * year is shown only when it isn't the current year (see
+ * {@link isDifferentYear}).
  *
  * @param iso - ISO-8601 instant string, or null/undefined
  * @returns "MMM D, HH:MM" (or "MMM D, YYYY, HH:MM" off-year) in UTC, or "" when
@@ -232,14 +290,12 @@ export function formatScheduledUtc(iso: string | null | undefined): string {
 	if (!iso) return "";
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return "";
-	return d.toLocaleString("en-CA", {
+	return d.toLocaleString(TIME_LOCALE, {
 		timeZone: "UTC",
 		month: "short",
 		day: "numeric",
 		...(isDifferentYear(d, "UTC") ? { year: "numeric" as const } : {}),
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
+		...UTC_CLOCK_OPTIONS,
 	});
 }
 
@@ -256,8 +312,13 @@ export function formatScheduledUtc(iso: string | null | undefined): string {
  *   eastern/western zones can roll the instant onto a neighbouring day, and a
  *   bare "(00:30 JST)" next to "May 30" would be misleading.
  *
+ * The two halves are deliberately allowed to differ in face: the UTC primary
+ * is always 24-hour, while the parenthetical is the viewer's own clock, so a
+ * 12-hour reader gets "May 30, 14:30 UTC (7:30 AM PDT)" — the canonical value
+ * plus its translation, which is the whole point of the line.
+ *
  * @param iso - ISO-8601 instant string, or null/undefined
- * @returns "MMM D, HH:MM UTC (HH:MM TZ)" (date in the local part only when it
+ * @returns "MMM D, HH:MM UTC (<time> TZ)" (date in the local part only when it
  *   differs), or "" when the input is empty/invalid
  */
 export function formatScheduledWithLocal(
@@ -271,26 +332,28 @@ export function formatScheduledWithLocal(
 		month: "short",
 		day: "numeric",
 	};
-	const timeOpts: Intl.DateTimeFormatOptions = {
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	};
-
-	const utcDate = d.toLocaleDateString("en-CA", {
+	const utcDate = d.toLocaleDateString(TIME_LOCALE, {
 		...dateOpts,
 		timeZone: "UTC",
 	});
-	const utcTime = d.toLocaleTimeString("en-CA", {
-		...timeOpts,
+	const localDate = d.toLocaleDateString(TIME_LOCALE, dateOpts);
+
+	// Whether the viewer sits on UTC is a fact about the instant, not about how
+	// it's written, so the test renders BOTH sides on the canonical face. Testing
+	// the display strings instead would misfire now that the halves can differ in
+	// face: a 12-hour viewer on UTC would fail the equality and be handed the
+	// useless "May 30, 14:30 UTC (2:30 PM GMT)".
+	const utcTime = d.toLocaleTimeString(TIME_LOCALE, {
+		...UTC_CLOCK_OPTIONS,
 		timeZone: "UTC",
 	});
-	const localDate = d.toLocaleDateString("en-CA", dateOpts);
-	const localTime = d.toLocaleTimeString("en-CA", timeOpts);
+	const localTimeUtcFace = d.toLocaleTimeString(TIME_LOCALE, UTC_CLOCK_OPTIONS);
 
 	// Viewer is effectively on UTC — the local part would just echo the primary.
-	if (localDate === utcDate && localTime === utcTime) return `${utc} UTC`;
+	if (localDate === utcDate && localTimeUtcFace === utcTime)
+		return `${utc} UTC`;
 
+	const localTime = d.toLocaleTimeString(TIME_LOCALE, viewerClockOptions());
 	const tzName = shortTimeZoneName(d);
 
 	// The local date is shown only on a day rollover; include its year when it
@@ -299,7 +362,7 @@ export function formatScheduledWithLocal(
 	// year gap only happens across the New Year boundary, which already differs
 	// by day, so the day comparison catches it.
 	const localDateDisplay = isDifferentYear(d, undefined)
-		? d.toLocaleDateString("en-CA", { ...dateOpts, year: "numeric" })
+		? d.toLocaleDateString(TIME_LOCALE, { ...dateOpts, year: "numeric" })
 		: localDate;
 
 	const local =
@@ -319,7 +382,8 @@ export function formatScheduledWithLocal(
  *
  * @param iso - ISO-8601 instant string, or null/undefined
  * @param zone - "utc" for the canonical UTC clock, "local" for the viewer's
- * @returns "MMM D, HH:MM <TZ>", or "" when the input is empty/invalid
+ * @returns "MMM D, <time> <TZ>" — 24-hour on the UTC clock, the viewer's own
+ *   face on the local one — or "" when the input is empty/invalid
  */
 export function formatScheduledInZone(
 	iso: string | null | undefined,
@@ -334,16 +398,39 @@ export function formatScheduledInZone(
 		return utc ? `${utc} UTC` : "";
 	}
 
-	const dateTime = d.toLocaleString("en-CA", {
+	const dateTime = d.toLocaleString(TIME_LOCALE, {
 		month: "short",
 		day: "numeric",
 		...(isDifferentYear(d, undefined) ? { year: "numeric" as const } : {}),
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
+		...viewerClockOptions(),
 	});
 	const tzName = shortTimeZoneName(d);
 	return tzName ? `${dateTime} ${tzName}` : dateTime;
+}
+
+/**
+ * The time half alone of {@link formatScheduledInZone} — no date, no zone
+ * label, e.g. "14:30" (or "2:30 PM"). For surfaces whose own chrome already
+ * carries the date and zone, like the matches calendar, where the day cell
+ * names the day and the toggle names the zone.
+ *
+ * @param iso - ISO-8601 instant string, or null/undefined
+ * @param zone - "utc" for the canonical UTC clock, "local" for the viewer's
+ * @returns the clock time in that zone, or "" when the input is empty/invalid
+ */
+export function formatScheduledTimeInZone(
+	iso: string | null | undefined,
+	zone: "utc" | "local",
+): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	return zone === "utc"
+		? d.toLocaleTimeString(TIME_LOCALE, {
+				...UTC_CLOCK_OPTIONS,
+				timeZone: "UTC",
+			})
+		: d.toLocaleTimeString(TIME_LOCALE, viewerClockOptions());
 }
 
 /**
