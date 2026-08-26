@@ -211,6 +211,16 @@
 						Players
 					</a>
 					{#if user}
+						<!-- The private half of the site lives in this menu (Settings,
+						     Admin), and a list only you can see belongs with them
+						     rather than on the public profile the avatar links to. -->
+						<a
+							href={resolve("/opponents")}
+							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
+							onclick={closeMenu}
+						>
+							Opponents
+						</a>
 						<a
 							href={resolve("/stats")}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
