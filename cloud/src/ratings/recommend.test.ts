@@ -3,6 +3,7 @@ import {
 	buildRecommendations,
 	MAX_APPEARANCES,
 	MAX_UNSETTLED_PER_LIST,
+	MIN_RECOMMENDATION_COUNT,
 	RECOMMENDATION_COUNT,
 	type RecommendationCandidate,
 } from "./recommend";
@@ -53,43 +54,71 @@ describe("buildRecommendations", () => {
 	});
 
 	it("never suggests a game one side would walk", () => {
+		// Eight players at the same strength, so the floor below is nowhere near
+		// binding and the band is free to do its job.
 		const players = [
-			player("even", { r: 1500 }),
-			player("close", { r: 1560 }),
+			...pool(8),
 			player("hopeless", { r: 2400 }),
 			player("outclassed", { r: 700 }),
 		];
 		const lists = buildRecommendations({ players, duels: [], today: TODAY });
 
-		expect(idsFor(lists, "even")).toEqual(["close"]);
-		// …and symmetrically: the strong player is not offered the weak one.
+		for (const p of pool(8)) {
+			const ids = idsFor(lists, p.userId);
+			expect(ids).not.toContain("hopeless");
+			expect(ids).not.toContain("outclassed");
+		}
+		// …and symmetrically: the strong player is not offered the weak one
+		// while anyone closer is left.
 		expect(idsFor(lists, "hopeless")).not.toContain("outclassed");
+	});
+
+	it("gives the ends of the ladder a floor rather than a dead end", () => {
+		// One player far above a settled pack: nobody is a close game for them,
+		// so the band has to give way — down to the floor, and no further.
+		const players = [player("champion", { r: 2100 }), ...pool(12)];
+		const lists = buildRecommendations({ players, duels: [], today: TODAY });
+
+		const ids = idsFor(lists, "champion");
+		expect(ids).toHaveLength(MIN_RECOMMENDATION_COUNT);
+		expect(new Set(ids).size).toBe(ids.length);
+		// The pack still gets full lists off each other.
+		expect(idsFor(lists, "p0")).toHaveLength(RECOMMENDATION_COUNT);
 	});
 
 	it("widens the band for a player it barely knows, rather than giving up", () => {
 		// Each of these is ~200 rating points away: outside the band a settled
-		// player is held to, inside the one a barely-known player gets.
+		// player is held to, inside the one a barely-known player gets. Six
+		// same-strength players sit alongside them so the floor is already
+		// satisfied and the band is what decides.
 		const opponents = [
 			player("a", { r: 1700 }),
 			player("b", { r: 1300 }),
 			player("c", { r: 1660 }),
 		];
-		const newcomer = player("newcomer", { r: 1500, rd: 300, games: 1 });
+		const nearby = pool(6, "near");
 
-		// A settled player at the same rating finds none of them close enough.
+		// A settled player at the same rating finds none of the three close
+		// enough, and fills up from the six instead.
 		const settled = buildRecommendations({
-			players: [player("settled"), ...opponents],
+			players: [player("settled"), ...opponents, ...nearby],
 			duels: [],
 			today: TODAY,
 		});
-		expect(idsFor(settled, "settled")).toEqual([]);
+		const settledIds = idsFor(settled, "settled");
+		expect(settledIds.sort()).toEqual(nearby.map((p) => p.userId).sort());
 
+		// The newcomer's band is wide enough to reach all nine.
 		const unsettled = buildRecommendations({
-			players: [newcomer, ...opponents],
+			players: [
+				player("newcomer", { r: 1500, rd: 300, games: 1 }),
+				...opponents,
+				...nearby,
+			],
 			duels: [],
 			today: TODAY,
 		});
-		expect(idsFor(unsettled, "newcomer")).toHaveLength(3);
+		expect(idsFor(unsettled, "newcomer")).toHaveLength(9);
 	});
 
 	it("leaves out anyone who opted out, and still gives them their own list", () => {
