@@ -41,11 +41,12 @@ interface OpponentRow {
 	avatar_hash: string | null;
 	meetings: number;
 	badges: string;
-	computed_at: string;
 }
 
 // GET /v1/users/me/opponents — the signed-in viewer's ten suggested opponents,
-// in the order the nightly rebuild shuffled them into.
+// in the order the nightly rebuild shuffled them into. Identity, a link to
+// their Discord profile, and the pair's history: no rating, no probability, no
+// score, because the numbers stop at this line.
 //
 // `rated` is what separates the two empty lists: a player with no rated
 // multiplayer game yet has nothing the model can reason from and needs to be
@@ -64,7 +65,7 @@ export async function handleMyOpponents(
 	const rows = await env.SHARE_DB.prepare(
 		`SELECT o.opponent_user_id AS user_id, u.discord_id,
 		        ${displayNameSql("u")} AS display_name, u.slug, u.avatar_hash,
-		        o.meetings, o.badges, o.computed_at
+		        o.meetings, o.badges
 		   FROM user_recommended_opponents o
 		   JOIN users u ON u.user_id = o.opponent_user_id
 		  WHERE o.user_id = ?
@@ -87,12 +88,17 @@ export async function handleMyOpponents(
 				display_name: r.display_name,
 				slug: r.slug,
 				avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
+				// The Discord profile, where the Message button is. Built here
+				// from the snowflake rather than shipping a discord_* field, the
+				// same select-use-don't-serialize shape as avatar_url — which
+				// already carries the same snowflake to every public payload, as
+				// cdn.discordapp.com/avatars/<discord_id>/<hash>.png. The line the
+				// PII stance holds is the *handle*, discord_username, and nothing
+				// here exposes it.
+				discord_url: `https://discord.com/users/${r.discord_id}`,
 				meetings: r.meetings,
 				badges: JSON.parse(r.badges) as OpponentBadge[],
 			})),
-			// When the list was last rebuilt, so the page can say so rather than
-			// leaving the viewer to wonder whether it reacts to their last game.
-			computed_at: results[0]?.computed_at ?? null,
 			rated: rated !== null,
 		},
 		200,
