@@ -2281,6 +2281,10 @@ export interface RecommendedOpponent {
 	display_name: string;
 	slug: string | null;
 	avatar_url: string;
+	// Their Discord profile, where the Message button is. Built by the Worker
+	// from the snowflake it already puts inside avatar_url, so the page can
+	// offer a DM without a discord_* field ever being on the wire.
+	discord_url: string;
 	// Rated games the pair has already played against each other.
 	meetings: number;
 	badges: OpponentBadge[];
@@ -2306,8 +2310,6 @@ export interface RatingsRebuildSummary {
 
 export interface RecommendedOpponents {
 	opponents: RecommendedOpponent[];
-	// When the nightly rebuild last ran, or null when the list is empty.
-	computed_at: string | null;
 	// Whether the viewer has any rated multiplayer game at all — what separates
 	// "you have not played one yet" from "nothing to suggest this week".
 	rated: boolean;
