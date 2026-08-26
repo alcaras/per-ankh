@@ -43,6 +43,15 @@ import { createRng, shuffle } from "../tournament/rng";
 // read in one go and to keep any single player from being everyone's answer.
 export const RECOMMENDATION_COUNT = 10;
 
+// ...and never fewer than six, whatever the model thinks.
+//
+// At the ends of the ladder there are genuinely only a handful of people who
+// would give you a close game — the strongest player in the community had one
+// name on their page — and a page with one name on it is not a recommendation,
+// it is a dead end. Below this floor the no-stomp band is the last thing to
+// give way, and it gives way in order of how close the game would still be.
+export const MIN_RECOMMENDATION_COUNT = 6;
+
 // A candidate must have been seen — logged in, or finished a rated game —
 // within this many days. Wide, because Old World games take weeks: a player
 // mid-match is invisible to both signals until the save lands.
@@ -243,6 +252,7 @@ export function buildRecommendations(args: {
 		const scored: {
 			rec: Recommendation;
 			score: number;
+			inBand: boolean;
 			unsettled: boolean;
 			appearances: number;
 		}[] = [];
@@ -254,7 +264,6 @@ export function buildRecommendations(args: {
 			const muJ = (candidate.r - 1500) / SCALE;
 			const phiJ = candidate.rd / SCALE;
 			const e = expectedScore(mu, muJ, phiJ);
-			if (e < lo || e > hi) continue;
 
 			// The Fisher information each side would gain, converted to the
 			// deviation they would shed by playing. The shared E(1 - E) is what
@@ -289,6 +298,10 @@ export function buildRecommendations(args: {
 
 			scored.push({
 				score,
+				// Whether this is a game both of them might win. Recorded rather
+				// than filtered on, because it is the last rule the fill below
+				// relaxes and it has to still be there to relax.
+				inBand: e >= lo && e <= hi,
 				unsettled: candidate.rd > UNSETTLED_RD,
 				appearances,
 				rec: {
@@ -299,31 +312,51 @@ export function buildRecommendations(args: {
 			});
 		}
 
-		// Best score first, then down the list three times, dropping one balancing
-		// rule each pass and only ever running a later pass because an earlier one
-		// left the list short.
+		// Best score first, then down the list once per pass, each pass dropping
+		// one rule — and a later pass only ever runs because an earlier one left
+		// the list short.
 		//
-		// Both rules exist to stop a healthy pool from piling everyone onto a few
-		// names. Neither is worth a short page: in this community only a minority
-		// of players are settled enough to be a confident pairing, so a strict
-		// reading hands exactly the veterans who most want this feature a list of
-		// three — the appearance ceiling having been spent on the players
-		// processed before them. A candidate suggested to one person too many
-		// costs nothing; a page with three names on it is the feature not working.
+		// The first three rules exist to stop a healthy pool from piling everyone
+		// onto a few names, and none of them is worth a short page. In this
+		// community only a minority of players are settled enough to be a
+		// confident pairing, so a strict reading hands exactly the veterans who
+		// most want this feature a list of three, the appearance ceiling having
+		// been spent on whoever was processed before them.
+		//
+		// The last pass gives up the no-stomp band itself, and only down to the
+		// floor: at the ends of the ladder there really are only a handful of
+		// close games available, and six names — the last of them not quite even
+		// — beat one name and a lot of white space. Because the score's own
+		// evenness term peaks at even odds, the order this pass admits people in
+		// is closest-game-first.
 		scored.sort((a, b) => b.score - a.score);
 		const chosen: typeof scored = [];
 		const taken = new Set<number>();
 		let unsettledChosen = 0;
-		for (const pass of ["balanced", "over-subscribe", "anyone"] as const) {
-			if (chosen.length === RECOMMENDATION_COUNT) break;
+		const passes = [
+			// Every rule honoured.
+			{ target: RECOMMENDATION_COUNT, cap: true, quota: true, band: true },
+			// Someone may be on one list too many.
+			{ target: RECOMMENDATION_COUNT, cap: false, quota: true, band: true },
+			// More than three of them may be players nobody can place yet.
+			{ target: RECOMMENDATION_COUNT, cap: false, quota: false, band: true },
+			// And finally, the game need not be even — but only to the floor.
+			{
+				target: MIN_RECOMMENDATION_COUNT,
+				cap: false,
+				quota: false,
+				band: false,
+			},
+		];
+		for (const pass of passes) {
+			if (chosen.length >= pass.target) continue;
 			for (const [index, candidate] of scored.entries()) {
-				if (chosen.length === RECOMMENDATION_COUNT) break;
+				if (chosen.length >= pass.target) break;
 				if (taken.has(index)) continue;
-				if (pass === "balanced" && candidate.appearances >= MAX_APPEARANCES) {
-					continue;
-				}
+				if (pass.band && !candidate.inBand) continue;
+				if (pass.cap && candidate.appearances >= MAX_APPEARANCES) continue;
 				if (
-					pass !== "anyone" &&
+					pass.quota &&
 					candidate.unsettled &&
 					unsettledChosen >= MAX_UNSETTLED_PER_LIST
 				) {

@@ -859,8 +859,8 @@ export async function handleMe(
 			// to decide whether to offer the one-time "remember my stream" input.
 			stream_url: row.stream_url,
 			// Whether other players may be suggested this user as an opponent.
-			// Read by the preferences toggle and by /opponents, which tells a
-			// hidden viewer why nobody is being shown them back.
+			// Read by the preferences toggle and by the profile's Opponents tab,
+			// which tells a hidden viewer that the suggesting runs both ways.
 			open_to_matches: row.open_to_matches === 1,
 		},
 		200,
