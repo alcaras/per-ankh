@@ -188,8 +188,8 @@ export interface UserMe {
 	stream_url: string | null;
 	// Whether other players may be shown this user as a suggested opponent
 	// (the product default; a user can opt out in Preferences). Read by that
-	// toggle and by /opponents, which tells an opted-out viewer that the
-	// suggesting runs both ways.
+	// toggle and by the Opponents tab, which tells an opted-out viewer that
+	// the suggesting runs both ways.
 	open_to_matches: boolean;
 }
 
@@ -700,7 +700,8 @@ export const cloudApi = {
 		return res.json() as Promise<RatingsRebuildSummary>;
 	},
 
-	// The signed-in viewer's suggested opponents — the whole of /opponents.
+	// The signed-in viewer's suggested opponents — the whole of the profile's
+	// Opponents tab.
 	// There is no by-user-id form: a player sees only their own list, which the
 	// Worker enforces by having no route that takes one.
 	getMyOpponents: async (opts?: CallOpts): Promise<RecommendedOpponents> => {
