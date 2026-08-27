@@ -244,6 +244,7 @@ export type StatsCategory =
 	| "leaders"
 	| "wonders"
 	| "families"
+	| "family-keeps"
 	| "yields"
 	| "laws"
 	| "cities"
