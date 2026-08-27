@@ -208,12 +208,9 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 		title: {
 			...CHART_THEME.title,
 			text: "Families kept",
-			// Names the three columns on the right and the one rule that governs
-			// every colour on the chart. Without it the Δ column is a signed
-			// number in one of three colours with no way to know what any of it
-			// means.
-			subtext:
-				"kept · vs chance · games   —   coloured where the gap is more than luck explains; the tick on each bar is chance",
+			// Names the three columns on the right — the rule the colour follows
+			// is on the note under the chart, where the sample size is.
+			subtext: "kept · vs chance · games",
 			subtextStyle: { color: "#7a6a55", fontSize: 11 },
 		},
 		tooltip: {
@@ -292,12 +289,21 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 			},
 			{
 				// The chance notch, one per row at that row's own level.
+				//
+				// z above the bars, explicitly. Both series default to the same z
+				// and fall back to declaration order, which is a thin thing to rest
+				// on for the one mark the whole chart is read against — and when a
+				// bar runs past its own chance level, the notch sits inside the
+				// fill, which is exactly where losing the tie makes it vanish.
 				type: "custom",
+				z: 10,
 				yAxisIndex: 0,
 				silent: true,
 				data: sorted.map((r, i) => [r.baseline_pct, i]),
 				renderItem: (_params, api) => {
 					const [x, y] = api.coord([api.value(0), api.value(1)]);
+					// Taller than the 18px bar so it reads as a mark laid across it
+					// rather than a gap in it.
 					const height = (api.size?.([0, 1]) as number[])[1] * 0.85;
 					return {
 						type: "rect",

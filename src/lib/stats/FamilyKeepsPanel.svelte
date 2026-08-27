@@ -88,6 +88,6 @@
 	>
 		Based on {keeps.player_games} player-games{nation === ALL_NATIONS
 			? ""
-			: ` of ${nationLabel(nation)}`}.
+			: ` of ${nationLabel(nation)}`}. Color = significant.
 	</p>
 {/if}
