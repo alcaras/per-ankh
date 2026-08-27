@@ -2296,8 +2296,9 @@ export interface RecommendedOpponent {
 }
 
 export interface SuggestedMap {
-	// The script's name, e.g. "Coastal Rain Basin".
-	label: string;
+	// What to call it — the script, plus the variant where the pool holds
+	// several of one script: "Coastal Rain Basin", "DOTA Jungle".
+	name: string;
 	// How it is set up: "Duel · wide · point-sym off · mirror".
 	setting: string;
 	// Deep link into owtournamentatlas.

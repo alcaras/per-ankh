@@ -2,14 +2,16 @@
 // Source: owtournamentatlas' published pool (src/pages/index.astro POOL,
 // joined to src/data/atlas-dist.json). Re-run when the atlas pool changes.
 
-// One map the community plays: the script it runs, how it is set up, and
-// the anchor that addresses it on the atlas. `script` is the raw Old
-// World value — canonicalMapScript() in ../tournament/canonical-maps is
-// what makes it comparable with the script recorded on a game.
+// One map the community plays: what to call it, the script it runs, how
+// it is set up, and the anchor that addresses it on the atlas. `name`
+// carries the variant where the pool holds several of one script ("DOTA
+// Jungle"). `script` is the raw Old World value — canonicalMapScript()
+// in ../tournament/canonical-maps is what makes it comparable with the
+// script recorded on a game.
 export interface AtlasPoolMap {
 	anchor: string;
 	script: string;
-	label: string;
+	name: string;
 	setting: string;
 }
 
@@ -17,109 +19,109 @@ export const ATLAS_POOL: readonly AtlasPoolMap[] = [
 	{
 		anchor: "sq-duel-arch-ps",
 		script: "MAPCLASS_MapScriptArchipelago",
-		label: "Archipelago",
+		name: "Archipelago",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "wide-duel-arch",
 		script: "MAPCLASS_MapScriptArchipelago",
-		label: "Archipelago",
+		name: "Archipelago",
 		setting: "Duel · wide · point-sym off · mirror",
 	},
 	{
 		anchor: "sq-duel-sm-seas-aridp-ps",
 		script: "MAPCLASS_MapScriptAridPlateau",
-		label: "Arid Plateau",
+		name: "Arid Plateau Sm Seas",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-lg-seas-aridp-ps",
 		script: "MAPCLASS_MapScriptAridPlateau",
-		label: "Arid Plateau",
+		name: "Arid Plateau Lg Seas",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "wide-duel-crb",
 		script: "MAPCLASS_MapScriptCoastalRainBasin",
-		label: "Coastal Rain Basin",
+		name: "Coastal Rain Basin",
 		setting: "Duel · wide · point-sym off · mirror",
 	},
 	{
 		anchor: "sq-duel-crb-ps",
 		script: "MAPCLASS_MapScriptCoastalRainBasin",
-		label: "Coastal Rain Basin",
+		name: "Coastal Rain Basin",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "wide-duel-cont-ps",
 		script: "MAPCLASS_MapScriptContinent",
-		label: "Continent",
+		name: "Continent",
 		setting: "Duel · wide · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-tiny-lush-desert",
 		script: "MAPCLASS_MapScriptDesert",
-		label: "Desert",
+		name: "Desert Lush",
 		setting: "Tiny · square · point-sym off · mirror",
 	},
 	{
 		anchor: "sq-tiny-nocst-desert-ps",
 		script: "MAPCLASS_MapScriptDesert",
-		label: "Desert",
+		name: "Desert NoCst",
 		setting: "Tiny · square · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-donut-ps",
 		script: "MAPCLASS_MapScriptDonut",
-		label: "Donut",
+		name: "Donut",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-jungle-dota",
 		script: "MAPCLASS_MapScriptDota",
-		label: "DOTA",
+		name: "DOTA Jungle",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-sand-dota",
 		script: "MAPCLASS_MapScriptDota",
-		label: "DOTA",
+		name: "DOTA Sand",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-water-dota",
 		script: "MAPCLASS_MapScriptDota",
-		label: "DOTA",
+		name: "DOTA Water",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "wide-duel-hardwood",
 		script: "MAPCLASS_MapScriptHardwoodForest",
-		label: "Hardwood Forest",
+		name: "Hardwood Forest",
 		setting: "Duel · wide · point-sym off · mirror",
 	},
 	{
 		anchor: "sq-duel-inlsea-ps",
 		script: "MAPCLASS_MapScriptInlandSea2",
-		label: "Inland Sea",
+		name: "Inland Sea",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 	{
 		anchor: "wide-duel-inlsea",
 		script: "MAPCLASS_MapScriptInlandSea2",
-		label: "Inland Sea",
+		name: "Inland Sea",
 		setting: "Duel · wide · point-sym off · mirror",
 	},
 	{
 		anchor: "wide-duel-mtnpass-ps",
 		script: "MAPCLASS_MapscriptMountainPass",
-		label: "Mountain Pass",
+		name: "Mountain Pass",
 		setting: "Duel · wide · point-sym on · mirror",
 	},
 	{
 		anchor: "sq-duel-wetlands-ps",
 		script: "MAPCLASS_MapscriptWetlands",
-		label: "Wetlands",
+		name: "Wetlands",
 		setting: "Duel · square · point-sym on · mirror",
 	},
 ];

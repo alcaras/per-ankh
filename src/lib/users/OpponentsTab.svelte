@@ -66,7 +66,7 @@
 	function dmFor(o: RecommendedOpponent): string {
 		if (!o.map) return "Fancy a game?";
 		const setting = o.map.setting.split(" · ").slice(0, 2).join(" · ");
-		return `Fancy a game? Per-Ankh suggests ${o.map.label} (${setting}) — ${o.map.url}`;
+		return `Fancy a game? Per-Ankh suggests ${o.map.name} (${setting}) — ${o.map.url}`;
 	}
 
 	function labelsFor(o: RecommendedOpponent): string[] {
@@ -172,7 +172,7 @@
 
 				{#if o.map}
 					<div class="mt-1 truncate text-xs text-tan opacity-70">
-						{o.map.label}
+						{o.map.name}
 						<span class="opacity-70"
 							>· {o.map.setting.split(" · ").slice(0, 2).join(" · ")}</span
 						>

@@ -32,8 +32,15 @@ export interface AtlasPoolEntry {
 	anchor: string;
 	// The Old World map script it runs, e.g. MAPCLASS_MapScriptCoastalRainBasin.
 	script: string;
-	// The script's display name, as the atlas groups by ("Coastal Rain Basin").
-	label: string;
+	// What to call this map: the script the atlas groups by, plus the variant
+	// when the pool holds more than one of that script and the variant is what
+	// tells them apart — "DOTA Jungle" and "DOTA Sand" rather than two maps both
+	// called DOTA. Named in the atlas' own vocabulary, abbreviations included
+	// ("Desert NoCst"), because the link beside it goes to a page using exactly
+	// those words. Two configurations of one script that differ only in their
+	// setting (the two Archipelagos) share a name, and the setting tells them
+	// apart.
+	name: string;
 	// "Duel · wide · point-sym off · mirror".
 	setting: string;
 	// Fewest city sites observed across this config's generations.
@@ -163,10 +170,11 @@ export function readAtlasPool(): AtlasPoolEntry[] {
 		if (minSites == null) {
 			throw new Error(`config ${c.slug} has no dist.sites.min`);
 		}
+		const variant = optionLabel(c, multiVariant);
 		return {
 			anchor: slugify(cfgLabelShort(c, multiVariant)),
 			script: scriptForGroup(c.group),
-			label: c.group,
+			name: variant ? `${c.group} ${variant}` : c.group,
 			setting: c.setting,
 			minSites,
 		};
