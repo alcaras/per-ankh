@@ -15,7 +15,7 @@ metadata:
 
 **Red line — read first.** `./per-ankh admin` defaults to **production**. Never run it against production or with `--staging`/`--remote` — including read-only reads — unless the user's current message explicitly asks for that exact command; ask first. It authenticates against the user's Cloudflare account (a 1Password prompt on this machine). Only the `--local` path (and the hard-local-only `dev-login` / `tournament seed`) is safe to run unprompted.
 
-`./per-ankh admin` is the operator CLI for the live app. Implementation lives under `scripts/admin/`. Calls `wrangler` directly (no API key — relies on `wrangler login`). Run `./per-ankh admin --help` for the full list. The list below is illustrative, not exhaustive — `--help` groups the full surface (Stats, Users, Creator channels, Games, Events, Security, Tournaments, Caches, Dev).
+`./per-ankh admin` is the operator CLI for the live app. Implementation lives under `scripts/admin/`. Calls `wrangler` directly (no API key — relies on `wrangler login`). Run `./per-ankh admin --help` for the full list. The list below is illustrative, not exhaustive — `--help` groups the full surface (Stats, Users, Creator channels, Games, Events, Corpus sweeps, Security, Tournaments, Caches, Dev).
 
 ```bash
 ./per-ankh admin stats                       # Global counts + recent activity
@@ -28,6 +28,12 @@ metadata:
 ./per-ankh admin events [--type T] [--user U]
 ./per-ankh admin nuke-user <user_id>         # Delete cloud user + games + R2 blobs (type "nuke")
 ```
+
+## Corpus sweeps
+
+`./per-ankh admin duel-event-titles [--out FILE] [--concurrency N] [--cache-dir DIR]` lists the distinct event-story titles that have fired in a two-player multiplayer duel. Unlike every other read command it is a **sweep**: one `wrangler` spawn per matching save (hundreds), so budget minutes, not seconds. Saves land in `--cache-dir` and are reused, so a second run to reshape the output reads nothing remote.
+
+It reads the raw ZIPs rather than the parsed blobs on purpose — `story_events` only began carrying a game's whole history at parser 2.14.0, and older blobs hold just the newest 100 player-scoped rows with no character- or city-scoped ones at all. The save itself is the authoritative record of what fired.
 
 ## Tournaments
 

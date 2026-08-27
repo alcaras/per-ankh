@@ -14,6 +14,7 @@ import * as events from "./commands/events";
 import * as security from "./commands/security";
 import * as tournament from "./commands/tournament";
 import * as cache from "./commands/cache";
+import * as duelEventTitles from "./commands/duel-event-titles";
 import * as devLogin from "./commands/dev-login";
 
 function printHelp(): void {
@@ -44,6 +45,11 @@ function printHelp(): void {
 			"  add-channel <user_id> <url|@handle>   Link a user's YouTube channel (resolves + upserts)",
 			"  remove-channel <user_id> <platform>   Unlink a user's channel for a platform",
 			"  list-channels [--limit N]             List all linked creator channels",
+			"",
+			"Corpus sweeps (minutes — reads every matching save from R2):",
+			"  duel-event-titles [--out FILE] [--concurrency N] [--cache-dir DIR]",
+			"                                   Distinct event-story titles that have fired",
+			"                                   in a two-player multiplayer duel",
 			"",
 			"Security:",
 			"  nuke-user <user_id> [reason]     Delete user, their games, and R2 blobs",
@@ -148,6 +154,8 @@ export async function main(argv: string[]): Promise<void> {
 			return games.runPurge(subArgs, opts);
 		case "events":
 			return events.run(subArgs, opts);
+		case "duel-event-titles":
+			return duelEventTitles.run(subArgs, opts);
 		case "nuke-user":
 			return security.runNukeUser(subArgs, opts);
 		case "tournament":

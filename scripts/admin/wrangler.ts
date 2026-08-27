@@ -1,4 +1,4 @@
-// Thin wrappers around `npx wrangler d1 execute` and `wrangler r2 object delete`.
+// Thin wrappers around `npx wrangler d1 execute` and `wrangler r2 object get/delete`.
 // Spawns the wrangler binary in cloud/ and parses --json output. Used by every
 // admin subcommand.
 //
@@ -274,6 +274,25 @@ export async function kvBulkDelete(keys: string[]): Promise<void> {
 			await rm(file, { force: true });
 		}
 	}
+}
+
+// Fetch one object into a local file. `destPath` must be absolute — wrangler
+// runs with its cwd set to cloud/, so a relative --file would land there.
+// A missing key returns false rather than throwing (the same case the two
+// download routes 404 on), so a sweep can count misses instead of aborting.
+export async function r2Get(key: string, destPath: string): Promise<boolean> {
+	const { stdout, stderr, code } = await runWrangler([
+		"r2",
+		"object",
+		"get",
+		`${r2Bucket()}/${key}`,
+		"--file",
+		destPath,
+		...targetFlags(),
+	]);
+	if (code === 0) return true;
+	if (/not.?found|404|NoSuchKey/i.test(`${stderr}\n${stdout}`)) return false;
+	throw new Error(`wrangler r2 get failed (exit ${code}): ${stderr.trim()}`);
 }
 
 export async function r2Delete(key: string): Promise<void> {
