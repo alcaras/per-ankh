@@ -227,8 +227,53 @@ async function casualDuels(
 	return out;
 }
 
-// Every ratable duel in D1, de-duplicated by key. A tournament record wins a
-// shared key: it is the reported, official result.
+// Merge the two sources into one duel per key.
+//
+// A tournament record wins a shared key — it is the reported, official result —
+// but winning the key is not the same as winning every field. Two of them come
+// from whichever source knows the answer, not from whichever row held the key:
+//
+//   isPublic — a match one player uploaded publicly and the other privately is
+//   a public match; the public upload already published that it happened. Same
+//   reading the played-games board takes of a double-uploaded match
+//   (stats/handlers.ts).
+//
+//   script — a tournament duel learns the map from the match row's map_script,
+//   a casual one from the save's map_class. A match reported without a map set,
+//   against a save that has one, would otherwise drop a game out of the map
+//   history for no better reason than which row happened to hold the key.
+//
+// A duel with no date is dropped rather than silently landing in whichever
+// rating period sorts first.
+//
+// Exported for the test: reaching this through extractDuels would mean a D1
+// fixture to exercise a merge rule. It fills fields in on the records it is
+// given and counts the dedup in `stats`, so the arrays it returns are the
+// caller's own.
+export function mergeDuels(
+	tournament: readonly ResolvedDuel[],
+	casual: readonly ResolvedDuel[],
+	stats: DuelExtraction["stats"],
+): ResolvedDuel[] {
+	const byKey = new Map<string, ResolvedDuel>();
+	for (const d of tournament) {
+		if (d.date) byKey.set(d.key, d);
+	}
+	for (const d of casual) {
+		if (!d.date) continue;
+		const seen = byKey.get(d.key);
+		if (seen) {
+			if (d.isPublic) seen.isPublic = true;
+			if (!seen.script && d.script) seen.script = d.script;
+			stats.deduped += 1;
+			continue;
+		}
+		byKey.set(d.key, d);
+	}
+	return [...byKey.values()];
+}
+
+// Every ratable duel in D1, de-duplicated by key.
 export async function extractDuels(db: QueryableD1): Promise<DuelExtraction> {
 	const stats: DuelExtraction["stats"] = {
 		tournament: 0,
@@ -245,26 +290,5 @@ export async function extractDuels(db: QueryableD1): Promise<DuelExtraction> {
 	stats.tournament = tournament.length;
 	stats.casual = casual.length;
 
-	// A duel with no date can't be placed in a rating period, so it is dropped
-	// rather than silently landing in whichever period sorts first.
-	const byKey = new Map<string, ResolvedDuel>();
-	for (const d of tournament) {
-		if (d.date) byKey.set(d.key, d);
-	}
-	for (const d of casual) {
-		if (!d.date) continue;
-		const seen = byKey.get(d.key);
-		if (seen) {
-			// A match one player uploaded publicly and the other privately is a
-			// public match — the public upload already published that it
-			// happened. Same reading the played-games board takes of a
-			// double-uploaded match (stats/handlers.ts).
-			if (d.isPublic) seen.isPublic = true;
-			stats.deduped += 1;
-			continue;
-		}
-		byKey.set(d.key, d);
-	}
-
-	return { duels: [...byKey.values()], stats };
+	return { duels: mergeDuels(tournament, casual, stats), stats };
 }
