@@ -199,8 +199,45 @@ async function casualDuels(
 	return out;
 }
 
-// Every ratable duel in D1, de-duplicated by key. A tournament record wins a
-// shared key: it is the reported, official result.
+// Merge the two sources into one duel per key.
+//
+// A tournament record wins a shared key — it is the reported, official result —
+// but winning the key is not the same as winning every field. The two sources
+// learn the map from different places: a tournament duel reads the match row's
+// map_script, a casual one reads the save's map_class. A match reported without
+// a map set, against a save that has one, would otherwise drop a game out of
+// the map history for no better reason than which row happened to hold the key.
+// So the result comes from the tournament record and the script from whichever
+// source knows it.
+//
+// A duel with no date is dropped rather than silently landing in whichever
+// rating period sorts first.
+//
+// Exported for the test: this is pure, and reaching it through extractDuels
+// would mean a D1 fixture to exercise a merge rule.
+export function mergeDuels(
+	tournament: readonly ResolvedDuel[],
+	casual: readonly ResolvedDuel[],
+	stats: DuelExtraction["stats"],
+): ResolvedDuel[] {
+	const byKey = new Map<string, ResolvedDuel>();
+	for (const d of tournament) {
+		if (d.date) byKey.set(d.key, d);
+	}
+	for (const d of casual) {
+		if (!d.date) continue;
+		const existing = byKey.get(d.key);
+		if (existing) {
+			if (!existing.script && d.script) existing.script = d.script;
+			stats.deduped += 1;
+			continue;
+		}
+		byKey.set(d.key, d);
+	}
+	return [...byKey.values()];
+}
+
+// Every ratable duel in D1, de-duplicated by key.
 export async function extractDuels(db: D1Database): Promise<DuelExtraction> {
 	const stats: DuelExtraction["stats"] = {
 		tournament: 0,
@@ -217,20 +254,5 @@ export async function extractDuels(db: D1Database): Promise<DuelExtraction> {
 	stats.tournament = tournament.length;
 	stats.casual = casual.length;
 
-	// A duel with no date can't be placed in a rating period, so it is dropped
-	// rather than silently landing in whichever period sorts first.
-	const byKey = new Map<string, ResolvedDuel>();
-	for (const d of tournament) {
-		if (d.date) byKey.set(d.key, d);
-	}
-	for (const d of casual) {
-		if (!d.date) continue;
-		if (byKey.has(d.key)) {
-			stats.deduped += 1;
-			continue;
-		}
-		byKey.set(d.key, d);
-	}
-
-	return { duels: [...byKey.values()], stats };
+	return { duels: mergeDuels(tournament, casual, stats), stats };
 }

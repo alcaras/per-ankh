@@ -26,7 +26,7 @@ interface AtlasConfig {
 	dist: { sites?: { min: number } };
 }
 
-export interface AtlasPoolEntry {
+interface AtlasPoolEntry {
 	// The map's atlas URL anchor — slugify(compact label), the same value
 	// atlasAnchor() produces at runtime in $lib/tournament/map-script-options.
 	anchor: string;
