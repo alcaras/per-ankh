@@ -56,7 +56,7 @@ function mapFor(anchor: string | null) {
 	const m = POOL_BY_ANCHOR.get(anchor);
 	if (!m) return null;
 	return {
-		label: m.label,
+		name: m.name,
 		setting: m.setting,
 		url: `${ATLAS_BASE_URL}#${m.anchor}`,
 	};
