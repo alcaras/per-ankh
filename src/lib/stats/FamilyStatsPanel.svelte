@@ -12,10 +12,10 @@
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import NationSelect from "./NationSelect.svelte";
 	import type { ChartBundleCore } from "./types";
+	import FamilyKeepBars from "./FamilyKeepBars.svelte";
 	import {
 		capitalFamilyWinLossOption,
 		familyClassRowCount,
-		familyCutsOption,
 		familyNations,
 		familyNationPicksOption,
 	} from "./charts/families";
@@ -33,25 +33,32 @@
 		chosen && options.includes(chosen) ? chosen : ALL_NATIONS,
 	);
 
-	const cuts = $derived(bundle.familyCuts);
+	// The keep table for whatever nation is selected — its own table when one
+	// is, the cross-nation one otherwise. Each carries its own gate, so this is
+	// a swap rather than a filter over shared rows.
+	const keeps = $derived(
+		nation === ALL_NATIONS
+			? bundle.familyKeeps.overall
+			: (bundle.familyKeeps.byNation.find((n) => n.nation === nation) ??
+					bundle.familyKeeps.overall),
+	);
 	// What the table couldn't read, said out loud rather than quietly dropped —
-	// a rate whose exclusions are invisible invites more trust than it has
-	// earned.
+	// a rate whose exclusions are invisible invites more trust than it earned.
 	const skipped = $derived(
-		cuts.skipped_incomplete +
-			cuts.skipped_forced_pool +
-			cuts.skipped_unknown_pool,
+		keeps.skipped_incomplete +
+			keeps.skipped_forced_pool +
+			keeps.skipped_unknown_pool,
 	);
 	const skippedReason = $derived(
 		[
-			cuts.skipped_incomplete > 0
-				? `${cuts.skipped_incomplete} that lost a family to conquest`
+			keeps.skipped_incomplete > 0
+				? `${keeps.skipped_incomplete} that lost a family to conquest`
 				: null,
-			cuts.skipped_forced_pool > 0
-				? `${cuts.skipped_forced_pool} on nations that field their whole pool`
+			keeps.skipped_forced_pool > 0
+				? `${keeps.skipped_forced_pool} on nations that field their whole pool`
 				: null,
-			cuts.skipped_unknown_pool > 0
-				? `${cuts.skipped_unknown_pool} on an unrecognised nation`
+			keeps.skipped_unknown_pool > 0
+				? `${keeps.skipped_unknown_pool} on an unrecognised nation`
 				: null,
 		]
 			.filter(Boolean)
@@ -74,33 +81,38 @@
 	</p>
 {/if}
 
-<!-- Which families this corpus refuses. Its own guard: a corpus can have
-     capital-family data and still have no readable cut table, because a roster
-     that lost a family to conquest can't say what was chosen at setup. -->
-{#if cuts.rows.length > 0}
-	<ChartContainer
-		option={familyCutsOption(bundle)}
-		height={barChartHeight(cuts.rows.length)}
-		title="Families cut"
-	/>
-	<p class="px-4 pb-2 text-center text-xs text-tan opacity-60">
-		{cuts.player_games} player-games. A player fields three of their nation's families,
-		so the notch on each bar is how often chance alone would cut it — bars past the
-		notch are refused more than chance, and colour marks the ones that clear a false-discovery
-		gate across all {cuts.rows.length} classes.
-		{#if skipped > 0}
-			{skipped}
-			{skipped === 1 ? "player-game is" : "player-games are"} left out: {skippedReason}.
-		{/if}
-	</p>
-{:else}
-	<p class="p-8 text-center italic text-brown">No family cut data available.</p>
-{/if}
-
 {#if nations.length === 0}
 	<p class="p-8 text-center italic text-brown">No family data available.</p>
 {:else}
+	<!-- One selector for both of the family-choice views below: which classes
+	     get kept, and how the games went for them. -->
 	<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
+
+	<!-- Same card the sibling charts sit in (ChartContainer's shell), so the one
+	     hand-rolled view on this panel doesn't read as an unstyled fragment
+	     between two chrome-wrapped charts. -->
+	{#if keeps.rows.length > 0}
+		<div
+			class="mx-auto mb-6 max-w-3xl overflow-hidden rounded-lg px-5 py-4"
+			style="background-color: rgb(var(--color-surface-raised));"
+		>
+			<h3 class="text-center text-base font-bold text-tan">
+				Families kept{nation === ALL_NATIONS ? "" : ` — ${nationLabel(nation)}`}
+			</h3>
+			<FamilyKeepBars rows={keeps.rows} />
+			<p class="mx-auto mt-3 max-w-2xl text-center text-xs text-muted">
+				{keeps.player_games} player-games. A player fields three of their nation's
+				families, so the notch is how often chance alone would keep one — past the
+				notch is a family players want, short of it one they pass over. Δ is that
+				gap, coloured only where it clears a false-discovery gate across all
+				{keeps.rows.length} classes.
+				{#if skipped > 0}
+					{skipped}
+					{skipped === 1 ? "player-game is" : "player-games are"} left out: {skippedReason}.
+				{/if}
+			</p>
+		</div>
+	{/if}
 
 	<ChartContainer
 		option={familyNationPicksOption(bundle, nation)}

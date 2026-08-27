@@ -41,24 +41,25 @@ export interface ChartBundleSummary extends ChartBundleSummaryCore {
 // Chart-fields core, returned by both the user and tournament stats endpoints.
 // ChartBundle (user) extends it with the Overview fields.
 // One family class, over the player-games where its nation's pool contained it.
-// Mirrors cloud/src/stats/family-cuts.ts.
-export interface FamilyCutRow {
+// Mirrors cloud/src/stats/family-keeps.ts.
+export interface FamilyKeepRow {
 	family_class: string;
 	eligible: number;
-	cut: number;
-	cut_pct: number;
+	kept: number;
+	kept_pct: number;
 	// What indifference alone produces: a player fields three of the pool, so a
-	// four-family nation cuts one of four by chance. Accumulated per game
+	// four-family nation keeps three of four by chance. Accumulated per game
 	// because pools differ in size, which is why it isn't a constant.
 	baseline_pct: number;
+	// Above zero is kept more often than chance; below is a family refused.
 	delta: number;
 	z: number;
 	// Survives Benjamini-Hochberg at q=0.05 across the classes in this table.
 	significant: boolean;
 }
 
-export interface FamilyCutTable {
-	rows: FamilyCutRow[];
+export interface FamilyKeepTable {
+	rows: FamilyKeepRow[];
 	player_games: number;
 	// Rosters that couldn't say what was chosen at setup, nations that field
 	// their whole pool, and rows whose nation or classes aren't in the baked
@@ -68,10 +69,17 @@ export interface FamilyCutTable {
 	skipped_unknown_pool: number;
 }
 
+// The overall table plus one per nation, each with its own false-discovery
+// gate — looking at one nation is four tests, not ten.
+export interface FamilyKeeps {
+	overall: FamilyKeepTable;
+	byNation: Array<{ nation: string } & FamilyKeepTable>;
+}
+
 export interface ChartBundleCore {
 	meta: ChartBundleMeta;
 
-	familyCuts: FamilyCutTable;
+	familyKeeps: FamilyKeeps;
 
 	summary: ChartBundleSummaryCore;
 
