@@ -14,7 +14,9 @@
 	// field" in the other with no branch here — the corpus behind the bundle is
 	// the only difference.
 	import NationSelect from "./NationSelect.svelte";
-	import FamilyKeepBars from "./FamilyKeepBars.svelte";
+	import ChartContainer from "$lib/ChartContainer.svelte";
+	import { familyKeepsOption } from "./charts/families";
+	import { barChartHeight } from "./charts/helpers";
 	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
 	import type { ChartBundleCore } from "./types";
 
@@ -73,21 +75,19 @@
 {:else}
 	<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
 
-	<div
-		class="mx-auto mb-6 max-w-3xl overflow-hidden rounded-lg px-5 py-4"
-		style="background-color: rgb(var(--color-surface-raised));"
+	<ChartContainer
+		option={familyKeepsOption(keeps.rows)}
+		height={barChartHeight(keeps.rows.length + 1)}
+		title="Families kept"
+	/>
+	<p
+		class="-mt-4 mb-6 text-center text-xs text-muted"
+		title={skipped > 0
+			? `${skipped} more left out: ${skippedReason}`
+			: undefined}
 	>
-		<h3 class="mb-3 text-center text-base font-bold text-tan">
-			Families kept{nation === ALL_NATIONS ? "" : ` — ${nationLabel(nation)}`}
-		</h3>
-		<FamilyKeepBars rows={keeps.rows} />
-		<p
-			class="mt-3 text-center text-xs text-muted"
-			title={skipped > 0
-				? `${skipped} more left out: ${skippedReason}`
-				: undefined}
-		>
-			Based on {keeps.player_games} player-games.
-		</p>
-	</div>
+		Based on {keeps.player_games} player-games{nation === ALL_NATIONS
+			? ""
+			: ` of ${nationLabel(nation)}`}.
+	</p>
 {/if}
