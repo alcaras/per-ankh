@@ -208,10 +208,7 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 		title: {
 			...CHART_THEME.title,
 			text: "Families kept",
-			// Names the three columns on the right — the rule the colour follows
-			// is on the note under the chart, where the sample size is.
-			subtext: "kept · vs chance · games",
-			subtextStyle: { color: "#7a6a55", fontSize: 11 },
+			// The columns name themselves, from the right axis — see its `name`.
 		},
 		tooltip: {
 			...CHART_THEME.tooltip,
@@ -251,6 +248,25 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 				type: "category",
 				position: "right",
 				data: keys,
+				// Column headings, sat at the top of the value column. The axis
+				// `name` is the only thing ECharts anchors to the end of an axis,
+				// and giving it the same rich-text widths as the labels below is
+				// what lines the three headings up over the three columns instead
+				// of floating them somewhere near.
+				name: "{hk|kept}{hc|vs chance}{hg|games}",
+				nameLocation: "end",
+				nameGap: 16,
+				nameTextStyle: {
+					rich: {
+						// Widths match the value columns below exactly, so the
+						// headings sit over what they name. A point smaller than the
+						// values, because "vs chance" is the widest string here and
+						// at 10px it spills out of its cell into "kept".
+						hk: { width: 42, align: "right", color: "#7a6a55", fontSize: 9 },
+						hc: { width: 44, align: "right", color: "#7a6a55", fontSize: 9 },
+						hg: { width: 40, align: "right", color: "#7a6a55", fontSize: 9 },
+					},
+				},
 				axisTick: { show: false },
 				axisLine: { show: false },
 				axisLabel: {
