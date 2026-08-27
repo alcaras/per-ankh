@@ -35,7 +35,7 @@ export interface YieldCohort {
 	>;
 }
 
-import type { FamilyCutTable } from "./family-cuts";
+import type { FamilyKeeps } from "./family-keeps";
 
 export interface ChartBundleMeta {
 	// Number of games actually aggregated (after visibility / game-type
@@ -69,10 +69,10 @@ export interface ChartBundleSummary extends ChartBundleSummaryCore {
 export interface ChartBundleCore {
 	meta: ChartBundleMeta;
 
-	// Which families this corpus refuses to field. See stats/family-cuts —
-	// the null is the pool's chance level, not zero, so every row carries the
-	// baseline it is measured against.
-	familyCuts: FamilyCutTable;
+	// Which families this corpus keeps, overall and per nation. See
+	// stats/family-keeps — the null is the pool's chance level, not zero, so
+	// every row carries the baseline it is measured against.
+	familyKeeps: FamilyKeeps;
 
 	// --- Summary -----------------------------------------------------
 	summary: ChartBundleSummaryCore;

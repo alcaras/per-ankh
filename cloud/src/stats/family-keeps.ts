@@ -1,4 +1,5 @@
-// Which families players refuse to field.
+// Which families players keep, against how often keeping one would happen by
+// itself.
 //
 // A nation has a fixed pool of families and a player fields exactly three per
 // game, so a four-family nation leaves one out of every game it ever plays.
@@ -13,10 +14,16 @@
 // A class in six nations' pools is being asked about in all six.
 //
 // And the null is not zero. Fielding three of four means 75% is exactly what
-// indifference produces, so a 70% keep rate is a *cut*, not a preference. Worse,
-// pools differ in size — Maurya's six give 50% — so the baseline has to be
-// accumulated per game rather than applied as one percentage at the end.
-// Skipping that makes every Maurya class look shunned.
+// indifference produces, so a 70% keep rate is a family being *refused*, not
+// one being liked. Worse, pools differ in size — Maurya's six give 50% — so the
+// baseline has to be accumulated per game rather than applied as one percentage
+// at the end. Skipping that makes every Maurya class look shunned.
+//
+// Counted as keeps rather than cuts. It is the same quantity from the other
+// side (kept = eligible - cut, and the two baselines sum to 100), so the
+// arithmetic still checks against a spec written in cuts — but a page about
+// what players field reads better than one about what they refuse, and the
+// interesting rows end up at the top rather than the bottom.
 //
 // Everything here describes choices, not outcomes, so nothing is rating
 // adjusted: the null is the pool's chance level, not what a rating expected.
@@ -36,22 +43,24 @@ const FIELDED_PER_GAME = 3;
 // about 40% of the time, so the table would be decorative.
 const FDR_Q = 0.05;
 
-export interface FamilyCutRow {
+export interface FamilyKeepRow {
 	family_class: string;
 	// Player-games where this class was in the nation's pool.
 	eligible: number;
-	cut: number;
-	cut_pct: number;
-	// What indifference alone would have produced, accumulated per game.
+	kept: number;
+	kept_pct: number;
+	// What indifference alone would have produced, accumulated per game: three
+	// of a four-family pool is 75%, three of Maurya's six is 50%.
 	baseline_pct: number;
+	// Above zero is kept more often than chance, below is a family refused.
 	delta: number;
 	z: number;
 	// Survives Benjamini-Hochberg at q=0.05 across the classes in this table.
 	significant: boolean;
 }
 
-export interface FamilyCutTable {
-	rows: FamilyCutRow[];
+export interface FamilyKeepTable {
+	rows: FamilyKeepRow[];
 	// Player-games the table is built from.
 	player_games: number;
 	// And the ones it isn't, surfaced rather than quietly dropped. A roster that
@@ -70,8 +79,19 @@ export interface FamilyCutTable {
 	skipped_unknown_pool: number;
 }
 
+// The overall table plus the same thing per nation, because a reader wants to
+// ask "and what about Rome?".
+//
+// Each nation carries its own false-discovery gate rather than a slice of the
+// overall one: the gate belongs to the set of classes actually on trial, and
+// looking at one nation is four tests, not ten.
+export interface FamilyKeeps {
+	overall: FamilyKeepTable;
+	byNation: Array<{ nation: string } & FamilyKeepTable>;
+}
+
 /** One player's families in one game, as stored on player_summaries. */
-export interface FamilyCutInput {
+export interface FamilyKeepInput {
 	nation: string | null;
 	// The `family_classes` JSON column, already parsed.
 	family_classes: readonly string[] | null;
@@ -112,9 +132,9 @@ function erfc(x: number): number {
  * That is what lets a player who favours unusual nations still be read against
  * chance.
  */
-export function buildFamilyCutTable(
-	inputs: readonly FamilyCutInput[],
-): FamilyCutTable {
+export function buildFamilyKeepTable(
+	inputs: readonly FamilyKeepInput[],
+): FamilyKeepTable {
 	interface Record {
 		pool: readonly string[];
 		fielded: Set<string>;
@@ -152,28 +172,28 @@ export function buildFamilyCutTable(
 
 	const rows = classes.map((family) => {
 		const eligible = records.filter((r) => r.pool.includes(family));
-		const cut = eligible.filter((r) => !r.fielded.has(family)).length;
+		const kept = eligible.filter((r) => r.fielded.has(family)).length;
 
-		// Poisson-binomial: every game brings its own probability of a cut,
-		// because pools differ in size. A binomial test with one pooled p would
-		// be measuring a population that doesn't exist.
+		// Poisson-binomial: every game brings its own probability, because pools
+		// differ in size. A binomial test with one pooled p would be measuring a
+		// population that doesn't exist.
 		let expected = 0;
 		let variance = 0;
 		for (const r of eligible) {
-			const pCut = 1 - FIELDED_PER_GAME / r.pool.length;
-			expected += pCut;
-			variance += pCut * (1 - pCut);
+			const pKeep = FIELDED_PER_GAME / r.pool.length;
+			expected += pKeep;
+			variance += pKeep * (1 - pKeep);
 		}
 
 		const n = eligible.length;
-		const z = variance > 0 ? (cut - expected) / Math.sqrt(variance) : 0;
+		const z = variance > 0 ? (kept - expected) / Math.sqrt(variance) : 0;
 		return {
 			family_class: family,
 			eligible: n,
-			cut,
-			cut_pct: n > 0 ? (100 * cut) / n : 0,
+			kept,
+			kept_pct: n > 0 ? (100 * kept) / n : 0,
 			baseline_pct: n > 0 ? (100 * expected) / n : 0,
-			delta: n > 0 ? (100 * cut) / n - (100 * expected) / n : 0,
+			delta: n > 0 ? (100 * kept) / n - (100 * expected) / n : 0,
 			z,
 			p: variance > 0 ? erfc(Math.abs(z) / Math.SQRT2) : 1,
 			significant: false,
@@ -192,13 +212,39 @@ export function buildFamilyCutTable(
 	});
 
 	return {
-		// Most-cut first: the finding is which families get refused.
+		// Most-kept first: the families a field actually fights over lead.
 		rows: rows
-			.sort((a, b) => b.cut_pct - a.cut_pct)
+			.sort((a, b) => b.kept_pct - a.kept_pct)
 			.map(({ p: _p, ...row }) => row),
 		player_games: records.length,
 		skipped_incomplete: skippedIncomplete,
 		skipped_forced_pool: skippedForced,
 		skipped_unknown_pool: skippedUnknown,
+	};
+}
+
+/**
+ * The overall table and one per nation, from the same player-games.
+ *
+ * A nation with no usable player-games is left out rather than listed empty —
+ * the selector should only offer nations there is something to show for.
+ */
+export function buildFamilyKeeps(
+	inputs: readonly FamilyKeepInput[],
+): FamilyKeeps {
+	const byNation = new Map<string, FamilyKeepInput[]>();
+	for (const input of inputs) {
+		if (!input.nation) continue;
+		const list = byNation.get(input.nation);
+		if (list) list.push(input);
+		else byNation.set(input.nation, [input]);
+	}
+
+	return {
+		overall: buildFamilyKeepTable(inputs),
+		byNation: [...byNation.entries()]
+			.map(([nation, rows]) => ({ nation, ...buildFamilyKeepTable(rows) }))
+			.filter((n) => n.rows.length > 0)
+			.sort((a, b) => b.player_games - a.player_games),
 	};
 }
