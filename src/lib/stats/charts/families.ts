@@ -5,11 +5,15 @@ import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
+	COMMON_GRID,
 	type WinLossRow,
+	crestAxisLabel,
 	fmtClass,
 	nationLabel,
 	winLossStackedOption,
 } from "./helpers";
+import { CHART_THEME } from "$lib/config";
+import type { FamilyKeepRow } from "../types";
 
 // Founding-order slots, in order. A player runs three families; which one
 // seeded the first city is a different commitment from the third.
@@ -178,4 +182,130 @@ export function capitalFamilyWinLossOption(
 		title: "Capital family",
 		labelWidth: 150,
 	});
+}
+
+// The ECharts rendering of Families kept.
+//
+// The numbers sit in a column on the right rather than riding the end of each
+// bar: on the bar they start at a different x on every row, so reading "which
+// gaps are big" means tracking a ragged edge instead of scanning a column. A
+// second category axis pinned right, sharing the series' categories, is how
+// ECharts does an aligned column — the rich-text segments give it fixed widths
+// and let Δ take its colour per row.
+export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
+	// Category axes run bottom-up, so ascending puts the most-kept at the top.
+	const sorted = [...rows].sort((a, b) => a.kept_pct - b.kept_pct);
+	const keys = sorted.map((r) => r.family_class);
+	const labelWidth = 150;
+	// Colour means the gap cleared the significance gate, and which colour means
+	// which way — the same rule the bar follows, so the two can't disagree.
+	const KEPT_MORE = "#8cc878";
+	const KEPT_LESS = "#c86e5a";
+	const NEUTRAL = "#6b6257";
+
+	return {
+		...CHART_THEME,
+		title: {
+			...CHART_THEME.title,
+			text: "Families kept",
+			// Names the three columns on the right and the one rule that governs
+			// every colour on the chart. Without it the Δ column is a signed
+			// number in one of three colours with no way to know what any of it
+			// means.
+			subtext:
+				"kept · vs chance · games   —   coloured where the gap is more than luck explains; the tick on each bar is chance",
+			subtextStyle: { color: "#7a6a55", fontSize: 11 },
+		},
+		tooltip: {
+			...CHART_THEME.tooltip,
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = (params as { dataIndex: number }[])[0];
+				const r = sorted[p.dataIndex];
+				if (!r) return "";
+				return (
+					`${fmtClass(r.family_class)}<br/>` +
+					`Kept in ${r.kept} of ${r.eligible} games where it was available<br/>` +
+					`Chance alone: ${r.baseline_pct.toFixed(0)}%<br/>` +
+					(r.significant
+						? "Further from chance than luck explains"
+						: "Not distinguishable from chance")
+				);
+			},
+		},
+		grid: { ...COMMON_GRID, left: labelWidth, top: 78, right: 150 },
+		xAxis: { type: "value", max: 100, axisLabel: { formatter: "{value}%" } },
+		yAxis: [
+			{
+				type: "category",
+				data: keys,
+				axisLabel: crestAxisLabel(
+					keys,
+					classCrestUrl,
+					fmtClass,
+					labelWidth - 8,
+					20,
+					14,
+				),
+			},
+			{
+				// The value column. Same categories, pinned right, chrome off — it
+				// is a label track, not an axis anyone reads as one.
+				type: "category",
+				position: "right",
+				data: keys,
+				axisTick: { show: false },
+				axisLine: { show: false },
+				axisLabel: {
+					formatter: (_value: string, index: number) => {
+						const r = sorted[index];
+						if (!r) return "";
+						const tone = !r.significant ? "dim" : r.delta >= 0 ? "up" : "down";
+						const sign = r.delta >= 0 ? "+" : "";
+						return `{pct|${r.kept_pct.toFixed(0)}%}{${tone}|${sign}${r.delta.toFixed(0)}}{n|${r.eligible}g}`;
+					},
+					rich: {
+						pct: { width: 42, align: "right", color: "#FFFFFF" },
+						up: { width: 44, align: "right", color: KEPT_MORE },
+						down: { width: 44, align: "right", color: KEPT_LESS },
+						dim: { width: 44, align: "right", color: "#7a6a55" },
+						n: { width: 40, align: "right", color: "#7a6a55" },
+					},
+				},
+			},
+		],
+		series: [
+			{
+				type: "bar",
+				yAxisIndex: 0,
+				data: sorted.map((r) => ({
+					value: r.kept_pct,
+					itemStyle: {
+						color: r.significant
+							? r.delta >= 0
+								? KEPT_MORE
+								: KEPT_LESS
+							: NEUTRAL,
+					},
+				})),
+				barWidth: 18,
+			},
+			{
+				// The chance notch, one per row at that row's own level.
+				type: "custom",
+				yAxisIndex: 0,
+				silent: true,
+				data: sorted.map((r, i) => [r.baseline_pct, i]),
+				renderItem: (_params, api) => {
+					const [x, y] = api.coord([api.value(0), api.value(1)]);
+					const height = (api.size?.([0, 1]) as number[])[1] * 0.85;
+					return {
+						type: "rect",
+						shape: { x: x - 1.5, y: y - height / 2, width: 3, height },
+						style: { fill: "#FFFFFF" },
+					};
+				},
+			},
+		],
+	};
 }
