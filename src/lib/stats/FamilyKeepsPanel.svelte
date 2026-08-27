@@ -80,14 +80,25 @@
 		height={barChartHeight(keeps.rows.length + 1)}
 		title="Families kept"
 	/>
+	<!-- What each column is. Three definitions rather than a paragraph: the
+	     chart is legible without them, and this is for the reader who wants to
+	     know what "vs chance" is measured against. -->
 	<p
-		class="-mt-4 mb-6 text-center text-xs text-muted"
+		class="-mt-4 mb-1 text-center text-xs text-muted"
 		title={skipped > 0
 			? `${skipped} more left out: ${skippedReason}`
 			: undefined}
 	>
 		Based on {keeps.player_games} player-games{nation === ALL_NATIONS
 			? ""
-			: ` of ${nationLabel(nation)}`}. Color = significant.
+			: ` of ${nationLabel(nation)}`}.
+	</p>
+	<p class="mx-auto mb-6 max-w-3xl px-4 text-center text-xs text-muted">
+		<span class="text-tan">kept</span> — how often the family was fielded in the
+		games its nation could have fielded it.
+		<span class="text-tan">vs chance</span> — how far that sits from fielding
+		three of the pool at random, which is the tick on each bar.
+		<span class="text-tan">color</span> — the gap is further from chance than this
+		many games could produce by luck.
 	</p>
 {/if}
