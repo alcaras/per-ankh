@@ -5,11 +5,14 @@ import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
+	COMMON_GRID,
 	type WinLossRow,
+	crestAxisLabel,
 	fmtClass,
 	nationLabel,
 	winLossStackedOption,
 } from "./helpers";
+import { CHART_THEME } from "$lib/config";
 
 // Founding-order slots, in order. A player runs three families; which one
 // seeded the first city is a different commitment from the third.
@@ -178,4 +181,121 @@ export function capitalFamilyWinLossOption(
 		title: "Capital family",
 		labelWidth: 150,
 	});
+}
+
+// Which families get refused, against what refusing them at random would look
+// like.
+//
+// Two presentation rules earned the hard way, both about not making the reader
+// do arithmetic. The baseline sits on the SAME AXIS as the bar — a notch, not a
+// number in a neighbouring column — because "cut more often than chance" has to
+// be readable at a glance, and chance is a different number for each row (a
+// four-family nation cuts one in four, Maurya one in two). And every row shows
+// its sample, because a cut rate with no n invites the reader to trust a
+// four-game cell.
+//
+// Colour marks only the rows that survive the multiple-comparison gate. Ten
+// classes tested at once throw a false positive about 40% of the time
+// uncorrected, so an uncoloured bar here means "not distinguishable from
+// chance", not "small".
+export function familyCutsOption(bundle: ChartBundleCore): ChartOption {
+	// Least-refused first: ECharts' category axis runs bottom-up, so this puts
+	// the most-cut family at the top where the eye lands.
+	const rows = [...bundle.familyCuts.rows].sort(
+		(a, b) => a.cut_pct - b.cut_pct,
+	);
+	const keys = rows.map((r) => r.family_class);
+	const labelWidth = 150;
+
+	return {
+		...CHART_THEME,
+		title: { ...CHART_THEME.title, text: "Families cut" },
+		tooltip: {
+			...CHART_THEME.tooltip,
+			axisPointer: { type: "shadow" },
+			formatter: (params: unknown) => {
+				const p = (params as { dataIndex: number }[])[0];
+				const row = rows[p.dataIndex];
+				if (!row) return "";
+				const sign = row.delta >= 0 ? "+" : "";
+				return (
+					`${fmtClass(row.family_class)}<br/>` +
+					`Cut in ${row.cut} of ${row.eligible} games where it was available<br/>` +
+					`Chance alone: ${row.baseline_pct.toFixed(1)}% (${sign}${row.delta.toFixed(1)} points)<br/>` +
+					(row.significant
+						? "Clears the false-discovery gate"
+						: "Not distinguishable from chance")
+				);
+			},
+		},
+		grid: { ...COMMON_GRID, left: labelWidth, top: 64, right: 120 },
+		xAxis: {
+			type: "value",
+			max: 100,
+			axisLabel: { formatter: "{value}%" },
+		},
+		yAxis: {
+			type: "category",
+			data: keys,
+			axisLabel: crestAxisLabel(
+				keys,
+				classCrestUrl,
+				fmtClass,
+				labelWidth - 8,
+				20,
+				14,
+			),
+		},
+		series: [
+			{
+				type: "bar",
+				data: rows.map((r) => ({
+					value: r.cut_pct,
+					itemStyle: {
+						// Grey for a bar the gate didn't clear, so the eye skips it.
+						color: r.significant ? CHART_THEME.colors[0] : "#6b6257",
+					},
+				})),
+				barWidth: 18,
+				label: {
+					show: true,
+					position: "right",
+					color: "#FFFFFF",
+					formatter: (p: { dataIndex: number }) => {
+						const r = rows[p.dataIndex];
+						return `${r.cut_pct.toFixed(0)}%  n=${r.eligible}`;
+					},
+				},
+			},
+			{
+				// The baseline notch: one short upright tick sitting on each bar at
+				// that row's own chance level, so "further right than the notch"
+				// means "refused more often than chance" with no arithmetic.
+				//
+				// A custom series rather than a markLine because a markLine takes
+				// one value for the whole series, and chance is a different number
+				// per row — a four-family nation cuts one in four, Maurya one in
+				// two, and a mixed corpus lands somewhere between. Custom is one of
+				// the four series types registered in $lib/echarts; markPoint,
+				// which would also have fitted, is not, and an unregistered
+				// component draws nothing rather than failing.
+				type: "custom",
+				silent: true,
+				data: rows.map((r, i) => [r.baseline_pct, i]),
+				renderItem: (_params, api) => {
+					const [x, y] = api.coord([api.value(0), api.value(1)]);
+					// Taller than the bar (barWidth 18) and short of the next row, so
+					// the tick reads as a mark laid over the bar rather than as part
+					// of it — which matters most on the long bars, where it sits
+					// inside the fill.
+					const height = (api.size?.([0, 1]) as number[])[1] * 0.85;
+					return {
+						type: "rect",
+						shape: { x: x - 1.5, y: y - height / 2, width: 3, height },
+						style: { fill: "#FFFFFF" },
+					};
+				},
+			},
+		],
+	};
 }
