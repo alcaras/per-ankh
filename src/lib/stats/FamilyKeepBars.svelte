@@ -35,14 +35,17 @@
 		];
 	}
 
-	// Bar fill carries direction and distance at once: kept more than chance
-	// reads as success, kept less as danger, and the further from chance the
-	// stronger it sits. Saturating at 25 points stops one extreme row washing
-	// every other one out.
+	// One rule for every coloured thing on the row: colour means the gap cleared
+	// the significance gate, and which colour means which way. A bar that took
+	// its colour from the sign alone said "kept less than chance" for a family
+	// sitting five points under it on sixty games — a claim the Δ beside it was
+	// declining to make, in the same two colours. Below the gate the bar is
+	// neutral and the position does the talking; the notch is still right there.
 	function fill(row: FamilyKeepRow): string {
+		if (!row.significant) return "rgb(var(--color-muted) / 0.55)";
 		const token = row.delta >= 0 ? "--color-success" : "--color-danger";
 		const strength = Math.min(1, Math.abs(row.delta) / 25);
-		return `rgb(var(${token}) / ${(0.3 + strength * 0.55).toFixed(2)})`;
+		return `rgb(var(${token}) / ${(0.35 + strength * 0.5).toFixed(2)})`;
 	}
 </script>
 
