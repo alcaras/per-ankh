@@ -155,7 +155,7 @@
 				<YieldsStatsPanel {bundle} {countLabel} toolbarFlush />
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
-			{:else if section.id === "family-keeps"}
+			{:else if section.id === "family-fielded"}
 				<FamilyKeepsPanel {bundle} />
 			{:else if section.id === "laws"}
 				<LawsStatsPanel {bundle} {showNationSelect} toolbarFlush />

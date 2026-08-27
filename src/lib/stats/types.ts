@@ -252,7 +252,7 @@ export type StatsCategory =
 	| "leaders"
 	| "wonders"
 	| "families"
-	| "family-keeps"
+	| "family-fielded"
 	| "yields"
 	| "laws"
 	| "cities"
