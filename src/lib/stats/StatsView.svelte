@@ -134,7 +134,7 @@
 				<YieldsStatsPanel {bundle} />
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} />
-			{:else if section.id === "family-keeps"}
+			{:else if section.id === "family-fielded"}
 				<FamilyKeepsPanel {bundle} />
 			{:else if section.id === "laws"}
 				<LawsStatsPanel {bundle} />

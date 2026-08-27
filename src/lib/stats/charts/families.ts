@@ -184,7 +184,7 @@ export function capitalFamilyWinLossOption(
 	});
 }
 
-// The ECharts rendering of Families kept.
+// The ECharts rendering of Families fielded.
 //
 // The numbers sit in a column on the right rather than riding the end of each
 // bar: on the bar they start at a different x on every row, so reading "which
@@ -207,7 +207,7 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 		...CHART_THEME,
 		title: {
 			...CHART_THEME.title,
-			text: "Families kept",
+			text: "Families fielded",
 			// The columns name themselves, from the right axis — see its `name`.
 		},
 		tooltip: {
@@ -219,7 +219,7 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 				if (!r) return "";
 				return (
 					`${fmtClass(r.family_class)}<br/>` +
-					`Kept in ${r.kept} of ${r.eligible} games where it was available<br/>` +
+					`Fielded in ${r.kept} of ${r.eligible} games where it was available<br/>` +
 					`Chance alone: ${r.baseline_pct.toFixed(0)}%<br/>` +
 					(r.significant
 						? "Further from chance than luck explains"
@@ -227,7 +227,7 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 				);
 			},
 		},
-		grid: { ...COMMON_GRID, left: labelWidth, top: 78, right: 150 },
+		grid: { ...COMMON_GRID, left: labelWidth, top: 78, right: 162 },
 		xAxis: { type: "value", max: 100, axisLabel: { formatter: "{value}%" } },
 		yAxis: [
 			{
@@ -253,7 +253,7 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 				// and giving it the same rich-text widths as the labels below is
 				// what lines the three headings up over the three columns instead
 				// of floating them somewhere near.
-				name: "{hk|kept}{hc|vs chance}{hg|games}",
+				name: "{hk|fielded}{hc|vs chance}{hg|games}",
 				nameLocation: "end",
 				nameGap: 16,
 				nameTextStyle: {
@@ -262,8 +262,8 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 						// headings sit over what they name. A point smaller than the
 						// values, because "vs chance" is the widest string here and
 						// at 10px it spills out of its cell into "kept".
-						hk: { width: 42, align: "right", color: "#7a6a55", fontSize: 9 },
-						hc: { width: 44, align: "right", color: "#7a6a55", fontSize: 9 },
+						hk: { width: 48, align: "right", color: "#7a6a55", fontSize: 9 },
+						hc: { width: 52, align: "right", color: "#7a6a55", fontSize: 9 },
 						hg: { width: 40, align: "right", color: "#7a6a55", fontSize: 9 },
 					},
 				},
@@ -278,10 +278,13 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 						return `{pct|${r.kept_pct.toFixed(0)}%}{${tone}|${sign}${r.delta.toFixed(0)}}{n|${r.eligible}g}`;
 					},
 					rich: {
-						pct: { width: 42, align: "right", color: "#FFFFFF" },
-						up: { width: 44, align: "right", color: KEPT_MORE },
-						down: { width: 44, align: "right", color: KEPT_LESS },
-						dim: { width: 44, align: "right", color: "#7a6a55" },
+						// Widths are shared with the headings above (nameTextStyle
+						// .rich) so the two line up; "vs chance" is the widest string
+						// in the block and sets the middle column.
+						pct: { width: 48, align: "right", color: "#FFFFFF" },
+						up: { width: 52, align: "right", color: KEPT_MORE },
+						down: { width: 52, align: "right", color: KEPT_LESS },
+						dim: { width: 52, align: "right", color: "#7a6a55" },
 						n: { width: 40, align: "right", color: "#7a6a55" },
 					},
 				},

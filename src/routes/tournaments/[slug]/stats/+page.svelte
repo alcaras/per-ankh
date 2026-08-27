@@ -178,7 +178,7 @@
 		"leaders",
 		"wonders",
 		"families",
-		"family-keeps",
+		"family-fielded",
 		"yields",
 		"casters",
 	] as const;
@@ -217,8 +217,8 @@
 			<Tabs.Trigger value="wonders" class={triggerClass}>Wonders</Tabs.Trigger>
 			<Tabs.Trigger value="families" class={triggerClass}>Families</Tabs.Trigger
 			>
-			<Tabs.Trigger value="family-keeps" class={triggerClass}
-				>Families kept</Tabs.Trigger
+			<Tabs.Trigger value="family-fielded" class={triggerClass}
+				>Families fielded</Tabs.Trigger
 			>
 			<Tabs.Trigger value="yields" class={triggerClass}>Yields</Tabs.Trigger>
 			<Tabs.Trigger value="casters" class={triggerClass}>Casters</Tabs.Trigger>
@@ -403,7 +403,7 @@
 		<!-- Which families this event's field refuses to put on the board — a
 		     choice measured against the pool's chance level, where the Families
 		     tab beside it measures outcomes. -->
-		<Tabs.Content value="family-keeps">
+		<Tabs.Content value="family-fielded">
 			<FamilyKeepsPanel bundle={data.games} />
 		</Tabs.Content>
 

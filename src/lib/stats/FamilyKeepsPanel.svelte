@@ -1,6 +1,11 @@
 <script lang="ts">
-	// Families-kept category: which family classes this corpus actually fields,
-	// against how often keeping one would happen by itself.
+	// Families-fielded category: which family classes this corpus actually
+	// fields, against how often fielding one would happen by itself.
+	//
+	// "Fielded" on the surface, `familyKeeps` underneath. The mechanic's own
+	// verb is field — a player fields three of the pool — and that is what the
+	// page should say. The data layer keeps the keep/cut vocabulary the method
+	// is written in, so its arithmetic stays checkable against the method.
 	//
 	// Its own category rather than a third chart on Families, because it asks a
 	// different kind of question. The two charts there are outcome stats — this
@@ -78,7 +83,7 @@
 	<ChartContainer
 		option={familyKeepsOption(keeps.rows)}
 		height={barChartHeight(keeps.rows.length + 1)}
-		title="Families kept"
+		title="Families fielded"
 	/>
 	<!-- What each column is. Three definitions rather than a paragraph: the
 	     chart is legible without them, and this is for the reader who wants to
@@ -94,8 +99,8 @@
 			: ` of ${nationLabel(nation)}`}.
 	</p>
 	<p class="mx-auto mb-6 max-w-3xl px-4 text-center text-xs text-muted">
-		<span class="text-tan">kept</span> — how often the family was fielded in the
-		games its nation could have fielded it.
+		<span class="text-tan">fielded</span> — how often the family was fielded in
+		the games its nation could have fielded it.
 		<span class="text-tan">vs chance</span> — how far that sits from fielding
 		three of the pool at random, which is the tick on each bar.
 		<span class="text-tan">color</span> — the gap is further from chance than this
