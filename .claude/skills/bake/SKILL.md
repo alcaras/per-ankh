@@ -51,6 +51,8 @@ Self-contained bakers — each writes its `src/lib/generated/` module directly, 
 npm run bake:science-yields    # science-yields.ts (from Reference/XML)
 npm run bake:unit-stats        # unit-stats.ts (from Reference/XML)
 npm run bake:atlas-pool        # atlas-pool.ts (src/ AND cloud/src/; needs an owtournamentatlas checkout)
+npm run bake:family-pools      # cloud/src/generated/family-pools.ts — each nation's
+                               # family pool, the baseline every cut rate is measured against
 npm run bake:owtt              # owtt.ts (needs a local owtt checkout, OWTT_DIR)
 npm run bake:momentum          # momentum.ts (src/ AND cloud/src/; fits on a local blob corpus)
 npm run bake:family-opinion    # family-opinion.ts (opinion bands + their city-upkeep effect)

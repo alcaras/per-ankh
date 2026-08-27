@@ -35,6 +35,8 @@ export interface YieldCohort {
 	>;
 }
 
+import type { FamilyCutTable } from "./family-cuts";
+
 export interface ChartBundleMeta {
 	// Number of games actually aggregated (after visibility / game-type
 	// filtering). The signal for whole-bundle "no data yet" empty states.
@@ -66,6 +68,11 @@ export interface ChartBundleSummary extends ChartBundleSummaryCore {
 // extends it with the Overview fields that only make sense one-focal-per-game.
 export interface ChartBundleCore {
 	meta: ChartBundleMeta;
+
+	// Which families this corpus refuses to field. See stats/family-cuts —
+	// the null is the pool's chance level, not zero, so every row carries the
+	// baseline it is measured against.
+	familyCuts: FamilyCutTable;
 
 	// --- Summary -----------------------------------------------------
 	summary: ChartBundleSummaryCore;
