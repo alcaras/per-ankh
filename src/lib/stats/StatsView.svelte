@@ -11,6 +11,7 @@
 	import { page } from "$app/state";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import YieldsStatsPanel from "./YieldsStatsPanel.svelte";
+	import FamilyKeepsPanel from "./FamilyKeepsPanel.svelte";
 	import FamilyStatsPanel from "./FamilyStatsPanel.svelte";
 	import LawsStatsPanel from "./LawsStatsPanel.svelte";
 	import TechStatsPanel from "./TechStatsPanel.svelte";
@@ -154,6 +155,8 @@
 				<YieldsStatsPanel {bundle} {countLabel} toolbarFlush />
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
+			{:else if section.id === "family-keeps"}
+				<FamilyKeepsPanel {bundle} />
 			{:else if section.id === "laws"}
 				<LawsStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "tech"}

@@ -51,6 +51,24 @@
      between a name and its bar, and the notch stops being comparable row to
      row. -->
 <div class="flex flex-col gap-1">
+	<!-- Column headers instead of a paragraph. Without them the Δ column is a
+	     signed number in one of three colours and no way to know what any of it
+	     means; "vs chance" names the comparison and the colour then reads as
+	     what it is. -->
+	<div
+		class="grid items-end gap-2 pb-0.5 text-[10px] uppercase tracking-wide text-muted"
+		style="grid-template-columns: 120px 1fr 38px 42px 34px;"
+	>
+		<span></span>
+		<span class="text-right">kept, vs the tick = chance</span>
+		<span class="text-right">kept</span>
+		<span
+			class="text-right"
+			title="Kept minus chance. Coloured where the gap is more than this many games could produce by luck."
+			>vs chance</span
+		>
+		<span class="text-right">games</span>
+	</div>
 	{#each rows as row (row.family_class)}
 		<div
 			class="grid items-center gap-2 text-xs"
