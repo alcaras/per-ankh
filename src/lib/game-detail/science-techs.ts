@@ -1063,9 +1063,6 @@ export function scienceBreakdown(
 		const flat = tenths(perResource) * resources;
 		const percent = rules.reduce((total, r) => total + r.percent, 0);
 		if (flat === 0 && percent === 0) continue;
-		// Rules that cancel out (a future penalty against a bonus) leave
-		// nothing to attribute and would divide by zero below.
-		if (percent === 0) rules.length = 0;
 		const specialistPct = specialistTileModifier(improvement, t.specialist);
 		const staffed = (value: number) =>
 			modify(modify(value, percent), specialistPct);
@@ -1084,14 +1081,18 @@ export function scienceBreakdown(
 				order,
 			);
 		}
-		for (const rule of rules) {
-			addModifierRow(
-				rule.rows,
-				rule.label,
-				(fromPercent * rule.percent) / percent / 10,
-				rule.count,
-				rule.order,
-			);
+		// Rules that cancel out — a penalty against a bonus — leave nothing to
+		// attribute, and their share is undefined rather than zero.
+		if (percent !== 0) {
+			for (const rule of rules) {
+				addModifierRow(
+					rule.rows,
+					rule.label,
+					(fromPercent * rule.percent) / percent / 10,
+					rule.count,
+					rule.order,
+				);
+			}
 		}
 		if (t.owner_city != null) {
 			cityFlat.set(
