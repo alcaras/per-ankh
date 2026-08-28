@@ -9,6 +9,11 @@
 //   Reference/XML/Infos/improvementClass.xml — <aaiResourceYieldOutput>:
 //     per-resource outputs of resource-sited classes (a Grove's science is
 //     entirely here — +2 on every grove resource — not on the improvement).
+//   improvement.xml + improvementClass.xml, again — the neighbour terms of
+//     Tile.yieldOutputForGovernor: <aiAdjacentImprovementModifier> and
+//     <aiAdjacentImprovementClassModifier> (what an improvement grants the
+//     tiles beside it) and <aiAdjacentResourceYieldOutput> (what a tile earns
+//     per adjacent resource).
 //   Reference/XML/Infos/specialist.xml — <EffectCity> + <EffectCityExtra>
 //     (the Apprentice/Master/Elder extras carry the tier science) resolved
 //     through effectCity.xml the same way.
@@ -92,6 +97,12 @@ interface Entry {
 	aiYieldRateSpecialist?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRateReligion?: { Pair?: YieldPair | YieldPair[] };
 	aiImprovementClassModifier?: { Pair?: YieldPair | YieldPair[] };
+	// The neighbour terms of Tile.yieldOutputForGovernor: the percent an
+	// improvement grants the tiles NEXT to it, and the flat yield a tile earns
+	// per adjacent resource.
+	aiAdjacentImprovementModifier?: { Pair?: YieldPair | YieldPair[] };
+	aiAdjacentImprovementClassModifier?: { Pair?: YieldPair | YieldPair[] };
+	aiAdjacentResourceYieldOutput?: { Pair?: YieldPair | YieldPair[] };
 	aaiResourceYieldOutput?: { Pair?: ResourceYieldPair | ResourceYieldPair[] };
 	// "when effect <zIndex> is present in this city, pay <SubPair>" — the shape
 	// Philosophy's Forum science and the Scholar archetype's Archive science use.
@@ -558,6 +569,122 @@ async function main(): Promise<void> {
 		}
 	}
 
+	// ─── Adjacency: the neighbour terms of a tile's science ──────────────
+	//
+	// A tile's yield is not its base output. Tile.yieldOutputForGovernor
+	// (Tile.cs:13233) runs base → × neighbour modifiers → × the staffing
+	// specialist's class modifier, and the base itself (yieldBaseForGovernor,
+	// :13364) already includes a per-adjacent-resource term. Both neighbour
+	// terms are baked here; only the specialist one was modelled before.
+	//
+	// DIRECTION IS INVERTED FROM HOW THE XML READS. InfoHelpers
+	// .adjacentYieldOutputImprovementModifier(eImprovement, eAdjacent)
+	// (InfoHelpers.cs:2025) looks the tables up on eAdjacent — the NEIGHBOUR —
+	// keyed by the improvement being modified. So <IMPROVEMENTCLASS_MONASTERY>
+	// <aiAdjacentImprovementClassModifier><IMPROVEMENTCLASS_GROVE>60 means a
+	// Monastery grants +60% to the Groves beside it, not the reverse.
+	//
+	// Classes are expanded to their improvements on both sides, because the
+	// per-religion rules must not cross: TEMPLE_HINDUISM grants its +20% to
+	// MONASTERY_HINDUISM alone, and a class-keyed table would leak it to every
+	// monastery. Only rules whose TARGET can produce science are emitted,
+	// which is what keeps the table to the handful of science rules rather
+	// than every farm and mine adjacency in the game.
+	const improvementsOfClass = new Map<string, string[]>();
+	const classOfImprovement = new Map<string, string>();
+	for (const imp of improvements) {
+		if (!imp.zType || !imp.Class) continue;
+		classOfImprovement.set(imp.zType, imp.Class);
+		const list = improvementsOfClass.get(imp.Class) ?? [];
+		list.push(imp.zType);
+		improvementsOfClass.set(imp.Class, list);
+	}
+	const producesScience = (zType: string): boolean =>
+		(improvementScience[zType]?.flat ?? 0) > 0 ||
+		improvementResourceScience[zType] != null;
+
+	// Target improvement → the neighbour granting it → percent. Percentages
+	// from several neighbours sum, matching the game's per-direction loop.
+	const improvementAdjacentModifier: Record<
+		string,
+		Record<string, number>
+	> = {};
+	const grantModifier = (
+		target: string | undefined,
+		source: string,
+		percent: number,
+	): void => {
+		if (!target || percent === 0 || !producesScience(target)) return;
+		const row = (improvementAdjacentModifier[target] ??= {});
+		row[source] = (row[source] ?? 0) + percent;
+	};
+	for (const source of improvements) {
+		if (!source.zType) continue;
+		for (const p of pairs(source.aiAdjacentImprovementModifier)) {
+			grantModifier(p.zIndex, source.zType, Number(p.iValue ?? 0));
+		}
+		for (const p of pairs(source.aiAdjacentImprovementClassModifier)) {
+			for (const target of improvementsOfClass.get(p.zIndex ?? "") ?? []) {
+				grantModifier(target, source.zType, Number(p.iValue ?? 0));
+			}
+		}
+	}
+	for (const cls of improvementClasses) {
+		if (!cls.zType) continue;
+		for (const p of pairs(cls.aiAdjacentImprovementClassModifier)) {
+			const targets = improvementsOfClass.get(p.zIndex ?? "") ?? [];
+			for (const source of improvementsOfClass.get(cls.zType) ?? []) {
+				for (const target of targets) {
+					grantModifier(target, source, Number(p.iValue ?? 0));
+				}
+			}
+		}
+	}
+	if (Object.keys(improvementAdjacentModifier).length === 0) {
+		throw new Error(
+			"bake-science-yields: no science adjacency modifiers found (Monastery→Grove is the canonical one) — the improvement XML shape changed",
+		);
+	}
+
+	// Improvement → science per adjacent resource tile the team owns
+	// (Tile.countTeamAdjacentResources). The library line carries the only
+	// science one, on its CLASS; the improvement-level table is read too
+	// because the game sums both.
+	const classAdjacentResourceScience = new Map<string, number>();
+	for (const cls of improvementClasses) {
+		if (!cls.zType) continue;
+		const science = yieldValue(
+			pairs(cls.aiAdjacentResourceYieldOutput),
+			"YIELD_SCIENCE",
+		);
+		if (science !== 0) classAdjacentResourceScience.set(cls.zType, science);
+	}
+	const improvementAdjacentResourceScience: Record<string, number> = {};
+	for (const imp of improvements) {
+		if (!imp.zType) continue;
+		const science =
+			yieldValue(pairs(imp.aiAdjacentResourceYieldOutput), "YIELD_SCIENCE") +
+			(imp.Class ? (classAdjacentResourceScience.get(imp.Class) ?? 0) : 0);
+		if (science > 0) {
+			improvementAdjacentResourceScience[imp.zType] = science / 10;
+		}
+	}
+
+	// Both sides of every emitted rule need their class resolvable — the
+	// breakdown labels rows by class ("Grove next to Monastery"), and a
+	// granting improvement (a Temple) need not produce science itself, so it
+	// would otherwise be absent from the table above.
+	for (const [target, sources] of Object.entries(improvementAdjacentModifier)) {
+		for (const zType of [target, ...Object.keys(sources)]) {
+			const cls = classOfImprovement.get(zType);
+			if (cls) improvementClass[zType] = cls;
+		}
+	}
+	for (const zType of Object.keys(improvementAdjacentResourceScience)) {
+		const cls = classOfImprovement.get(zType);
+		if (cls) improvementClass[zType] = cls;
+	}
+
 	const specialistScience: Record<string, number> = {};
 	// Specialists that multiply their tile's whole output — a staffed
 	// Gardener is +100% to the Grove's yields (Tile.yieldOutputForGovernor
@@ -714,6 +841,37 @@ async function main(): Promise<void> {
 	lines.push("// Tile.yieldOutputForGovernor × aiImprovementClassModifier).");
 	lines.push(
 		`export const SPECIALIST_TILE_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(specialistTileModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// Target improvement → the adjacent improvement granting it a percent",
+	);
+	lines.push(
+		"// modifier → that percent, summed per neighbour direction as the game",
+	);
+	lines.push(
+		"// does (Tile.yieldModifierNoSpecialist → adjacentYieldOutputImprovement",
+	);
+	lines.push(
+		'// Modifier). Read as "a Monastery next door is +60% to this Grove";',
+	);
+	lines.push(
+		"// classes are expanded on both sides so per-religion rules (a Temple",
+	);
+	lines.push("// lifts only its OWN religion's Monastery) stay separate.");
+	lines.push(
+		`export const IMPROVEMENT_ADJACENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(improvementAdjacentModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// Improvement → science per adjacent resource tile the same team owns",
+	);
+	lines.push(
+		"// (Tile.countTeamAdjacentResources), per turn. Part of the tile's BASE,",
+	);
+	lines.push("// so the percent modifiers above multiply it.");
+	lines.push(
+		`export const IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE: Readonly<Record<string, number>> = ${JSON.stringify(sorted(improvementAdjacentResourceScience))};`,
 	);
 	lines.push("");
 	lines.push(
