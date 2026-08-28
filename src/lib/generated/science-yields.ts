@@ -103,36 +103,34 @@ export const SPECIALIST_TILE_MODIFIER: Readonly<
 	SPECIALIST_WOODCUTTER: { IMPROVEMENTCLASS_LUMBERMILL: 50 },
 };
 
-// Target improvement → the adjacent improvement granting it a percent
-// modifier → that percent, summed per neighbour direction as the game
-// does (Tile.yieldModifierNoSpecialist → adjacentYieldOutputImprovement
-// Modifier). Read as "a Monastery next door is +60% to this Grove";
-// classes are expanded on both sides so per-religion rules (a Temple
-// lifts only its OWN religion's Monastery) stay separate.
+// ─── Tile modifiers (Tile.yieldModifierNoSpecialist) ────────────────
+
+// Every table below keys by improvement zType OR improvement class,
+// exactly as the XML writes each rule; the two token spaces can't
+// collide, so a lookup sums whichever of the two hit.
+
+// What a NEIGHBOUR grants this tile: granting improvement/class → the
+// improvement/class it lifts → percent. Read as "a Monastery next door
+// is +60% to this Grove" — the game looks the rule up on the neighbour
+// (InfoHelpers.adjacentYieldOutputImprovementModifier), and percentages
+// from several neighbours sum.
 export const IMPROVEMENT_ADJACENT_MODIFIER: Readonly<
 	Record<string, Readonly<Record<string, number>>>
 > = {
-	IMPROVEMENT_GROVE: {
-		IMPROVEMENT_MONASTERY_BUDDHISM: 60,
-		IMPROVEMENT_MONASTERY_CHRISTIANITY: 60,
-		IMPROVEMENT_MONASTERY_HINDUISM: 60,
-		IMPROVEMENT_MONASTERY_JUDAISM: 60,
-		IMPROVEMENT_MONASTERY_MANICHAEISM: 60,
-		IMPROVEMENT_MONASTERY_ZOROASTRIANISM: 60,
-	},
-	IMPROVEMENT_MONASTERY_BUDDHISM: { IMPROVEMENT_TEMPLE_BUDDHISM: 20 },
-	IMPROVEMENT_MONASTERY_CHRISTIANITY: { IMPROVEMENT_TEMPLE_CHRISTIANITY: 20 },
-	IMPROVEMENT_MONASTERY_HINDUISM: { IMPROVEMENT_TEMPLE_HINDUISM: 20 },
-	IMPROVEMENT_MONASTERY_JUDAISM: { IMPROVEMENT_TEMPLE_JUDAISM: 20 },
-	IMPROVEMENT_MONASTERY_MANICHAEISM: { IMPROVEMENT_TEMPLE_MANICHAEISM: 20 },
-	IMPROVEMENT_MONASTERY_ZOROASTRIANISM: {
-		IMPROVEMENT_TEMPLE_ZOROASTRIANISM: 20,
+	IMPROVEMENTCLASS_MONASTERY: { IMPROVEMENTCLASS_GROVE: 60 },
+	IMPROVEMENT_TEMPLE_BUDDHISM: { IMPROVEMENT_MONASTERY_BUDDHISM: 20 },
+	IMPROVEMENT_TEMPLE_CHRISTIANITY: { IMPROVEMENT_MONASTERY_CHRISTIANITY: 20 },
+	IMPROVEMENT_TEMPLE_HINDUISM: { IMPROVEMENT_MONASTERY_HINDUISM: 20 },
+	IMPROVEMENT_TEMPLE_JUDAISM: { IMPROVEMENT_MONASTERY_JUDAISM: 20 },
+	IMPROVEMENT_TEMPLE_MANICHAEISM: { IMPROVEMENT_MONASTERY_MANICHAEISM: 20 },
+	IMPROVEMENT_TEMPLE_ZOROASTRIANISM: {
+		IMPROVEMENT_MONASTERY_ZOROASTRIANISM: 20,
 	},
 };
 
 // Improvement → science per adjacent resource tile the same team owns
 // (Tile.countTeamAdjacentResources), per turn. Part of the tile's BASE,
-// so the percent modifiers above multiply it.
+// so the percent modifiers here multiply it.
 export const IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE: Readonly<
 	Record<string, number>
 > = {
@@ -140,6 +138,45 @@ export const IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE: Readonly<
 	IMPROVEMENT_LIBRARY_2: 1,
 	IMPROVEMENT_LIBRARY_3: 1,
 };
+
+// What the CITY grants a tile standing in it (City.getImprovement
+// ModifierForGovernor), by the source a save actually records. Scope
+// differs per table — see each one's comment.
+
+// The city's ruling family class: Clerics double monasteries.
+export const FAMILY_CLASS_IMPROVEMENT_MODIFIER: Readonly<
+	Record<string, Readonly<Record<string, number>>>
+> = { FAMILYCLASS_CLERICS: { IMPROVEMENTCLASS_MONASTERY: 100 } };
+
+// A project the city completed. All are <bSingle>, so the modifier
+// lands once however many completions the city reports.
+export const PROJECT_IMPROVEMENT_MODIFIER: Readonly<
+	Record<string, Readonly<Record<string, number>>>
+> = {
+	PROJECT_IMPROVED_HYDRAULICS: { IMPROVEMENT_WATERMILL: 50 },
+	PROJECT_MONASTIC_TRADITIONS: { IMPROVEMENTCLASS_MONASTERY: 50 },
+};
+
+// The player's nation, through its player effect — every city of theirs.
+export const NATION_IMPROVEMENT_MODIFIER: Readonly<
+	Record<string, Readonly<Record<string, number>>>
+> = { NATION_KUSH: { IMPROVEMENTCLASS_SHRINE: 50 } };
+
+// A trait on the character GOVERNING the city (<GovernorEffectCity>) —
+// that city only.
+export const GOVERNOR_TRAIT_IMPROVEMENT_MODIFIER: Readonly<
+	Record<string, Readonly<Record<string, number>>>
+> = {
+	TRAIT_CULTIVATOR: { IMPROVEMENT_GROVE: 50 },
+	TRAIT_PLANTERS_CLOAK: { IMPROVEMENTCLASS_GROVE: 100 },
+};
+
+// The same trait on the RULER, through <LeaderEffectPlayer> — every
+// city. A Cultivator ruler who also governs gets both, as the game
+// sums the two effects.
+export const LEADER_TRAIT_IMPROVEMENT_MODIFIER: Readonly<
+	Record<string, Readonly<Record<string, number>>>
+> = { TRAIT_CULTIVATOR: { IMPROVEMENT_GROVE: 20 } };
 
 // Improvement → its class, for the science-relevant improvements the
 // tile modifiers above are looked up against.

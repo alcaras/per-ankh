@@ -89,6 +89,8 @@ interface Entry {
 	bNoDamage?: string;
 	bNoAssimilate?: string;
 	LeaderEffectPlayer?: string;
+	// trait.xml — the effect a character carries into the city they GOVERN.
+	GovernorEffectCity?: string;
 	aiYieldOutput?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRate?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldModifier?: { Pair?: YieldPair | YieldPair[] };
@@ -96,6 +98,7 @@ interface Entry {
 	aiYieldGovernorModifier?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRateSpecialist?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRateReligion?: { Pair?: YieldPair | YieldPair[] };
+	aiImprovementModifier?: { Pair?: YieldPair | YieldPair[] };
 	aiImprovementClassModifier?: { Pair?: YieldPair | YieldPair[] };
 	// The neighbour terms of Tile.yieldOutputForGovernor: the percent an
 	// improvement grants the tiles NEXT to it, and the flat yield a tile earns
@@ -569,27 +572,28 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// ─── Adjacency: the neighbour terms of a tile's science ──────────────
+	// ─── Tile modifiers: the two halves of yieldModifierNoSpecialist ─────
 	//
 	// A tile's yield is not its base output. Tile.yieldOutputForGovernor
-	// (Tile.cs:13233) runs base → × neighbour modifiers → × the staffing
+	// (Tile.cs:13233) runs base → × tile modifiers → × the staffing
 	// specialist's class modifier, and the base itself (yieldBaseForGovernor,
-	// :13364) already includes a per-adjacent-resource term. Both neighbour
-	// terms are baked here; only the specialist one was modelled before.
+	// :13364) already carries a per-adjacent-resource term. Only the specialist
+	// step was modelled before.
 	//
-	// DIRECTION IS INVERTED FROM HOW THE XML READS. InfoHelpers
-	// .adjacentYieldOutputImprovementModifier(eImprovement, eAdjacent)
-	// (InfoHelpers.cs:2025) looks the tables up on eAdjacent — the NEIGHBOUR —
-	// keyed by the improvement being modified. So <IMPROVEMENTCLASS_MONASTERY>
-	// <aiAdjacentImprovementClassModifier><IMPROVEMENTCLASS_GROVE>60 means a
-	// Monastery grants +60% to the Groves beside it, not the reverse.
+	// yieldModifierNoSpecialist (:13479) sums two sources, baked into separate
+	// tables because a blob resolves them differently: what the tile's
+	// NEIGHBOURS grant it, and what the CITY it sits in grants it
+	// (City.getImprovementModifierForGovernor, City.cs:4646).
 	//
-	// Classes are expanded to their improvements on both sides, because the
-	// per-religion rules must not cross: TEMPLE_HINDUISM grants its +20% to
-	// MONASTERY_HINDUISM alone, and a class-keyed table would leak it to every
-	// monastery. Only rules whose TARGET can produce science are emitted,
-	// which is what keeps the table to the handful of science rules rather
-	// than every farm and mine adjacency in the game.
+	// Both key by improvement zType OR improvement class, exactly as the XML
+	// writes each rule — the two token spaces can't collide, so nothing has to
+	// be expanded (one Kush shrine rule would otherwise fan out to 53
+	// improvements) and the per-religion pairs can't cross (a Temple lifts only
+	// its own religion's Monastery because the XML pairs improvements there,
+	// and classes in the Monastery→Grove rule).
+	//
+	// Only rules whose TARGET can produce science are emitted, which is what
+	// keeps these to a handful rather than every farm and mine rule in the game.
 	const improvementsOfClass = new Map<string, string[]>();
 	const classOfImprovement = new Map<string, string>();
 	for (const imp of improvements) {
@@ -599,48 +603,58 @@ async function main(): Promise<void> {
 		list.push(imp.zType);
 		improvementsOfClass.set(imp.Class, list);
 	}
-	const producesScience = (zType: string): boolean =>
+	const improvementProducesScience = (zType: string): boolean =>
 		(improvementScience[zType]?.flat ?? 0) > 0 ||
 		improvementResourceScience[zType] != null;
+	// A token is either an improvement or a class; a class counts when any of
+	// its improvements pays science.
+	const producesScience = (token: string): boolean =>
+		improvementProducesScience(token) ||
+		(improvementsOfClass.get(token) ?? []).some(improvementProducesScience);
+	// The class of every token a rule can name, so the breakdown can label a
+	// row by class. A granting Temple pays no science of its own and would
+	// otherwise be absent from IMPROVEMENT_CLASS.
+	const recordClass = (token: string): void => {
+		const cls = classOfImprovement.get(token);
+		if (cls) improvementClass[token] = cls;
+	};
 
-	// Target improvement → the neighbour granting it → percent. Percentages
-	// from several neighbours sum, matching the game's per-direction loop.
-	const improvementAdjacentModifier: Record<
-		string,
-		Record<string, number>
-	> = {};
-	const grantModifier = (
+	// Adjacency. DIRECTION IS INVERTED FROM HOW THE XML READS: InfoHelpers
+	// .adjacentYieldOutputImprovementModifier(eImprovement, eAdjacent)
+	// (InfoHelpers.cs:2025) looks its three tables up on eAdjacent — the
+	// NEIGHBOUR — keyed by the improvement being modified. So
+	// <IMPROVEMENTCLASS_MONASTERY><aiAdjacentImprovementClassModifier>
+	// <IMPROVEMENTCLASS_GROVE>60 means a Monastery grants +60% to the Groves
+	// beside it, not the reverse.
+	const adjacentModifier: Record<string, Record<string, number>> = {};
+	const grantAdjacent = (
+		source: string | undefined,
 		target: string | undefined,
-		source: string,
 		percent: number,
 	): void => {
-		if (!target || percent === 0 || !producesScience(target)) return;
-		const row = (improvementAdjacentModifier[target] ??= {});
-		row[source] = (row[source] ?? 0) + percent;
+		if (!source || !target || percent === 0 || !producesScience(target)) return;
+		const row = (adjacentModifier[source] ??= {});
+		row[target] = (row[target] ?? 0) + percent;
+		recordClass(source);
+		recordClass(target);
 	};
 	for (const source of improvements) {
-		if (!source.zType) continue;
+		// improvement(eAdjacent).maiAdjacentImprovementModifier[eImprovement]
 		for (const p of pairs(source.aiAdjacentImprovementModifier)) {
-			grantModifier(p.zIndex, source.zType, Number(p.iValue ?? 0));
+			grantAdjacent(source.zType, p.zIndex, Number(p.iValue ?? 0));
 		}
+		// improvement(eAdjacent).maiAdjacentImprovementClassModifier[eClass]
 		for (const p of pairs(source.aiAdjacentImprovementClassModifier)) {
-			for (const target of improvementsOfClass.get(p.zIndex ?? "") ?? []) {
-				grantModifier(target, source.zType, Number(p.iValue ?? 0));
-			}
+			grantAdjacent(source.zType, p.zIndex, Number(p.iValue ?? 0));
 		}
 	}
 	for (const cls of improvementClasses) {
-		if (!cls.zType) continue;
+		// improvementClass(eAdjacentClass).maiAdjacentImprovementClassModifier
 		for (const p of pairs(cls.aiAdjacentImprovementClassModifier)) {
-			const targets = improvementsOfClass.get(p.zIndex ?? "") ?? [];
-			for (const source of improvementsOfClass.get(cls.zType) ?? []) {
-				for (const target of targets) {
-					grantModifier(target, source, Number(p.iValue ?? 0));
-				}
-			}
+			grantAdjacent(cls.zType, p.zIndex, Number(p.iValue ?? 0));
 		}
 	}
-	if (Object.keys(improvementAdjacentModifier).length === 0) {
+	if (Object.keys(adjacentModifier).length === 0) {
 		throw new Error(
 			"bake-science-yields: no science adjacency modifiers found (Monastery→Grove is the canonical one) — the improvement XML shape changed",
 		);
@@ -667,23 +681,98 @@ async function main(): Promise<void> {
 			(imp.Class ? (classAdjacentResourceScience.get(imp.Class) ?? 0) : 0);
 		if (science > 0) {
 			improvementAdjacentResourceScience[imp.zType] = science / 10;
+			recordClass(imp.zType);
 		}
 	}
 
-	// Both sides of every emitted rule need their class resolvable — the
-	// breakdown labels rows by class ("Grove next to Monastery"), and a
-	// granting improvement (a Temple) need not produce science itself, so it
-	// would otherwise be absent from the table above.
-	for (const [target, sources] of Object.entries(improvementAdjacentModifier)) {
-		for (const zType of [target, ...Object.keys(sources)]) {
-			const cls = classOfImprovement.get(zType);
-			if (cls) improvementClass[zType] = cls;
+	// The city half. Everything a city holds is an EffectCity, and each can
+	// carry <aiImprovementModifier> / <aiImprovementClassModifier> — a Clerics
+	// family doubles its cities' monasteries, a Cultivator governor lifts their
+	// groves. Resolved per SOURCE below, because that is what a blob records:
+	// the city's family class, its completed projects, the player's nation, the
+	// governing character's traits, the wonders standing in it.
+	//
+	// <EffectCityUnlock> is followed, as changeEffectCity does (Tile.cs:13567).
+	// <aeEffectCityEffectCity> — "if the city also holds effect X, add Y", the
+	// Aksum Stele's shape — is NOT: those grant city percent modifiers, not
+	// improvement ones, so none of them reaches this table today.
+	const effectImprovementModifier = (
+		name: string | undefined,
+		seen = new Set<string>(),
+	): Record<string, number> => {
+		const out: Record<string, number> = {};
+		if (!name || seen.has(name)) return out;
+		seen.add(name);
+		const e = effectByType.get(name);
+		if (!e) return out;
+		for (const block of [
+			e.aiImprovementModifier,
+			e.aiImprovementClassModifier,
+		]) {
+			for (const p of pairs(block)) {
+				const percent = Number(p.iValue ?? 0);
+				if (!p.zIndex || percent === 0 || !producesScience(p.zIndex)) continue;
+				out[p.zIndex] = (out[p.zIndex] ?? 0) + percent;
+				recordClass(p.zIndex);
+			}
 		}
-	}
-	for (const zType of Object.keys(improvementAdjacentResourceScience)) {
-		const cls = classOfImprovement.get(zType);
-		if (cls) improvementClass[zType] = cls;
-	}
+		for (const [token, percent] of Object.entries(
+			effectImprovementModifier(e.EffectCityUnlock, seen),
+		)) {
+			out[token] = (out[token] ?? 0) + percent;
+		}
+		return out;
+	};
+	const mergeModifiers = (
+		effects: (string | undefined)[],
+	): Record<string, number> => {
+		const out: Record<string, number> = {};
+		for (const name of effects) {
+			for (const [token, percent] of Object.entries(
+				effectImprovementModifier(name),
+			)) {
+				out[token] = (out[token] ?? 0) + percent;
+			}
+		}
+		return out;
+	};
+	const bySource = (
+		entries: Entry[],
+		effectsOf: (entry: Entry) => (string | undefined)[],
+	): Record<string, Record<string, number>> => {
+		const out: Record<string, Record<string, number>> = {};
+		for (const entry of entries) {
+			if (!entry.zType) continue;
+			const mods = mergeModifiers(effectsOf(entry));
+			if (Object.keys(mods).length > 0) out[entry.zType] = mods;
+		}
+		return out;
+	};
+	const familyClassImprovementModifier = bySource(familyClasses, (fc) => [
+		fc.EffectCity,
+	]);
+	const projectImprovementModifier = bySource(projects, (p) => [
+		p.EffectCity,
+		p.EffectCityExtra,
+	]);
+	const nationImprovementModifier = bySource(nations, (n) =>
+		cityEffectsOfPlayerEffect(n.EffectPlayer),
+	);
+	// A trait reaches a city two ways, with different scope: through the
+	// character GOVERNING it (trait.xml <GovernorEffectCity>, applied in
+	// City.getEffectCityCountsForGovernor) and, when the RULER carries it,
+	// through the player effect that reaches every city.
+	const governorTraitImprovementModifier = bySource(traits, (t) => [
+		t.GovernorEffectCity,
+	]);
+	const leaderTraitImprovementModifier = bySource(traits, (t) =>
+		cityEffectsOfPlayerEffect(t.LeaderEffectPlayer),
+	);
+	// A wonder standing in the city could grant one too, but the only science
+	// rule of that shape today — the Cult of the Mother's +50% to shrines —
+	// is defined in improvement-event-sap.xml, and this bake sweeps only
+	// improvement.xml. Left unmodelled rather than half-swept; widening the
+	// improvement load is its own change, since it would move every table here.
 
 	const specialistScience: Record<string, number> = {};
 	// Specialists that multiply their tile's whole output — a staffed
@@ -844,23 +933,32 @@ async function main(): Promise<void> {
 	);
 	lines.push("");
 	lines.push(
-		"// Target improvement → the adjacent improvement granting it a percent",
+		"// ─── Tile modifiers (Tile.yieldModifierNoSpecialist) ────────────────",
+	);
+	lines.push("");
+	lines.push(
+		"// Every table below keys by improvement zType OR improvement class,",
 	);
 	lines.push(
-		"// modifier → that percent, summed per neighbour direction as the game",
+		"// exactly as the XML writes each rule; the two token spaces can't",
+	);
+	lines.push("// collide, so a lookup sums whichever of the two hit.");
+	lines.push("");
+	lines.push(
+		"// What a NEIGHBOUR grants this tile: granting improvement/class → the",
 	);
 	lines.push(
-		"// does (Tile.yieldModifierNoSpecialist → adjacentYieldOutputImprovement",
+		'// improvement/class it lifts → percent. Read as "a Monastery next door',
 	);
 	lines.push(
-		'// Modifier). Read as "a Monastery next door is +60% to this Grove";',
+		'// is +60% to this Grove" — the game looks the rule up on the neighbour',
 	);
 	lines.push(
-		"// classes are expanded on both sides so per-religion rules (a Temple",
+		"// (InfoHelpers.adjacentYieldOutputImprovementModifier), and percentages",
 	);
-	lines.push("// lifts only its OWN religion's Monastery) stay separate.");
+	lines.push("// from several neighbours sum.");
 	lines.push(
-		`export const IMPROVEMENT_ADJACENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(improvementAdjacentModifier))};`,
+		`export const IMPROVEMENT_ADJACENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(adjacentModifier))};`,
 	);
 	lines.push("");
 	lines.push(
@@ -869,9 +967,56 @@ async function main(): Promise<void> {
 	lines.push(
 		"// (Tile.countTeamAdjacentResources), per turn. Part of the tile's BASE,",
 	);
-	lines.push("// so the percent modifiers above multiply it.");
+	lines.push("// so the percent modifiers here multiply it.");
 	lines.push(
 		`export const IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE: Readonly<Record<string, number>> = ${JSON.stringify(sorted(improvementAdjacentResourceScience))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// What the CITY grants a tile standing in it (City.getImprovement",
+	);
+	lines.push(
+		"// ModifierForGovernor), by the source a save actually records. Scope",
+	);
+	lines.push("// differs per table — see each one's comment.");
+	lines.push("");
+	lines.push("// The city's ruling family class: Clerics double monasteries.");
+	lines.push(
+		`export const FAMILY_CLASS_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(familyClassImprovementModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// A project the city completed. All are <bSingle>, so the modifier",
+	);
+	lines.push("// lands once however many completions the city reports.");
+	lines.push(
+		`export const PROJECT_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(projectImprovementModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// The player's nation, through its player effect — every city of theirs.",
+	);
+	lines.push(
+		`export const NATION_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(nationImprovementModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// A trait on the character GOVERNING the city (<GovernorEffectCity>) —",
+	);
+	lines.push("// that city only.");
+	lines.push(
+		`export const GOVERNOR_TRAIT_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(governorTraitImprovementModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// The same trait on the RULER, through <LeaderEffectPlayer> — every",
+	);
+	lines.push(
+		"// city. A Cultivator ruler who also governs gets both, as the game",
+	);
+	lines.push("// sums the two effects.");
+	lines.push(
+		`export const LEADER_TRAIT_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(leaderTraitImprovementModifier))};`,
 	);
 	lines.push("");
 	lines.push(
