@@ -10,6 +10,7 @@
 	import type { StoryEvent } from "$lib/types/StoryEvent";
 	import type {
 		CharacterInfo,
+		CharacterTraitInfo,
 		FamilyInfo,
 		GameReligion,
 		MemoryInfo,
@@ -82,6 +83,7 @@
 		memoryData = [],
 		storyEvents = [],
 		characters = [],
+		characterTraits = [],
 		gameReligions = [],
 		gameOptions = null,
 		userNation = null,
@@ -103,6 +105,9 @@
 		memoryData?: MemoryInfo[];
 		storyEvents?: StoryEvent[];
 		characters?: CharacterInfo[];
+		// Traits with the turn they were acquired and lost — the science
+		// breakdown reads the ones a ruler or governor still holds.
+		characterTraits?: CharacterTraitInfo[];
 		// Founded religions with their theologies (2.15.0+) — the science
 		// breakdown's Dualism rows. Defaults to [] for legacy callers.
 		gameReligions?: GameReligion[];
@@ -615,6 +620,19 @@
 			: gameOptions.GAMEOPTION_COMPETITIVE_MODE === true,
 	);
 	const characterById = $derived(new Map(characters.map((c) => [c.xml_id, c])));
+	// Character → the traits they still hold at game end (a removed trait
+	// stops paying), for the breakdown's city-bonus rows.
+	const traitsByCharacter = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
+		const byId = new Map<number, string[]>();
+		for (const t of characterTraits) {
+			if (t.removed_turn != null) continue;
+			const held = byId.get(t.character_xml_id) ?? [];
+			held.push(t.trait_name);
+			byId.set(t.character_xml_id, held);
+		}
+		return byId;
+	});
 	// religion → theologies established, for the breakdown's Dualism rows.
 	// Empty lists on pre-2.15.0 blobs, which simply produce no rows.
 	const theologiesByReligion = $derived(
@@ -697,6 +715,13 @@
 						leaderArchetype,
 						theologiesByReligion,
 						governorWisdom: (xmlId) => characterById.get(xmlId)?.wisdom ?? null,
+						governorTraits: (xmlId) => traitsByCharacter.get(xmlId) ?? [],
+						// Same reigning-leader rule as the archetype above: a ruler
+						// off the throne grants nothing.
+						leaderTraits:
+							leader == null || leader.death_turn != null
+								? []
+								: (traitsByCharacter.get(leader.xml_id) ?? []),
 					},
 					specialistName,
 					improvementDisplayName,
@@ -714,6 +739,7 @@
 		{ key: "specialistsUrban", label: "Urban specialists" },
 		{ key: "buildings", label: "Buildings & resources" },
 		{ key: "adjacency", label: "Adjacency" },
+		{ key: "cityBonuses", label: "City bonuses" },
 		{ key: "laws", label: "Laws" },
 		{ key: "cityEffects", label: "Nation, family & religion" },
 		{ key: "modifiers", label: "Modifiers" },
