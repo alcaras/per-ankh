@@ -583,6 +583,7 @@
 			{improvementData}
 			{cityStatistics}
 			{techChoices}
+			mapTiles={mapTiles ?? []}
 			{families}
 			{memoryData}
 			{storyEvents}
