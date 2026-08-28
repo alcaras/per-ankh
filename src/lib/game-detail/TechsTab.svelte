@@ -5,6 +5,7 @@
 	import type { LawAdoptionHistory } from "$lib/types/LawAdoptionHistory";
 	import type { PlayerLaw } from "$lib/types/PlayerLaw";
 	import type { ImprovementData } from "$lib/types/ImprovementData";
+	import type { MapTile } from "$lib/types/MapTile";
 	import type { CityStatistics } from "$lib/types/CityStatistics";
 	import type { StoryEvent } from "$lib/types/StoryEvent";
 	import type {
@@ -76,6 +77,7 @@
 		currentLaws,
 		improvementData,
 		cityStatistics,
+		mapTiles = [],
 		families = [],
 		memoryData = [],
 		storyEvents = [],
@@ -93,6 +95,10 @@
 		currentLaws: PlayerLaw[];
 		improvementData: ImprovementData;
 		cityStatistics: CityStatistics;
+		// The final-turn map, which carries the tile coordinates the science
+		// breakdown's adjacency rows need. Defaults to [] — a blob with no map
+		// simply gets no adjacency section.
+		mapTiles?: MapTile[];
 		families?: FamilyInfo[];
 		memoryData?: MemoryInfo[];
 		storyEvents?: StoryEvent[];
@@ -636,6 +642,15 @@
 				(c) => c.owner_player_xml_id,
 				(c) => c.owner_nation,
 			);
+			// The player's own tiles as the map records them: the breakdown's
+			// adjacency terms need coordinates, which live only here, and only
+			// a player's OWN neighbours grant them (the game's same-team test).
+			const tiles = ownedByPlayer(
+				mapTiles,
+				player,
+				(t) => t.owner_player_xml_id,
+				(t) => t.owner_nation,
+			);
 			const capitalCity = cities.find((c) => c.is_capital);
 			// The reigning leader's Wisdom — the only court rating that pays
 			// science. Null on pre-2.11.0 blobs (no leader id) or when the
@@ -664,6 +679,7 @@
 				player,
 				b: scienceBreakdown(
 					improvements,
+					tiles,
 					activeLaws,
 					capitalCity
 						? {
@@ -697,6 +713,7 @@
 		{ key: "specialistsRural", label: "Rural specialists" },
 		{ key: "specialistsUrban", label: "Urban specialists" },
 		{ key: "buildings", label: "Buildings & resources" },
+		{ key: "adjacency", label: "Adjacency" },
 		{ key: "laws", label: "Laws" },
 		{ key: "cityEffects", label: "Nation, family & religion" },
 		{ key: "modifiers", label: "Modifiers" },

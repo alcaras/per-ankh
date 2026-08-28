@@ -576,6 +576,7 @@
 			{currentLaws}
 			{improvementData}
 			{cityStatistics}
+			mapTiles={mapTiles ?? []}
 			{families}
 			{memoryData}
 			{storyEvents}

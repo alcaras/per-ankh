@@ -34,6 +34,7 @@ import type { LawAdoptionDataPoint } from "$lib/types/LawAdoptionDataPoint";
 import type { PlayerTech } from "$lib/types/PlayerTech";
 import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
 import type { CityInfo } from "$lib/types/CityInfo";
+import type { MapTile } from "$lib/types/MapTile";
 import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { CharacterInfo, FamilyInfo } from "$lib/parser/types";
 import { SPECIALISTS, SPECIALIST_CLASSES } from "$lib/generated/specialists";
@@ -41,6 +42,8 @@ import { IMPROVEMENT_NAMES } from "$lib/generated/improvement-names";
 import {
 	IMPROVEMENT_SCIENCE,
 	IMPROVEMENT_RESOURCE_SCIENCE,
+	IMPROVEMENT_ADJACENT_MODIFIER,
+	IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE,
 	IMPROVEMENT_UNLOCK_COST,
 	IMPROVEMENT_CLASS,
 	SPECIALIST_SCIENCE,
@@ -71,6 +74,7 @@ import {
 	formatArchetype,
 	formatEnum,
 } from "$lib/utils/formatting";
+import { hexNeighbors } from "$lib/utils/hex";
 import {
 	storyEventType,
 	storyEventsFor,
@@ -237,12 +241,23 @@ function buildingName(zType: string, prefix: string): string {
 	return domain ? `${base} (${domain})` : base;
 }
 
+// The percent a staffing specialist applies to their tile's WHOLE output — a
+// Gardener doubles the Grove's yields (Tile.yieldOutputForGovernor ×
+// specialist.aiImprovementClassModifier). 0 when the tile is unstaffed or the
+// specialist's class doesn't match the improvement's.
+function specialistTileModifier(
+	improvement: string,
+	specialist: string | null,
+): number {
+	if (specialist == null) return 0;
+	const cls = IMPROVEMENT_CLASS[improvement];
+	return cls ? (SPECIALIST_TILE_MODIFIER[specialist]?.[cls] ?? 0) : 0;
+}
+
 // Base science of one standing improvement tile: the improvement's own flat
 // science plus what it earns off its resource (a grove's science comes
 // entirely from the luxury it sits on), multiplied by the staffing
-// specialist's tile modifier when one applies — a Gardener doubles the
-// Grove's whole output (Tile.yieldOutputForGovernor ×
-// specialist.aiImprovementClassModifier).
+// specialist's tile modifier when one applies.
 function tileScience(
 	improvement: string,
 	resource: string | null,
@@ -254,9 +269,23 @@ function tileScience(
 			? (IMPROVEMENT_RESOURCE_SCIENCE[improvement]?.[resource] ?? 0)
 			: 0);
 	if (base === 0 || specialist == null) return base;
-	const cls = IMPROVEMENT_CLASS[improvement];
-	const mod = cls ? (SPECIALIST_TILE_MODIFIER[specialist]?.[cls] ?? 0) : 0;
-	return (base * (100 + mod)) / 100;
+	return (base * (100 + specialistTileModifier(improvement, specialist))) / 100;
+}
+
+// The game's yields are ×10 fixed-point integers and every modifier is
+// applied to them with integer math, so the adjacency arithmetic below runs
+// in tenths and divides only at the end — rounding earlier drifts off the
+// real value.
+const tenths = (science: number): number => Math.round(science * 10);
+
+/**
+ * `Utils.modify` (Utils.cs:58) — apply a percent to a ×10 fixed-point yield.
+ * Integer division truncating toward zero, and a modifier past −100% floors
+ * the multiplier at zero rather than flipping the yield's sign.
+ */
+function modify(value: number, percent: number): number {
+	if (value === 0 || percent === 0) return value;
+	return Math.trunc((value * Math.max(0, percent + 100)) / 100);
 }
 
 // Count rows into "n× Name" pairs, keeping first-seen name order.
@@ -458,6 +487,12 @@ export type ScienceBreakdown = {
 	specialistsRural: { items: BreakdownItem[]; total: number };
 	specialistsUrban: { items: BreakdownItem[]; total: number };
 	buildings: { items: BreakdownItem[]; total: number };
+	// What a tile's NEIGHBOURS add to it — the terms of
+	// Tile.yieldOutputForGovernor the flat rows above don't see: a Monastery
+	// is +60% to every Grove beside it, a Temple +20% to its own religion's
+	// Monastery, and a Library earns +1 per adjacent resource. Empty when the
+	// blob carries no map (the coordinates live only on map_tiles).
+	adjacency: { items: BreakdownItem[]; total: number };
 	// Flat conditional law sources: Constitution per urban specialist,
 	// Centralization off capital culture, and science law UPKEEP (negative,
 	// × city count per Player.getYieldUpkeepNet). Exact rates from the
@@ -488,10 +523,13 @@ export type ScienceBreakdown = {
 	// SIGNED remainder vs the actual rate: the non-leader court (spouses,
 	// successors, courtiers, council — all opinion-scaled),
 	// Philosophy-via-Forums, connected-foreign-trade science, and every
-	// interaction the save doesn't itemize. The main remaining NEGATIVE
-	// component is angry/furious family opinion (a city percent modifier the
-	// save doesn't let us price per family) — discontent IS priced, in the
-	// Modifiers section. Deliberately not clamped so over-counting shows.
+	// interaction the save doesn't itemize. What drives it NEGATIVE is the
+	// Modifiers estimate: a percent is exact but the base it's applied to is
+	// only what we itemize, so a discontented empire under-charges its own
+	// -5%-per-level and the remainder absorbs the difference. (Family opinion
+	// is not the culprit — opinionFamily.xml pays its ANGRY/FURIOUS penalty
+	// in Civics, Training and Maintenance, and never touches science.)
+	// Deliberately not clamped so over-counting shows.
 	other: number;
 	// The player's actual science/turn at game end.
 	total: number;
@@ -668,9 +706,13 @@ export interface CityEffectContext {
 
 /**
  * Decompose a player's end-of-game science rate into itemized sources.
- * `improvements` are the player's own tiles; `activeLaws` their laws still
- * active at game end; `capital` their capital's name + culture level (null
- * when unresolvable); `cityCount` scales the per-city law upkeep;
+ * `improvements` are the player's own tiles; `tiles` the same tiles as the
+ * map records them, carrying the coordinates the adjacency terms need (pass
+ * the player's own map tiles, or an empty list when the blob has no map —
+ * the two views agree row for row, so nothing is double-counted);
+ * `activeLaws` their laws still active at game end; `capital` their capital's
+ * name + culture level (null when unresolvable); `cityCount` scales the
+ * per-city law upkeep;
  * `finalRate` is the last non-null YIELD_SCIENCE rate; `cityContext` the
  * per-city data for the city-effect and governor rows.
  *
@@ -685,6 +727,7 @@ export interface CityEffectContext {
  */
 export function scienceBreakdown(
 	improvements: ImprovementInfo[],
+	tiles: readonly MapTile[],
 	activeLaws: ReadonlySet<string>,
 	capital: { cityName: string; cultureLevel: string | null } | null,
 	cityCount: number,
@@ -791,6 +834,127 @@ export function scienceBreakdown(
 				);
 				cityPct.set(i.city_name, m);
 			}
+		}
+	}
+
+	// Adjacency: what a tile's NEIGHBOURS add to it. Two terms, both from
+	// Tile.yieldOutputForGovernor (Tile.cs:13233) and neither visible to the
+	// flat rows above — a per-adjacent-resource yield folded into the tile's
+	// base (yieldBaseForGovernor), and the percent modifiers the neighbours
+	// grant it (yieldModifierNoSpecialist), which stack per direction: a
+	// Grove ringed by five monasteries is at +300%.
+	//
+	// The whole delta lands in this section, INCLUDING the staffing
+	// specialist's share of it. A Gardener on that Grove doubles 8 science,
+	// not 2, and those extra 6 exist only because the monasteries are there;
+	// crediting them to the Gardener's row would read as a specialist the
+	// player could have placed anywhere.
+	//
+	// Coordinates live only on map_tiles, so this reads the map rather than
+	// the improvement rows. The tiles passed in are the player's OWN, so a
+	// neighbour belonging to anyone else is simply absent from the lookup —
+	// which is the game's same-team test, give or take a team game (the save
+	// records no teams, so an allied neighbour's grant is missed).
+	const adjacencyRows = new Map<string, Acc>();
+	const addAdjacency = (
+		label: string,
+		science: number,
+		count: number,
+		order: number,
+	) => {
+		const acc = adjacencyRows.get(label) ?? {
+			count: 0,
+			science: 0,
+			pct: 0,
+			order,
+		};
+		acc.count += count;
+		acc.science += science;
+		// A row's tiers can differ in unlock cost; the latest gates the row.
+		acc.order = Math.max(acc.order, order);
+		adjacencyRows.set(label, acc);
+	};
+	// Both sides of a row read as their improvement CLASS — "Grove next to
+	// Monastery" — so the six per-religion monastery rules collapse into one
+	// row instead of splitting the comparison table six ways.
+	const classLabel = (improvement: string): string => {
+		const cls = IMPROVEMENT_CLASS[improvement];
+		return cls
+			? formatEnum(cls, "IMPROVEMENTCLASS_")
+			: improvementLabel(improvement);
+	};
+	const tileAt = new Map<string, MapTile>();
+	for (const t of tiles) tileAt.set(`${t.x},${t.y}`, t);
+	for (const t of tiles) {
+		const improvement = t.improvement;
+		if (improvement == null || t.improvement_pillaged) continue;
+		const perResource = IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE[improvement] ?? 0;
+		const base = tenths(tileScience(improvement, t.resource, null));
+		if (base === 0 && perResource === 0) continue;
+		const rules = IMPROVEMENT_ADJACENT_MODIFIER[improvement];
+		// One pass over the six neighbours collects both terms: how many carry
+		// a resource (Tile.countTeamAdjacentResources) and what each grants
+		// this tile, grouped by the granting class for the row label.
+		let resources = 0;
+		let percent = 0;
+		const sources = new Map<
+			string,
+			{ rate: number; count: number; unlock: number }
+		>();
+		for (const [nx, ny] of hexNeighbors(t.x, t.y)) {
+			const n = tileAt.get(`${nx},${ny}`);
+			if (n == null) continue;
+			if (n.resource != null) resources += 1;
+			if (n.improvement == null || n.improvement_pillaged) continue;
+			const rate = rules?.[n.improvement] ?? 0;
+			if (rate === 0) continue;
+			percent += rate;
+			// Keyed by class AND rate, so a class whose members grant different
+			// percentages can't hide behind one row's headline number.
+			const key = `${classLabel(n.improvement)} (+${rate}%)`;
+			const seen = sources.get(key) ?? { rate, count: 0, unlock: 0 };
+			seen.count += 1;
+			seen.unlock = Math.max(
+				seen.unlock,
+				IMPROVEMENT_UNLOCK_COST[n.improvement] ?? 0,
+			);
+			sources.set(key, seen);
+		}
+		const flat = tenths(perResource) * resources;
+		if (flat === 0 && percent === 0) continue;
+		const specialistPct = specialistTileModifier(improvement, t.specialist);
+		const staffed = (value: number) =>
+			modify(modify(value, percent), specialistPct);
+		// The flat term is priced as its own marginal value on top of the
+		// percent ones; what's left is the percent rules', split in
+		// proportion to the percentage each contributed (the game applies
+		// them as a single sum, so no exact per-rule split exists).
+		const fromFlat = staffed(base + flat) - staffed(base);
+		const fromPercent = staffed(base) - modify(base, specialistPct);
+		const order = IMPROVEMENT_UNLOCK_COST[improvement] ?? 0;
+		if (fromFlat !== 0) {
+			addAdjacency(
+				`${improvementLabel(improvement)} (per adjacent resource)`,
+				fromFlat / 10,
+				1,
+				order,
+			);
+		}
+		for (const [neighbour, source] of sources) {
+			// Rows sort by the tech that unlocks them, and this one needs BOTH
+			// sides built, so the later unlock is what gates it.
+			addAdjacency(
+				`${classLabel(improvement)} next to ${neighbour}`,
+				(fromPercent * source.rate * source.count) / percent / 10,
+				source.count,
+				Math.max(order, source.unlock),
+			);
+		}
+		if (t.owner_city != null) {
+			cityFlat.set(
+				t.owner_city,
+				(cityFlat.get(t.owner_city) ?? 0) + (fromFlat + fromPercent) / 10,
+			);
 		}
 	}
 
@@ -1143,6 +1307,7 @@ export function scienceBreakdown(
 	const ruralItems = toItems(specialistsRural, false);
 	const urbanItems = toItems(specialistsUrban, false);
 	const buildingItems = toItems(buildings, false);
+	const adjacencyItems = toItems(adjacencyRows, false);
 	const lawItems = toItems(laws, false);
 	const cityEffectItems = toItems(cityEffects, false);
 	const modifierItems = toItems(modifiers, true);
@@ -1150,6 +1315,7 @@ export function scienceBreakdown(
 	const ruralTotal = sum(ruralItems);
 	const urbanTotal = sum(urbanItems);
 	const buildingsTotal = sum(buildingItems);
+	const adjacencyTotal = sum(adjacencyItems);
 	const lawsTotal = sum(lawItems);
 	const cityEffectsTotal = sum(cityEffectItems);
 	const modifiersTotal = sum(modifierItems);
@@ -1158,6 +1324,7 @@ export function scienceBreakdown(
 		specialistsRural: { items: ruralItems, total: ruralTotal },
 		specialistsUrban: { items: urbanItems, total: urbanTotal },
 		buildings: { items: buildingItems, total: buildingsTotal },
+		adjacency: { items: adjacencyItems, total: adjacencyTotal },
 		laws: { items: lawItems, total: lawsTotal },
 		cityEffects: { items: cityEffectItems, total: cityEffectsTotal },
 		modifiers: { items: modifierItems, total: modifiersTotal },
@@ -1169,6 +1336,7 @@ export function scienceBreakdown(
 				ruralTotal -
 				urbanTotal -
 				buildingsTotal -
+				adjacencyTotal -
 				lawsTotal -
 				cityEffectsTotal -
 				modifiersTotal -
