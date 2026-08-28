@@ -49,6 +49,7 @@ import {
 	NATION_IMPROVEMENT_MODIFIER,
 	GOVERNOR_TRAIT_IMPROVEMENT_MODIFIER,
 	LEADER_TRAIT_IMPROVEMENT_MODIFIER,
+	IMPROVEMENT_FAMILY_CLASS_SCIENCE_MODIFIER,
 	IMPROVEMENT_UNLOCK_COST,
 	IMPROVEMENT_CLASS,
 	SPECIALIST_SCIENCE,
@@ -804,6 +805,15 @@ export function scienceBreakdown(
 		m.set(label, acc);
 	};
 
+	// City → its ruling family class, for the conditional wonder modifiers
+	// below (an Aksum Stele pays only in a Clerics city).
+	const familyClassOfCity = new Map<string, string>();
+	for (const city of cityContext.cities) {
+		if (city.family_class != null) {
+			familyClassOfCity.set(city.city_name, city.family_class);
+		}
+	}
+
 	const specialistsRural = new Map<string, Acc>();
 	const specialistsUrban = new Map<string, Acc>();
 	const buildings = new Map<string, Acc>();
@@ -822,7 +832,19 @@ export function scienceBreakdown(
 		// boost lands on THEIR row, on top of their own yield.
 		const tile = tileScience(i.improvement, i.resource, null);
 		const boost = tileScience(i.improvement, i.resource, i.specialist) - tile;
-		const pct = IMPROVEMENT_SCIENCE[i.improvement]?.pct ?? 0;
+		// A wonder can also pay a percent only while the city's ruling family
+		// is of the right class — <aeEffectCityEffectCity>, "when the city ALSO
+		// holds this effect" (City.addEffectYield). The Aksum Stele tiers are
+		// the only science ones, and they read as one row with the rest.
+		const familyClass =
+			i.city_name != null ? familyClassOfCity.get(i.city_name) : undefined;
+		const pct =
+			(IMPROVEMENT_SCIENCE[i.improvement]?.pct ?? 0) +
+			(familyClass != null
+				? (IMPROVEMENT_FAMILY_CLASS_SCIENCE_MODIFIER[i.improvement]?.[
+						familyClass
+					] ?? 0)
+				: 0);
 		const staff =
 			(i.specialist ? (SPECIALIST_SCIENCE[i.specialist] ?? 0) : 0) + boost;
 		if (tile > 0)
