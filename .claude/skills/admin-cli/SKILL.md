@@ -31,7 +31,7 @@ metadata:
 
 ## Corpus sweeps
 
-`./per-ankh admin duel-event-titles [--out FILE] [--concurrency N] [--cache-dir DIR]` lists the distinct event-story titles that have fired in a two-player multiplayer duel. Unlike every other read command it is a **sweep**: one `wrangler` spawn per matching save (hundreds), so budget minutes, not seconds. Saves land in `--cache-dir` and are reused, so a second run to reshape the output reads nothing remote.
+`./per-ankh admin duel-event-titles [--csv] [--out FILE] [--concurrency N] [--cache-dir DIR]` lists the event stories that have fired in a two-player multiplayer duel, one row per event type with the counts an event balance pass needs: `games` (duel games it fired in), `player_games` (player slots that fired it, at most two per game), and `character_city_records` (characters and cities holding their own record of it). `--csv` writes a spreadsheet instead of the markdown table. Unlike every other read command it is a **sweep**: one `wrangler` spawn per matching save (hundreds), so budget minutes, not seconds. Saves land in `--cache-dir` and are reused, so a second run to reshape the output reads nothing remote.
 
 It reads the raw ZIPs rather than the parsed blobs on purpose — `story_events` only began carrying a game's whole history at parser 2.14.0, and older blobs hold just the newest 100 player-scoped rows with no character- or city-scoped ones at all. The save itself is the authoritative record of what fired.
 

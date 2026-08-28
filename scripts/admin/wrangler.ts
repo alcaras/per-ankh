@@ -291,7 +291,12 @@ export async function r2Get(key: string, destPath: string): Promise<boolean> {
 		...targetFlags(),
 	]);
 	if (code === 0) return true;
-	if (/not.?found|404|NoSuchKey/i.test(`${stderr}\n${stdout}`)) return false;
+	// wrangler surfaces R2's own wording for an absent object — "The specified
+	// key does not exist." — so matching only the S3 error name would push
+	// every miss into the caller's failure path instead of its miss count.
+	if (/does not exist|not.?found|404|NoSuchKey/i.test(`${stderr}\n${stdout}`)) {
+		return false;
+	}
 	throw new Error(`wrangler r2 get failed (exit ${code}): ${stderr.trim()}`);
 }
 

@@ -1,5 +1,7 @@
-// `./per-ankh admin duel-event-titles` — the distinct set of event-story titles
-// that have fired in a two-player multiplayer duel, swept from the raw saves.
+// `./per-ankh admin duel-event-titles` — every event story that has fired in a
+// two-player multiplayer duel, with how often each one fired, swept from the
+// raw saves. Feeds an event balance pass, so the counts matter as much as the
+// titles: `--csv` writes a spreadsheet.
 //
 // SOURCE — the raw saves, not the stored blob. `story_events` only began
 // shipping a game's whole history at parser 2.14.0; below that the blob carries
@@ -43,12 +45,27 @@ const SINGLE_PLAYER_MODES = ["SINGLE_PLAYER", "SINGLE_PLAYER_SIMPLE"];
 
 const sqlList = (values: string[]): string => values.map(sqlStr).join(", ");
 
-// A save records a fired event as an element named for its zType, e.g.
-// <EVENTSTORY_COURTIER_MISSION_FOOD>32</EVENTSTORY_COURTIER_MISSION_FOOD>.
-// Only opening tags match (the leading `<` is not followed by `/`), and zTypes
-// carrying the prefix appear nowhere else in the save as an element name, so
-// this needs no structural walk of the three containers that hold them.
-const EVENT_TAG = /<(EVENTSTORY_[A-Z0-9_]+)>/g;
+// A fired event is a child of a `<...EventStoryTurn>` container, named for its
+// zType and holding the turn it fired on:
+//   <AllEventStoryTurn><EVENTSTORY_FAMILY_GAMES>21</EVENTSTORY_FAMILY_GAMES>…
+// Scoped containers prefix the tag with the target they belong to
+// (`<P.0.EVENTSTORY_X>`, `<FAMILY_AMARNA.EVENTSTORY_X>`), so the entry pattern
+// skips a leading prefix.
+//
+// Reading the containers rather than sweeping the whole save for EVENTSTORY_
+// tags is what makes the counts mean something — and it keeps
+// `<EventStoryTested>`, which lists events the game merely *evaluated*, out of
+// a report about what fired.
+const EVENT_CONTAINER = /<([A-Za-z]*EventStoryTurn)>([\s\S]*?)<\/\1>/g;
+const EVENT_ENTRY = /<(?:[A-Z0-9_.]+\.)?(EVENTSTORY_[A-Z0-9_]+)>/g;
+
+// The container that carries a player's whole fired-event history. The
+// per-family/religion/tribe/player containers are breakdowns of the same
+// firings and the per-character/city ones are a subset of it, so this is the
+// one container a firing is guaranteed to appear in exactly once per player.
+const PLAYER_CONTAINER = "AllEventStoryTurn";
+// Character and city nodes both carry their records under this bare name.
+const SUBJECT_CONTAINER = "EventStoryTurn";
 
 interface GameRow {
 	game_id: string;
@@ -60,6 +77,26 @@ interface XmlEntry {
 	Name?: string;
 	"en-US"?: string;
 }
+
+// How often one event type fired across the swept saves. `games` is the
+// dependable frequency signal; the other two say how an event distributes.
+interface EventStat {
+	// Games in which the event fired at least once.
+	games: number;
+	// Player slots that fired it — at most two per duel. A save records the
+	// turn a player last saw an event, not each firing, so a repeat within one
+	// player's game does not add to this.
+	playerGames: number;
+	// Characters and cities that carry their own record of it. Zero for a
+	// purely player-scoped event; large for one that fires per character.
+	characterCityRecords: number;
+}
+
+const emptyStat = (): EventStat => ({
+	games: 0,
+	playerGames: 0,
+	characterCityRecords: 0,
+});
 
 const xmlParser = new XMLParser({
 	ignoreAttributes: true,
@@ -88,8 +125,13 @@ async function loadEntries(path: string): Promise<XmlEntry[]> {
 // `known` is returned alongside because a zType with no title is two different
 // things: an event the data defines but leaves untitled (no <Name> at all —
 // the silent setup and chain-link halves of an event, which never raise a
-// titled popup), and an event absent from the current XML entirely (played on
-// a version since changed). The report has to tell those apart.
+// titled popup), and an event absent from the current XML entirely (a mod, or
+// a base-game event since removed or renamed). The report has to tell those
+// apart.
+//
+// Titles are not unique: 359 of them are shared by more than one zType (95
+// events share "{NATION-0} in the Old World"), so every row is keyed by zType
+// and carries the title alongside rather than the other way round.
 async function loadTitles(): Promise<{
 	titles: Map<string, string>;
 	known: Set<string>;
@@ -154,46 +196,133 @@ async function mapLimit<T>(
 	await Promise.all(workers);
 }
 
-function buildReport(
-	named: Set<string>,
-	zTypeCount: number,
+// One save's fired events. Counted per game first so that a game contributes
+// at most one to each event's `games`, however many scopes recorded it.
+function scanSave(xml: string): Map<string, EventStat> {
+	const perGame = new Map<string, EventStat>();
+	for (const container of xml.matchAll(EVENT_CONTAINER)) {
+		const [, name, body] = container;
+		for (const entry of body.matchAll(EVENT_ENTRY)) {
+			const zType = entry[1];
+			let stat = perGame.get(zType);
+			if (!stat) {
+				stat = emptyStat();
+				stat.games = 1;
+				perGame.set(zType, stat);
+			}
+			if (name === PLAYER_CONTAINER) stat.playerGames++;
+			else if (name === SUBJECT_CONTAINER) stat.characterCityRecords++;
+		}
+	}
+	return perGame;
+}
+
+type Status = "titled" | "untitled" | "not_in_reference";
+
+interface ReportRow extends EventStat {
+	zType: string;
+	title: string;
+	status: Status;
+	gamePct: number;
+}
+
+function buildRows(
+	stats: Map<string, EventStat>,
+	titles: Map<string, string>,
+	known: Set<string>,
 	scanned: number,
-	untitled: string[],
-	unknown: string[],
-): string {
+): ReportRow[] {
+	const rows: ReportRow[] = [];
+	for (const [zType, stat] of stats) {
+		const title = titles.get(zType);
+		rows.push({
+			...stat,
+			zType,
+			title: title ?? "",
+			status: title
+				? "titled"
+				: known.has(zType)
+					? "untitled"
+					: "not_in_reference",
+			gamePct: scanned > 0 ? (stat.games / scanned) * 100 : 0,
+		});
+	}
+	// Frequency first — that is the column a balance pass reads.
+	return rows.sort(
+		(a, b) =>
+			b.games - a.games ||
+			b.playerGames - a.playerGames ||
+			a.zType.localeCompare(b.zType),
+	);
+}
+
+const CSV_HEADER = [
+	"event_type",
+	"title",
+	"games",
+	"pct_of_games",
+	"player_games",
+	"character_city_records",
+	"status",
+];
+
+// RFC 4180 field/row quoting. The Worker has the same primitives in
+// cloud/src/tournament/export.ts, but cloud/ is a separate package without
+// `"type": "module"`, so importing them here resolves to a CJS shim with no
+// named exports.
+function csvField(value: string | number): string {
+	const s = String(value);
+	return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function buildCsv(rows: ReportRow[]): string {
+	const lines = [
+		CSV_HEADER.join(","),
+		...rows.map((r) =>
+			[
+				r.zType,
+				r.title,
+				r.games,
+				r.gamePct.toFixed(1),
+				r.playerGames,
+				r.characterCityRecords,
+				r.status,
+			]
+				.map(csvField)
+				.join(","),
+		),
+	];
+	// UTF-8 BOM, CRLF rows — matching the tournament export, so a title with a
+	// curly quote or an em-dash survives a spreadsheet import.
+	return "﻿" + lines.join("\r\n") + "\r\n";
+}
+
+function buildReport(rows: ReportRow[], scanned: number): string {
+	const titled = rows.filter((r) => r.status === "titled").length;
+	const untitled = rows.filter((r) => r.status === "untitled").length;
+	const unknown = rows.filter((r) => r.status === "not_in_reference").length;
 	const lines: string[] = [
-		"# Event titles fired in two-player multiplayer duels",
+		"# Events fired in two-player multiplayer duels",
 		"",
-		`${named.size} distinct titles, from ${zTypeCount} distinct event types across ${scanned} games.`,
+		`${rows.length} event types across ${scanned} games — ${titled} titled, ${untitled} untitled in the game data, ${unknown} not in the current reference data.`,
+		"",
+		"- **games** — duel games the event fired in at least once.",
+		"- **player games** — player slots that fired it, at most two per game. A save records the turn a player last saw an event, not every firing.",
+		"- **char/city** — characters and cities holding their own record of it; zero for a purely player-scoped event.",
+		"- **untitled** events are defined in eventStory\\*.xml with no `<Name>` — the setup and chain-link halves of an event, which fire without raising a titled popup.",
+		"- **not in reference** means the event is absent from the eventStory\\*.xml we have: a mod's event, or a base-game one removed or renamed since those games were played.",
 		"",
 		"Titles are as the game data writes them, so a few carry the runtime",
 		"substitution slots the game fills in from the board — {CHARACTER-SHORT-0},",
 		"{CITY-0}, {G1:Man:Woman}.",
 		"",
-		...[...named].sort((a, b) => a.localeCompare(b)).map((t) => `- ${t}`),
+		"| Event | Title | Games | % | Player games | Char/city | Status |",
+		"| --- | --- | ---: | ---: | ---: | ---: | --- |",
+		...rows.map(
+			(r) =>
+				`| \`${r.zType}\` | ${r.title || "—"} | ${r.games} | ${r.gamePct.toFixed(1)}% | ${r.playerGames} | ${r.characterCityRecords} | ${r.status} |`,
+		),
 	];
-	if (untitled.length > 0) {
-		lines.push(
-			"",
-			`## Untitled in the game data (${untitled.length})`,
-			"",
-			"Defined in eventStory*.xml with no <Name> — the setup and chain-link",
-			"halves of an event, which fire without ever raising a titled popup.",
-			"",
-			...untitled.sort().map((z) => `- \`${z}\``),
-		);
-	}
-	if (unknown.length > 0) {
-		lines.push(
-			"",
-			`## Not in the current reference data (${unknown.length})`,
-			"",
-			"Fired in a save but absent from eventStory*.xml — removed or renamed",
-			"since those games were played.",
-			"",
-			...unknown.sort().map((z) => `- \`${z}\``),
-		);
-	}
 	return lines.join("\n") + "\n";
 }
 
@@ -201,6 +330,7 @@ export async function run(args: string[], opts: CommandOpts): Promise<void> {
 	const { flags } = parseFlags(args);
 	const concurrency = flagInt(flags, "concurrency", 6);
 	const outPath = flagString(flags, "out");
+	const asCsv = flags.csv !== undefined;
 	const cacheDir = resolve(
 		flagString(flags, "cache-dir") ?? resolve(tmpdir(), "per-ankh-duel-saves"),
 	);
@@ -235,7 +365,7 @@ export async function run(args: string[], opts: CommandOpts): Promise<void> {
 	);
 	info(`Reading saves (${concurrency} at a time), cache: ${cacheDir}`);
 
-	const zTypes = new Set<string>();
+	const stats = new Map<string, EventStat>();
 	const missing: string[] = [];
 	const failed: Array<{ game_id: string; error: string }> = [];
 	let scanned = 0;
@@ -257,7 +387,13 @@ export async function run(args: string[], opts: CommandOpts): Promise<void> {
 					buf.byteOffset + buf.byteLength,
 				) as ArrayBuffer,
 			);
-			for (const m of xml.matchAll(EVENT_TAG)) zTypes.add(m[1]);
+			for (const [zType, stat] of scanSave(xml)) {
+				const agg = stats.get(zType) ?? emptyStat();
+				agg.games += stat.games;
+				agg.playerGames += stat.playerGames;
+				agg.characterCityRecords += stat.characterCityRecords;
+				stats.set(zType, agg);
+			}
 			scanned++;
 		} catch (e) {
 			failed.push({ game_id: game.game_id, error: String(e) });
@@ -266,24 +402,16 @@ export async function run(args: string[], opts: CommandOpts): Promise<void> {
 	});
 
 	const { titles, known } = await loadTitles();
-	const named = new Set<string>();
-	const untitled: string[] = [];
-	const unknown: string[] = [];
-	for (const z of zTypes) {
-		const title = titles.get(z);
-		if (title) named.add(title);
-		else if (known.has(z)) untitled.push(z);
-		else unknown.push(z);
-	}
+	const rows = buildRows(stats, titles, known, scanned);
 
 	for (const f of failed) warn(`${f.game_id}: ${f.error}`);
 	if (missing.length > 0) {
 		warn(`${missing.length} save(s) had no object in R2`);
 	}
 
-	const report = buildReport(named, zTypes.size, scanned, untitled, unknown);
+	const document = asCsv ? buildCsv(rows) : buildReport(rows, scanned);
 	if (outPath) {
-		await writeFile(resolve(outPath), report, "utf-8");
+		await writeFile(resolve(outPath), document, "utf-8");
 		info(`Wrote ${resolve(outPath)}`);
 	}
 
@@ -293,20 +421,27 @@ export async function run(args: string[], opts: CommandOpts): Promise<void> {
 			scanned,
 			missing,
 			failed,
-			event_types: zTypes.size,
-			titles: [...named].sort((a, b) => a.localeCompare(b)),
-			untitled: untitled.sort(),
-			unknown: unknown.sort(),
+			event_types: rows.length,
+			events: rows.map((r) => ({
+				event_type: r.zType,
+				title: r.title,
+				games: r.games,
+				pct_of_games: Number(r.gamePct.toFixed(1)),
+				player_games: r.playerGames,
+				character_city_records: r.characterCityRecords,
+				status: r.status,
+			})),
 		});
 		return;
 	}
 
 	if (outPath) {
+		const titled = rows.filter((r) => r.status === "titled").length;
 		process.stdout.write(
-			`\n${bold(`${named.size} distinct titles`)} from ${zTypes.size} event types across ${scanned} games\n` +
-				`${dim(`untitled ${untitled.length}, unrecognised ${unknown.length}`)}\n`,
+			`\n${bold(`${rows.length} event types`)} across ${scanned} games\n` +
+				`${dim(`titled ${titled}, untitled ${rows.filter((r) => r.status === "untitled").length}, not in reference ${rows.filter((r) => r.status === "not_in_reference").length}`)}\n`,
 		);
 		return;
 	}
-	process.stdout.write(report);
+	process.stdout.write(document);
 }
