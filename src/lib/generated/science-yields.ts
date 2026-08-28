@@ -178,6 +178,17 @@ export const LEADER_TRAIT_IMPROVEMENT_MODIFIER: Readonly<
 	Record<string, Readonly<Record<string, number>>>
 > = { TRAIT_CULTIVATOR: { IMPROVEMENT_GROVE: 20 } };
 
+// A wonder that pays a percent of city science only while the city's
+// ruling family is of the right class (<aeEffectCityEffectCity>): the
+// Aksum Stele tiers, +10/25/50% in a Clerics city.
+export const IMPROVEMENT_FAMILY_CLASS_SCIENCE_MODIFIER: Readonly<
+	Record<string, Readonly<Record<string, number>>>
+> = {
+	IMPROVEMENT_AKSUM_STELE_1: { FAMILYCLASS_CLERICS: 10 },
+	IMPROVEMENT_AKSUM_STELE_2: { FAMILYCLASS_CLERICS: 25 },
+	IMPROVEMENT_AKSUM_STELE_3: { FAMILYCLASS_CLERICS: 50 },
+};
+
 // Improvement → its class, for the science-relevant improvements the
 // tile modifiers above are looked up against.
 export const IMPROVEMENT_CLASS: Readonly<Record<string, string>> = {

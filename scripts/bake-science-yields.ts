@@ -69,6 +69,12 @@ interface ResourceYieldPair {
 	zIndex?: string;
 	SubPair?: SubPair | SubPair[];
 }
+// A <Pair> mapping one type to another rather than to a number, the shape
+// <aeEffectCityEffectCity> uses: "when the city also holds zIndex, add zValue".
+interface TypePair {
+	zIndex?: string;
+	zValue?: string;
+}
 interface Entry {
 	zType?: string;
 	Class?: string;
@@ -110,6 +116,7 @@ interface Entry {
 	// "when effect <zIndex> is present in this city, pay <SubPair>" — the shape
 	// Philosophy's Forum science and the Scholar archetype's Archive science use.
 	aaiEffectCityYieldRate?: { Pair?: ResourceYieldPair | ResourceYieldPair[] };
+	aeEffectCityEffectCity?: { Pair?: TypePair | TypePair[] };
 }
 
 const parser = new XMLParser({
@@ -787,6 +794,52 @@ async function main(): Promise<void> {
 	const leaderTraitImprovementModifier = bySource(traits, (t) =>
 		cityEffectsOfPlayerEffect(t.LeaderEffectPlayer),
 	);
+	// Conditional city modifiers: <aeEffectCityEffectCity> is "when the city
+	// ALSO holds effect X, add effect Y" (City.addEffectYield, City.cs:4697,
+	// which multiplies the two effects' counts). The three Aksum Stele tiers
+	// are the only science ones and every condition is a family class, so the
+	// table keys by that; anything else throws rather than being dropped.
+	const familyClassOfEffect = new Map<string, string>();
+	for (const fc of familyClasses) {
+		if (fc.zType && fc.EffectCity)
+			familyClassOfEffect.set(fc.EffectCity, fc.zType);
+	}
+	const typePairs = (block?: { Pair?: TypePair | TypePair[] }): TypePair[] => {
+		const p = block?.Pair;
+		if (p == null) return [];
+		return Array.isArray(p) ? p : [p];
+	};
+	const improvementFamilyClassScience: Record<
+		string,
+		Record<string, number>
+	> = {};
+	for (const imp of improvements) {
+		if (!imp.zType || !imp.EffectCity) continue;
+		const effect = effectByType.get(imp.EffectCity);
+		if (!effect) continue;
+		for (const pair of typePairs(effect.aeEffectCityEffectCity)) {
+			if (!pair.zIndex || !pair.zValue) continue;
+			const bonus = effectByType.get(pair.zValue);
+			if (!bonus) continue;
+			const percent = yieldValue(pairs(bonus.aiYieldModifier), "YIELD_SCIENCE");
+			const flat = yieldValue(pairs(bonus.aiYieldRate), "YIELD_SCIENCE");
+			if (percent === 0 && flat === 0) continue;
+			if (flat !== 0) {
+				throw new Error(
+					`bake-science-yields: ${pair.zValue} pays FLAT conditional science, which belongs with the city-effect rows, not the percent modifiers`,
+				);
+			}
+			const familyClass = familyClassOfEffect.get(pair.zIndex);
+			if (!familyClass) {
+				throw new Error(
+					`bake-science-yields: ${imp.zType} grants science when a city holds ${pair.zIndex}, which is not a family-class effect — the condition needs resolving from the blob before it can be baked`,
+				);
+			}
+			const row = (improvementFamilyClassScience[imp.zType] ??= {});
+			row[familyClass] = (row[familyClass] ?? 0) + percent;
+		}
+	}
+
 	// A wonder standing in the city could grant one too, but the only science
 	// rule of that shape today — the Cult of the Mother's +50% to shrines —
 	// is defined in improvement-event-sap.xml, and this bake sweeps only
@@ -1036,6 +1089,17 @@ async function main(): Promise<void> {
 	lines.push("// sums the two effects.");
 	lines.push(
 		`export const LEADER_TRAIT_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(leaderTraitImprovementModifier))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// A wonder that pays a percent of city science only while the city's",
+	);
+	lines.push(
+		"// ruling family is of the right class (<aeEffectCityEffectCity>): the",
+	);
+	lines.push("// Aksum Stele tiers, +10/25/50% in a Clerics city.");
+	lines.push(
+		`export const IMPROVEMENT_FAMILY_CLASS_SCIENCE_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(improvementFamilyClassScience))};`,
 	);
 	lines.push("");
 	lines.push(
