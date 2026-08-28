@@ -552,6 +552,17 @@ async function main(): Promise<void> {
 		if (flat > 0 || eff.pct > 0) {
 			improvementScience[imp.zType] = { flat: flat / 10, pct: eff.pct };
 		}
+		// The tile-modifier tables below multiply this `flat` as a TILE yield,
+		// which holds only while none of it arrives through <EffectCity> — a
+		// city effect is added after the tile's modifiers, not multiplied by
+		// them (Tile.yieldOutputForGovernor → yieldOutputCityEffects). True of
+		// every science improvement today; if a patch changes that, the field
+		// has to split into its tile and city halves rather than drift.
+		if (eff.flat > 0) {
+			throw new Error(
+				`bake-science-yields: ${imp.zType} pays flat science through ${imp.EffectCity}, which the tile modifiers would wrongly multiply — split ImprovementScience.flat`,
+			);
+		}
 		const byResource = imp.Class
 			? classResourceScience.get(imp.Class)
 			: undefined;
@@ -607,10 +618,18 @@ async function main(): Promise<void> {
 		(improvementScience[zType]?.flat ?? 0) > 0 ||
 		improvementResourceScience[zType] != null;
 	// A token is either an improvement or a class; a class counts when any of
-	// its improvements pays science.
-	const producesScience = (token: string): boolean =>
-		improvementProducesScience(token) ||
-		(improvementsOfClass.get(token) ?? []).some(improvementProducesScience);
+	// its improvements pays science. Declared before the tables below fill it,
+	// because the per-adjacent-resource yield counts too — a library earns no
+	// science of its own, but a percent modifier on one would still multiply
+	// what its neighbouring resources pay it.
+	const producesScience = (token: string): boolean => {
+		const pays = (zType: string) =>
+			improvementProducesScience(zType) ||
+			improvementAdjacentResourceScience[zType] != null;
+		return (
+			pays(token) || (improvementsOfClass.get(token) ?? []).some((z) => pays(z))
+		);
+	};
 	// The class of every token a rule can name, so the breakdown can label a
 	// row by class. A granting Temple pays no science of its own and would
 	// otherwise be absent from IMPROVEMENT_CLASS.
@@ -618,6 +637,31 @@ async function main(): Promise<void> {
 		const cls = classOfImprovement.get(token);
 		if (cls) improvementClass[token] = cls;
 	};
+
+	// Improvement → science per adjacent resource tile the team owns
+	// (Tile.countTeamAdjacentResources). The library line carries the only
+	// science one, on its CLASS; the improvement-level table is read too
+	// because the game sums both.
+	const classAdjacentResourceScience = new Map<string, number>();
+	for (const cls of improvementClasses) {
+		if (!cls.zType) continue;
+		const science = yieldValue(
+			pairs(cls.aiAdjacentResourceYieldOutput),
+			"YIELD_SCIENCE",
+		);
+		if (science !== 0) classAdjacentResourceScience.set(cls.zType, science);
+	}
+	const improvementAdjacentResourceScience: Record<string, number> = {};
+	for (const imp of improvements) {
+		if (!imp.zType) continue;
+		const science =
+			yieldValue(pairs(imp.aiAdjacentResourceYieldOutput), "YIELD_SCIENCE") +
+			(imp.Class ? (classAdjacentResourceScience.get(imp.Class) ?? 0) : 0);
+		if (science > 0) {
+			improvementAdjacentResourceScience[imp.zType] = science / 10;
+			recordClass(imp.zType);
+		}
+	}
 
 	// Adjacency. DIRECTION IS INVERTED FROM HOW THE XML READS: InfoHelpers
 	// .adjacentYieldOutputImprovementModifier(eImprovement, eAdjacent)
@@ -658,31 +702,6 @@ async function main(): Promise<void> {
 		throw new Error(
 			"bake-science-yields: no science adjacency modifiers found (Monastery→Grove is the canonical one) — the improvement XML shape changed",
 		);
-	}
-
-	// Improvement → science per adjacent resource tile the team owns
-	// (Tile.countTeamAdjacentResources). The library line carries the only
-	// science one, on its CLASS; the improvement-level table is read too
-	// because the game sums both.
-	const classAdjacentResourceScience = new Map<string, number>();
-	for (const cls of improvementClasses) {
-		if (!cls.zType) continue;
-		const science = yieldValue(
-			pairs(cls.aiAdjacentResourceYieldOutput),
-			"YIELD_SCIENCE",
-		);
-		if (science !== 0) classAdjacentResourceScience.set(cls.zType, science);
-	}
-	const improvementAdjacentResourceScience: Record<string, number> = {};
-	for (const imp of improvements) {
-		if (!imp.zType) continue;
-		const science =
-			yieldValue(pairs(imp.aiAdjacentResourceYieldOutput), "YIELD_SCIENCE") +
-			(imp.Class ? (classAdjacentResourceScience.get(imp.Class) ?? 0) : 0);
-		if (science > 0) {
-			improvementAdjacentResourceScience[imp.zType] = science / 10;
-			recordClass(imp.zType);
-		}
 	}
 
 	// The city half. Everything a city holds is an EffectCity, and each can
