@@ -297,15 +297,18 @@ function adjacentModifier(
 	improvementClass: string | undefined,
 	neighbour: string,
 ): number {
-	let percent = 0;
-	for (const from of [neighbour, IMPROVEMENT_CLASS[neighbour]]) {
-		if (from == null) continue;
-		const rules = IMPROVEMENT_ADJACENT_MODIFIER[from];
-		if (rules == null) continue;
-		percent += rules[improvement] ?? 0;
-		if (improvementClass != null) percent += rules[improvementClass] ?? 0;
-	}
-	return percent;
+	const byNeighbour = IMPROVEMENT_ADJACENT_MODIFIER[neighbour];
+	const neighbourClass = IMPROVEMENT_CLASS[neighbour];
+	const byNeighbourClass =
+		neighbourClass != null
+			? IMPROVEMENT_ADJACENT_MODIFIER[neighbourClass]
+			: undefined;
+	if (improvementClass == null) return byNeighbour?.[improvement] ?? 0;
+	return (
+		(byNeighbour?.[improvement] ?? 0) +
+		(byNeighbour?.[improvementClass] ?? 0) +
+		(byNeighbourClass?.[improvementClass] ?? 0)
+	);
 }
 
 /**
@@ -921,17 +924,15 @@ export function scienceBreakdown(
 		acc.order = Math.max(acc.order, order);
 		rows.set(label, acc);
 	};
-	// Rules name an improvement OR its class; the two token spaces don't
-	// collide, so one label helper covers both.
-	const tokenLabel = (token: string): string =>
-		token.startsWith("IMPROVEMENTCLASS_")
-			? formatEnum(token, "IMPROVEMENTCLASS_")
-			: improvementLabel(token);
 	// A tile reads as its CLASS — "Grove next to Monastery" — so the six
 	// per-religion monastery rules collapse into one row instead of splitting
 	// the comparison table six ways.
-	const tileLabel = (improvement: string): string =>
-		tokenLabel(IMPROVEMENT_CLASS[improvement] ?? improvement);
+	const tileLabel = (improvement: string): string => {
+		const cls = IMPROVEMENT_CLASS[improvement];
+		return cls
+			? formatEnum(cls, "IMPROVEMENTCLASS_")
+			: improvementLabel(improvement);
+	};
 
 	// City-granted rules, resolved per city from what the save records: the
 	// player's nation and their ruler's traits reach every city; the city's own
@@ -1062,6 +1063,9 @@ export function scienceBreakdown(
 		const flat = tenths(perResource) * resources;
 		const percent = rules.reduce((total, r) => total + r.percent, 0);
 		if (flat === 0 && percent === 0) continue;
+		// Rules that cancel out (a future penalty against a bonus) leave
+		// nothing to attribute and would divide by zero below.
+		if (percent === 0) rules.length = 0;
 		const specialistPct = specialistTileModifier(improvement, t.specialist);
 		const staffed = (value: number) =>
 			modify(modify(value, percent), specialistPct);
