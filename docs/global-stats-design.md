@@ -144,13 +144,13 @@ Alternatives considered and rejected: **t-digest / reservoir sampling** (constan
 
 The deciding fact is that the bundle is **size-stable as the corpus grows**. `yieldCurves` is 16 series × 2 (rate/cumulative) × 3 bands × 3 cohorts = 288 arrays of length `turns.length` — that is `O(max_turn)`, not `O(games)`. The per-nation/law/tech rows are `O(nations × laws)`. On the current 152-turn axis the all-public bundle is 622 KB of JSON, 154 KB gzipped, and it stays there as games accumulate. The 10-game single-player slice is 385 KB / 94 KB on the same axis — 57× fewer games for 62% of the payload — which is the property this section rests on.
 
-The only `O(games)` field is `save_dates`, which the global bundle drops anyway (§8.1).
+Two fields scale with game count rather than turn count: `save_dates`, which the global bundle drops (§8.1), and `openingLaws`, which §8.2 bounds. With both handled the size-stability above holds.
 
 **The rule to revisit this:** split per category only if a field is added whose size scales with game count.
 
 ### 8.1 Per-field disposition
 
-Which `ChartBundleCore` fields survive the widening to a global corpus. **Skeleton — to be worked through in a later session.**
+Which `ChartBundleCore` fields survive the widening to a global corpus.
 
 | Field | Global? | Notes |
 | --- | --- | --- |
@@ -158,21 +158,31 @@ Which `ChartBundleCore` fields survive the widening to a global corpus. **Skelet
 | `summary.total_games` | keep | |
 | `summary.avg_total_turns` | keep | |
 | `save_dates` | **drop** | `O(games)`; a calendar heatmap of the whole site is not a chart |
-| `favorite_day_of_week` | TBD | derived from `save_dates` |
+| `favorite_day_of_week` | **drop** | no consumer on any surface — the profile card reads its own copy from `GET /v1/users/:user_id`, not the bundle |
 | `nations` | keep | |
 | `nationWinRate` | keep | reads as deviation from ~50%, not absolute |
 | `nationAvgPoints` | keep | |
 | `startingArchetypeWinRate` | keep | |
 | `startingTraitWinRate` | keep | |
-| `wonderStats` | TBD | eligibility denominator excludes pre-2.12.0 blobs |
+| `wonderStats` | keep | a row reports the pooled subset when it has a denominator, everything when it has none (gate 1, `aggregate.ts`) |
 | `capitalFamilyWinRate` | keep | |
 | `familyByNation` | keep | |
 | `yieldCurves` | keep | the payload and memory driver |
 | `lawTiming` | keep | |
-| `openingLaws` | TBD | cardinality across a global corpus is unbounded |
+| `openingLaws` | keep, bounded | `O(games)` as it stands — §8.2 |
 | `expansionWinRate` | keep | |
 | `techFirst` | keep | |
 | `techTiming` | keep | |
+
+### 8.2 Bounding `openingLaws`
+
+Distinct (nation, four-law-set) rows grow with the corpus — 139 at 143 games, 270 at 286, 469 at 572 — and 67% of them are singletons. At 51 KB it is the third-largest field, and the only one besides `save_dates` without a ceiling.
+
+The chart never shows the tail: `openingLawsOption` (`src/lib/stats/charts/laws.ts`) ranks and takes the top 15. So the field ships hundreds of rows to render fifteen.
+
+Bounding it server-side is not quite a `slice()`, because the "All nations" view sums a combo's counts across nations *before* ranking, so a per-nation top-N can drop a row that would have placed in the aggregate. Two forms work: drop `count == 1` rows, which is safe only while the modal count stays clear of the 13 a singleton could sum to (19 today — a real margin, but one that narrows); or rank after the cross-nation sum and keep the top N per nation plus the top N overall, which has no expiry date and is what to build.
+
+Either changes chart output on the user page as well, so it lands against the round-trip test, not before it.
 
 ## 9. Frontend
 
@@ -200,13 +210,15 @@ Because the payload is byte-identical for every viewer and changes at most night
 
 ## 12. Caching and the cold-start problem
 
-Precomputation inverts what a cache miss means. Today a miss recomputes; for a precomputed slice, recompute-on-request is what you cannot afford.
+A whole-corpus aggregation is ~1s of JS and ~60 MB with §7.1 (§6.1), which fits a fetch handler with room. So precomputation is an optimization, not something the request path depends on: **a miss computes in the request, exactly as a faceted selection does.** The cron warms the cache rather than owning it, which is also why first population needs no deploy-runbook step and `putCached`'s 24h TTL can stay as it is.
 
-Three things need explicit answers in the implementation:
+Two things still need explicit answers.
 
-1. **Miss behavior.** A parser-version or `BUNDLE_SCHEMA_VERSION` bump orphans every precomputed entry (both are in the key), leaving nothing until the next cron run — up to 24 hours. Options: a not-ready response, serve-stale under the previous key, or a version-tolerant key.
-2. **First population.** A fresh deploy has no entries until the cron fires. The deploy runbook (`docs/cloud-deploy-plan.md`, the `deploy` skill) needs a step; how to trigger a scheduled event against a deployed Worker has not been verified.
-3. **TTL.** `putCached`'s 24h TTL races a nightly write. Precomputed entries need a longer TTL, or none.
+**Serve-stale is available on one of the key's two version segments, not both.** A `parser_version` bump orphans every entry without changing the bundle's shape, so the previous entry is merely stale and safe to serve while the new one computes. A `BUNDLE_SCHEMA_VERSION` bump does change the shape, and `cache.ts` is explicit that the bundle types declare every field required so consumers dereference them directly — a frontend on the new shape reading a pre-bump bundle breaks on it. So: serve-stale on parser drift, recompute on schema drift. Treating the two segments alike is what makes the option look unavailable.
+
+Neither bump is rare enough to wave off — five bundle-schema versions landed between 2026-05-24 and 2026-07-26, and the parser moved several times over the same window.
+
+**The herd is the real cost of a cold key.** Every concurrent request recomputes at 108 queries apiece, bounded only by §11's rate limit — which ties the abuse ceiling to the cold-start ceiling, two knobs that should move independently. A single-flight lock in KV, or simply accepting the duplicate work at this corpus size, are both defensible; inheriting the coupling by default is not.
 
 Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. Facet keys must be **normalized** (sorted, deduped) so that selecting Rome-then-Greece and Greece-then-Rome hit the same entry.
 
@@ -220,8 +232,8 @@ Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. F
 
 ## 14. Open questions
 
-1. **`favorite_day_of_week`, `wonderStats`, `openingLaws`** dispositions in the §8.1 table.
-2. **Miss behavior** choice from §12.
+1. **Cold-start latency.** A miss computes in the request (§12) — affordable, but ~1s of CPU plus D1 round trips. Whether an anonymous visitor waits for that or sees a warming state is a product call, not a measurement.
+2. **Herd control on a cold key** — a single-flight lock versus accepting duplicate recomputes (§12).
 
 ## 15. Deferred, with growth triggers
 
@@ -265,19 +277,20 @@ One branch, one session. Ordered so each step is verifiable before the next depe
 
 1. **Fixture → bundle round-trip test** (§13). Nothing else is safely verifiable without it.
 2. **Disjoint cohorts** in `loadYieldCurves` (§7.1) — load-bearing for the all-public slice, not an optimization. Prove byte-identical output against step 1.
-3. **Shared composition predicates** — the player-counting duel/FFA/single-player fragments (§3), in `games-scope.ts`, used by the global resolver.
-4. **`resolveGlobalCorpus`** — slice + facets → corpus, with the focal-restriction form for nations (§4.2).
-5. **Cron precompute** for the four slices + KV `global` key variant + miss behavior (§12), with its own cron pattern and staging enabled (§13).
-6. **`GET /v1/stats`** — public, own rate-limit budget, on-demand facet path (§5, §11).
-7. **Registry parameterized over `ChartBundleCore`** (§9).
-8. **`/stats` route + facet UI** (§9).
+3. **Bound `openingLaws`** (§8.2) so the bundle stops scaling with game count. Changes chart output, so it diffs against step 1.
+4. **Shared composition predicates** — the player-counting duel/FFA/single-player fragments (§3), in `games-scope.ts`, used by the global resolver.
+5. **`resolveGlobalCorpus`** — slice + facets → corpus, with the focal-restriction form for nations (§4.2).
+6. **Cron precompute** for the four slices + KV `global` key variant + the serve-stale rule (§12), with its own cron pattern and staging enabled (§13).
+7. **`GET /v1/stats`** — public, own rate-limit budget, on-demand facet path (§5, §11).
+8. **Registry parameterized over `ChartBundleCore`** (§9).
+9. **`/stats` route + facet UI** (§9).
 
-Turn-window chunking (§7.2) is out of scope here; it slots between 2 and 3 only if a slice crosses the row count in §7.2.
+Turn-window chunking (§7.2) is out of scope here; it slots after step 2 only if a slice crosses the row count in §7.2.
 
 ## 18. Docs to update on ship
 
 - **`docs/aggregate-statistics.md`** — its "Future work" bullet predicts this feature and asserts the cost is caching ("an arbitrary game-id set hashes to a poor hit-rate key"). That is wrong: caching is the easy part once the slice set is enumerable, and the real costs are isolate memory and the per-invocation query ceiling. Correct it, and fold the as-built outcome in.
 - **`docs/api-reference.md`** — the new endpoint.
-- **`docs/cloud-deploy-plan.md`** — the first-population step (§12.2), and it still points a health check at the retired `/v1/stats` path (§486, §521), which this feature now claims for something else.
+- **`docs/cloud-deploy-plan.md`** — it still points a health check at the retired `/v1/stats` path (§486, §521), which this feature now claims for something else. No first-population step is needed: a cold key computes in the request (§12).
 - **`docs/tournament-stats-design.md`** — §5's UI-generalization notes are superseded once the registry is parameterized.
 - **This doc** — retire it into `docs/aggregate-statistics.md` once built.
