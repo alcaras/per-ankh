@@ -37,11 +37,50 @@ const NATIONS = [
 	"NATION_YUEZHI",
 ] as const;
 
+// The yield series a share blob carries, mirroring SHARE_YIELD_TYPES in
+// src/lib/parser/derive/yield-history.ts. Cloud keeps its own copies of
+// frontend-derived data rather than importing across the package boundary.
+// Order is load-bearing: a series' position offsets its values, so no two of
+// the sixteen curves in a bundle carry the same numbers and a chart wired to
+// the wrong column fails loudly.
+const YIELD_TYPES = [
+	"YIELD_SCIENCE",
+	"YIELD_CIVICS",
+	"YIELD_TRAINING",
+	"YIELD_GROWTH",
+	"YIELD_CULTURE",
+	"YIELD_HAPPINESS",
+	"YIELD_ORDERS",
+	"YIELD_FOOD",
+	"YIELD_MONEY",
+	"YIELD_DISCONTENT",
+	"YIELD_IRON",
+	"YIELD_STONE",
+	"YIELD_WOOD",
+	"YIELD_MAINTENANCE",
+] as const;
+
+// The two stock series (military_power, legitimacy) come from player_history
+// rather than yield_history. These keep their values clear of the yields' range
+// and of each other, for the same reason the yield offsets exist.
+const MILITARY_POWER_OFFSET = 100;
+const LEGITIMACY_OFFSET = 200;
+
+// Character xml_ids for seeded rulers, one per player index. Clear of the
+// city_id range so a mis-keyed lookup can't land on a real row.
+const RULER_XML_ID_BASE = 1000;
+
+// games.save_date when a fixture doesn't ask for one.
+const DEFAULT_SAVE_DATE = "2026-01-01";
+
 export interface UploadFixtureOpts {
 	// player_index of the winning human. Restricted to the first two seats,
 	// which is every seat in the default two-human shape; a wider or narrower
-	// roster is `humans` below.
-	readonly winnerIndex: 0 | 1;
+	// roster is `humans` below. Pass null for a save that records completion
+	// with no winner — very old saves do, and handleGameUpload gates only on
+	// game_over. Every player_summaries.is_winner is then 0, which is what the
+	// aggregator reads as an undecided game.
+	readonly winnerIndex: 0 | 1 | null;
 	// Salt mixed into the ZIP placeholder so two fixtures produce
 	// distinct file_hash values; defaults to a fresh nanoid.
 	readonly nonce?: string;
@@ -86,6 +125,48 @@ export interface UploadFixtureOpts {
 		capturedFrom?: number;
 	}>;
 	readonly disabledImprovements?: readonly string[];
+	// Per-turn series → game_player_turn rows, via yield_history +
+	// player_history. Omitted, a fixture produces no turn rows at all: the
+	// bundle's yieldCurves comes back empty and nationAvgPoints has no
+	// final_points to read.
+	readonly turns?: ReadonlyArray<{
+		readonly player: number;
+		// One value per turn, from turn 1. Each yield's rate is the value plus
+		// that yield's index in YIELD_TYPES and its cumulative the running sum;
+		// points takes the value as-is, military_power and legitimacy take it
+		// offset clear of the yields.
+		readonly values: readonly number[];
+	}>;
+	// Law adoptions → law_events, behind both lawTiming and openingLaws.
+	// Succession laws are accepted and worth passing: the aggregator drops them
+	// from both charts, which is only observable if a fixture supplies one.
+	readonly laws?: ReadonlyArray<{
+		readonly player: number;
+		readonly law: string;
+		readonly turn: number;
+	}>;
+	// Completed techs → tech_events (techFirst, techTiming). A turn-1 tech is
+	// the nation's starting grant rather than a research choice and the
+	// aggregator excludes it, so a fixture that wants a first-tech row
+	// researches past turn 1.
+	readonly techs?: ReadonlyArray<{
+		readonly player: number;
+		readonly tech: string;
+		readonly turn: number;
+	}>;
+	// The player's starting ruler → player_summaries.starting_ruler_archetype
+	// and .starting_ruler_traits. An archetype is itself a trait — the game
+	// records it as a self-named TRAIT_*_ARCHETYPE — so it is stamped on the
+	// character and repeated in its trait list the way a real save carries it,
+	// and the leader charts split the two apart again.
+	readonly rulers?: ReadonlyArray<{
+		readonly player: number;
+		readonly archetype: string;
+		readonly traits?: readonly string[];
+	}>;
+	// games.save_date, which the calendar heatmap and favorite_day_of_week read.
+	// Defaults to DEFAULT_SAVE_DATE, so a fixture wanting two weekdays asks.
+	readonly saveDate?: string;
 	// Append a non-human player after the humans (index 2 in the default
 	// two-human shape). The wonder stats count only human builders, so an AI
 	// build has to be visible to the eligibility gate — a wonder it finished is
@@ -133,7 +214,7 @@ export async function buildUploadFormData(
 }
 
 function buildMinimalGameBlob(
-	winnerIndex: 0 | 1,
+	winnerIndex: 0 | 1 | null,
 	parserVersion: string | undefined,
 	humans: number,
 	opts: UploadFixtureOpts,
@@ -161,6 +242,52 @@ function buildMinimalGameBlob(
 			? `steam:${String(s.index + 1).padStart(15, "0")}`
 			: null,
 	}));
+	// yield_history / player_history — the indexer pivots these back into one
+	// game_player_turn row per (player, turn).
+	const turnSeries = opts.turns ?? [];
+	const yieldHistory = turnSeries.flatMap((t) =>
+		YIELD_TYPES.map((yieldType, seriesIdx) => {
+			let running = 0;
+			return {
+				player_id: t.player,
+				yield_type: yieldType,
+				data: t.values.map((v, turnIdx) => {
+					const rate = v + seriesIdx;
+					running += rate;
+					return { turn: turnIdx + 1, rate, cumulative: running };
+				}),
+			};
+		}),
+	);
+	const playerHistory = turnSeries.map((t) => ({
+		player_id: t.player,
+		history: t.values.map((v, turnIdx) => ({
+			turn: turnIdx + 1,
+			points: v,
+			military_power: v + MILITARY_POWER_OFFSET,
+			legitimacy: v + LEGITIMACY_OFFSET,
+		})),
+	}));
+
+	// law_adoption_history is grouped per player, and its synthetic start/end
+	// points carry a null law_name — only named adoptions become law_events.
+	const laws = opts.laws ?? [];
+	const lawAdoptionHistory = [...new Set(laws.map((l) => l.player))].map(
+		(player) => ({
+			player_id: player,
+			data: laws
+				.filter((l) => l.player === player)
+				.map((l) => ({ turn: l.turn, law_count: 1, law_name: l.law })),
+		}),
+	);
+
+	// One royal per seeded ruler, on the throne from turn 0. derivePlayerSummary
+	// takes the earliest became_leader_turn as the starting ruler, then the
+	// traits stamped on it by turn 1.
+	const rulers = opts.rulers ?? [];
+
+	const saveDate = opts.saveDate ?? DEFAULT_SAVE_DATE;
+
 	return {
 		version: 2,
 		parser_version: parserVersion ?? PARSER_VERSION,
@@ -169,7 +296,7 @@ function buildMinimalGameBlob(
 			xml_game_id: nanoid(12),
 			total_turns: 100,
 			game_name: "Test Match",
-			save_date: "2026-01-01",
+			save_date: saveDate,
 			game_version: "1.0.0",
 			map_width: 80,
 			map_height: 52,
@@ -182,16 +309,19 @@ function buildMinimalGameBlob(
 			enabled_mods: null,
 			enabled_dlc: null,
 			game_over: true,
-			winner: {
-				winner_player_xml_id: winnerIndex,
-				winner_team_id: null,
-				victory_type: "VICTORY_AMBITION",
-			},
+			winner:
+				winnerIndex === null
+					? null
+					: {
+							winner_player_xml_id: winnerIndex,
+							winner_team_id: null,
+							victory_type: "VICTORY_AMBITION",
+						},
 		},
 		game_details: {
 			match_id: 1,
 			game_name: "Test Match",
-			save_date: "2026-01-01",
+			save_date: saveDate,
 			total_turns: 100,
 			map_size: "MAPSIZE_DUEL",
 			map_class: "MAPCLASS_OPEN",
@@ -199,9 +329,9 @@ function buildMinimalGameBlob(
 			difficulty: "LEVEL_THE_GREAT",
 			opponent_level: "LEVEL_THE_GREAT",
 			winner_player_id: winnerIndex,
-			winner_name: "Player " + winnerIndex,
-			winner_civilization: "NATION_EGYPT",
-			winner_victory_type: "VICTORY_AMBITION",
+			winner_name: winnerIndex === null ? null : "Player " + winnerIndex,
+			winner_civilization: winnerIndex === null ? null : NATIONS[winnerIndex],
+			winner_victory_type: winnerIndex === null ? null : "VICTORY_AMBITION",
 			// Only a 2.12.0+ blob carries this; omitting it models an older save,
 			// which leaves the game out of the wonder-eligibility denominator.
 			...(opts.disabledImprovements
@@ -209,13 +339,19 @@ function buildMinimalGameBlob(
 				: {}),
 			players,
 		},
-		player_history: [],
-		yield_history: [],
+		player_history: playerHistory,
+		yield_history: yieldHistory,
 		event_logs: [],
-		law_adoption_history: [],
+		law_adoption_history: lawAdoptionHistory,
 		current_laws: [],
 		tech_discovery_history: [],
-		completed_techs: [],
+		completed_techs: (opts.techs ?? []).map((t) => ({
+			player_id: t.player,
+			player_name: `Player ${t.player}`,
+			nation: NATIONS[t.player],
+			tech: t.tech,
+			completed_turn: t.turn,
+		})),
 		units_produced: [],
 		city_statistics: {
 			cities: (opts.cities ?? []).map((c, i) => ({
@@ -268,8 +404,21 @@ function buildMinimalGameBlob(
 					]),
 			).values(),
 		],
-		characters: [],
-		character_traits: [],
+		characters: rulers.map((r) => ({
+			xml_id: RULER_XML_ID_BASE + r.player,
+			player_xml_id: r.player,
+			is_royal: true,
+			became_leader_turn: 0,
+			death_turn: null,
+			archetype: r.archetype,
+		})),
+		character_traits: rulers.flatMap((r) =>
+			[r.archetype, ...(r.traits ?? [])].map((trait) => ({
+				character_xml_id: RULER_XML_ID_BASE + r.player,
+				trait_name: trait,
+				acquired_turn: 1,
+			})),
+		),
 		player_roster: playerRoster,
 	};
 }
