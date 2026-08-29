@@ -12,27 +12,29 @@
 	import { page } from "$app/state";
 	import type { ResolvedPathname } from "$app/types";
 	import type { TournamentDetail } from "$lib/api-cloud";
-	import { tournamentView, type TournamentView } from "./views";
+	import {
+		tournamentView,
+		tournamentViewLabel,
+		type TournamentView,
+	} from "./views";
 
 	let { tournament }: { tournament: TournamentDetail } = $props();
 
+	// Each tab is just its view plus the href to reach it; the label comes from
+	// views.ts, which the crumb leaves read too.
 	const navTabs: {
-		label: string;
 		view: TournamentView;
 		href: ResolvedPathname;
 	}[] = $derived([
 		{
-			label: "Overview",
 			view: "overview",
 			href: resolve("/tournaments/[slug]", { slug: tournament.slug }),
 		},
 		{
-			label: "Matches",
 			view: "matches",
 			href: resolve("/tournaments/[slug]/matches", { slug: tournament.slug }),
 		},
 		{
-			label: "Stats",
 			view: "stats",
 			href: resolve("/tournaments/[slug]/stats", { slug: tournament.slug }),
 		},
@@ -43,7 +45,6 @@
 		...(tournament.youtube_playlist_url
 			? [
 					{
-						label: "Videos",
 						// `as const` only here: the annotation on navTabs above
 						// contextually types that array's own elements, but does not
 						// reach through this conditional spread.
@@ -89,7 +90,7 @@
 			aria-current={i === activeIndex ? "page" : undefined}
 			class="relative z-10 px-3 py-1.5 text-center text-xs font-bold text-tan transition-colors"
 		>
-			{tab.label}
+			{tournamentViewLabel(tab.view)}
 		</a>
 	{/each}
 	<!-- eslint-enable svelte/no-navigation-without-resolve -->

@@ -22,7 +22,7 @@
 	import SignedUpPopover from "$lib/tournament/SignedUpPopover.svelte";
 	import TournamentActions from "$lib/tournament/TournamentActions.svelte";
 	import TournamentViewTabs from "$lib/tournament/TournamentViewTabs.svelte";
-	import { tournamentView } from "$lib/tournament/views";
+	import { tournamentView, tournamentViewLabel } from "$lib/tournament/views";
 	import { resolveInitialZone } from "$lib/tournament/zone-preference";
 	import { ZoneClock, setZoneClock } from "$lib/tournament/zone-context.svelte";
 	import type { LayoutData } from "./$types";
@@ -41,35 +41,23 @@
 	const view = $derived(tournamentView(page.route.id));
 	const isMatches = $derived(view === "matches");
 	const isStats = $derived(view === "stats");
-	const isVideos = $derived(view === "videos");
 	const isOverview = $derived(view === "overview");
 
-	// Canonical trail. Overview: the name is the tail (no link). Matches/Stats:
-	// the name links back to Overview, with a leaf naming the current view.
+	// Canonical trail. Overview: the name is the tail (no link). Every other view:
+	// the name links back to Overview, with a leaf naming the current view — read
+	// from views.ts, the same source the tabs label themselves from.
 	const crumbs = $derived.by((): Crumb[] => {
 		const base: Crumb[] = [
 			{ label: "Home", href: resolve("/") },
 			{ label: "Tournaments", href: resolve("/tournaments") },
 		];
-		if (isMatches)
-			return [
-				...base,
-				{ label: tournament.name, href: overviewHref },
-				{ label: "Matches" },
-			];
-		if (isStats)
-			return [
-				...base,
-				{ label: tournament.name, href: overviewHref },
-				{ label: "Stats" },
-			];
-		if (isVideos)
-			return [
-				...base,
-				{ label: tournament.name, href: overviewHref },
-				{ label: "Videos" },
-			];
-		return [...base, { label: tournament.name }];
+		if (view == null || view === "overview")
+			return [...base, { label: tournament.name }];
+		return [
+			...base,
+			{ label: tournament.name, href: overviewHref },
+			{ label: tournamentViewLabel(view) },
+		];
 	});
 
 	// Status chip — Overview-only, matching today's header (Matches/Stats carry

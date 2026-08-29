@@ -1,7 +1,8 @@
-// Which of a tournament's top-level views a route sits on — the single owner of
-// the route-id → view mapping, shared by the tournament layout (header chrome
-// and crumbs) and TournamentViewTabs (the sliding pill). Both used to derive
-// this separately, each commented "same rule as the other".
+// Which of a tournament's top-level views a route sits on, and what that view is
+// called — the single owner of the route-id → view → label mapping, shared by the
+// tournament layout (header chrome and crumbs) and TournamentViewTabs (the
+// sliding pill). Both used to derive the view separately, each commented "same
+// rule as the other", and both spelled the labels out again on their own.
 //
 // Matched on `page.route.id`, NOT on `page.url.pathname`. `resolve()` returns
 // `base + path`, and during SSR `base` is RELATIVE to the page being rendered
@@ -35,4 +36,20 @@ export function tournamentView(routeId: RouteId | null): TournamentView | null {
 		default:
 			return null;
 	}
+}
+
+// What each view is called wherever it's named in navigation: the tabs' pill on
+// every view, and — for the three that sit under Overview — the crumb leaf.
+// Overview reads its label here too even though its crumb is the tournament's
+// own name, so renaming a view stays one edit.
+const VIEW_LABELS: Record<TournamentView, string> = {
+	overview: "Overview",
+	matches: "Matches",
+	stats: "Stats",
+	videos: "Videos",
+};
+
+/** The navigation label for a view. */
+export function tournamentViewLabel(view: TournamentView): string {
+	return VIEW_LABELS[view];
 }
