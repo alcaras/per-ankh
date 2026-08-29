@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026-08-29-ea24eb6] - 2026-08-29
+
+### Features
+
+- (admin) duel-event-titles sweeps raw saves for fired events — [28a987c](https://github.com/becked/per-ankh/commit/28a987c12062190ba37c8a3a0495d0363c88d16a)
+- (admin) duel-event-titles counts each event and writes CSV — [6ee057d](https://github.com/becked/per-ankh/commit/6ee057d8dad0d6e090f961b430390ff2135eaac0)
+- (tournament) a 12/24-hour clock toggle beside the UTC/local one — [d26f3f3](https://github.com/becked/per-ankh/commit/d26f3f37689cd2fb1a7029b20b8783de7dfa1262)
+
+### Fixes
+
+- (tournament) show the clock-face toggle wherever the face applies — [fc34c56](https://github.com/becked/per-ankh/commit/fc34c56cef4e884d4150d81fcd92271aac2afccd)
+- (tournament) match the active view on route id, not pathname — [095da74](https://github.com/becked/per-ankh/commit/095da7446ab4c4c1013f4c1a9024b7770a8f2659)
+
+### Other
+
+- (tournament) read the view labels from one source — [c249cec](https://github.com/becked/per-ankh/commit/c249cec74ceb2561b0094cdeeaebf3c6bcfb78d7)
+- (tournament) index the view labels instead of calling for them — [ea24eb6](https://github.com/becked/per-ankh/commit/ea24eb61978ee4786ffb35fcd52be414e807e8fb)
+
 ## [2026-08-26-27fd762] - 2026-08-26
 
 ### Features
