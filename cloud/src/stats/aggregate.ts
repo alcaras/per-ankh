@@ -34,11 +34,14 @@ export interface AggregateEnv {
 // the uploader's own row per game; "humans" (tournament corpus) widens to every
 // human, so both sides of a 1v1 contribute. The convention lives in exactly two
 // places (buildSelfMembership + loadYieldCurves' selfClause), threaded from
-// here rather than forked into a parallel aggregation path.
+// here rather than forked into a parallel aggregation path. A global corpus's
+// nation facet (StatsCorpus.focalNations) narrows the same set further, at
+// those same two places and nowhere else.
 export type Focal = "uploader" | "humans";
 
-// D1 bind-parameter cap is 100. Leave headroom for joins with literal
-// params (we never need more than a few literals per statement). Exported
+// D1 bind-parameter cap is 100. Leave headroom for the params a statement
+// binds alongside the ids — the widest is loadYieldCurves under a nation
+// facet, one bind per selected nation (13 playable), so 63 of the 100. Exported
 // (with chunk) for other batched IN-list loaders, e.g. the tournament
 // player_summaries batch in tournament/public.ts.
 export const CHUNK_SIZE = 50;
@@ -183,12 +186,22 @@ function parseJsonArray(raw: string | null): string[] {
 // The corpus's focal (game_id, player_index) tuples, encoded as
 // `${game_id}|${player_index}` strings for quick membership checks. "uploader"
 // keeps only the uploader's own row per game; "humans" keeps every human row
-// (baseRows are already is_human=1, so that's all of them).
-function buildSelfMembership(baseRows: BaseRow[], focal: Focal): Set<string> {
+// (baseRows are already is_human=1, so that's all of them). A faceted global
+// corpus keeps only the seats playing one of its nations — the JS half of the
+// restriction loadYieldCurves applies in SQL.
+function buildSelfMembership(
+	baseRows: BaseRow[],
+	focal: Focal,
+	focalNations: string[] | null,
+): Set<string> {
+	const nations = focalNations === null ? null : new Set(focalNations);
 	const self = new Set<string>();
 	for (const r of baseRows) {
 		const isFocal = focal === "humans" ? r.is_human === 1 : r.is_uploader === 1;
-		if (isFocal) self.add(`${r.game_id}|${r.player_index}`);
+		if (!isFocal) continue;
+		if (nations !== null && (r.nation === null || !nations.has(r.nation)))
+			continue;
+		self.add(`${r.game_id}|${r.player_index}`);
 	}
 	return self;
 }
@@ -274,6 +287,7 @@ async function loadYieldCurves(
 	env: AggregateEnv,
 	gameIds: string[],
 	focal: Focal,
+	focalNations: string[] | null,
 ): Promise<ChartBundleCore["yieldCurves"]> {
 	if (gameIds.length === 0)
 		return { turns: [], counts: [], series: {}, outcome: null };
@@ -288,9 +302,17 @@ async function loadYieldCurves(
 	const selectList = [...columns].map((c) => `gpt.${c}`).join(", ");
 
 	// The focal-player filter — the second (and last) site the focal
-	// convention lives, mirroring buildSelfMembership.
+	// convention lives, mirroring buildSelfMembership. The rows are filtered in
+	// SQL rather than after the fact because they are what the memory bound is
+	// denominated in: a nation facet should never pull the other seats' rows
+	// into the isolate just to drop them.
 	const selfClause =
 		focal === "humans" ? "ps.is_human = 1" : "ps.is_uploader = 1";
+	const nationClause =
+		focalNations === null
+			? ""
+			: ` AND ps.nation IN (${focalNations.map(() => "?").join(", ")})`;
+	const nationBinds = focalNations ?? [];
 
 	// Per turn: a value sample per field (rate + cumulative) and a row count.
 	type Bucket = {
@@ -337,10 +359,10 @@ async function loadYieldCurves(
 			 FROM game_player_turn gpt
 			 JOIN player_summaries ps ON ps.game_id = gpt.game_id
 			                          AND ps.player_index = gpt.player_index
-			 WHERE ${selfClause}
+			 WHERE ${selfClause}${nationClause}
 			   AND gpt.game_id IN (${placeholders(ids.length)})`,
 		)
-			.bind(...ids)
+			.bind(...nationBinds, ...ids)
 			.all<YieldRawRow>();
 
 		for (const row of (res.results ?? []) as YieldRawRow[]) {
@@ -643,7 +665,10 @@ export function boundOpeningLaws(rows: OpeningLawRow[]): OpeningLawRow[] {
 // focal "uploader" → the full user ChartBundle (core + Overview extension).
 // focal "humans" → the tournament ChartBundleCore, with the one-focal-per-game
 // Overview fields (win_rate/games_with_outcome, summary.top_nation/top_archetype)
-// excluded by the return type, not nulled at runtime.
+// excluded by the return type, not nulled at runtime. Either mode narrows
+// further to corpus.focalNations when the corpus carries one; the per-game
+// facts (meta.game_count, summary.total_games, avg_total_turns) stay the
+// corpus's own and don't move with it.
 export function buildChartBundle(
 	env: AggregateEnv,
 	corpus: StatsCorpus,
@@ -675,6 +700,11 @@ export async function buildChartBundle(
 				});
 	}
 
+	// A faceted global corpus restricts the focal set to its nations' seats;
+	// empty and absent read alike, so no caller can express "restricted to
+	// nothing".
+	const focalNations = corpus.focalNations?.length ? corpus.focalNations : null;
+
 	const [
 		baseRows,
 		yieldCurves,
@@ -686,7 +716,7 @@ export async function buildChartBundle(
 		saveDateRows,
 	] = await Promise.all([
 		loadBaseRows(env, corpus.gameIds),
-		loadYieldCurves(env, corpus.gameIds, focal),
+		loadYieldCurves(env, corpus.gameIds, focal, focalNations),
 		loadTechEvents(env, corpus.gameIds),
 		loadLawEvents(env, corpus.gameIds),
 		loadWonderEvents(env, corpus.gameIds),
@@ -695,7 +725,7 @@ export async function buildChartBundle(
 		loadSaveDates(env, corpus.gameIds),
 	]);
 
-	const selfMembership = buildSelfMembership(baseRows, focal);
+	const selfMembership = buildSelfMembership(baseRows, focal, focalNations);
 	const selfRows = baseRows.filter((r) =>
 		selfMembership.has(`${r.game_id}|${r.player_index}`),
 	);

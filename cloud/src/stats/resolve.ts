@@ -1,13 +1,21 @@
-// Corpus resolver — translates a "/v1/users/:id/stats" request into a
-// concrete StatsCorpus the aggregator can run against.
+// Corpus resolvers — translate a stats request into a concrete StatsCorpus the
+// aggregator can run against.
 //
-//   user: games WHERE user_id = ? [AND is_public=1 for visitor view]
-//         [AND game-type filter — vs AI / MP / tournament / all]
+//   user:       games WHERE user_id = ? [AND is_public=1 for visitor view]
+//               [AND game-type filter — vs AI / MP / tournament / all]
+//   tournament: the saves linked to a tournament's completed matches
+//   global:     games WHERE is_public = 1 [AND composition slice]
+//               [AND nation]
 //
-// StatsCorpus is the set of in-scope game ids the aggregator runs over.
+// StatsCorpus is the set of in-scope game ids the aggregator runs over, plus
+// the nation restriction a faceted global corpus applies within them.
 
-import { buildUserScopeWhere, TOURNAMENT_GAME_IDS_SQL } from "../games-scope";
-import type { UserScope, UserStatsScope } from "./types";
+import {
+	buildGlobalSliceWhere,
+	buildUserScopeWhere,
+	TOURNAMENT_GAME_IDS_SQL,
+} from "../games-scope";
+import type { GlobalSlice, UserScope, UserStatsScope } from "./types";
 import type { QueryableD1 } from "../d1";
 
 export interface ResolveEnv {
@@ -16,6 +24,13 @@ export interface ResolveEnv {
 
 export interface StatsCorpus {
 	gameIds: string[];
+	// Nations the focal set is restricted to; absent (or empty) is every focal
+	// seat. It rides on the corpus rather than on buildChartBundle's `focal`
+	// argument because a nation selection narrows the games *and* the seats
+	// within them: resolving both here is what stops a caller from narrowing
+	// one and not the other — a Rome corpus feeding the Greek's rows into the
+	// yield bands.
+	focalNations?: string[];
 }
 
 interface UserRow {
@@ -77,5 +92,51 @@ export async function resolveTournamentCorpus(
 
 	return {
 		gameIds: (rows.results ?? []).map((r) => r.game_id),
+	};
+}
+
+// Resolve a global corpus: every public game of one composition slice,
+// optionally narrowed to the games one or more nations were played in.
+//
+// is_public = 1 is the whole visibility rule. It already covers both "public
+// because the uploader said so" and "public because it is a tournament game" —
+// linkTournamentMatch forces the flag on linked uploads — so no union with the
+// tournament game ids is needed. Composition is the slice's half of the
+// predicate, from the shared fragments in games-scope.ts.
+//
+// A nation selection narrows twice (global-stats design §4.2): the games become
+// those holding at least one seat of a selected nation, and the focal set
+// becomes those seats' rows, carried on `focalNations`. The game half
+// qualifies on a *human* seat so the two halves stay in step — a game admitted
+// for its AI Rome would report in meta.game_count while contributing no focal
+// row at all. The seat's nation comes from player_summaries, not
+// games.user_nation, which names the uploader's seat and so would miss the
+// other side of a duel.
+//
+// `nations` is a set even though the UI is single-select, so widening to
+// multi-select later costs the nightly precompute table rather than this
+// signature. Sorted and deduped here, so the corpus carries one canonical form.
+export async function resolveGlobalCorpus(
+	env: ResolveEnv,
+	slice: GlobalSlice,
+	opts: { nations: string[] },
+): Promise<StatsCorpus> {
+	const nations = [...new Set(opts.nations)].sort();
+	const nationClause =
+		nations.length > 0
+			? ` AND game_id IN (SELECT game_id FROM player_summaries
+			     WHERE is_human = 1 AND nation IN (${nations.map(() => "?").join(", ")}))`
+			: "";
+
+	const rows = await env.SHARE_DB.prepare(
+		`SELECT game_id FROM games
+		 WHERE is_public = 1${buildGlobalSliceWhere(slice)}${nationClause}`,
+	)
+		.bind(...nations)
+		.all<{ game_id: string }>();
+
+	return {
+		gameIds: (rows.results ?? []).map((r) => r.game_id),
+		focalNations: nations.length > 0 ? nations : undefined,
 	};
 }
