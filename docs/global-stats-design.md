@@ -71,12 +71,13 @@ Eight bundle fields are already nation-keyed (`nationWinRate`, `nationAvgPoints`
 ## 5. Architecture: precompute slices, compute facets on demand
 
 ```
-cron (nightly)          4 unfaceted slices ──▶ KV, long TTL
-request with facets ──▶ compute on demand ──▶ KV, short TTL, opportunistic
+cron (nightly)      4 unfaceted slices ──▶ KV, 24h
+request on a miss ──▶ compute in-request ──▶ KV, 24h
 ```
 
 - The **four unfaceted slices** are precomputed by the cron. Cheap and bounded.
 - A **faceted selection** is always a *subset* of its slice, so it is strictly smaller in queries and memory than the slice it narrows. It is computed in the request and cached under a key derived from the normalized facet set. Popular combinations warm naturally; exotic ones cost one compute.
+- **One tier, one TTL.** Both paths write the same kind of entry, because a precomputed slice a request finds missing is recomputed the same way a facet is (§12). The cron warms keys the request path could fill on its own; it does not own a separate class of entry with its own expiry.
 
 This inverts cleanly as the corpus grows: if on-demand aggregation stops fitting a request budget, the fallback is to precompute more and refuse the long tail, not to redesign.
 
@@ -210,7 +211,7 @@ Because the payload is byte-identical for every viewer and changes at most night
 
 ## 12. Caching and the cold-start problem
 
-A whole-corpus aggregation is ~1s of JS and ~60 MB with §7.1 (§6.1), which fits a fetch handler with room. So precomputation is an optimization, not something the request path depends on: **a miss computes in the request, exactly as a faceted selection does.** The cron warms the cache rather than owning it, which is also why first population needs no deploy-runbook step and `putCached`'s 24h TTL can stay as it is.
+A whole-corpus aggregation is ~1s of JS and ~60 MB with §7.1 (§6.1), which fits a fetch handler with room. So precomputation is an optimization, not something the request path depends on: **a miss computes in the request, exactly as a faceted selection does.** The cron warms the cache rather than owning it, which is also why `putCached`'s 24h TTL can stay as it is and stay uniform — a precomputed slice and an on-demand facet are the same kind of entry. First population needs no deploy-runbook step to be *correct*; it earns one anyway, as the cheapest herd control available.
 
 Two things still need explicit answers.
 
@@ -218,7 +219,11 @@ Two things still need explicit answers.
 
 Neither bump is rare enough to wave off — five bundle-schema versions landed between 2026-05-24 and 2026-07-26, and the parser moved several times over the same window.
 
-**The herd is the real cost of a cold key.** Every concurrent request recomputes at 108 queries apiece, bounded only by §11's rate limit — which ties the abuse ceiling to the cold-start ceiling, two knobs that should move independently. A single-flight lock in KV, or simply accepting the duplicate work at this corpus size, are both defensible; inheriting the coupling by default is not.
+**The herd is the real cost of a cold key.** Every concurrent request recomputes at 108 queries apiece, bounded only by §11's rate limit — which ties the abuse ceiling to the cold-start ceiling, two knobs that should move independently.
+
+Two mechanisms already in the repo cover it without a lock. A cold key follows a version bump, and a version bump is a deploy, so warming the four slices as a deploy step — four requests — means the herd never forms. And the payload is byte-identical for every viewer, which is what the edge cache is for: `caches.default` in `blob-cache.ts`, `s-maxage` on the public reads in `channels.ts`, `featured.ts` and `tournament/public.ts`. That takes the steady state to roughly one recompute per colo.
+
+The Cache API does not single-flight, so a simultaneous burst within one colo can still double up. A KV or Durable Object lock is the answer only if the two mechanisms above measurably don't hold — it would be a third thing doing their job.
 
 Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. Facet keys must be **normalized** (sorted, deduped) so that selecting Rome-then-Greece and Greece-then-Rome hit the same entry.
 
@@ -232,8 +237,7 @@ Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. F
 
 ## 14. Open questions
 
-1. **Cold-start latency.** A miss computes in the request (§12) — affordable, but ~1s of CPU plus D1 round trips. Whether an anonymous visitor waits for that or sees a warming state is a product call, not a measurement.
-2. **Herd control on a cold key** — a single-flight lock versus accepting duplicate recomputes (§12).
+1. **Cold-start latency on an unseen facet combination.** Warming covers the four slices (§12), but no cron can cover 2.1 million facet combinations, so the first request for an exotic one computes in-band — affordable, but ~1s of CPU plus D1 round trips. Whether that visitor waits or sees a warming state is a product call, not a measurement.
 
 ## 15. Deferred, with growth triggers
 
@@ -242,6 +246,7 @@ Not in scope; each records the condition that would change that.
 - **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~5,500 games, where `ceil(N/50) × 9` nears the 1,000-query ceiling. At 572 public games and ~200 uploads/month this is roughly two to three years out. It would also make the *user* path marginally slower, so it is worth doing only for the global case.
 - **Turn-window chunking** (§7.2). Trigger: ~250,000 focal rows in one slice — about 1,600 public games.
 - **A second facet dimension beyond nations and map sizes.** At 572 public games, 538 of them duels, most cells of a deeper cross-product would hold under 20 games. Trigger: enough corpus that a representative cell holds a usable sample.
+- **A single-flight lock for cold-key recomputes** (§12). Trigger: deploy-time warming plus the edge cache measurably failing to hold — duplicate recomputes showing up against the rate-limit budget or in CPU.
 - **Tournament chart tabs collapsing onto the shared registry** (§9).
 - **Issue #228** — migrating the user-page `?scope` selector onto this facet vocabulary. Deliberately out of scope: it changes three live surfaces and a URL contract, and issue #156 wants to move the same call sites. But the facet model here **must be designed to subsume `UserScope`**, and must be validated against the user page's concepts (collections, the `public` subset, `viewerOwnsTarget` visibility) even though only the global consumer ships now.
 
@@ -291,6 +296,6 @@ Turn-window chunking (§7.2) is out of scope here; it slots after step 2 only if
 
 - **`docs/aggregate-statistics.md`** — its "Future work" bullet predicts this feature and asserts the cost is caching ("an arbitrary game-id set hashes to a poor hit-rate key"). That is wrong: caching is the easy part once the slice set is enumerable, and the real costs are isolate memory and the per-invocation query ceiling. Correct it, and fold the as-built outcome in.
 - **`docs/api-reference.md`** — the new endpoint.
-- **`docs/cloud-deploy-plan.md`** — it still points a health check at the retired `/v1/stats` path (§486, §521), which this feature now claims for something else. No first-population step is needed: a cold key computes in the request (§12).
+- **`docs/cloud-deploy-plan.md`** — it still points a health check at the retired `/v1/stats` path (§486, §521), which this feature now claims for something else, and it gains a warm step for the four slices (§12 — optional for correctness, but the cheapest herd control there is).
 - **`docs/tournament-stats-design.md`** — §5's UI-generalization notes are superseded once the registry is parameterized.
 - **This doc** — retire it into `docs/aggregate-statistics.md` once built.
