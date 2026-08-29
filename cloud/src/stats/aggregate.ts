@@ -801,7 +801,14 @@ export async function buildChartBundle(
 	// 1. The pool. Old World enables only a subset of the wonders per game (a
 	//    base save disables 15 of 28), so the wonder has to be in that game's
 	//    pool. Blobs predating the parser that captures the pool have no rows in
-	//    it; they contribute no denominator rather than a wrong one.
+	//    it; they contribute no denominator rather than a wrong one. Gate 1 is
+	//    the one gate that also scopes the *numerator*: a corpus mixing pooled
+	//    and poolless games would otherwise divide every build it saw by the
+	//    eligibility only the pooled games could supply, and the chart reads the
+	//    two as one fraction ("Built in N of E games"). So a wonder that has a
+	//    denominator reports the builds from pooled games only, and a wonder
+	//    that has none (eligible: null) reports every build — each row's numbers
+	//    describe one population, named by whether `eligible` is null.
 	// 2. Culture. A wonder's only build requirement is a city at its
 	//    <CulturePrereq>, so the player has to have reached that level
 	//    (best_culture_level — see derive-player-summary.ts for what that
@@ -835,17 +842,25 @@ export async function buildChartBundle(
 		taken.add(w.wonder);
 		takenByNonHuman.set(w.game_id, taken);
 	}
-	const wonderTurns = new Map<string, number[]>();
-	const wonderWins = new Map<string, number>();
+	// Build turns and builder wins, tallied over the pooled subset and over
+	// every game. Which pair a wonder reports is decided below by whether it
+	// has a denominator; the two are never mixed within a row (gate 1).
+	const pooledTurns = new Map<string, number[]>();
+	const pooledWins = new Map<string, number>();
+	const allTurns = new Map<string, number[]>();
+	const allWins = new Map<string, number>();
 	for (const w of wonderEvents) {
 		if (w.is_human !== 1) continue;
 		if (!selfMembership.has(`${w.game_id}|${w.player_index}`)) continue;
-		const turns = wonderTurns.get(w.wonder) ?? [];
-		turns.push(w.turn);
-		wonderTurns.set(w.wonder, turns);
-		if (winnerRows.has(`${w.game_id}|${w.player_index}`)) {
-			wonderWins.set(w.wonder, (wonderWins.get(w.wonder) ?? 0) + 1);
-		}
+		const won = winnerRows.has(`${w.game_id}|${w.player_index}`);
+		const tally = (turns: Map<string, number[]>, wins: Map<string, number>) => {
+			const t = turns.get(w.wonder) ?? [];
+			t.push(w.turn);
+			turns.set(w.wonder, t);
+			if (won) wins.set(w.wonder, (wins.get(w.wonder) ?? 0) + 1);
+		};
+		tally(allTurns, allWins);
+		if (wonderPool.has(w.game_id)) tally(pooledTurns, pooledWins);
 	}
 	// Wonders we have pool coverage for at all — named by at least one focal
 	// row's game pool. Distinguishes "on the board, nobody qualified" (a real
@@ -876,16 +891,16 @@ export async function buildChartBundle(
 	}
 	// Every wonder someone could have built or did build, so an available one
 	// that nobody took still shows up with its zero.
-	const wonderKeys = new Set([
-		...eligibleByWonder.keys(),
-		...wonderTurns.keys(),
-	]);
+	const wonderKeys = new Set([...eligibleByWonder.keys(), ...allTurns.keys()]);
 	const wonderStats = [...wonderKeys].map((wonder) => {
-		const turns = (wonderTurns.get(wonder) ?? []).sort((a, b) => a - b);
-		const eligible = coveredWonders.has(wonder)
-			? (eligibleByWonder.get(wonder) ?? 0)
-			: null;
-		const wins = wonderWins.get(wonder) ?? 0;
+		// Covered ⇔ some pooled game accounted for this wonder ⇔ `eligible` is a
+		// number. That is exactly the condition for reporting the pooled builds.
+		const covered = coveredWonders.has(wonder);
+		const turns = ((covered ? pooledTurns : allTurns).get(wonder) ?? []).sort(
+			(a, b) => a - b,
+		);
+		const eligible = covered ? (eligibleByWonder.get(wonder) ?? 0) : null;
+		const wins = (covered ? pooledWins : allWins).get(wonder) ?? 0;
 		return {
 			wonder,
 			culture_prereq: WONDER_CULTURE_PREREQ[wonder] ?? null,

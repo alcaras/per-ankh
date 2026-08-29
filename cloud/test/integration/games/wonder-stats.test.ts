@@ -127,6 +127,35 @@ describe("wonder stats — eligibility", () => {
 		expect(row?.built ?? 0).toBe(1);
 	});
 
+	it("scopes a partly-covered wonder's builds to the games that supplied its denominator", async () => {
+		const user = await makeUser();
+		// The mixed case a real corpus is made of: the same wonder built in a
+		// pooled game and in an older poolless one. Only the pooled game can
+		// contribute eligibility, so only its build may be counted against it —
+		// the chart prints the two as one fraction ("Built in N of E games"),
+		// and a build the denominator never saw inflates every wonder on it.
+		await upload(user, {
+			winnerIndex: 0,
+			parserVersion: "2.12.0",
+			disabledImprovements: DISABLE_ALL_BUT_TEST_WONDERS,
+			cities: [{ owner: 0, cultureLevel: "CULTURE_WEAK" }],
+			wonders: [{ player_id: 0, wonder: WEAK_WONDER, completed_turn: 30 }],
+		});
+		await upload(user, {
+			winnerIndex: 0,
+			cities: [{ owner: 0, cultureLevel: "CULTURE_WEAK" }],
+			wonders: [{ player_id: 0, wonder: WEAK_WONDER, completed_turn: 80 }],
+		});
+
+		expect((await wonderStats(user)).get(WEAK_WONDER)).toMatchObject({
+			eligible: 1,
+			built: 1,
+			rate: 1,
+			// The poolless build would drag this to turn 55 if it were counted.
+			median_turn: 30,
+		});
+	});
+
 	it("drops a wonder an AI took from the human's denominator", async () => {
 		const user = await makeUser();
 		await upload(user, {
