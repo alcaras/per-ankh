@@ -315,6 +315,13 @@ export type UserScope =
 	| "tournament"
 	| number;
 
+// The single slice selection for the global corpus — one composition of the
+// player roster, the /stats sibling of UserScope's game-type buckets. "all" is
+// every public game rather than the union of the other three: a game with two
+// humans and any AI at all matches no composition, so it appears only there.
+// The predicates live in games-scope.ts.
+export type GlobalSlice = "all" | "duel" | "ffa" | "single_player";
+
 // Visibility scope for user corpus — owner sees private+public, others
 // see public only. Embedded in the cache key.
 export type UserStatsScope = "self" | "public";
