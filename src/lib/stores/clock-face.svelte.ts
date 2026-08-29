@@ -1,7 +1,8 @@
 // The viewer's sticky 12/24-hour clock FACE — whether a local time reads
 // "7:30 PM" or "19:30". Companion to the UTC/local zone preference (pa_zone,
 // $lib/tournament/zone-preference): that one picks which clock a time is read
-// on, this one picks how that clock is written.
+// on, this one picks how that clock is written. Both persist through the shared
+// preference-cookie policy in $lib/utils/pref-cookie.
 //
 // Unset means "follow the browser", which is what every viewer got before this
 // control existed. An explicit choice exists because the browser cannot answer
@@ -19,29 +20,21 @@
 // subscribes to it, so a flip re-renders every time on the page — the same
 // mechanism nowMs() uses in now.svelte.ts.
 import { viewerUses12Hour } from "$lib/utils/formatting";
+import { readPrefCookie, writePrefCookie } from "$lib/utils/pref-cookie";
 
-export type ClockFace = "12" | "24";
+type ClockFace = "12" | "24";
 
 const COOKIE = "pa_clock";
-const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 function isFace(v: string | null | undefined): v is ClockFace {
 	return v === "12" || v === "24";
 }
 
-// The saved face, or null when unset / on the server (no document).
+// The saved face, or null when unset / on the server (no document). An
+// unrecognised value is treated as unset rather than trusted.
 function readClockCookie(): ClockFace | null {
-	if (typeof document === "undefined") return null;
-	const match = document.cookie.match(/(?:^|;\s*)pa_clock=(12|24)(?:;|$)/);
-	return isFace(match?.[1]) ? match[1] : null;
-}
-
-// Persist app-globally (path=/) for a year, mirroring writeZoneCookie:
-// SameSite=Lax is plenty for a non-sensitive UI pref, and JS owns it so there's
-// no HttpOnly.
-function writeClockCookie(face: ClockFace): void {
-	if (typeof document === "undefined") return;
-	document.cookie = `${COOKIE}=${face}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax`;
+	const saved = readPrefCookie(COOKIE);
+	return isFace(saved) ? saved : null;
 }
 
 // Seeded at module load — on the client that's app bootstrap, before the first
@@ -68,5 +61,5 @@ export function clockFaceIs12Hour(): boolean {
  */
 export function setClockFace(next: ClockFace): void {
 	face = next;
-	writeClockCookie(next);
+	writePrefCookie(COOKIE, next);
 }

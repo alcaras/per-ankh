@@ -213,9 +213,11 @@ const UTC_CLOCK_OPTIONS: Intl.DateTimeFormatOptions = {
 	hour12: false,
 };
 
-// Resolved once per session: a full match table formats a time per row, and
-// constructing a throwaway Intl.DateTimeFormat for each would double the
-// formatter churn. A viewer's clock face can't change mid-session.
+// Resolved once per session. What's cached is the BROWSER's answer, which a
+// page can't change — not the face on screen, which the header toggle now flips
+// at will (clock-face.svelte.ts layers the explicit choice over this). Probing
+// Intl builds a throwaway DateTimeFormat, and this is the default every viewer
+// who has never touched the toggle falls back to on every render.
 let cached12Hour: boolean | undefined;
 
 /**

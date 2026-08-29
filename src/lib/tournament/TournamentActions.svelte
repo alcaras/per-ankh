@@ -18,15 +18,28 @@
 		tournament: TournamentDetail;
 		// Opens the tournament guide (threaded to the links menu).
 		onGuide: () => void;
-		// The active clock. Omitted on surfaces with no time-bearing content (e.g. a
-		// setup-phase overview page), where the toggle is hidden entirely.
+		// The active clock. Omitted on surfaces with no schedule to switch (e.g. a
+		// setup-phase overview page), where the UTC/local toggle is hidden. It gates
+		// that toggle alone — the face toggle beside it has its own flag.
 		zone?: ScheduleZone;
 		// Flip handler; the caller persists the choice app-wide (writeZoneCookie).
 		// eslint-disable-next-line no-unused-vars -- callback signature
 		onZoneChange?: (zone: ScheduleZone) => void;
+		// Whether to offer the 12/24-hour face toggle. Gated separately from `zone`
+		// because the face reaches further: a completed tournament's overview has no
+		// live schedule to switch clocks on, yet its bracket still opens match cards
+		// that render a local half. The caller owns the rule — it knows the route and
+		// the tournament's phase.
+		showClockFace?: boolean;
 	}
 
-	let { tournament, onGuide, zone, onZoneChange }: Props = $props();
+	let {
+		tournament,
+		onGuide,
+		zone,
+		onZoneChange,
+		showClockFace = false,
+	}: Props = $props();
 
 	// Settings shows for admins always, and for everyone once the tournament is
 	// past setup (mirrors the gate this cluster replaced in TournamentHeader).
@@ -88,21 +101,28 @@
 			</svg>
 			{zone === "utc" ? "UTC" : localZoneLabel}
 		</button>
-		<!-- Clock-face toggle. The pair answers "when is this for me": the button
-		     before it picks which clock a time is read on, this one picks how that
-		     clock is written. Flips 12↔24 in place and sticks app-wide (pa_clock).
+	{/if}
+	{#if showClockFace}
+		<!-- Clock-face toggle. The pair answers "when is this for me": the
+		     UTC/local toggle picks which clock a time is read on, this one picks how
+		     that clock is written. Flips 12↔24 in place and sticks app-wide (pa_clock).
 		     No icon — a second clock glyph beside the zone button's would read as
-		     the same control twice. It rides the zone toggle's gate rather than
-		     appearing only on the local clock, because the match card renders a
-		     local half beside the canonical UTC one whichever way the zone is set. -->
+		     the same control twice. Gated on its own flag rather than the zone
+		     toggle's, because a match card renders a local half beside the canonical
+		     UTC one whichever way the zone is set — and on a completed tournament
+		     that card is the only clock left on the page.
+
+		     The accessible name repeats the visible "12h"/"24h" token so a voice-
+		     control user can address the button by what it reads (WCAG 2.5.3 Label
+		     in Name); the title carries the spelled-out wording. -->
 		<button
 			type="button"
 			class={triggerClass}
 			onclick={() => setClockFace(use12Hour ? "24" : "12")}
 			title="Toggle between a 12-hour (7:30 PM) and 24-hour (19:30) clock"
-			aria-label={`Showing a ${use12Hour ? "12" : "24"}-hour clock; switch to ${
-				use12Hour ? "24" : "12"
-			}-hour`}
+			aria-label={`Showing a ${use12Hour ? "12h" : "24h"} clock; switch to ${
+				use12Hour ? "24-hour" : "12-hour"
+			}`}
 		>
 			{use12Hour ? "12h" : "24h"}
 		</button>

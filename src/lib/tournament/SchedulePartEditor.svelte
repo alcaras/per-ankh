@@ -104,6 +104,11 @@
 	const datePlaceholder = toCalendarDate(nowLocal);
 	const timePlaceholder = new Time(nowLocal.hour, nowLocal.minute);
 
+	// The viewer's clock face, bound the same way every other consumer binds it.
+	// Display only: the hour cycle changes how a segment reads, never the Time
+	// that onValueChange writes back.
+	const use12Hour = $derived(clockFaceIs12Hour());
+
 	// Short zone name (e.g. "PDT") for the field label — resolved for the entered
 	// date so a summer match reads "PDT" and a winter one "PST".
 	const tzLabel = $derived.by(() => {
@@ -321,7 +326,7 @@
 			<TimeField.Root
 				locale={TIME_LOCALE}
 				granularity="minute"
-				hourCycle={clockFaceIs12Hour() ? 12 : 24}
+				hourCycle={use12Hour ? 12 : 24}
 				value={part.time}
 				placeholder={timePlaceholder}
 				onValueChange={(v) => (part.time = v instanceof Time ? v : undefined)}

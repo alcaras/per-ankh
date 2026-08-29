@@ -91,8 +91,8 @@
 	);
 	setZoneClock(clock);
 
-	// The clock toggle shows only where there's time-bearing content: always on
-	// Matches and Stats (Stats keeps it for header consistency and to let a
+	// The UTC/local toggle shows only where there's a schedule to switch: always
+	// on Matches and Stats (Stats keeps it for header consistency and to let a
 	// visitor set the app-wide preference), and on Overview only while the
 	// tournament is running (its Live & Upcoming panel — setup/complete have no
 	// schedule to clock).
@@ -102,6 +102,16 @@
 			(isOverview &&
 				(tournament.status === "swiss" ||
 					tournament.status === "championship")),
+	);
+
+	// The 12/24-hour face reaches one phase further than the zone does. A COMPLETE
+	// tournament's overview has no live schedule to clock, but its bracket still
+	// opens match cards — and those render a local half beside the canonical UTC
+	// one whichever way the zone is set, plus a schedule editor that types into
+	// the viewer's own face. Only setup, which has no matches at all, has nothing
+	// for the face to write.
+	const showClockFace = $derived(
+		isMatches || isStats || (isOverview && tournament.status !== "setup"),
 	);
 
 	// Open the shared guide, carrying this tournament as origin so the guide's
@@ -181,6 +191,7 @@
 							onGuide={openGuide}
 							zone={showClock ? clock.zone : undefined}
 							onZoneChange={(z) => clock.set(z)}
+							{showClockFace}
 						/>
 					</div>
 				</div>
