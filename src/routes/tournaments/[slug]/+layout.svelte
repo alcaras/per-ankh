@@ -22,7 +22,10 @@
 	import SignedUpPopover from "$lib/tournament/SignedUpPopover.svelte";
 	import TournamentActions from "$lib/tournament/TournamentActions.svelte";
 	import TournamentViewTabs from "$lib/tournament/TournamentViewTabs.svelte";
-	import { tournamentView, tournamentViewLabel } from "$lib/tournament/views";
+	import {
+		TOURNAMENT_VIEW_LABELS,
+		tournamentView,
+	} from "$lib/tournament/views";
 	import { resolveInitialZone } from "$lib/tournament/zone-preference";
 	import { ZoneClock, setZoneClock } from "$lib/tournament/zone-context.svelte";
 	import type { LayoutData } from "./$types";
@@ -56,7 +59,7 @@
 		return [
 			...base,
 			{ label: tournament.name, href: overviewHref },
-			{ label: tournamentViewLabel(view) },
+			{ label: TOURNAMENT_VIEW_LABELS[view] },
 		];
 	});
 

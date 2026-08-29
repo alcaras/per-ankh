@@ -13,8 +13,8 @@
 	import type { ResolvedPathname } from "$app/types";
 	import type { TournamentDetail } from "$lib/api-cloud";
 	import {
+		TOURNAMENT_VIEW_LABELS,
 		tournamentView,
-		tournamentViewLabel,
 		type TournamentView,
 	} from "./views";
 
@@ -90,7 +90,7 @@
 			aria-current={i === activeIndex ? "page" : undefined}
 			class="relative z-10 px-3 py-1.5 text-center text-xs font-bold text-tan transition-colors"
 		>
-			{tournamentViewLabel(tab.view)}
+			{TOURNAMENT_VIEW_LABELS[tab.view]}
 		</a>
 	{/each}
 	<!-- eslint-enable svelte/no-navigation-without-resolve -->
