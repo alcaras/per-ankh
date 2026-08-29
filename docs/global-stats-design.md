@@ -8,7 +8,7 @@ Status: **planned, unbuilt.** Written 2026-08-28.
 
 Today the chart catalog answers "how do *my* games look" (`/users/[user_id]?tab=stats`) and "how did *this tournament* look" (`/tournaments/[slug]/stats`). It cannot answer "how do multiplayer duels look, across everyone" — the question the charts are actually best at, because it is the only corpus large enough for the distributions to mean something.
 
-`/stats` is that surface: pick a **slice** (a corpus), optionally narrow it with **facets**, read the same charts.
+`/stats` is that surface: pick a **slice** (a corpus), optionally narrow it to one **nation**, read the same charts.
 
 ## 2. What already exists
 
@@ -35,7 +35,7 @@ Four, each `is_public = 1`. Counts are from the 2026-08-25 corpus snapshot; §16
 
 *Focal rows* are the human `game_player_turn` rows a slice feeds to `loadYieldCurves` — the quantity §7 is denominated in, and the one that governs whether a slice fits.
 
-**The corpus is duels.** 94% of public games are 1v1, so "All public games" and "Multiplayer duels" are the same charts to within 34 games, and the other two slices are small enough that a facet applied to them is decorative. Ship all four regardless: the taxonomy is the point, and the two thin slices cost 9 queries and ~20 MB each. Expect the duel slice to carry the page.
+**The corpus is duels.** 94% of public games are 1v1, so "All public games" and "Multiplayer duels" are the same charts to within 34 games, and the other two slices are small enough that a facet applied to them is decorative. Ship all four regardless: the taxonomy is the point, and the two thin slices cost at most 126 queries and ~20 MB each. Expect the duel slice to carry the page.
 
 **Tournament is not a slice.** A tournament match is two humans playing each other, so tournament games are a subset of multiplayer duels — not a sibling category. Per-tournament stats already have their own page. This is deliberate and is the same taxonomy defect that issue #228 records against the existing `?scope` selector.
 
@@ -45,22 +45,38 @@ Four, each `is_public = 1`. Counts are from the 2026-08-25 corpus snapshot; §16
 
 ## 4. Facets
 
-Two, both **multi-select**, ANDed with the slice:
+One facet: **nations**, single-select, ANDed with the slice.
 
-- **Nations**
-- **Map sizes**
+Eight bundle fields are already nation-keyed (§4.3), so the unfaceted bundle puts every nation side by side and cross-nation *comparison* needs no control at all. What the facet adds is the other eight fields — `yieldCurves` above all — narrowed to one nation. That is a single-select question, and answering it single-select is what keeps the whole selection space precomputable.
 
-### 4.1 Facets cannot be precomputed
+**Map size is not a facet.** Its cells do not hold: 395 of 538 public duels are `MAPSIZE_SMALLEST`, and crossing map size with nations gives 68 non-empty cells of which 47 hold fewer than 10 players. It is deferred with a measured trigger (§15). No bundle field is keyed by map size, so deferring the facet keeps map size off this surface entirely — that is the cost, and it buys a facet space small enough to precompute whole.
 
-~13 playable nations and 7 map sizes present in the public corpus. Multi-select means every subset is a valid selection, so the combination space is 4 slices × 2¹³ × 2⁷ ≈ **4.2 million bundles**. Single-select would still be ~448 bundles, an upper bound of ~48,000 D1 queries ≈ 48 cron invocations. Neither is precomputable.
+### 4.1 The selection space is precomputable
 
-This is the central architectural consequence and it shapes §5.
+13 playable nations in the public corpus, single-select, across 4 slices: **52 faceted bundles plus the 4 unfaceted slices, 56 in all.** Every one is precomputed nightly (§5).
 
-### 4.2 The nation facet filters *players*, not games
+A faceted selection is a subset of its slice, so it costs `ceil(N/50) × 9` against its own smaller N rather than the slice's:
 
-In a Rome-vs-Greece duel with "Rome" selected, filtering by *game* would qualify the match and then feed **both** players' rows into `yieldCurves` — including the Greek's. That is not what anyone means by "Rome stats".
+| Slice | Unfaceted | 13 nation bundles | Total |
+| --- | --- | --- | --- |
+| All public games | 108 | 261 | 369 |
+| Multiplayer duels | 99 | 243 | 342 |
+| Multiplayer FFA | 9 | ≤ 117 | ≤ 126 |
+| Single-player | 9 | ≤ 117 | ≤ 126 |
 
-So the nation facet restricts the **focal set**: only rows for players of a selected nation contribute. Multi-select composes as a union of focal sets. Map size has no such ambiguity — it is a pure game property and filters games.
+**One cron pattern per slice.** 963 queries in a single invocation would run against the 1,000 ceiling with no headroom. `crons` is an array and the handler dispatches on `controller.cron`, so a pattern per slice gives each a fresh query budget *and* a fresh isolate, and a fifth slice later adds a pattern instead of eating another's margin. Keep every pattern at an interval ≥ 1 hour to stay on the 15-minute CPU tier.
+
+Within an invocation the bundles are built and written **sequentially, each released before the next**, so peak memory is one bundle rather than fourteen. The unfaceted slice is the largest of them (§7).
+
+Storage is not a constraint: 56 bundles at ~600 KB is ~34 MB against 1 GB included, and 56 nightly writes is ~1,700/month against 1M.
+
+### 4.2 A nation narrows both the games and the focal set
+
+In a Rome-vs-Greece duel with "Rome" selected, narrowing by *game* alone would qualify the match and then feed **both** players' rows into `yieldCurves` — including the Greek's. That is not what anyone means by "Rome stats".
+
+So a nation selection narrows twice: the corpus becomes the slice's games holding at least one Rome player, and the focal set becomes those players' rows. Both, not either — narrowing only the focal set leaves `meta.game_count` reporting the whole slice, a control that visibly fails to move a headline number, and narrowing only the games is the Greek-rows defect above. Map size, were it ever a facet, would need only the first: it is a pure game property.
+
+`summary.total_games` and `meta.game_count` stay derived from the corpus id list, not from focal membership. Deriving them from the focal set would make the two impossible to drift apart, which is the better structure, but it is not free: `buildSelfMembership` selects on `is_uploader = 1` for the user corpus, and the 19 observer uploads carry no such row — they would silently drop out of a count that includes them today.
 
 Consequence: the focal convention gains a third form. It currently lives in exactly two places (`buildSelfMembership` and `loadYieldCurves`'s `selfClause`, both in `aggregate.ts`); a nation-restricted focal must thread through both and nowhere else.
 
@@ -68,18 +84,26 @@ Consequence: the focal convention gains a third form. It currently lives in exac
 
 Eight bundle fields are already nation-keyed (`nationWinRate`, `nationAvgPoints`, `nations`, `familyByNation`, `lawTiming`, `openingLaws`, `techFirst`, `techTiming`), so a nation filter could be a free client-side row filter over data already in the payload. But the other eight are not nation-keyed (`yieldCurves`, `wonderStats`, `capitalFamilyWinRate`, `expansionWinRate`, `startingArchetypeWinRate`, `startingTraitWinRate`, `summary`, `favorite_day_of_week`) and would silently ignore the filter. Half the page quietly not respecting a control is worse than not offering the control. Rejected.
 
-## 5. Architecture: precompute slices, compute facets on demand
+## 5. Architecture: precompute every selection, compute on a miss
 
 ```
-cron (nightly)      4 unfaceted slices ──▶ KV, 24h
+cron (nightly)      56 selections ──▶ KV, 24h
 request on a miss ──▶ compute in-request ──▶ KV, 24h
 ```
 
-- The **four unfaceted slices** are precomputed by the cron. Cheap and bounded.
-- A **faceted selection** is always a *subset* of its slice, so it is strictly smaller in queries and memory than the slice it narrows. It is computed in the request and cached under a key derived from the normalized facet set. Popular combinations warm naturally; exotic ones cost one compute.
-- **One tier, one TTL.** Both paths write the same kind of entry, because a precomputed slice a request finds missing is recomputed the same way a facet is (§12). The cron warms keys the request path could fill on its own; it does not own a separate class of entry with its own expiry.
+Every selection the UI can express is precomputed (§4.1), so the steady state is a KV read.
 
-This inverts cleanly as the corpus grows: if on-demand aggregation stops fitting a request budget, the fallback is to precompute more and refuse the long tail, not to redesign.
+The request path still computes on a miss, and that is not a vestige. A `BUNDLE_SCHEMA_VERSION` bump orphans every key at once (§12) and a deploy warms only the four slices, so a nation selection asked for between the bump and the next cron is served by computing it. **Never refuse on a miss.** Precompute-only is the one shape that would make this facet model expensive to change later; compute-on-miss is what keeps the model a UI decision.
+
+**One tier, one TTL.** Both paths write the same kind of entry, so `putCached`'s 24h TTL stays uniform. The cron warms keys the request path could fill on its own; it does not own a separate class of entry with its own expiry.
+
+Three things stay set-shaped for the same reason, at no cost today:
+
+- the resolver takes a set — `resolveGlobalCorpus(slice, { nations: string[] })` — even though the UI sends one value;
+- cache keys normalize (sort, dedupe) the nation set before stringifying, so a single value is a one-element list;
+- the compute-on-miss path above.
+
+With those three, widening to multi-select later is a UI and URL change with no backend migration: it costs the precompute table in §4.1, not the architecture.
 
 CPU is not what bounds this path. A whole-corpus aggregation costs ~1s of JS (§6.1) against a 30s fetch-handler default (raisable to 5 min via `limits.cpu_ms`), and a faceted selection is a subset of its slice and therefore cheaper still. The request path is bounded by memory instead — §7.
 
@@ -94,13 +118,13 @@ Verified against Cloudflare docs, 2026-08-28.
 | Subrequests per invocation | 10,000 (Paid) | D1/KV calls count; not a concern here |
 | Isolate memory | **128 MB** | See §7 — the real ceiling |
 | D1 rows read | 25 B/month included, then $0.001/M | Effectively free at this scale |
-| KV writes | 1M/month included, then $5/M | Nightly × 4 slices ≈ 120/month |
+| KV writes | 1M/month included, then $5/M | Nightly × 56 selections ≈ 1,700/month |
 | KV storage / max value | 1 GB included / 25 MiB per value | Not a concern |
 | D1 max bound params | 100 | Why `CHUNK_SIZE = 50` leaves headroom |
 
-**Query arithmetic.** The aggregator runs 9 chunked query loops at `CHUNK_SIZE = 50`, so a slice costs exactly `ceil(N/50) × 9` queries. The all-public slice is 108; all four together are 225, well inside one invocation's 1,000. The ceiling arrives at roughly 5,500 games in a single slice (§15).
+**Query arithmetic.** The aggregator runs 9 chunked query loops at `CHUNK_SIZE = 50`, so a corpus costs exactly `ceil(N/50) × 9` queries. The all-public slice is 108 and the four unfaceted slices together are 225. With their nation bundles the nightly total is ~963, which is why the cron runs a pattern per slice rather than one invocation (§4.1). The ceiling arrives at roughly 5,500 games in a single slice (§15).
 
-**Both the query ceiling and the memory ceiling are per invocation.** `crons` is an array and the handler already dispatches on `controller.cron`, so splitting slices across staggered cron patterns gives each a fresh 1,000-query budget *and* a fresh isolate. Keep every added pattern at an interval ≥ 1 hour to stay on the 15-minute CPU tier.
+**Both the query ceiling and the memory ceiling are per invocation**, which is what the per-slice cron pattern in §4.1 buys: each pattern gets a fresh 1,000-query budget *and* a fresh isolate.
 
 ### 6.1 Cost of one aggregation
 
@@ -137,9 +161,9 @@ The trigger is a row count, not a game count: against a 128 MB isolate the ceili
 
 Costs: windows must run sequentially (parallel defeats the memory bound), so wall-clock grows and global slices become cron-only rather than on-demand-capable; needs the turn range up front; the window width is a tuning knob whose right value drifts with corpus size.
 
-Alternatives considered and rejected: **t-digest / reservoir sampling** (constant memory, but approximate — the global page's bands would differ from the tournament page's over overlapping data, an invisible inconsistency in charts we deliberately share); **percentiles in SQL** (288 values per turn; unmaintainable as one statement, ~30 queries split up, and structurally unlike the other eight loaders); **a precomputed rollup table** (permanently cheap, but a rollup can only be keyed by groupings chosen in advance, which is exactly what ad-hoc facets are not).
+Alternatives considered and rejected: **t-digest / reservoir sampling** (constant memory, but approximate — the global page's bands would differ from the tournament page's over overlapping data, an invisible inconsistency in charts we deliberately share); **percentiles in SQL** (288 values per turn; unmaintainable as one statement, ~30 queries split up, and structurally unlike the other eight loaders); **a precomputed rollup table** (permanently cheap, but it duplicates in D1 what §4.1 already precomputes into KV — a second storage shape for the same enumerable set of groupings, rebuilt on every bundle-shape change).
 
-## 8. Bundle shape: one bundle
+## 8. The bundle
 
 **Decision: one bundle per corpus, as today. Not split per category.**
 
@@ -165,7 +189,7 @@ Which `ChartBundleCore` fields survive the widening to a global corpus.
 | `nationAvgPoints` | keep | |
 | `startingArchetypeWinRate` | keep | |
 | `startingTraitWinRate` | keep | |
-| `wonderStats` | keep | a row reports the pooled subset when it has a denominator, everything when it has none (gate 1, `aggregate.ts`) |
+| `wonderStats` | keep | a row reports the pooled subset when it has a denominator, everything when it has none — §8.3 |
 | `capitalFamilyWinRate` | keep | |
 | `familyByNation` | keep | |
 | `yieldCurves` | keep | the payload and memory driver |
@@ -181,9 +205,26 @@ Distinct (nation, four-law-set) rows grow with the corpus — 139 at 143 games, 
 
 The chart never shows the tail: `openingLawsOption` (`src/lib/stats/charts/laws.ts`) ranks and takes the top 15. So the field ships hundreds of rows to render fifteen.
 
-Bounding it server-side is not quite a `slice()`, because the "All nations" view sums a combo's counts across nations *before* ranking, so a per-nation top-N can drop a row that would have placed in the aggregate. Two forms work: drop `count == 1` rows, which is safe only while the modal count stays clear of the 13 a singleton could sum to (19 today — a real margin, but one that narrows); or rank after the cross-nation sum and keep the top N per nation plus the top N overall, which has no expiry date and is what to build.
+Bounding it server-side is not quite a `slice()`, because the "All nations" view sums a combo's counts across nations *before* ranking, so a per-nation top-N can drop a row that would have placed in the aggregate. Two forms work: drop `count == 1` rows, which is safe only while the modal count stays clear of the 13 a singleton could sum to (19 today — a real margin, but one that narrows); or rank after the cross-nation sum and keep the top N per nation plus the top N overall, which has no expiry date and is what to build. **N = 15**, read off the consumer rather than chosen: `openingLawsOption` takes `.slice(0, 15)`, and top-15-overall plus top-15-per-nation is exactly what a rendered chart can reach.
 
 Either changes chart output on the user page as well, so it lands against the round-trip test, not before it.
+
+### 8.3 One population per ratio
+
+The public corpus spans eleven parser versions, and a field is in a game's blob only if the parser that wrote the blob captured it. Coverage is therefore uneven, and the boundaries are sharp:
+
+| Field source | First parser | Public games covered |
+| --- | --- | --- |
+| `game_player_turn`, `tech_events` | — | 572 / 572 |
+| `player_family_cities` | 2.6.0 | 536 / 572 (94%) |
+| `starting_ruler_archetype` | 2.9.0 | 427 / 572 (75%) |
+| `game_wonder_pool` | 2.12.0 | 237 / 572 (41%) |
+
+The admin reindex sweep rebuilds every derived table from the stored blob, so it closes any gap where the blob already holds the source — that is how `player_family_cities` reached 94%. It cannot close these: `buildWonderPoolStatements` reads `blob.game_details.disabled_improvements`, and a blob written before 2.12.0 has no such key. Only a reparse from the raw save can (§14).
+
+So the corpus is heterogeneous, and the rule that makes it safe to publish is: **every ratio the bundle carries draws its numerator and its denominator from the same population, and the field names which.** `wonderStats` is the worked example — a wonder with pool coverage reports the builds from pooled games, a wonder without reports every build it has, and `eligible: null` is what says so. Any field added later that divides one table's rows by another's holds to the same rule.
+
+The rule's reach is small because the aggregator is already mostly self-consistent: `corpus.gameIds.length` arrives at only `meta.game_count` and `summary.total_games`, and every other field builds its denominator from the rows it drew its numerator from. What remains is presentational — a summary tile reading 572 beside charts resting on 536 or 237 — and it is the thing to weigh before adding a tile.
 
 ## 9. Frontend
 
@@ -193,7 +234,9 @@ The registry is also less general than it looks: `buildOption` is a hardcoded `s
 
 Once parameterized, the tournament stats page's **chart tabs** can collapse onto the shared registry — it currently hand-rolls its own tabs and calls option builders directly. Its Plane A tabs (Matches, Players, Casters) stay bespoke: they render a different payload shape and a `MatchTable`, neither of which the spec loop models. **Deferred** — it is a refactor of a live surface with no dependency on the rest, and it is the natural thing to drop if the session runs long.
 
-The facet UI is a sibling of `ScopeRow.svelte`, but multi-select rather than one dropdown. Selection lives in the URL, as tabs/scope/filters already do throughout the app.
+The facet UI is a sibling of `ScopeRow.svelte` — a slice selector plus a single-select nation dropdown, the shape `ScopeRow` already has.
+
+Selection lives in the URL as `?slice=` and `?nation=`, parsed the way `parseScopeParam` parses `?scope=`: known values pass through, anything else falls back to the default, so a stale or hand-edited URL degrades instead of 400ing. The default slice is **Multiplayer duels**: 94% of the corpus is duels, so the all-public numbers *are* the duel numbers, and landing on the label that describes the distribution beats landing on a superset whose name implies breadth it does not have.
 
 ## 10. Visibility
 
@@ -205,31 +248,35 @@ One residual edge, accepted: that lockout releases when a tournament reaches `co
 
 `/stats` is **public** — anonymous access, no session required. It is public data, and it is the surface most likely to bring players to the site.
 
-It gets its **own rate-limit budget**, not a share of `anon_read`. The tournament budgets are separate for exactly this reason: the 2026-08-05 incident was one busy surface deciding when the others started refusing. Follow the existing pattern in `wrangler.toml` — a `[vars]` entry so the ceiling can be retuned without a redeploy.
+It gets its **own rate-limit budget**, not a share of `anon_read`. The tournament budgets are separate for exactly this reason: the 2026-08-05 incident was one busy surface deciding when the others started refusing. `GLOBAL_STATS_VIEW_PER_HOUR = "600"` as a `[vars]` entry, so the ceiling can be retuned without a redeploy.
 
-Because the payload is byte-identical for every viewer and changes at most nightly, an edge cache layer is worth it here in a way it was not for user stats (`docs/aggregate-statistics.md` records "no client cache header" as a deliberate decision for that surface — different situation, revisit for this one).
+600 follows the rule the tournament block states for itself — convert through the fan-out, don't copy a number across. `/stats` is one bundle read per page load, and the three tournament budgets are each about 600 page loads an hour per visitor.
+
+The payload is byte-identical for every viewer and changes at most nightly, so it takes an edge cache: `public, max-age=0, s-maxage=60`, the same header `channels.ts`, `featured.ts` and `tournament/public.ts` already put on their public reads. (`docs/aggregate-statistics.md` records "no client cache header" for the *user* surface, whose payload is per-viewer. This one is not.)
 
 ## 12. Caching and the cold-start problem
 
-A whole-corpus aggregation is ~1s of JS and ~60 MB with §7.1 (§6.1), which fits a fetch handler with room. So precomputation is an optimization, not something the request path depends on: **a miss computes in the request, exactly as a faceted selection does.** The cron warms the cache rather than owning it, which is also why `putCached`'s 24h TTL can stay as it is and stay uniform — a precomputed slice and an on-demand facet are the same kind of entry. First population needs no deploy-runbook step to be *correct*; it earns one anyway, as the cheapest herd control available.
+A whole-corpus aggregation is ~1s of JS and ~60 MB with §7.1 (§6.1), which fits a fetch handler with room. So precomputation is an optimization and never a dependency: **a miss computes in the request** (§5). The cron warms the cache rather than owning it. Correctness never rests on the warm step; latency does, which is what earns it a place in the deploy runbook.
 
 Two things still need explicit answers.
 
 **Serve-stale is available on one of the key's two version segments, not both.** A `parser_version` bump orphans every entry without changing the bundle's shape, so the previous entry is merely stale and safe to serve while the new one computes. A `BUNDLE_SCHEMA_VERSION` bump does change the shape, and `cache.ts` is explicit that the bundle types declare every field required so consumers dereference them directly — a frontend on the new shape reading a pre-bump bundle breaks on it. So: serve-stale on parser drift, recompute on schema drift. Treating the two segments alike is what makes the option look unavailable.
 
+Serving the previous entry means finding it, and the key embeds the very version that is missing. The lookup is a prefix walk on `stats:v{schema}-p` filtered to the `global:` suffix — the shape `invalidateStatsCache` already uses. The recompute runs behind `ctx.waitUntil` so the stale response never waits on it.
+
 Neither bump is rare enough to wave off — five bundle-schema versions landed between 2026-05-24 and 2026-07-26, and the parser moved several times over the same window.
 
 **The herd is the real cost of a cold key.** Every concurrent request recomputes at 108 queries apiece, bounded only by §11's rate limit — which ties the abuse ceiling to the cold-start ceiling, two knobs that should move independently.
 
-Two mechanisms already in the repo cover it without a lock. A cold key follows a version bump, and a version bump is a deploy, so warming the four slices as a deploy step — four requests — means the herd never forms. And the payload is byte-identical for every viewer, which is what the edge cache is for: `caches.default` in `blob-cache.ts`, `s-maxage` on the public reads in `channels.ts`, `featured.ts` and `tournament/public.ts`. That takes the steady state to roughly one recompute per colo.
+Two mechanisms already in the repo cover it without a lock. A cold key follows a version bump, and a version bump is a deploy, so **the deploy warms the four unfaceted slices** — four requests — and the cron fills the 52 nation bundles on its next pass. Those four are the entry points: a visitor lands on a slice, not on a nation. And the payload is byte-identical for every viewer, which is what the edge cache is for: `caches.default` in `blob-cache.ts`, `s-maxage` on the public reads in `channels.ts`, `featured.ts` and `tournament/public.ts`. That takes the steady state to roughly one recompute per colo.
 
 The Cache API does not single-flight, so a simultaneous burst within one colo can still double up. A KV or Durable Object lock is the answer only if the two mechanisms above measurably don't hold — it would be a third thing doing their job.
 
-Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. Facet keys must be **normalized** (sorted, deduped) so that selecting Rome-then-Greece and Greece-then-Rome hit the same entry.
+Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant carrying the slice and the nation set. The set is **normalized** — sorted and deduped before stringifying. That is trivial while the UI is single-select, and it is what makes §5's widening a UI change rather than a key migration.
 
 ## 13. Testing
 
-**Staging must exercise the cron.** `[env.staging.triggers] crons = []` is currently empty for a stated reason: staging D1 is recloned from prod, and an independent retention sweep there would skew prod/staging diffs. So do not just populate the array — give the stats precompute its **own cron pattern** and have staging declare only that one. Triggers are per-environment and the handler dispatches on `controller.cron`, so staging runs the stats path and never the retention sweep.
+**Staging must exercise the cron.** `[env.staging.triggers] crons = []` is currently empty for a stated reason: staging D1 is recloned from prod, and an independent retention sweep there would skew prod/staging diffs. So do not just populate the array — give the stats precompute its **own cron patterns**, one per slice (§4.1), and have staging declare only those. Triggers are per-environment and the handler dispatches on `controller.cron`, so staging runs the stats path and never the retention sweep.
 
 **Close the aggregator-test gap.** `docs/aggregate-statistics.md` lists "No aggregator tests" as a known limitation and names the fix: a fixture → `ChartBundle` round-trip. That gap is load-bearing here — the disjoint-cohort change (§7.1) and any turn-windowing (§7.2) must be provably output-identical for existing corpora, and without a round-trip test there is nothing to diff old against new. Build it first, not last.
 
@@ -237,22 +284,23 @@ Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. F
 
 ## 14. Open questions
 
-1. **Cold-start latency on an unseen facet combination.** Warming covers the four slices (§12), but no cron can cover 2.1 million facet combinations, so the first request for an exotic one computes in-band — affordable, but ~1s of CPU plus D1 round trips. Whether that visitor waits or sees a warming state is a product call, not a measurement.
+1. **Whether to close the coverage gap with a reparse sweep.** §8.3's rule makes a heterogeneous corpus safe to publish; it does not make it complete. The 335 public games below parser 2.12.0 can only gain a wonder pool by reparsing from the raw save, which `BulkReparseModal` does one game at a time in the browser against `saves/{game_id}.zip`. R2 should still hold those — the retention sweep touches only `events`, and a save is deleted with its game — but whether every 2.5.0-era upload still has one needs checking against R2 before a sweep is worth planning. A completed sweep takes pool coverage from 41% to ~100% and retires the split numerator in `wonderStats` as a live concern.
 
 ## 15. Deferred, with growth triggers
 
 Not in scope; each records the condition that would change that.
 
-- **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~5,500 games, where `ceil(N/50) × 9` nears the 1,000-query ceiling. At 572 public games and ~200 uploads/month this is roughly two to three years out. It would also make the *user* path marginally slower, so it is worth doing only for the global case.
+- **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~5,500 games, where `ceil(N/50) × 9` nears the 1,000-query ceiling. It would also make the *user* path marginally slower, so it is worth doing only for the global case.
 - **Turn-window chunking** (§7.2). Trigger: ~250,000 focal rows in one slice — about 1,600 public games.
-- **A second facet dimension beyond nations and map sizes.** At 572 public games, 538 of them duels, most cells of a deeper cross-product would hold under 20 games. Trigger: enough corpus that a representative cell holds a usable sample.
+- **A map-size facet.** 395 of 538 public duels are `MAPSIZE_SMALLEST`, and crossing map size with nations gives 68 non-empty cells of which 47 hold fewer than 10 players. Trigger: enough corpus that a representative nation × map-size cell holds a usable sample. No bundle field is keyed by map size, so this facet is the only route by which map size reaches this surface.
+- **Multi-select nations.** The eight nation-keyed fields already serve comparison (§4), so multi-select buys combination space for a job the unfaceted bundle does. It also takes the selection space from 52 to 4 × 2¹³, past what §4.1 precomputes, trading the nightly table for the on-demand path §5 keeps alive. Trigger: a question the nation-keyed fields demonstrably cannot answer.
 - **A single-flight lock for cold-key recomputes** (§12). Trigger: deploy-time warming plus the edge cache measurably failing to hold — duplicate recomputes showing up against the rate-limit budget or in CPU.
 - **Tournament chart tabs collapsing onto the shared registry** (§9).
 - **Issue #228** — migrating the user-page `?scope` selector onto this facet vocabulary. Deliberately out of scope: it changes three live surfaces and a URL contract, and issue #156 wants to move the same call sites. But the facet model here **must be designed to subsume `UserScope`**, and must be validated against the user page's concepts (collections, the `public` subset, `viewerOwnsTarget` visibility) even though only the global consumer ships now.
 
 ## 16. Corpus sizing query
 
-Re-run against a D1 snapshot to refresh §3's counts and re-check §7.2's trigger; the figures in this doc are from 2026-08-25.
+Every snapshot-derived figure in this doc is from 2026-08-25 and is re-derived by the two queries below. The first refreshes §3's slice counts and §7.2's trigger; the second refreshes §4.1's per-nation query arithmetic, §4's map-size cell counts, and §8.3's coverage table.
 
 ```sql
 SELECT
@@ -276,6 +324,30 @@ SELECT
   (SELECT COUNT(DISTINCT map_size) FROM games WHERE is_public=1) AS distinct_map_sizes;
 ```
 
+Facet sizing and per-field coverage:
+
+```sql
+-- Games per nation, per slice. `ceil(games/50) * 9` is that bundle's query cost (§4.1).
+WITH duels AS (
+  SELECT game_id FROM player_summaries GROUP BY game_id HAVING COUNT(*)=2 AND SUM(is_human)=2)
+SELECT ps.nation,
+       COUNT(DISTINCT CASE WHEN d.game_id IS NOT NULL THEN ps.game_id END) AS duel_games,
+       COUNT(DISTINCT ps.game_id) AS all_public_games
+FROM player_summaries ps
+JOIN games g ON g.game_id=ps.game_id
+LEFT JOIN duels d ON d.game_id=ps.game_id
+WHERE g.is_public=1 AND ps.is_human=1
+GROUP BY ps.nation ORDER BY duel_games DESC;
+
+-- Per-field coverage by parser version (§8.3). A zero column below a version is a
+-- field the blob never carried, which only a reparse can fill (§14).
+SELECT g.parser_version AS pv, COUNT(*) AS public_games,
+  SUM(CASE WHEN EXISTS(SELECT 1 FROM game_wonder_pool w WHERE w.game_id=g.game_id) THEN 1 ELSE 0 END) AS wonder_pool,
+  SUM(CASE WHEN EXISTS(SELECT 1 FROM player_summaries p WHERE p.game_id=g.game_id AND p.starting_ruler_archetype IS NOT NULL) THEN 1 ELSE 0 END) AS archetype,
+  SUM(CASE WHEN EXISTS(SELECT 1 FROM player_family_cities f WHERE f.game_id=g.game_id) THEN 1 ELSE 0 END) AS family_cities
+FROM games g WHERE g.is_public=1 GROUP BY g.parser_version;
+```
+
 ## 17. Implementation order
 
 One branch, one session. Ordered so each step is verifiable before the next depends on it.
@@ -284,11 +356,13 @@ One branch, one session. Ordered so each step is verifiable before the next depe
 2. **Disjoint cohorts** in `loadYieldCurves` (§7.1) — load-bearing for the all-public slice, not an optimization. Prove byte-identical output against step 1.
 3. **Bound `openingLaws`** (§8.2) so the bundle stops scaling with game count. Changes chart output, so it diffs against step 1.
 4. **Shared composition predicates** — the player-counting duel/FFA/single-player fragments (§3), in `games-scope.ts`, used by the global resolver.
-5. **`resolveGlobalCorpus`** — slice + facets → corpus, with the focal-restriction form for nations (§4.2).
-6. **Cron precompute** for the four slices + KV `global` key variant + the serve-stale rule (§12), with its own cron pattern and staging enabled (§13).
-7. **`GET /v1/stats`** — public, own rate-limit budget, on-demand facet path (§5, §11).
+5. **`resolveGlobalCorpus`** — slice + nation → corpus, narrowing both the game set and the focal set (§4.2), with the set-shaped signature §5 requires.
+6. **Cron precompute** for all 56 selections + KV `global` key variant + the serve-stale rule (§12), one pattern per slice (§4.1) and staging declaring only those (§13).
+7. **`GET /v1/stats`** — public, own rate-limit budget, compute-on-miss (§5, §11).
 8. **Registry parameterized over `ChartBundleCore`** (§9).
 9. **`/stats` route + facet UI** (§9).
+
+§8.3's one-population rule is not a step. It governs steps 2, 3 and 5, and every field added after them.
 
 Turn-window chunking (§7.2) is out of scope here; it slots after step 2 only if a slice crosses the row count in §7.2.
 
