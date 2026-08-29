@@ -282,7 +282,12 @@ describe("chart bundle round-trip", () => {
 	// snapshots just as happily as a populated one.
 	it("populates every chart field the corpus has data for", async () => {
 		for (const focal of ["uploader", "humans"] as const) {
-			const b = await bundleFor(focal === "uploader" ? "uploader" : "humans");
+			// Branch the call, not the argument: bundleFor is overloaded on the
+			// literal, and every field below is one both bundles carry.
+			const b: ChartBundleCore =
+				focal === "uploader"
+					? await bundleFor("uploader")
+					: await bundleFor("humans");
 			expect(b.yieldCurves.turns, focal).toHaveLength(SEEDED_TURNS);
 			expect(b.yieldCurves.outcome, focal).not.toBeNull();
 			expect(Object.keys(b.yieldCurves.series), focal).toHaveLength(16);
