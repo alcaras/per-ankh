@@ -11,13 +11,14 @@
 // Key shape:
 //   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:user:{user_id}:{viewerScope}:{scope}
 //   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:tournament:{tournament_id}:{updated_at}
+//   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:global:{slice}:{nations}
 //
 // We reuse the existing SESSIONS_KV binding (no new infra) — the
 // `stats:` prefix keeps these distinct from `session:` and `oauth:`
 // keys.
 
 import type { SessionEnv } from "../session";
-import type { UserScope, UserStatsScope } from "./types";
+import type { GlobalSlice, UserScope, UserStatsScope } from "./types";
 
 // What each version of the bundle shape changed. This table *is* the version:
 // BUNDLE_SCHEMA_VERSION below is its highest key, so a bump can't happen
@@ -71,12 +72,39 @@ export type StatsCacheKey =
 			// tournaments.updated_at — drifts on every mutation (see above).
 			updated_at: string;
 			parser_version: string;
+	  }
+	| {
+			kind: "global";
+			// Composition slice of the public corpus (games-scope.ts). No
+			// viewerScope: is_public = 1 is the whole visibility rule, so every
+			// viewer reads the same bytes.
+			slice: GlobalSlice;
+			// Nations the selection is faceted on; empty is the whole slice.
+			// Normalized when stringified, so a selection has one spelling
+			// however the caller ordered it — which is what keeps widening the
+			// facet to multi-select a UI change rather than a key migration.
+			nations: string[];
+			parser_version: string;
 	  };
+
+// Everything after a global key's version segment. Its own function because
+// getStaleGlobalCached matches on it across parser versions: written under one
+// spelling and looked for under another, serve-stale would never find anything.
+function globalKeySuffix(
+	key: Extract<StatsCacheKey, { kind: "global" }>,
+): string {
+	return `global:${key.slice}:${[...new Set(key.nations)].sort().join(",")}`;
+}
 
 export function cacheKeyToString(key: StatsCacheKey): string {
 	const v = `v${BUNDLE_SCHEMA_VERSION}-p${key.parser_version}`;
 	if (key.kind === "tournament") {
 		return `stats:${v}:tournament:${key.tournament_id}:${key.updated_at}`;
+	}
+	if (key.kind === "global") {
+		// The empty nation set leaves a trailing colon, so the unfaceted slice
+		// can't be a prefix of a faceted one — what the suffix match relies on.
+		return `stats:${v}:${globalKeySuffix(key)}`;
 	}
 	// The `:user:{id}:` anchor stays early so the prefix walk in
 	// invalidateStatsCache matches every viewerScope × scope variant.
@@ -96,6 +124,60 @@ export async function getCached<T>(
 	} catch {
 		// Stale or corrupted JSON — fall back to recompute by returning
 		// null. The bad entry will be overwritten on next put.
+		return null;
+	}
+}
+
+// Serve-stale, for the global bundles only (global-stats design §12).
+//
+// The key carries two version segments and exactly one of them is safe to
+// reach across. A parser_version bump orphans every entry without changing the
+// bundle's shape, so the previous entry is merely stale and a consumer on the
+// current shape reads it fine. A BUNDLE_SCHEMA_VERSION bump does change the
+// shape, and this module's whole contract is that consumers dereference fields
+// directly — so the walk pins the schema in its prefix and leaves only the
+// parser open. Treating the two segments alike is what makes serve-stale look
+// unavailable here.
+//
+// Only the global corpus wants it. A user or tournament bundle covers one
+// library or one event and recomputes on the request that missed it; a global
+// bundle is up to 108 queries over the whole public corpus, which is what makes
+// last night's copy worth a list walk. The caller is the one that missed on
+// `key`, and is expected to start the recompute itself (ctx.waitUntil) so the
+// stale response never waits on it.
+export async function getStaleGlobalCached<T>(
+	env: StatsCacheEnv,
+	key: Extract<StatsCacheKey, { kind: "global" }>,
+): Promise<T | null> {
+	const prefix = `stats:v${BUNDLE_SCHEMA_VERSION}-p`;
+	const suffix = `:${globalKeySuffix(key)}`;
+
+	// Every entry carries putCached's 24h TTL, so the greatest expiration is
+	// the most recently written — the freshest of the stale, when the parser
+	// has moved more than once inside a TTL. Key order would not do: parser
+	// versions are semver, where "2.9.0" sorts after "2.15.0".
+	let best: { name: string; expiration: number } | null = null;
+	let cursor: string | undefined;
+	do {
+		const res = await env.SESSIONS_KV.list({ prefix, cursor });
+		for (const k of res.keys) {
+			if (!k.name.endsWith(suffix)) continue;
+			const expiration = k.expiration ?? 0;
+			if (best === null || expiration > best.expiration) {
+				best = { name: k.name, expiration };
+			}
+		}
+		cursor = res.list_complete ? undefined : res.cursor;
+	} while (cursor);
+
+	if (best === null) return null;
+	const raw = await env.SESSIONS_KV.get(best.name);
+	// Expired between the list and the read, or written by a build that
+	// crashed mid-JSON — either way the caller recomputes, same as a miss.
+	if (!raw) return null;
+	try {
+		return JSON.parse(raw) as T;
+	} catch {
 		return null;
 	}
 }

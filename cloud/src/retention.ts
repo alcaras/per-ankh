@@ -7,6 +7,13 @@
 // decision instead of silently inheriting a default. The deletion scope
 // is expected to grow over time (e.g. a future security_events table).
 
+// The cron pattern this sweep runs on. Named here so index.ts can dispatch on
+// it by exact match rather than by falling through: staging declares the stats
+// precompute's patterns and not this one, and a fall-through would sweep its
+// events the first time a stats pattern drifted out of sync. Kept in step by
+// eye with `crons` in wrangler.toml — nothing imports a wrangler config.
+export const RETENTION_CRON = "47 3 * * *";
+
 interface RetentionBucket {
 	readonly name: string;
 	// SQLite datetime() modifier, e.g. "-90 days".

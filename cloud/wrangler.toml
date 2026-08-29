@@ -126,12 +126,28 @@ binding = "SESSIONS_KV"
 id = "b7029ad65b8f410b84b4b55623b25e56"
 preview_id = "e4725d2a3a324ec98580f6d6cae1f209"
 
-# Nightly retention sweep over the D1 `events` table — see the `scheduled`
-# handler in src/index.ts and the per-event-type policy in src/retention.ts.
-# 03:47 UTC is off-peak for the player base and deliberately off the hour
+# Cron triggers. Two jobs, dispatched by exact pattern in the `scheduled`
+# handler (src/index.ts) with no fallback — a pattern listed here and matched
+# by neither table there logs and does nothing.
+#
+#   47 3      the retention sweep over the D1 `events` table. Per-event-type
+#             policy in src/retention.ts, which also names the pattern
+#             (RETENTION_CRON).
+#   17 4..7   the public /stats bundle precompute, one pattern per composition
+#             slice (STATS_PRECOMPUTE_CRONS in src/stats/precompute.ts, which
+#             maps each to its slice). Four patterns rather than one because
+#             both the 1,000-query ceiling and the 128 MB isolate are charged
+#             per invocation, and the four slices together are ~963 queries —
+#             so a pattern each buys a fresh budget and a fresh isolate. The
+#             hourly spacing is load-bearing twice over: it keeps every one of
+#             them clear of the others, and an interval of an hour or more is
+#             what puts a cron on the 15-minute CPU tier instead of the
+#             30-second one.
+#
+# All five are off-peak UTC for the player base and deliberately off the hour
 # boundary.
 [triggers]
-crons = ["47 3 * * *"]
+crons = ["47 3 * * *", "17 4 * * *", "17 5 * * *", "17 6 * * *", "17 7 * * *"]
 
 [vars]
 # === Cloud rewrite upload limits ===
@@ -219,9 +235,9 @@ SESSION_COOKIE_NAME = "session"
 #   - routes IS inherited — this block MUST declare its own routes. If it were
 #     removed, `wrangler deploy --env staging` would inherit the prod route and
 #     attach api.per-ankh.app to the staging worker.
-#   - triggers IS inherited — the empty [env.staging.triggers] below opts
-#     staging out of the nightly retention cron. Staging D1 is recloned from
-#     prod; an independent sweep there would skew prod/staging diffs.
+#   - triggers IS inherited — the [env.staging.triggers] block below replaces
+#     the inherited list wholesale, so staging runs the /stats precompute and
+#     not the retention sweep.
 #   - observability IS inherited, nested tables included — staging gets the
 #     same hot windows and exports to the same OTLP destinations (logs and
 #     traces alike) with no duplicate keys here. Exported records carry the
@@ -237,9 +253,13 @@ SESSION_COOKIE_NAME = "session"
 [env.staging]
 routes = [{ pattern = "api-staging.per-ankh.app", custom_domain = true }]
 
-# Opt out of the inherited nightly retention cron (see top-level comment).
+# Replaces the inherited list (see top-level comment). The /stats precompute
+# runs here so the cron path is exercised before prod; the retention sweep is
+# left out because staging D1 is recloned from prod and an independent sweep
+# there would skew prod/staging diffs. The precompute has no such problem — it
+# only reads D1, and writes to staging's own KV.
 [env.staging.triggers]
-crons = []
+crons = ["17 4 * * *", "17 5 * * *", "17 6 * * *", "17 7 * * *"]
 
 [[env.staging.r2_buckets]]
 binding = "SHARE_BUCKET"

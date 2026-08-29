@@ -95,6 +95,13 @@ export async function resolveTournamentCorpus(
 	};
 }
 
+// Every public game of one composition slice — the set both the corpus below
+// and its nation list narrow from. Written once so the two cannot disagree on
+// which games a slice covers. The trailing clause is a bare `WHERE`, so a
+// caller may append further ` AND` fragments to it.
+const globalSliceGamesSql = (slice: GlobalSlice): string =>
+	`SELECT game_id FROM games WHERE is_public = 1${buildGlobalSliceWhere(slice)}`;
+
 // Resolve a global corpus: every public game of one composition slice,
 // optionally narrowed to the games one or more nations were played in.
 //
@@ -129,8 +136,7 @@ export async function resolveGlobalCorpus(
 			: "";
 
 	const rows = await env.SHARE_DB.prepare(
-		`SELECT game_id FROM games
-		 WHERE is_public = 1${buildGlobalSliceWhere(slice)}${nationClause}`,
+		`${globalSliceGamesSql(slice)}${nationClause}`,
 	)
 		.bind(...nations)
 		.all<{ game_id: string }>();
@@ -139,4 +145,27 @@ export async function resolveGlobalCorpus(
 		gameIds: (rows.results ?? []).map((r) => r.game_id),
 		focalNations: nations.length > 0 ? nations : undefined,
 	};
+}
+
+// The nations the nightly precompute builds a faceted bundle for: those
+// actually seated somewhere in the slice, not the whole playable roster. A
+// nation absent from a slice resolves to an empty corpus, and the request path
+// already returns the empty bundle for that on a miss without touching the
+// aggregator — so precomputing it would buy nothing and cost a KV write.
+//
+// Human seats only, matching the game half of the narrowing above: a slice
+// whose only Rome is an AI's has no Rome bundle to build, because no focal set
+// could hold that seat.
+export async function listGlobalSliceNations(
+	env: ResolveEnv,
+	slice: GlobalSlice,
+): Promise<string[]> {
+	const rows = await env.SHARE_DB.prepare(
+		`SELECT DISTINCT nation FROM player_summaries
+		 WHERE is_human = 1 AND nation IS NOT NULL
+		   AND game_id IN (${globalSliceGamesSql(slice)})
+		 ORDER BY nation`,
+	).all<{ nation: string }>();
+
+	return (rows.results ?? []).map((r) => r.nation);
 }

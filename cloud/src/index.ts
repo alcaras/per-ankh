@@ -8,8 +8,10 @@
 //
 // Storage: R2 for blobs, D1 for indices/users, KV for sessions+OAuth state.
 //
-// Besides `fetch`, the Worker exports a `scheduled` handler: the nightly
-// events-retention sweep (cron in wrangler.toml, policy in retention.ts).
+// Besides `fetch`, the Worker exports a `scheduled` handler running two jobs,
+// dispatched by cron pattern (crons in wrangler.toml): the nightly
+// events-retention sweep (policy in retention.ts) and the public /stats bundle
+// precompute, one pattern per slice (stats/precompute.ts).
 
 import {
 	adoptTrustedFrontend,
@@ -27,7 +29,7 @@ import {
 	runWithLogContext,
 	setRoute,
 } from "./log";
-import { sweepEvents, sweepSecurityEvents } from "./retention";
+import { RETENTION_CRON, sweepEvents, sweepSecurityEvents } from "./retention";
 import { emitSecurityEvent } from "./security-events";
 import type { SecurityEventsEnv } from "./security-events";
 import {
@@ -87,6 +89,11 @@ import {
 	handleUncastMatchPart,
 } from "./tournament/player";
 import { handleUserStats } from "./stats/handlers";
+import {
+	STATS_PRECOMPUTE_CRONS,
+	precomputeGlobalSlice,
+} from "./stats/precompute";
+import { CURRENT_PARSER_VERSION } from "./schemas/game";
 import {
 	handlePublicUserSearch,
 	handleReleaseSlug,
@@ -1172,8 +1179,11 @@ export default {
 		});
 	},
 
-	// Not a dispatch path, so it never goes through `routeEnv` — the retention
-	// sweep is a DELETE and stays on the primary binding by construction.
+	// Not a dispatch path, so it never goes through `routeEnv`, and both jobs
+	// run on the primary binding. That is automatic for the sweep, which is a
+	// DELETE, and deliberate for the read-only precompute: `routeEnv` is the
+	// only place allowed to derive a replica handle (d1.ts), and a nightly
+	// warm has no latency budget worth a second replication policy for.
 	async scheduled(
 		controller: ScheduledController,
 		env: RawBindings,
@@ -1181,6 +1191,44 @@ export default {
 	): Promise<void> {
 		// No runWithLogContext: log.ts is safe without a request context
 		// (request_id logs as null, which is accurate for a cron run).
+		//
+		// Both jobs are matched by exact pattern and there is no fallback: an
+		// unrecognized cron logs and does nothing. A fall-through to the sweep
+		// would be the one shape that can't be allowed — staging declares the
+		// stats patterns and not the sweep's, so any drift between the tables
+		// and wrangler.toml would start deleting staging's events, which is
+		// exactly what keeping it off the cron protects.
+		const slice = STATS_PRECOMPUTE_CRONS[controller.cron];
+		if (slice !== undefined) {
+			logEvent("info", "stats_precompute_started", {
+				cron: controller.cron,
+				slice,
+			});
+			try {
+				const result = await precomputeGlobalSlice(
+					env,
+					slice,
+					CURRENT_PARSER_VERSION,
+				);
+				logEvent("info", "stats_precompute_completed", {
+					slice,
+					selections: result.selections,
+					games: result.games,
+				});
+			} catch (err) {
+				// Rethrown for the same reason the sweep's is: nothing awaits a
+				// cron, so the dashboard's run history is the only signal.
+				logError("stats_precompute_failed", err, { slice });
+				throw err;
+			}
+			return;
+		}
+
+		if (controller.cron !== RETENTION_CRON) {
+			logWarn("cron_unrecognized", { cron: controller.cron });
+			return;
+		}
+
 		logEvent("info", "retention_sweep_started", { cron: controller.cron });
 		try {
 			const result = await sweepEvents(env.SHARE_DB);
