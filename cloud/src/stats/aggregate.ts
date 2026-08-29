@@ -299,9 +299,14 @@ async function loadYieldCurves(
 		cum: Map<string, number[]>;
 	};
 	type Cohort = Map<number, Bucket>;
-	const pooled: Cohort = new Map();
+	// Three disjoint cohorts rather than pooled + winners + losers: a decided
+	// row belongs to exactly one of them, so it is stored once instead of
+	// twice. The pooled bands are the merge of all three at band time — the
+	// same multiset per turn, so the same percentiles. Halving what the samples
+	// retain is what keeps a whole-corpus aggregation inside the 128 MB isolate.
 	const winners: Cohort = new Map();
 	const losers: Cohort = new Map();
+	const undecided: Cohort = new Map();
 
 	const decided = await loadDecidedGames(env, gameIds);
 
@@ -339,21 +344,31 @@ async function loadYieldCurves(
 			.all<YieldRawRow>();
 
 		for (const row of (res.results ?? []) as YieldRawRow[]) {
-			const turn = row.turn;
-			accumulate(pooled, turn, row);
-			// Undecided games stay pooled-only: their all-zero is_winner would
-			// read as a clean sweep of losses.
-			if (!decided.has(row.game_id)) continue;
-			accumulate(row.is_winner === 1 ? winners : losers, turn, row);
+			// Undecided games stay out of the outcome split — their all-zero
+			// is_winner would read as a clean sweep of losses — but they are
+			// still part of the pooled merge.
+			accumulate(
+				!decided.has(row.game_id)
+					? undecided
+					: row.is_winner === 1
+						? winners
+						: losers,
+				row.turn,
+				row,
+			);
 		}
 	}
 
-	// The pooled cohort is the superset, so its turns are the shared x-axis;
-	// the split cohorts index against it and carry nulls where they have no
-	// sample.
-	const turns = [...pooled.keys()].sort((a, b) => a - b);
+	// Every turn any cohort saw is the shared x-axis; a cohort with no sample
+	// at one of them carries nulls there, so all of them stay index-aligned.
+	const turns = [
+		...new Set([...winners.keys(), ...losers.keys(), ...undecided.keys()]),
+	].sort((a, b) => a - b);
 
-	const bandsFor = (cohort: Cohort): YieldCohort => {
+	// One cohort, or the merge of several — pooled is all three at once.
+	// flatMap already returns a fresh array, so sorting it in place leaves the
+	// accumulated samples untouched for the next band.
+	const bandsFor = (...cohorts: Cohort[]): YieldCohort => {
 		const series: YieldCohort["series"] = {};
 		for (const [key] of YIELD_COLUMNS) {
 			const band = (which: "rate" | "cum") => {
@@ -361,8 +376,9 @@ async function loadYieldCurves(
 				const p50: Nullable<number>[] = [];
 				const p75: Nullable<number>[] = [];
 				for (const t of turns) {
-					const sample = cohort.get(t)?.[which].get(key) ?? [];
-					const sorted = [...sample].sort((a, b) => a - b);
+					const sorted = cohorts
+						.flatMap((c) => c.get(t)?.[which].get(key) ?? [])
+						.sort((a, b) => a - b);
 					p25.push(percentile(sorted, 25));
 					p50.push(percentile(sorted, 50));
 					p75.push(percentile(sorted, 75));
@@ -371,10 +387,15 @@ async function loadYieldCurves(
 			};
 			series[key] = { rate: band("rate"), cumulative: band("cum") };
 		}
-		return { counts: turns.map((t) => cohort.get(t)?.count ?? 0), series };
+		return {
+			counts: turns.map((t) =>
+				cohorts.reduce((n, c) => n + (c.get(t)?.count ?? 0), 0),
+			),
+			series,
+		};
 	};
 
-	const all = bandsFor(pooled);
+	const all = bandsFor(winners, losers, undecided);
 	return {
 		turns,
 		counts: all.counts,
