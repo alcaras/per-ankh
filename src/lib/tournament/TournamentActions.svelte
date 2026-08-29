@@ -54,9 +54,14 @@
 		"inline-flex items-center gap-1.5 whitespace-nowrap rounded border border-tan px-2.5 py-1 text-xs text-tan transition-colors hover:border-orange hover:text-orange";
 
 	// The local button shows the viewer's actual zone (e.g. "PDT") rather than a
-	// bare "Local", matching the abbreviation on the match times themselves. Falls
-	// back to "Local" if the environment can't resolve one (also the SSR case,
-	// where it would otherwise read "UTC" — corrected on hydration).
+	// bare "Local", matching the abbreviation on the match times themselves. The
+	// "Local" fallback is for an environment that resolves no abbreviation at all
+	// — NOT for SSR: the Worker runs UTC, so Intl resolves "UTC" there and this
+	// button server-renders reading "UTC" even when the clock is set to local.
+	// That's the honest label for that paint rather than a bug to paper over —
+	// MatchTable formats a local-zone time on the Worker's UTC clock too
+	// (formatScheduledInZone), so the button agrees with the times it sits above,
+	// and hydration corrects the pair together.
 	const localZoneLabel = $derived(shortTimeZoneName() || "Local");
 
 	// The viewer's clock face, for the toggle beside the zone one. Read from the

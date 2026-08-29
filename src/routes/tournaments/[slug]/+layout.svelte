@@ -22,6 +22,7 @@
 	import SignedUpPopover from "$lib/tournament/SignedUpPopover.svelte";
 	import TournamentActions from "$lib/tournament/TournamentActions.svelte";
 	import TournamentViewTabs from "$lib/tournament/TournamentViewTabs.svelte";
+	import { tournamentView } from "$lib/tournament/views";
 	import { resolveInitialZone } from "$lib/tournament/zone-preference";
 	import { ZoneClock, setZoneClock } from "$lib/tournament/zone-context.svelte";
 	import type { LayoutData } from "./$types";
@@ -30,24 +31,18 @@
 
 	const tournament = $derived(data.tournament);
 
-	// Which of the three tabs is active, matched on the exact pathname (same rule
-	// as TournamentViewTabs) so Overview doesn't also count on /matches or /stats.
+	// Which view is active, read from the route id (see views.ts — the pathname
+	// this used to compare against is relative during SSR, so every flag came out
+	// false on the server and the chrome below popped in on hydration). Exact per
+	// view, so Overview doesn't also count on /matches or /stats.
 	const overviewHref = $derived(
 		resolve("/tournaments/[slug]", { slug: tournament.slug }),
 	);
-	const isMatches = $derived(
-		page.url.pathname ===
-			resolve("/tournaments/[slug]/matches", { slug: tournament.slug }),
-	);
-	const isStats = $derived(
-		page.url.pathname ===
-			resolve("/tournaments/[slug]/stats", { slug: tournament.slug }),
-	);
-	const isVideos = $derived(
-		page.url.pathname ===
-			resolve("/tournaments/[slug]/videos", { slug: tournament.slug }),
-	);
-	const isOverview = $derived(page.url.pathname === overviewHref);
+	const view = $derived(tournamentView(page.route.id));
+	const isMatches = $derived(view === "matches");
+	const isStats = $derived(view === "stats");
+	const isVideos = $derived(view === "videos");
+	const isOverview = $derived(view === "overview");
 
 	// Canonical trail. Overview: the name is the tail (no link). Matches/Stats:
 	// the name links back to Overview, with a leaf naming the current view.
