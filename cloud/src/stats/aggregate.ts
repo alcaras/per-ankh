@@ -579,6 +579,67 @@ async function loadSaveDates(
 	return out;
 }
 
+// Rows the opening-laws chart can reach: openingLawsOption
+// (src/lib/stats/charts/laws.ts) ranks and takes the top 15 in both its
+// per-nation and its "All nations" reading. Kept in sync by eye, like
+// ALL_NATIONS — no module is shared across the worker/frontend boundary.
+export const OPENING_LAWS_TOP_N = 15;
+
+type OpeningLawRow = ChartBundleCore["openingLaws"][number];
+
+// Bound `openingLaws` to what the chart can show. It is the one bundle field
+// sized by the corpus rather than by the turn axis — distinct (nation,
+// four-law-set) rows grew 139 → 270 → 469 across 143, 286 and 572 public games,
+// two thirds of them singletons — so left alone it is what makes the bundle
+// scale with game count.
+//
+// Not a per-nation slice(), because the "All nations" view sums a set's counts
+// across nations *before* ranking: a row outside its own nation's top N can
+// still place in the aggregate. Keeping the input to both readings — every
+// nation's own top N, plus every row of a set that places in the top N once
+// summed — leaves both rendering what they would render unbounded, save for
+// rows tied at the cut.
+//
+// Exported for unit tests.
+export function boundOpeningLaws(rows: OpeningLawRow[]): OpeningLawRow[] {
+	const setKey = (r: OpeningLawRow) => r.laws.join("|");
+	const rowKey = (r: OpeningLawRow) => `${r.nation}|${setKey(r)}`;
+	// Ties are the common case at this tail, and D1 returns rows unordered, so
+	// the ranking breaks ties on the law set — otherwise which rows survive the
+	// cut would vary from one build of the same corpus to the next.
+	const byCount = (a: OpeningLawRow, b: OpeningLawRow) =>
+		b.count - a.count || setKey(a).localeCompare(setKey(b));
+
+	const keep = new Set<string>();
+
+	const byNation = new Map<string, OpeningLawRow[]>();
+	for (const row of rows) {
+		const forNation = byNation.get(row.nation) ?? [];
+		forNation.push(row);
+		byNation.set(row.nation, forNation);
+	}
+	for (const forNation of byNation.values())
+		for (const row of forNation.sort(byCount).slice(0, OPENING_LAWS_TOP_N))
+			keep.add(rowKey(row));
+
+	// Every nation's row for a top set, not just the ones that got it there:
+	// the aggregate view's count for a set is that whole sum.
+	const summed = new Map<string, number>();
+	for (const row of rows)
+		summed.set(setKey(row), (summed.get(setKey(row)) ?? 0) + row.count);
+	const topSets = new Set(
+		[...summed]
+			.sort(([ka, a], [kb, b]) => b - a || ka.localeCompare(kb))
+			.slice(0, OPENING_LAWS_TOP_N)
+			.map(([k]) => k),
+	);
+	for (const row of rows) if (topSets.has(setKey(row))) keep.add(rowKey(row));
+
+	// Source order: row order is not part of the field's contract, and every
+	// consumer re-ranks.
+	return rows.filter((row) => keep.has(rowKey(row)));
+}
+
 // focal "uploader" → the full user ChartBundle (core + Overview extension).
 // focal "humans" → the tournament ChartBundleCore, with the one-focal-per-game
 // Overview fields (win_rate/games_with_outcome, summary.top_nation/top_archetype)
@@ -1131,7 +1192,7 @@ export async function buildChartBundle(
 		existing.count += 1;
 		openingMap.set(key, existing);
 	}
-	const openingLaws = [...openingMap.values()];
+	const openingLaws = boundOpeningLaws([...openingMap.values()]);
 
 	// Tech: first tech per player + median timing per tech, each broken down by
 	// nation (the player's nation) with an extra ALL_NATIONS aggregate row so
