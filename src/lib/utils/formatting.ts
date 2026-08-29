@@ -228,9 +228,10 @@ let cached12Hour: boolean | undefined;
  * Governs LOCAL times only; UTC keeps its own 24-hour face (see
  * UTC_CLOCK_OPTIONS).
  *
- * Exported for the schedule editor's TimeField, which takes the face as a prop
- * rather than an option bag — and which enters a local time, so it follows the
- * viewer like every other local clock.
+ * This is the BROWSER's answer, and only a default: a viewer who has picked a
+ * face in the header toggle overrides it. Call clockFaceIs12Hour() from
+ * $lib/stores/clock-face instead — it layers the saved choice over this — unless
+ * you specifically want what the browser reports.
  */
 export function viewerUses12Hour(): boolean {
 	// There is no viewer to ask during SSR, and the Worker resolves en-US/UTC —
@@ -250,12 +251,17 @@ export function viewerUses12Hour(): boolean {
 // otherwise force a 12-hour face on everyone. The 12-hour face uses "numeric"
 // so it reads "7:30 PM" rather than a zero-padded "07:30 PM"; the 24-hour face
 // keeps the padding that lines a column of times up.
-function viewerClockOptions(): Intl.DateTimeFormatOptions {
-	const h12 = viewerUses12Hour();
+//
+// The face arrives as an argument rather than being looked up here: it is a
+// reactive preference (clock-face.svelte.ts), and reading a rune from this
+// module would pull $state into the ten bake scripts that import it under tsx,
+// where it doesn't exist. Callers read it in their own reactive context, which
+// is also what makes a flip re-render them.
+function viewerClockOptions(use12Hour: boolean): Intl.DateTimeFormatOptions {
 	return {
-		hour: h12 ? "numeric" : "2-digit",
+		hour: use12Hour ? "numeric" : "2-digit",
 		minute: "2-digit",
-		hour12: h12,
+		hour12: use12Hour,
 	};
 }
 
@@ -336,11 +342,14 @@ export function formatScheduledUtc(iso: string | null | undefined): string {
  * plus its translation, which is the whole point of the line.
  *
  * @param iso - ISO-8601 instant string, or null/undefined
+ * @param use12Hour - the viewer's clock face, from clockFaceIs12Hour(). Governs
+ *   the parenthetical local half only; the UTC primary is always 24-hour.
  * @returns "MMM D, HH:MM UTC (<time> TZ)" (date in the local part only when it
  *   differs), or "" when the input is empty/invalid
  */
 export function formatScheduledWithLocal(
 	iso: string | null | undefined,
+	use12Hour: boolean,
 ): string {
 	const utc = formatScheduledUtc(iso);
 	if (!utc) return "";
@@ -371,7 +380,10 @@ export function formatScheduledWithLocal(
 	if (localDate === utcDate && localTimeUtcFace === utcTime)
 		return `${utc} UTC`;
 
-	const localTime = d.toLocaleTimeString(TIME_LOCALE, viewerClockOptions());
+	const localTime = d.toLocaleTimeString(
+		TIME_LOCALE,
+		viewerClockOptions(use12Hour),
+	);
 	const tzName = shortTimeZoneName(d);
 
 	// The local date is shown only on a day rollover; include its year when it
@@ -400,12 +412,15 @@ export function formatScheduledWithLocal(
  *
  * @param iso - ISO-8601 instant string, or null/undefined
  * @param zone - "utc" for the canonical UTC clock, "local" for the viewer's
+ * @param use12Hour - the viewer's clock face, from clockFaceIs12Hour(). Applies
+ *   to the local clock only; the UTC one is always 24-hour.
  * @returns "MMM D, <time> <TZ>" — 24-hour on the UTC clock, the viewer's own
  *   face on the local one — or "" when the input is empty/invalid
  */
 export function formatScheduledInZone(
 	iso: string | null | undefined,
 	zone: "utc" | "local",
+	use12Hour: boolean,
 ): string {
 	if (!iso) return "";
 	const d = new Date(iso);
@@ -420,7 +435,7 @@ export function formatScheduledInZone(
 		month: "short",
 		day: "numeric",
 		...(isDifferentYear(d, undefined) ? { year: "numeric" as const } : {}),
-		...viewerClockOptions(),
+		...viewerClockOptions(use12Hour),
 	});
 	const tzName = shortTimeZoneName(d);
 	return tzName ? `${dateTime} ${tzName}` : dateTime;
@@ -434,11 +449,14 @@ export function formatScheduledInZone(
  *
  * @param iso - ISO-8601 instant string, or null/undefined
  * @param zone - "utc" for the canonical UTC clock, "local" for the viewer's
+ * @param use12Hour - the viewer's clock face, from clockFaceIs12Hour(). Applies
+ *   to the local clock only; the UTC one is always 24-hour.
  * @returns the clock time in that zone, or "" when the input is empty/invalid
  */
 export function formatScheduledTimeInZone(
 	iso: string | null | undefined,
 	zone: "utc" | "local",
+	use12Hour: boolean,
 ): string {
 	if (!iso) return "";
 	const d = new Date(iso);
@@ -448,7 +466,7 @@ export function formatScheduledTimeInZone(
 				...UTC_CLOCK_OPTIONS,
 				timeZone: "UTC",
 			})
-		: d.toLocaleTimeString(TIME_LOCALE, viewerClockOptions());
+		: d.toLocaleTimeString(TIME_LOCALE, viewerClockOptions(use12Hour));
 }
 
 /**

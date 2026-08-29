@@ -67,11 +67,11 @@
 	// propagate through the reactive proxy).
 	import type { UserSearchResult } from "$lib/api-cloud";
 	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
+	import { clockFaceIs12Hour } from "$lib/stores/clock-face.svelte";
 	import {
 		formatRelativeToNow,
 		formatScheduledUtc,
 		TIME_LOCALE,
-		viewerUses12Hour,
 	} from "$lib/utils/formatting";
 	import { DatePicker, TimeField } from "bits-ui";
 	import {
@@ -321,7 +321,7 @@
 			<TimeField.Root
 				locale={TIME_LOCALE}
 				granularity="minute"
-				hourCycle={viewerUses12Hour() ? 12 : 24}
+				hourCycle={clockFaceIs12Hour() ? 12 : 24}
 				value={part.time}
 				placeholder={timePlaceholder}
 				onValueChange={(v) => (part.time = v instanceof Time ? v : undefined)}

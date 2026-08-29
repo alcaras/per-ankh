@@ -56,6 +56,7 @@
 	import { buildSlotMaps } from "$lib/tournament/slot-identity";
 	import { toast } from "$lib/ui/toast";
 	import type { Measurable } from "$lib/ui/types";
+	import { clockFaceIs12Hour } from "$lib/stores/clock-face.svelte";
 	import { formatScheduledTimeInZone } from "$lib/utils/formatting";
 	import type { PageData } from "./$types";
 
@@ -66,6 +67,10 @@
 
 	const slotMaps = $derived(buildSlotMaps(data.standings, data.bracket));
 	const partition = $derived(partitionSchedule(data.matches));
+
+	// The viewer's clock face, for the calendar's time chips — MatchTable reads
+	// it itself. Ignored while the zone toggle sits on UTC, always 24-hour.
+	const use12Hour = $derived(clockFaceIs12Hour());
 
 	// Admin "sesh.fyi"-style copy of upcoming (scheduled, still-pending) matches,
 	// soonest first, with Discord timestamps — paste into a Discord scheduling /
@@ -706,6 +711,7 @@
 												>{formatScheduledTimeInZone(
 													np.part.scheduled_at,
 													clock.zone,
+													use12Hour,
 												)}{#if np.split}<span
 														class="ml-1 font-normal opacity-60"
 														>· Pt {np.partNumber}</span

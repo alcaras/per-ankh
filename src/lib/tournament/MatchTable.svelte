@@ -54,6 +54,7 @@
 		type MatchTableTournament,
 	} from "$lib/tournament/matches-table";
 	import type { ScheduleZone } from "$lib/tournament/schedule";
+	import { clockFaceIs12Hour } from "$lib/stores/clock-face.svelte";
 	import {
 		archetypeSpriteKey,
 		formatArchetype,
@@ -133,6 +134,11 @@
 		stickyHeader?: boolean;
 		emptyMessage?: string;
 	} = $props();
+
+	// The viewer's clock face, read once for the whole table rather than per time
+	// cell. Flipping it re-renders this component (see clock-face.svelte.ts); the
+	// UTC clock ignores it and stays 24-hour.
+	const use12Hour = $derived(clockFaceIs12Hour());
 
 	const distinguishing = $derived(distinguishingOptions(tournament.map_pool));
 
@@ -353,6 +359,7 @@
 											>{formatScheduledInZone(
 												row.part.scheduled_at,
 												zone,
+												use12Hour,
 											)}</span
 										>
 										{#if live}
@@ -371,7 +378,7 @@
 								{:else}
 									{@const g = matchStatusGroup(m)}
 									{@const instant = matchSortInstant(m)}
-									{@const t = formatScheduledInZone(instant, zone)}
+									{@const t = formatScheduledInZone(instant, zone, use12Hour)}
 									{#if instant}
 										{@const rel = formatRelativeToNow(instant)}
 										<!-- A real instant (scheduled or overdue): show it with the same

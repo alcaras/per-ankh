@@ -25,6 +25,7 @@
 	import UserAutocomplete from "$lib/ui/UserAutocomplete.svelte";
 	import SchedulePopover from "$lib/tournament/SchedulePopover.svelte";
 	import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
+	import { clockFaceIs12Hour } from "$lib/stores/clock-face.svelte";
 	import {
 		CHART_THEME,
 		getChartColor,
@@ -111,6 +112,11 @@
 		onSubstitute,
 		onClose,
 	}: Props = $props();
+
+	// The viewer's clock face. This card always renders both clocks ("14:30 UTC
+	// (7:30 AM PDT)"), so it follows the preference whichever way the page's
+	// UTC/local toggle is set — only the parenthetical local half is affected.
+	const use12Hour = $derived(clockFaceIs12Hour());
 
 	type EditMode = "none" | "map" | "retro";
 	let editMode = $state<EditMode>("none");
@@ -1206,7 +1212,7 @@
 								<path d="M16 2v4M8 2v4M3 10h18" />
 							</svg>
 							<span
-								>{formatScheduledWithLocal(part.scheduled_at)}<span
+								>{formatScheduledWithLocal(part.scheduled_at, use12Hour)}<span
 									class="text-muted"
 								>
 									· {formatRelativeToNow(part.scheduled_at)}</span
