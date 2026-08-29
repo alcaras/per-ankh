@@ -24,18 +24,24 @@ What does **not** exist: a global resolver, a facet vocabulary, precomputation, 
 
 ## 3. Slices
 
-Four, each `is_public = 1`:
+Four, each `is_public = 1`. Counts are from the 2026-08-25 corpus snapshot; §16 re-derives them.
 
-| Slice | Predicate |
-| --- | --- |
-| All public games | (no composition filter) |
-| Multiplayer duels | exactly 2 players, both human |
-| Multiplayer FFA | 3 or more human players |
-| Single-player | exactly 1 human player |
+| Slice | Predicate | Public games | Focal rows |
+| --- | --- | --- | --- |
+| All public games | (no composition filter) | 572 | 90,406 |
+| Multiplayer duels | exactly 2 players, both human | 538 | 78,878 |
+| Multiplayer FFA | 3 or more human players | 19 | 9,363 |
+| Single-player | exactly 1 human player | 10 | 1,209 |
+
+*Focal rows* are the human `game_player_turn` rows a slice feeds to `loadYieldCurves` — the quantity §7 is denominated in, and the one that governs whether a slice fits.
+
+**The corpus is duels.** 94% of public games are 1v1, so "All public games" and "Multiplayer duels" are the same charts to within 34 games, and the other two slices are small enough that a facet applied to them is decorative. Ship all four regardless: the taxonomy is the point, and the two thin slices cost 9 queries and ~20 MB each. Expect the duel slice to carry the page.
 
 **Tournament is not a slice.** A tournament match is two humans playing each other, so tournament games are a subset of multiplayer duels — not a sibling category. Per-tournament stats already have their own page. This is deliberate and is the same taxonomy defect that issue #228 records against the existing `?scope` selector.
 
-**The duel predicate counts players, not humans:** `HAVING COUNT(*) = 2 AND SUM(is_human) = 2`. The existing scope predicates filter `WHERE is_human = 1` and *then* count, which would let a 2-human + 2-AI game pass as a duel. Note the divergence — a shared helper should implement the player-counting form.
+**The duel predicate counts players, not humans:** `HAVING COUNT(*) = 2 AND SUM(is_human) = 2`. The existing scope predicates filter `WHERE is_human = 1` and *then* count, which lets a 2-human + 2-AI game pass as a duel. The shared helper implements the player-counting form; the divergence covers 5 public games today, at player/human compositions 3/2, 4/2, 5/2 and 6/2.
+
+**The three composition slices do not partition the corpus.** Those same 5 games match no composition predicate — too few humans for FFA, too many for single-player, too many players for a duel — and so appear only under "All public games". That is the intended reading, and it is why the all-public slice is not the union of the other three (its 90,406 focal rows against their 89,450).
 
 ## 4. Facets
 
@@ -46,7 +52,7 @@ Two, both **multi-select**, ANDed with the slice:
 
 ### 4.1 Facets cannot be precomputed
 
-~13 playable nations and ~6 real map sizes. Multi-select means every subset is a valid selection, so the combination space is 4 slices × 2¹³ × 2⁶ ≈ **2.1 million bundles**. Single-select would still be ~392 bundles ≈ 53,000 D1 queries ≈ 53 cron invocations. Neither is precomputable.
+~13 playable nations and 7 map sizes present in the public corpus. Multi-select means every subset is a valid selection, so the combination space is 4 slices × 2¹³ × 2⁷ ≈ **4.2 million bundles**. Single-select would still be ~448 bundles, an upper bound of ~48,000 D1 queries ≈ 48 cron invocations. Neither is precomputable.
 
 This is the central architectural consequence and it shapes §5.
 
@@ -74,7 +80,7 @@ request with facets ──▶ compute on demand ──▶ KV, short TTL, opportu
 
 This inverts cleanly as the corpus grows: if on-demand aggregation stops fitting a request budget, the fallback is to precompute more and refuse the long tail, not to redesign.
 
-**Open:** actual CPU time for one aggregation is unmeasured. The fetch-handler default is 30s (raisable to 5 min via `limits.cpu_ms`). This must be measured before the on-demand path is relied on — see §12.
+CPU is not what bounds this path. A whole-corpus aggregation costs ~1s of JS (§6.1) against a 30s fetch-handler default (raisable to 5 min via `limits.cpu_ms`), and a faceted selection is a subset of its slice and therefore cheaper still. The request path is bounded by memory instead — §7.
 
 ## 6. Budgets and platform limits
 
@@ -91,23 +97,42 @@ Verified against Cloudflare docs, 2026-08-28.
 | KV storage / max value | 1 GB included / 25 MiB per value | Not a concern |
 | D1 max bound params | 100 | Why `CHUNK_SIZE = 50` leaves headroom |
 
-**Query arithmetic.** The aggregator runs 9 chunked query loops at `CHUNK_SIZE = 50`, so a slice costs `ceil(N/50) × 9` queries. At 739 games that is ~135 per whole-corpus slice; four slices ≈ 540, inside one invocation's 1,000.
+**Query arithmetic.** The aggregator runs 9 chunked query loops at `CHUNK_SIZE = 50`, so a slice costs exactly `ceil(N/50) × 9` queries. The all-public slice is 108; all four together are 225, well inside one invocation's 1,000. The ceiling arrives at roughly 5,500 games in a single slice (§15).
 
 **Both the query ceiling and the memory ceiling are per invocation.** `crons` is an array and the handler already dispatches on `controller.cron`, so splitting slices across staggered cron patterns gives each a fresh 1,000-query budget *and* a fresh isolate. Keep every added pattern at an interval ≥ 1 hour to stay on the 15-minute CPU tier.
 
+### 6.1 Cost of one aggregation
+
+Baseline, established by driving the real `buildChartBundle(env, corpus, version, "humans")` over all nine loaders against the 2026-08-25 snapshot, with D1 replaced by an in-process SQLite shim of `QueryableD1` (Apple M2, Node 25):
+
+| Slice | Queries | JS CPU | Peak live heap | Bundle JSON | gzipped |
+| --- | --- | --- | --- | --- | --- |
+| All public (572) | 108 | ~0.98 s | 97.7 MB | 622 KB | 154 KB |
+| Duels (538) | 99 | ~0.87 s | 86.4 MB | 597 KB | 151 KB |
+| FFA (19) | 9 | ~0.09 s | 19.6 MB | 419 KB | 112 KB |
+| Single-player (10) | 9 | ~0.02 s | 2.8 MB | 385 KB | 94 KB |
+
+Read these as an order of magnitude, not a contract, in two directions. SQLite runs in-process, so its time is excluded from JS CPU exactly as D1's would be — but workerd charges result deserialization the shim does not, so the deployed figure is some multiple of this rather than equal to it. And Node's `heapUsed` is not workerd's 128 MB accounting; what transfers is the ratio between slices and the slope in §7, not the third digit.
+
 ## 7. Memory — the binding constraint
 
-`loadYieldCurves` (`aggregate.ts:273`) pulls **raw** `game_player_turn` rows and retains, per row, one number in each of 32 arrays (16 series × rate + cumulative). Decided games land in `pooled` *and* one of `winners`/`losers`, so they are stored twice. Estimated at ~770 bytes retained per raw row.
+`loadYieldCurves` (`aggregate.ts:273`) pulls **raw** `game_player_turn` rows and retains, per row, one number in each of 32 arrays (16 series × rate + cumulative). Decided games land in `pooled` *and* one of `winners`/`losers`, so they are stored twice.
 
-**This number is not yet measured and it is the most decision-relevant unknown in the plan.** See §14.
+The rate is **~890 bytes of live heap per focal row**, over a ~17 MB floor for the other eight loaders — a slope confirmed across corpus subsets from 143 to 572 games. `loadYieldCurves` is ~83% of the peak: holding the corpus fixed at 572 games and halving the focal set (`focal: "uploader"`) takes the peak from 97.7 MB to 57.3 MB.
 
-### 7.1 Free win: disjoint cohorts
+At 90,406 focal rows that puts the all-public slice at **97.7 MB against a 128 MB isolate** — 76% of the ceiling in live objects, before allocation churn. §7.1 is what buys the headroom back, which is why it is a prerequisite rather than a tidy-up.
 
-Accumulate **winners / losers / undecided** as three disjoint cohorts instead of `pooled` + `winners` + `losers`. The pooled bands are then the merge of all three at band time — exactly identical percentiles, roughly **33% less memory**. Local change to one function, no bundle-shape change. Worth doing regardless of what the measurement says.
+### 7.1 Required: disjoint cohorts
+
+Accumulate **winners / losers / undecided** as three disjoint cohorts instead of `pooled` + `winners` + `losers`. The pooled bands are then the merge of all three at band time — exactly identical percentiles. Local change to one function, no bundle-shape change.
+
+The saving is set by how much of the corpus is decided, since a decided row is the one stored twice. 89,284 of 90,406 public focal rows — **98.8%** — sit in decided games, so this halves sample storage: `loadYieldCurves` goes from ~81 MB to ~41 MB and the all-public peak lands near 55–60 MB. That is the difference between a slice that fits with room and one that runs at 76% of the isolate.
 
 ### 7.2 Contingency: turn-window chunking
 
-If the all-public slice does not fit, process turns in windows (1–20, 21–40, …) instead of all at once. Percentiles are computed per turn independently, so windowing partitions the work along an axis the algorithm already partitions along — **byte-identical output, no bundle-shape change**, invisible to every chart.
+Out of v1 scope — with §7.1 the largest slice fits with roughly half the isolate free. If a slice later outgrows it, process turns in windows (1–20, 21–40, …) instead of all at once. Percentiles are computed per turn independently, so windowing partitions the work along an axis the algorithm already partitions along — **byte-identical output, no bundle-shape change**, invisible to every chart.
+
+The trigger is a row count, not a game count: against a 128 MB isolate the ceiling is ~125,000 focal rows as the code stands and ~250,000 with §7.1 — about 1,600 public games at the current ~158 focal rows per game.
 
 Costs: windows must run sequentially (parallel defeats the memory bound), so wall-clock grows and global slices become cron-only rather than on-demand-capable; needs the turn range up front; the window width is a tuning knob whose right value drifts with corpus size.
 
@@ -117,7 +142,7 @@ Alternatives considered and rejected: **t-digest / reservoir sampling** (constan
 
 **Decision: one bundle per corpus, as today. Not split per category.**
 
-The deciding fact is that the bundle is **size-stable as the corpus grows**. `yieldCurves` is 16 series × 2 (rate/cumulative) × 3 bands × 3 cohorts = 288 arrays of length `turns.length` — that is `O(max_turn)`, not `O(games)`. The per-nation/law/tech rows are `O(nations × laws)`. At ~300 turns the payload is roughly 500–600 KB of JSON, ~150 KB gzipped, and it stays there as games accumulate.
+The deciding fact is that the bundle is **size-stable as the corpus grows**. `yieldCurves` is 16 series × 2 (rate/cumulative) × 3 bands × 3 cohorts = 288 arrays of length `turns.length` — that is `O(max_turn)`, not `O(games)`. The per-nation/law/tech rows are `O(nations × laws)`. On the current 152-turn axis the all-public bundle is 622 KB of JSON, 154 KB gzipped, and it stays there as games accumulate. The 10-game single-player slice is 385 KB / 94 KB on the same axis — 57× fewer games for 62% of the payload — which is the property this section rests on.
 
 The only `O(games)` field is `save_dates`, which the global bundle drops anyway (§8.1).
 
@@ -191,26 +216,26 @@ Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant. F
 
 **Close the aggregator-test gap.** `docs/aggregate-statistics.md` lists "No aggregator tests" as a known limitation and names the fix: a fixture → `ChartBundle` round-trip. That gap is load-bearing here — the disjoint-cohort change (§7.1) and any turn-windowing (§7.2) must be provably output-identical for existing corpora, and without a round-trip test there is nothing to diff old against new. Build it first, not last.
 
-**Measure CPU** for one full aggregation before relying on the on-demand facet path (§5).
+**Re-measure cost as the corpus grows.** §6.1 is a baseline, not a fixed property; §16 and the same harness re-derive it. The figure to watch is focal rows per slice, since that is what §7.2's trigger is denominated in.
 
 ## 14. Open questions
 
-1. **`game_player_turn` row count.** The 2026-08-28 attempt returned wrangler's execution summary (528,766 rows read, 61.33 MB database) rather than the result row, so the counts are still unknown. This settles whether the all-public slice fits in 128 MB — i.e. whether §7.2 is v1 scope or contingency — and whether FFA has enough games to be worth a slice. Query is at §16.
-2. **Aggregation CPU time** — unmeasured; gates §5.
-3. **`favorite_day_of_week`, `wonderStats`, `openingLaws`** dispositions in the §8.1 table.
-4. **Miss behavior** choice from §12.
+1. **`favorite_day_of_week`, `wonderStats`, `openingLaws`** dispositions in the §8.1 table.
+2. **Miss behavior** choice from §12.
 
 ## 15. Deferred, with growth triggers
 
 Not in scope; each records the condition that would change that.
 
-- **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~5,500 games, where `ceil(N/50) × 9` nears the 1,000-query ceiling. At 739 games and ~200 uploads/month this is roughly two to three years out. It would also make the *user* path marginally slower, so it is worth doing only for the global case.
-- **Turn-window chunking** (§7.2). Trigger: the §14.1 measurement.
-- **A second facet dimension beyond nations and map sizes.** At 739 games most cells of a deeper cross-product would hold under 20 games. Trigger: enough corpus that a representative cell holds a usable sample.
+- **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~5,500 games, where `ceil(N/50) × 9` nears the 1,000-query ceiling. At 572 public games and ~200 uploads/month this is roughly two to three years out. It would also make the *user* path marginally slower, so it is worth doing only for the global case.
+- **Turn-window chunking** (§7.2). Trigger: ~250,000 focal rows in one slice — about 1,600 public games.
+- **A second facet dimension beyond nations and map sizes.** At 572 public games, 538 of them duels, most cells of a deeper cross-product would hold under 20 games. Trigger: enough corpus that a representative cell holds a usable sample.
 - **Tournament chart tabs collapsing onto the shared registry** (§9).
 - **Issue #228** — migrating the user-page `?scope` selector onto this facet vocabulary. Deliberately out of scope: it changes three live surfaces and a URL contract, and issue #156 wants to move the same call sites. But the facet model here **must be designed to subsume `UserScope`**, and must be validated against the user page's concepts (collections, the `public` subset, `viewerOwnsTarget` visibility) even though only the global consumer ships now.
 
 ## 16. Corpus sizing query
+
+Re-run against a D1 snapshot to refresh §3's counts and re-check §7.2's trigger; the figures in this doc are from 2026-08-25.
 
 ```sql
 SELECT
@@ -239,7 +264,7 @@ SELECT
 One branch, one session. Ordered so each step is verifiable before the next depends on it.
 
 1. **Fixture → bundle round-trip test** (§13). Nothing else is safely verifiable without it.
-2. **Disjoint cohorts** in `loadYieldCurves` (§7.1). Prove byte-identical output against step 1.
+2. **Disjoint cohorts** in `loadYieldCurves` (§7.1) — load-bearing for the all-public slice, not an optimization. Prove byte-identical output against step 1.
 3. **Shared composition predicates** — the player-counting duel/FFA/single-player fragments (§3), in `games-scope.ts`, used by the global resolver.
 4. **`resolveGlobalCorpus`** — slice + facets → corpus, with the focal-restriction form for nations (§4.2).
 5. **Cron precompute** for the four slices + KV `global` key variant + miss behavior (§12), with its own cron pattern and staging enabled (§13).
@@ -247,7 +272,7 @@ One branch, one session. Ordered so each step is verifiable before the next depe
 7. **Registry parameterized over `ChartBundleCore`** (§9).
 8. **`/stats` route + facet UI** (§9).
 
-Turn-window chunking (§7.2) slots between 2 and 3 if §14.1 says it is needed.
+Turn-window chunking (§7.2) is out of scope here; it slots between 2 and 3 only if a slice crosses the row count in §7.2.
 
 ## 18. Docs to update on ship
 
