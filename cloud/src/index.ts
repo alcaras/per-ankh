@@ -897,8 +897,11 @@ const ROUTES: RouteSpec[] = [
 		handler: (r, e, m) => handleUserTournaments(m![1], r, e),
 	},
 	// The chart bundle over the whole public corpus — what /stats reads.
-	// Public and sessionless: is_public = 1 is the whole visibility rule, so
-	// every viewer gets the same bytes. ?slice= picks the roster composition,
+	// Session-gated, and not because the payload is viewer-dependent: it isn't.
+	// is_public = 1 is the whole visibility rule, so every signed-in caller
+	// reads the same bytes. What the session gates is who may spend a
+	// whole-corpus aggregation, and it is checked ahead of the budget so a
+	// refused call spends none of it. ?slice= picks the roster composition,
 	// ?nation= facets it. Its own per-IP budget (GLOBAL_STATS_VIEW_PER_HOUR),
 	// not a share of anon_read. Passes ctx so a stale-served bundle can rebuild
 	// in the background.

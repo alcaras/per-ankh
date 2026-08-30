@@ -555,7 +555,6 @@ async function loadFamilyCities(
 
 interface SaveDateRow {
 	date: string;
-	weekday: number | null;
 	nation: string | null;
 	// Identity + title inputs for the Overview calendar's click-through. The
 	// last three feed formatGameTitle on the frontend so a calendar cell links
@@ -567,11 +566,16 @@ interface SaveDateRow {
 	total_turns: number;
 }
 
-// One row per in-scope game with a save_date — feeds the Overview
-// calendar heatmap, the favorite-day stat, and the games-by-nation bar.
-// weekday is computed in SQL (strftime '%w', 0=Sun..6=Sat) to preserve
-// the semantics of the retired /v1/stats handler; nation falls back to
-// the first human player (the same COALESCE handleGameList uses).
+// One row per in-scope game with a save_date — feeds the Overview calendar
+// heatmap and nothing else. (The games-by-nation bar reads the self rows'
+// nationCount, not this; and the modal weekday this used to compute went with
+// favorite_day_of_week.) nation falls back to the first human player, the same
+// COALESCE handleGameList uses.
+//
+// Called only on the uploader focal path: save_dates is a ChartBundle field,
+// not a ChartBundleCore one, so an all-humans corpus has nowhere to put the
+// result and skipping the call is what makes that bundle cost eight chunked
+// query loops instead of nine.
 async function loadSaveDates(
 	env: AggregateEnv,
 	gameIds: string[],
@@ -580,7 +584,6 @@ async function loadSaveDates(
 	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
 			`SELECT substr(g.save_date, 1, 10) AS date,
-			        CAST(strftime('%w', g.save_date) AS INTEGER) AS weekday,
 			        g.game_id AS game_id,
 			        g.game_name AS game_name,
 			        g.display_name AS display_name,
@@ -697,6 +700,7 @@ export async function buildChartBundle(
 					top_archetype: null,
 					win_rate: null,
 					games_with_outcome: 0,
+					save_dates: [],
 				});
 	}
 
@@ -722,7 +726,9 @@ export async function buildChartBundle(
 		loadWonderEvents(env, corpus.gameIds),
 		loadWonderPool(env, corpus.gameIds),
 		loadFamilyCities(env, corpus.gameIds),
-		loadSaveDates(env, corpus.gameIds),
+		focal === "uploader"
+			? loadSaveDates(env, corpus.gameIds)
+			: Promise.resolve<SaveDateRow[]>([]),
 	]);
 
 	const selfMembership = buildSelfMembership(baseRows, focal, focalNations);
@@ -789,7 +795,8 @@ export async function buildChartBundle(
 		.map(([nation, games_played]) => ({ nation, games_played }))
 		.sort((a, b) => b.games_played - a.games_played);
 
-	// Calendar heatmap data + modal weekday.
+	// Calendar heatmap data. Empty on the all-humans path, where the loader
+	// above never ran and the field is off the returned type anyway.
 	const saveDates = saveDateRows.map((r) => ({
 		date: r.date,
 		nation: r.nation,
@@ -798,25 +805,6 @@ export async function buildChartBundle(
 		display_name: r.display_name,
 		total_turns: r.total_turns,
 	}));
-	const weekdayCount = new Map<number, number>();
-	for (const r of saveDateRows) {
-		if (r.weekday != null) {
-			weekdayCount.set(r.weekday, (weekdayCount.get(r.weekday) ?? 0) + 1);
-		}
-	}
-	let favoriteDayOfWeek: number | null = null;
-	let favoriteDayCount = -1;
-	for (const [weekday, count] of weekdayCount) {
-		// Tiebreak on the lower weekday for a stable result, matching the
-		// old ORDER BY COUNT(*) DESC, weekday ASC.
-		if (
-			count > favoriteDayCount ||
-			(count === favoriteDayCount && weekday < (favoriteDayOfWeek ?? Infinity))
-		) {
-			favoriteDayCount = count;
-			favoriteDayOfWeek = weekday;
-		}
-	}
 
 	// --- Nation win rate / avg points ---------------------------------
 	const nationStats = new Map<
@@ -1326,8 +1314,6 @@ export async function buildChartBundle(
 			total_games: totalGames,
 			avg_total_turns: avgTotalTurns,
 		},
-		save_dates: saveDates,
-		favorite_day_of_week: favoriteDayOfWeek,
 		nations,
 		nationWinRate,
 		nationAvgPoints,
@@ -1351,6 +1337,7 @@ export async function buildChartBundle(
 		top_archetype: topArchetype,
 		win_rate: winRate,
 		games_with_outcome: gamesWithOutcome,
+		save_dates: saveDates,
 	});
 }
 
@@ -1364,6 +1351,7 @@ function withOverview(
 		top_archetype: ChartBundle["summary"]["top_archetype"];
 		win_rate: Nullable<number>;
 		games_with_outcome: number;
+		save_dates: ChartBundle["save_dates"];
 	},
 ): ChartBundle {
 	return {
@@ -1375,6 +1363,7 @@ function withOverview(
 		},
 		win_rate: overview.win_rate,
 		games_with_outcome: overview.games_with_outcome,
+		save_dates: overview.save_dates,
 	};
 }
 
@@ -1403,8 +1392,6 @@ function emptyCore(parserVersion: string): ChartBundleCore {
 			total_games: 0,
 			avg_total_turns: null,
 		},
-		save_dates: [],
-		favorite_day_of_week: null,
 		nations: [],
 		nationWinRate: [],
 		nationAvgPoints: [],

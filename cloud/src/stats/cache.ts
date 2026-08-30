@@ -39,6 +39,7 @@ const BUNDLE_SCHEMA_CHANGELOG: Record<number, string> = {
 	6: "starting-leader archetype + trait win rates",
 	7: "per-wonder build rate, builder win rate, and build-turn distribution",
 	8: "capital family class win rate, plus avg_share / share_samples / slot_counts on familyByNation (per-class city footprint and founding order)",
+	9: "favorite_day_of_week dropped (no consumer — the profile card reads its own copy from GET /v1/users/:user_id), and save_dates moved from ChartBundleCore to the user-only ChartBundle: only the profile Overview calendar renders it, and it was the one field whose size grew with the corpus rather than with the turn axis",
 };
 
 export const BUNDLE_SCHEMA_VERSION = Math.max(
@@ -141,7 +142,7 @@ export async function getCached<T>(
 //
 // Only the global corpus wants it. A user or tournament bundle covers one
 // library or one event and recomputes on the request that missed it; a global
-// bundle is up to 108 queries over the whole public corpus, which is what makes
+// bundle is up to 96 queries over the whole public corpus, which is what makes
 // last night's copy worth a list walk. The caller is the one that missed on
 // `key`, and is expected to start the recompute itself (ctx.waitUntil) so the
 // stale response never waits on it.

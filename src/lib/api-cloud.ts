@@ -1028,8 +1028,10 @@ export const cloudApi = {
 	},
 
 	// Aggregate ChartBundleCore over the whole public corpus — feeds /stats.
-	// Public: anonymous, no session, and the payload is the same bytes for
-	// every viewer (which is what lets the Worker put an s-maxage on it).
+	// Session-gated — 401 without one, which is why this goes through the
+	// credentialed `request` rather than a bare fetch. The payload is still the
+	// same bytes for every viewer (which is what lets the Worker put an
+	// s-maxage on a cookie-gated response).
 	// The selection is a composition slice plus an optional nation; each is
 	// omitted at its default so the default view has one canonical URL, and
 	// so one edge-cache entry rather than several spellings of one bundle.

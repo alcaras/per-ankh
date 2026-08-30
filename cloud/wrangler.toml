@@ -137,7 +137,7 @@ preview_id = "e4725d2a3a324ec98580f6d6cae1f209"
 #             slice (STATS_PRECOMPUTE_CRONS in src/stats/precompute.ts, which
 #             maps each to its slice). Four patterns rather than one because
 #             both the 1,000-query ceiling and the 128 MB isolate are charged
-#             per invocation, and the four slices together are ~963 queries —
+#             per invocation, and the four slices together are ~856 queries —
 #             so a pattern each buys a fresh budget and a fresh isolate. The
 #             hourly spacing is load-bearing twice over: it keeps every one of
 #             them clear of the others, and an interval of an hour or more is
@@ -146,8 +146,8 @@ preview_id = "e4725d2a3a324ec98580f6d6cae1f209"
 #   37 *      the /stats warm (STATS_WARM_CRON, same module). Rebuilds any of
 #             the four *unfaceted* bundles that is missing, and only those:
 #             the 52 nation bundles belong to the nightly patterns above,
-#             because all 56 in one invocation is ~963 queries against the
-#             1,000 ceiling while the four unfaceted are ~225. Both segments
+#             because all 56 in one invocation is ~856 queries against the
+#             1,000 ceiling while the four unfaceted are ~200. Both segments
 #             of the cache key are Worker-compiled, so a deploy is what
 #             orphans them, and hourly bounds the cold window to one interval
 #             rather than to the night's run. Conditional, so the steady state

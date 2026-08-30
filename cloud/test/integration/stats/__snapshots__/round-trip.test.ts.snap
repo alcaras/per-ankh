@@ -129,7 +129,6 @@ exports[`chart bundle round-trip > builds the all-humans bundle from the same co
       "wins": 1,
     },
   ],
-  "favorite_day_of_week": 1,
   "lawTiming": [
     {
       "count": 1,
@@ -404,32 +403,6 @@ exports[`chart bundle round-trip > builds the all-humans bundle from the same co
         "LAW_VASSALAGE",
       ],
       "nation": "NATION_ROME",
-    },
-  ],
-  "save_dates": [
-    {
-      "date": "2026-01-05",
-      "display_name": null,
-      "game_id": "game#0",
-      "game_name": "Test Match",
-      "nation": "NATION_EGYPT",
-      "total_turns": 100,
-    },
-    {
-      "date": "2026-01-05",
-      "display_name": null,
-      "game_id": "game#1",
-      "game_name": "Test Match",
-      "nation": "NATION_EGYPT",
-      "total_turns": 100,
-    },
-    {
-      "date": "2026-01-07",
-      "display_name": null,
-      "game_id": "game#2",
-      "game_name": "Test Match",
-      "nation": "NATION_EGYPT",
-      "total_turns": 100,
     },
   ],
   "startingArchetypeWinRate": [
@@ -2450,7 +2423,6 @@ exports[`chart bundle round-trip > builds the user bundle from the fixture corpu
       "wins": 1,
     },
   ],
-  "favorite_day_of_week": 1,
   "games_with_outcome": 3,
   "lawTiming": [
     {

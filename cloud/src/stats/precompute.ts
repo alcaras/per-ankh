@@ -24,7 +24,7 @@ import type { ChartBundleCore, GlobalSlice } from "./types";
 // Cron pattern → the slice that pattern precomputes.
 //
 // One pattern per slice rather than one invocation for all four. The four
-// together are ~963 D1 queries against a 1,000-per-invocation ceiling, and
+// together are ~856 D1 queries against a 1,000-per-invocation ceiling, and
 // both that ceiling and the 128 MB isolate are charged per invocation — so a
 // pattern each buys a fresh query budget *and* a fresh isolate, and a fifth
 // slice later adds a pattern instead of eating another's margin. Every
@@ -179,14 +179,14 @@ export interface WarmResult {
 // stampede.
 //
 // **Only the four unfaceted slices.** All 56 selections in one invocation is
-// ~963 D1 queries against a 1,000-per-invocation ceiling, which is the reason
+// ~856 D1 queries against a 1,000-per-invocation ceiling, which is the reason
 // §4.1 splits the nightly by slice in the first place; the four unfaceted ones
-// are ~225 and fit with room. They are also the ones that matter here — a
+// are ~200 and fit with room. They are also the ones that matter here — a
 // visitor lands on a slice, never on a nation — and the 52 nation bundles have
 // the nightly crons and the request path's compute-on-miss.
 //
 // **Only the ones actually missing.** An unconditional hourly rebuild would be
-// ~5,400 D1 queries a day spent overwriting entries that were already correct.
+// ~4,800 D1 queries a day spent overwriting entries that were already correct.
 // Both segments of the cache key are Worker-compiled — BUNDLE_SCHEMA_VERSION
 // (stats/cache.ts) and CURRENT_PARSER_VERSION (schemas/game.ts) — so every
 // event that orphans a key at once is a Worker deploy, and the worst case this

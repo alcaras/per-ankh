@@ -311,12 +311,24 @@ describe("chart bundle round-trip", () => {
 				"expansionWinRate",
 				"techFirst",
 				"techTiming",
-				"save_dates",
 			] as const) {
 				expect(b[field], `${focal}.${field}`).not.toHaveLength(0);
 			}
-			expect(b.favorite_day_of_week, focal).not.toBeNull();
 		}
+	});
+
+	// save_dates is the one populated field that is *not* in the loop above,
+	// because it is not in the core: it belongs to the user-only extension, so
+	// the two bundles are asserted to differ rather than to agree. Stating both
+	// halves is the point — dropping it from the core saves the payload only if
+	// the humans path also stops loading it, and an assertion that it is merely
+	// absent would pass just as well if it were being loaded and discarded.
+	it("carries save_dates on the user bundle only", async () => {
+		const user = await bundleFor("uploader");
+		expect(user.save_dates.length).toBeGreaterThan(0);
+
+		const humans: ChartBundleCore = await bundleFor("humans");
+		expect("save_dates" in humans).toBe(false);
 	});
 });
 

@@ -7,7 +7,7 @@
 // under every nation's key, and the resulting page would look right until
 // someone compared a nation against itself. The second is that the warm stays
 // inside its brief: the four unfaceted bundles, only the ones missing. Warming
-// wider is ~963 queries against a 1,000 ceiling; warming unconditionally is a
+// wider is ~856 queries against a 1,000 ceiling; warming unconditionally is a
 // day's D1 budget spent overwriting correct entries. The third is the
 // dispatch: `scheduled` matches cron patterns by exact table and exact
 // constant with no fallback, because staging declares these patterns and not
@@ -271,7 +271,7 @@ describe("warmGlobalSlices", () => {
 		// Stated separately from the set above because it is the constraint, not
 		// an incidental consequence of it: the nightly writes one bundle per
 		// nation seated in the slice — Egypt and Rome both are, in the duel — and
-		// all 56 selections in one invocation is ~963 D1 queries against a
+		// all 56 selections in one invocation is ~856 D1 queries against a
 		// 1,000-per-invocation ceiling. The warm builds four.
 		expect(await cachedBundle("duel", [EGYPT], WARM_COLD_PARSER)).toBeNull();
 		expect(await cachedBundle("duel", [ROME], WARM_COLD_PARSER)).toBeNull();
@@ -375,7 +375,7 @@ describe("cron dispatch", () => {
 		for (const key of unfaceted) expect(after.has(key)).toBe(true);
 		// And whatever it did add was unfaceted: the nation bundles belong to
 		// the nightly patterns, which is what keeps this invocation's query
-		// count at ~225 rather than ~963.
+		// count at ~200 rather than ~856.
 		const added = [...after].filter((k) => !before.has(k));
 		expect(added.every((k) => unfaceted.includes(k))).toBe(true);
 	});

@@ -342,7 +342,7 @@ User-corpus aggregate stats bundle.
 - **Auth:** Public (owner extras) — owner (`self`) corpus includes private games; visitor/anon forced to public.
 - **Path:** `user_id` (21-char).
 - **Query:** `scope` (default `all`; `public`|`vs_ai`|`mp`|`tournament`|`<collection_id>`; collection and `public` narrowing are owner-only).
-- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, wonder build/timing stats, yield curves, law/tech timing…) plus user-only `win_rate` and `games_with_outcome`.
+- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, wonder build/timing stats, yield curves, law/tech timing…) plus the user-only extension: `win_rate`, `games_with_outcome`, `summary.top_nation`/`top_archetype`, and `save_dates` (the Overview calendar; user-only since bundle schema 9, along with the removal of `favorite_day_of_week` — the profile card's copy of that comes from `GET /v1/users/:user_id`, not here).
 - **Errors:** `400 INVALID_USER_ID`, `404 NOT_FOUND`.
 - **Notes:** KV-cached, keyed on `{ user_id, viewerScope, scope, parser_version }`.
 
@@ -396,7 +396,7 @@ The chart bundle over the **whole public corpus** — the same catalog `GET /v1/
 
 - **Auth:** Session. Not because the payload is viewer-dependent — it is not: `is_public = 1` is the whole visibility rule, and it already covers both "public because the uploader said so" and "public because it is a tournament game" (a tournament-linked upload is forced public), so every signed-in caller reads the same bytes. The session gates who may spend a whole-corpus aggregation, and it is checked before the rate limit, so a refused call spends no budget. Scraper User-Agents are exempt from the budget but not from the gate, so link-preview bots get `401` here.
 - **Query:** `slice` (default `duel`; `all`|`duel`|`ffa`|`single_player`) and `nation` (a nation zType, e.g. `NATION_ROME`; default none). Both parse forgivingly like `?scope=` elsewhere — an unknown slice falls back to the default and an unknown nation to no facet, so a stale bookmark degrades to a neighbouring view instead of `400`ing.
-- **Response 200:** `ChartBundleCore` — the same shape `GET /v1/tournaments/:id/stats/games` returns. No `win_rate` / `top_nation`: this corpus counts every human seat, where those fields assume one focal player per game and would read ~50% by construction.
+- **Response 200:** `ChartBundleCore` — the same shape `GET /v1/tournaments/:id/stats/games` returns. No `win_rate` / `top_nation`: this corpus counts every human seat, where those fields assume one focal player per game and would read ~50% by construction. No `save_dates` either, for a different reason — a calendar of every save on the site is not a chart, and it was the one bundle field whose size grew with the corpus rather than with the turn axis.
 - **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_GLOBAL_STATS`.
 - **Notes:** The slices are roster **compositions** — `duel` is exactly two players both human, `ffa` three or more humans, `single_player` exactly one — and they do **not** partition the corpus: a game with two humans and any AI matches none of them, so it appears only under `all`. A `nation` selection narrows twice, the games *and* the seats within them, so a Rome facet over a Rome-vs-Greece duel bands only the Roman's rows. KV-cached, keyed on `{ slice, nations, parser_version }`, with all 56 selections warmed nightly by cron (one pattern per slice). A miss computes in the request and never refuses; across a parser-version bump the previous entry is served stale while the new one rebuilds in the background, but never across a `BUNDLE_SCHEMA_VERSION` bump — that changes the bundle's shape. Edge-cached 60s (`s-maxage`), no browser cache.
 
@@ -484,7 +484,7 @@ Competition stats (standings + caster leaderboard + player picks).
 ### `GET /v1/tournaments/:id/stats/games`
 Aggregate game/chart stats over the tournament's completed matches.
 
-- **Response 200:** `ChartBundleCore` (same core fields as user stats, "humans" focal — every human player).
+- **Response 200:** `ChartBundleCore` (same core fields as user stats, "humans" focal — every human player; no `save_dates` or the other user-only Overview fields).
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 - **Notes:** KV-cached, keyed on `{ tournament_id, updated_at, parser_version }`.
 

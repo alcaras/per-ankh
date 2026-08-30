@@ -45,17 +45,6 @@ export interface ChartBundleCore {
 
 	summary: ChartBundleSummaryCore;
 
-	// Per-game; correct over either focal set (final home on the tournament
-	// page is deferred).
-	save_dates: Array<{
-		date: string;
-		nation: string | null;
-		game_id: string;
-		game_name: string | null;
-		display_name: string | null;
-		total_turns: number;
-	}>;
-	favorite_day_of_week: Nullable<number>;
 	nations: Array<{ nation: string; games_played: number }>;
 
 	nationWinRate: Array<{
@@ -188,6 +177,19 @@ export interface ChartBundle extends ChartBundleCore {
 	// --- Overview (user corpus) — folded from the retired /v1/stats ---
 	win_rate: Nullable<number>;
 	games_with_outcome: number;
+
+	// The Overview tab's calendar heatmap. Per-game, so it would read fine
+	// over the all-humans focal set too — it is user-only because only the
+	// profile renders it, and because it is the one field that grows with the
+	// corpus instead of with the turn axis.
+	save_dates: Array<{
+		date: string;
+		nation: string | null;
+		game_id: string;
+		game_name: string | null;
+		display_name: string | null;
+		total_turns: number;
+	}>;
 }
 
 // The single scope selection for the user corpus (mirrors the Worker's
