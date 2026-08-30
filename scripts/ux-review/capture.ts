@@ -398,6 +398,11 @@ export async function captureAnon(
 export interface AuthOpts {
 	isAdmin: boolean;
 	tournamentSlug: string | null;
+	// Whether the signed-in user owns the game being walked. The signed-in
+	// pass defaults to the local admin while the game is picked at random, so
+	// the two need not coincide — and the owner-only controls on game detail
+	// render only when they do.
+	ownsGame: boolean;
 }
 
 // Run the signed-in pass at the current viewport. Returns records.
@@ -447,7 +452,13 @@ export async function captureAuth(
 		}),
 	);
 	recs.push(
-		...(await captureGameDetail(page, baseUrl, "auth", ids.gameId, "owner")),
+		...(await captureGameDetail(
+			page,
+			baseUrl,
+			"auth",
+			ids.gameId,
+			opts.ownsGame ? "owner" : "signed in",
+		)),
 	);
 	recs.push(
 		await captureSingle(page, baseUrl, {

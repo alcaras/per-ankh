@@ -19,13 +19,14 @@
 //                /?next=… .
 //
 //   Signed in  — the same browser with a real session cookie minted for a
-//                local user (the discovered game's owner by default).
-//                Unlocks the owner / authenticated surface: / ,
-//                /users/[user_id] (owner), /account, /games/[id] (owner),
-//                /tournaments, /tournaments/[slug], /admin (when the auth
-//                user is the local ADMIN_DISCORD_ID), plus a
-//                redirect-verification note for /dashboard, /games,
-//                /auth/callback.
+//                local user (the local ADMIN_DISCORD_ID user by default, so
+//                the gated surfaces stay captured however the random game's
+//                ownership falls). Unlocks the authenticated surface: / ,
+//                /users/[user_id] (owner), /account, /games/[id] (owner
+//                only when that user owns the game picked), /tournaments,
+//                /tournaments/[slug], /admin (when the auth user is the
+//                local ADMIN_DISCORD_ID), plus a redirect-verification note
+//                for /dashboard, /games, /auth/callback.
 //
 // Auth mechanism: a session is just a `session` cookie carrying an opaque
 // token mapping in SESSIONS_KV to {user_id, discord_username} (see
@@ -55,6 +56,7 @@ import {
 	deleteLocalSession,
 	discoverGame,
 	discoverTournamentSlug,
+	lookupAdminUserId,
 	lookupAuthUser,
 	lookupGameOwner,
 	mintLocalSession,
@@ -106,8 +108,9 @@ function printHelp(): void {
 			"  --user-id ID        Pin the publicly-viewed profile",
 			"                      (default: the game's owner)",
 			"  --auth-user-id ID   Pin the user the signed-in pass runs as",
-			"                      (default: --user-id). /admin and /tournaments are",
-			"                      captured only when that user clears their gates.",
+			"                      (default: the local ADMIN_DISCORD_ID user, else",
+			"                      --user-id). /admin and /tournaments are captured",
+			"                      only when that user clears their gates.",
 			"  --help              Show this help",
 			"",
 			"Preconditions:",
@@ -142,20 +145,26 @@ export async function main(argv: string[]): Promise<void> {
 	setTarget("local");
 
 	let gameId: string;
-	let userId: string;
+	let gameOwnerId: string;
 	if (gameIdArg) {
 		gameId = gameIdArg;
-		// The publicly-viewed profile is the game's owner unless pinned — the
-		// same pairing auto-discovery produces, so the two paths agree.
-		userId = userIdArg ?? (await lookupGameOwner(gameId));
+		gameOwnerId = await lookupGameOwner(gameId);
 	} else {
 		info("Discovering a public game whose blob is present in local R2…");
 		const found = await discoverGame();
 		gameId = found.game_id;
-		userId = userIdArg ?? found.user_id;
+		gameOwnerId = found.user_id;
 	}
+	// The publicly-viewed profile is the game's owner unless pinned, so the
+	// anonymous pass shows the profile behind the game it just walked.
+	const userId = userIdArg ?? gameOwnerId;
 
-	const authUserId = authUserIdArg ?? userId;
+	// The signed-in pass runs as the local admin unless pinned. The game is
+	// picked at random and most public games are not the admin's, so tying
+	// the session to the game's owner instead would drop /admin and the
+	// tournament beta gate from nearly every bundle. Falls back to the
+	// profile user where the checkout has no local admin.
+	const authUserId = authUserIdArg ?? (await lookupAdminUserId()) ?? userId;
 	const { discordUsername, isAdmin } = await lookupAuthUser(authUserId);
 	const tournamentSlug = await discoverTournamentSlug();
 	const ids: ReviewIds = {
@@ -164,9 +173,14 @@ export async function main(argv: string[]): Promise<void> {
 		authUserId,
 		authLabel: discordUsername || null,
 	};
+	const ownsGame = authUserId === gameOwnerId;
 	info(
 		`game_id=${gameId}  user_id=${userId}  auth_user_id=${authUserId}` +
-			` (${discordUsername}${isAdmin ? ", admin" : ""})`,
+			` (${discordUsername}${isAdmin ? ", admin" : ""}` +
+			// Whether game detail is captured in owner state or as a signed-in
+			// visitor is the one thing the identities decide that isn't visible
+			// from the ids themselves.
+			`${ownsGame ? ", owns game" : ", not the game's owner"})`,
 	);
 
 	info("Minting local session…");
@@ -243,6 +257,7 @@ export async function main(argv: string[]): Promise<void> {
 			for (const rec of await captureAuth(auth, baseUrl, ids, {
 				isAdmin,
 				tournamentSlug,
+				ownsGame,
 			})) {
 				await mergeRecord(bp.id, rec);
 			}

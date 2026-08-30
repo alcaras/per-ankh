@@ -119,9 +119,30 @@ export async function discoverGame(): Promise<GameRow> {
 	);
 }
 
-// The owner of a pinned --game-id. Auto-discovery always pairs a game with
-// its owner (who therefore has at least one public game); resolving the same
-// pairing here keeps --game-id from dragging in an unrelated profile.
+// ADMIN_DISCORD_ID from cloud/.dev.vars. Null when the file is absent or the
+// var is unset — both read as "this checkout has no local admin".
+function adminDiscordId(): string | null {
+	const v = readDotVars(DEV_VARS).ADMIN_DISCORD_ID;
+	return v != null && v !== "" ? v : null;
+}
+
+// The local site admin's user_id — the default identity for the signed-in
+// pass, so /admin and the tournament beta gate stay captured however the
+// random game's ownership falls. Null when there is no local admin, or no
+// user row carries their discord_id (a checkout whose D1 predates them).
+export async function lookupAdminUserId(): Promise<string | null> {
+	const discordId = adminDiscordId();
+	if (discordId == null) return null;
+	const rows = await d1Query<{ user_id: string }>(
+		`SELECT user_id FROM users WHERE discord_id = ${sqlStr(discordId)};`,
+	);
+	return rows[0]?.user_id ?? null;
+}
+
+// The owner of a game. Auto-discovery pairs a game with its owner (who
+// therefore has at least one public game — what the anonymous profile pass
+// needs); this resolves the same pairing for a pinned --game-id, and tells
+// the signed-in pass whether it is looking at its own game.
 export async function lookupGameOwner(gameId: string): Promise<string> {
 	const rows = await d1Query<{ user_id: string }>(
 		`SELECT user_id FROM games WHERE game_id = ${sqlStr(gameId)};`,
@@ -146,11 +167,10 @@ export async function lookupAuthUser(
 	if (!row) {
 		throw new Error(`No local user ${userId} (for --auth-user-id).`);
 	}
-	// No .dev.vars, or no ADMIN_DISCORD_ID in it, reads as "no local admin".
-	const adminDiscordId = readDotVars(DEV_VARS).ADMIN_DISCORD_ID ?? null;
+	const discordId = adminDiscordId();
 	return {
 		discordUsername: row.discord_username ?? "",
-		isAdmin: adminDiscordId != null && row.discord_id === adminDiscordId,
+		isAdmin: discordId != null && row.discord_id === discordId,
 	};
 }
 
