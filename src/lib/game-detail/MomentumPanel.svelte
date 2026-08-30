@@ -4,10 +4,9 @@
 	// and the 50% midline filled in whoever-leads' colour, and the numbers for
 	// the hovered turn in a stable panel below the chart — hover explores,
 	// click pins. No tooltip, no commentary: the panel is the data.
-	import type { ChartOption, ECharts, LineSeriesOption } from "$lib/echarts";
+	import type { ChartOption, ECharts } from "$lib/echarts";
 	import type { EventLog } from "$lib/types/EventLog";
 	import { CHART_THEME, CHART_REFERENCE_LINE_COLOR } from "$lib/config";
-	import { toRgba } from "$lib/utils/color";
 	import Chart from "$lib/Chart.svelte";
 	import { formatEnum, stripMarkup } from "$lib/utils/formatting";
 	import type { MomentumCurve } from "./momentum";
@@ -47,27 +46,6 @@
 	// filled in whoever-leads' colour — above the midline `a`'s fill, below it
 	// `b`'s. Two silent clamped series carry the fills (max(p,50) / min(p,50)
 	// with the area anchored at 50), so no visualMap is needed.
-	//
-	// The early stretch fades: at 30% of the game the model's held-out
-	// discrimination is barely better than a coin flip (see the generated
-	// header), and rendering it with the endgame's visual authority would
-	// borrow the idiom of a live win-probability graphic — a forecast, which
-	// this is not. Line and fills ramp to full strength at ~30% progress.
-	const fade = (
-		color: string,
-		peak: number,
-	): NonNullable<LineSeriesOption["areaStyle"]>["color"] => ({
-		type: "linear",
-		x: 0,
-		y: 0,
-		x2: 1,
-		y2: 0,
-		colorStops: [
-			{ offset: 0, color: toRgba(color, peak * 0.3) },
-			{ offset: 0.3, color: toRgba(color, peak) },
-			{ offset: 1, color: toRgba(color, peak) },
-		],
-	});
 	const chartOption = $derived<ChartOption>({
 		...CHART_THEME,
 		title: { ...CHART_THEME.title, text: "Momentum" },
@@ -93,9 +71,7 @@
 					Math.max(50, Math.round(pt.p * 1000) / 10),
 				),
 				lineStyle: { opacity: 0 },
-				// Opacity lives in the gradient stops; ECharts' 0.7 default
-				// would multiply on top of it.
-				areaStyle: { origin: 50, color: fade(a.color, 0.22), opacity: 1 },
+				areaStyle: { origin: 50, color: a.color, opacity: 0.22 },
 			},
 			{
 				type: "line",
@@ -105,13 +81,13 @@
 					Math.min(50, Math.round(pt.p * 1000) / 10),
 				),
 				lineStyle: { opacity: 0 },
-				areaStyle: { origin: 50, color: fade(b.color, 0.22), opacity: 1 },
+				areaStyle: { origin: 50, color: b.color, opacity: 0.22 },
 			},
 			{
 				type: "line",
 				showSymbol: false,
 				data: curve.points.map((pt) => Math.round(pt.p * 1000) / 10),
-				lineStyle: { width: 2, color: fade(a.color, 1) },
+				lineStyle: { width: 2, color: a.color },
 				itemStyle: { color: a.color },
 				markLine: {
 					silent: true,
@@ -146,11 +122,17 @@
 
 	type BarRow = { dim: string; v: number };
 
+	/** Display floor for a bar — below this a row is noise, not a story. */
+	const BAR_MIN = 0.03;
+	/** Everything that moved at all; lv/ch are rounded to 2dp, so ties drop. */
+	const BAR_MIN_ANY = 0.01;
+
 	// Contributions flipped toward the named player, so positive always means
 	// "helped them"; split into helping and working-against.
 	function bars(
 		vals: number[],
 		towardA: boolean,
+		min: number,
 	): {
 		pos: BarRow[];
 		neg: BarRow[];
@@ -159,7 +141,7 @@
 		const sgn = towardA ? 1 : -1;
 		const rows = curve.dims
 			.map((dim, j) => ({ dim, v: Math.round(vals[j] * sgn * 100) / 100 }))
-			.filter((r) => Math.abs(r.v) >= 0.03);
+			.filter((r) => Math.abs(r.v) >= min);
 		return {
 			pos: rows.filter((r) => r.v > 0).sort((x, y) => y.v - x.v),
 			neg: rows.filter((r) => r.v < 0).sort((x, y) => x.v - y.v),
@@ -167,11 +149,22 @@
 		};
 	}
 
-	const levelBars = $derived(bars(pt.lv, aLeads));
+	const levelBars = $derived(bars(pt.lv, aLeads, BAR_MIN));
 	const delta = $derived(prev ? pt.p - prev.p : 0);
+	const deltaPts = $derived(Math.round(Math.abs(delta) * 100));
 	const gainerIsA = $derived(delta >= 0);
 	const gainer = $derived(gainerIsA ? a : b);
-	const changeBars = $derived(prev ? bars(pt.ch, gainerIsA) : null);
+	// BAR_MIN is per-dimension while the header quotes their sum, so five
+	// dimensions each moving just under the floor still add to a move the
+	// header prints. When that happens, drop the floor rather than caption a
+	// non-zero header with "no dimension moved much" — the bars and the
+	// header describe the same number and must never disagree.
+	const changeBars = $derived.by(() => {
+		if (!prev) return null;
+		const shownBars = bars(pt.ch, gainerIsA, BAR_MIN);
+		if (shownBars.pos.length > 0 || shownBars.neg.length > 0) return shownBars;
+		return deltaPts > 0 ? bars(pt.ch, gainerIsA, BAR_MIN_ANY) : shownBars;
+	});
 
 	// Key stats: each side's own numbers, leader-per-row coloured.
 	const STAT_ROWS: { label: string; index: number; dp: number }[] = [
@@ -285,13 +278,6 @@
 >
 	<Chart option={chartOption} height="280px" onReady={wireChart} />
 
-	<!-- The scorer's honesty note, surfaced where the reader is -->
-	<div class="mt-1 text-[10px] italic text-tan">
-		A retrospective read of the finished match — who was winning, not who
-		would have won. The early game fades because the model is genuinely
-		uncertain there.
-	</div>
-
 	<!-- Detail for the hovered / pinned turn -->
 	<div
 		class="mt-2 rounded-md border border-border-subtle p-3"
@@ -384,7 +370,7 @@
 					>
 						T{prev.turn} → T{pt.turn}:
 						<span style="color: {gainer.color};">{gainer.label}</span>
-						+{Math.round(Math.abs(delta) * 100)} pts
+						+{deltaPts} pts
 					</div>
 					{#if changeBars.pos.length === 0 && changeBars.neg.length === 0}
 						<div class="text-xs italic text-tan">no dimension moved much</div>
