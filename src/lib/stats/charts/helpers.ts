@@ -60,17 +60,21 @@ export function fmtLaw(value: string): string {
 export const WIN_COLOR = YIELD_COLORS.YIELD_GROWTH;
 export const LOSS_COLOR = MILITARY_POWER_COLOR;
 
-// Fills for a chart that buckets an outcome three ways rather than splitting it
-// two (the wonders bars). Culture / Food / Orders, from the same yield palette
-// the two-way split draws on but sharing no color with it — a scale of its
-// own, read on the one chart that uses it.
+// The middle fill for a chart that buckets an outcome three ways rather than
+// splitting it two (the wonders bars). The outer two buckets are WIN_COLOR and
+// LOSS_COLOR above: a bucket that means "mostly won" and a stack segment that
+// means "won" are the same claim, so they read in the same green and red
+// everywhere. Culture sits between them for the bucket that is neither.
 //
-// All three clear the contrast floor the yield bake enforces on the chart
-// ground: 5.53 / 4.99 / 6.39:1. Separation at the worst pair is 0.142 in OKLab
-// (Culture/Orders) and 0.098 under deuteranopic simulation (Food/Orders).
-export const OUTCOME_WON = YIELD_COLORS.YIELD_CULTURE;
-export const OUTCOME_MIXED = YIELD_COLORS.YIELD_FOOD;
-export const OUTCOME_LOST = YIELD_COLORS.YIELD_ORDERS;
+// Culture clears the same contrast floor on the chart ground (5.53:1). The
+// three-way separation is tighter than the two-way pair it extends — 0.107 in
+// OKLab at the worst pair (Growth/Culture) against the 0.256 of green-to-red —
+// and under deuteranopic simulation the worst pair is still green-to-red at
+// 0.073. What carries the reading is the same thing that carries it on the
+// two-way charts: fixed order (won, mixed, lost, top to bottom) plus text —
+// here a legend the wonders chart turns on and a tooltip that spells the rate
+// out with its sample.
+export const OUTCOME_MIXED = YIELD_COLORS.YIELD_CULTURE;
 
 // The app's body-text tan (--color-tan, what `text-tan` renders), spelled as a
 // literal because ECharts options can't read a CSS variable.

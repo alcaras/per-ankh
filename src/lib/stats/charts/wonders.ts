@@ -28,10 +28,10 @@ import {
 	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
-	OUTCOME_LOST,
+	LOSS_COLOR,
 	OUTCOME_MIXED,
-	OUTCOME_WON,
 	TEXT_TAN,
+	WIN_COLOR,
 	crestAxisLabel,
 } from "./helpers";
 
@@ -95,11 +95,15 @@ const TICK_INTERVAL = 20;
 // Outcome buckets for the bar's fill. A wonder's builders are few, so the read
 // is "did building this tend to go with winning", not a precise rate — three
 // buckets say that honestly where a gradient would imply precision.
+//
+// The outer two take the app-wide win and loss colors, so a bar that means
+// "mostly won" reads as the same green as a wins segment on the nation and
+// leader bars; OUTCOME_MIXED is the third fill those charts never need.
 const OUTCOME_BUCKETS = [
 	{
 		name: "Mostly won when built",
 		min: 0.6,
-		itemStyle: { color: OUTCOME_WON },
+		itemStyle: { color: WIN_COLOR },
 	},
 	{
 		name: "Mixed",
@@ -109,7 +113,7 @@ const OUTCOME_BUCKETS = [
 	{
 		name: "Mostly lost when built",
 		min: 0,
-		itemStyle: { color: OUTCOME_LOST },
+		itemStyle: { color: LOSS_COLOR },
 	},
 ] as const;
 
