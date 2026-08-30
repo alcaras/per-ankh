@@ -93,7 +93,11 @@
 					silent: true,
 					symbol: "none",
 					label: { show: false },
-					lineStyle: { color: CHART_REFERENCE_LINE_COLOR, type: "dashed" },
+					lineStyle: {
+						color: CHART_REFERENCE_LINE_COLOR,
+						type: "solid",
+						width: 1,
+					},
 					data: [{ yAxis: 50 }],
 				},
 			},

@@ -151,7 +151,7 @@
 					label: { show: false },
 					lineStyle: {
 						color: CHART_REFERENCE_LINE_COLOR,
-						type: "dashed",
+						type: "solid",
 						width: 1,
 					},
 					data: [{ yAxis: 50 }],

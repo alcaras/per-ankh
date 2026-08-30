@@ -125,7 +125,7 @@ export function getSeriesColor(index: number): string {
 }
 
 /**
- * Subdued dashed reference line (e.g. the momentum chart's 50% midline):
+ * Subdued reference line (e.g. the momentum chart's 50% midline):
  * warm gray between the theme's surface browns and its text creams, so the
  * line reads as furniture rather than another data series.
  */
