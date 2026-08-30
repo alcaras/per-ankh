@@ -6,6 +6,7 @@
 	import DiscordLoginButton from "$lib/DiscordLoginButton.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import RecentSaveCard from "$lib/RecentSaveCard.svelte";
+	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import Panel from "$lib/ui/Panel.svelte";
 	import VideoCard from "$lib/VideoCard.svelte";
 	import type { PageData } from "./$types";
@@ -129,25 +130,38 @@
 				</div>
 
 				<!--
-					The action. Signed in it's the way into your own games, carrying the
-					same avatar the header shows so it reads as "you". Signed out it's the
-					same button the header's Login is, sized as a call to action.
+					The action. Signed in it's a pair — the whole public corpus, then your
+					own games, in that order because the first is the same page for every
+					viewer and the second is yours; the profile link carries the same avatar
+					the header shows so it reads as "you". Signed out it's the same button
+					the header's Login is, sized as a call to action.
 					-->
 				{#if user}
-					<ProfileLink
-						userId={user.user_id}
-						slug={user.slug}
-						class="inline-flex shrink-0 items-center gap-2 self-start rounded-md bg-[#292623] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:text-orange sm:self-auto"
+					<div
+						class="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto"
 					>
-						<img
-							src={user.avatar_url}
-							alt=""
-							class="h-6 w-6 rounded-full border border-black"
-							width="24"
-							height="24"
-						/>
-						Your Games
-					</ProfileLink>
+						<a
+							href={resolve("/stats")}
+							class="inline-flex items-center gap-2 rounded-md bg-[#292623] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:text-orange"
+						>
+							<SpriteIcon category="icons" value="STATS" size={24} alt="" />
+							Global Stats
+						</a>
+						<ProfileLink
+							userId={user.user_id}
+							slug={user.slug}
+							class="inline-flex items-center gap-2 rounded-md bg-[#292623] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:text-orange"
+						>
+							<img
+								src={user.avatar_url}
+								alt=""
+								class="h-6 w-6 rounded-full border border-black"
+								width="24"
+								height="24"
+							/>
+							Your Games
+						</ProfileLink>
+					</div>
 				{:else}
 					<DiscordLoginButton
 						label="Continue with Discord"

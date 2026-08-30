@@ -194,6 +194,19 @@
 				<div
 					class="absolute right-0 z-50 mt-2 w-40 rounded border-2 border-black bg-blue-gray shadow-lg"
 				>
+					<!--
+						Global stats leads both branches: it's public data, so it's the one
+						destination in here a signed-out viewer can reach, and the divider
+						keeps it read as a place to go rather than an account item.
+					-->
+					<a
+						href={resolve("/stats")}
+						class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
+						onclick={closeMenu}
+					>
+						Global Stats
+					</a>
+					<div class="border-t border-black"></div>
 					{#if user}
 						<a
 							href={resolve("/account")}
