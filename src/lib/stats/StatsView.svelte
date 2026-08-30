@@ -34,10 +34,22 @@
 	// dropdowns would be a second control for the same question. The profile
 	// stats tab has no such facet, so it keeps them — there they are the only
 	// way to read one nation at a time.
+	//
+	// countLabel — what one sample on the yields overlay is, which follows the
+	// focal mode the bundle was built in and so is the caller's to name. A
+	// uploader-focal bundle has one seat per game ("Games"); a humans-focal one
+	// has a seat per human player ("Players"), where a one-duel corpus counts 2.
+	// Forwarded to YieldsStatsPanel, which is where the tournament stats page
+	// passes its own.
 	let {
 		bundle,
 		showNationSelect = true,
-	}: { bundle: ChartBundleCore; showNationSelect?: boolean } = $props();
+		countLabel,
+	}: {
+		bundle: ChartBundleCore;
+		showNationSelect?: boolean;
+		countLabel?: string;
+	} = $props();
 
 	// Group CHART_SPECS by category once at module init. Not reactive —
 	// a constant lookup over a static array.
@@ -139,7 +151,7 @@
 	{#each sections as section (section.id)}
 		<Tabs.Content value={section.id} class="px-4 pb-4">
 			{#if section.id === "yields"}
-				<YieldsStatsPanel {bundle} toolbarFlush />
+				<YieldsStatsPanel {bundle} {countLabel} toolbarFlush />
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "laws"}

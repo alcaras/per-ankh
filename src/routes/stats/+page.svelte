@@ -48,7 +48,11 @@
 				{:else}
 					<!-- The facet row above is this page's nation control, so the
 					     per-nation panels drop their own. -->
-					<StatsView bundle={data.bundle} showNationSelect={false} />
+					<StatsView
+						bundle={data.bundle}
+						showNationSelect={false}
+						countLabel="Players"
+					/>
 				{/if}
 			</div>
 		</div>

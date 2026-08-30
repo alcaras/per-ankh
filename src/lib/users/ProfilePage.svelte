@@ -264,7 +264,7 @@
 							{#if hasNoGames}
 								{@render noGames()}
 							{:else}
-								<StatsView {bundle} />
+								<StatsView {bundle} countLabel="Games" />
 							{/if}
 						</Tabs.Content>
 					</div>
