@@ -1,6 +1,6 @@
 # Per-Ankh — UX Review Bundle
 
-Generated **2026-05-25T00:52:25.703Z** against `http://localhost:1420` · game `P5J5b0oR1IYan3cBtW2zt` · public user `xuWIHsyF2uC7ybDPjqd1G` · signed in as `xuWIHsyF2uC7ybDPjqd1G` (.becked).
+Generated **2026-08-30T17:57:04.203Z** against `http://localhost:1420` · game `ig-lHvRp_8w-0Ik9d6lx_` · public user `rkHvk1UV8SbUSCF505YEV` · signed in as `rkHvk1UV8SbUSCF505YEV` (.becked).
 
 ## How to review
 
@@ -13,18 +13,23 @@ Generated **2026-05-25T00:52:25.703Z** against `http://localhost:1420` · game `
 - State differences: anonymous vs. owner views of the same page (controls that should/shouldn't appear).
 - Consistency of headers, tables, and charts against the games-table theme.
 - Empty/edge states and any visibly broken renders.
+- Cold-start home: the `Cold feed` / `Cold start` shots stub the home feeds empty, so the games column widens to two-up cards and the hero loses its video tile — layouts the live feed never shows.
 
 ## Inventory
 
 Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 
+
 ### Anonymous (signed out)
+
 
 **Home** — `/`
 
 - Home: [Desktop](shots/anon__home__desktop.jpg) · [Tablet](shots/anon__home__tablet.jpg) · [Mobile](shots/anon__home__mobile.jpg)
+- Cold feed: [Desktop](shots/anon__home__cold-feed__desktop.jpg) · [Tablet](shots/anon__home__cold-feed__tablet.jpg) · [Mobile](shots/anon__home__cold-feed__mobile.jpg)
+- Cold start: [Desktop](shots/anon__home__cold-start__desktop.jpg) · [Tablet](shots/anon__home__cold-start__tablet.jpg) · [Mobile](shots/anon__home__cold-start__mobile.jpg)
 
-**Game detail** — `/games/P5J5b0oR1IYan3cBtW2zt`
+**Game detail** — `/games/ig-lHvRp_8w-0Ik9d6lx_`
 
 - Overview: [Desktop](shots/anon__game-detail__overview__desktop.jpg) · [Tablet](shots/anon__game-detail__overview__tablet.jpg) · [Mobile](shots/anon__game-detail__overview__mobile.jpg)
 - Events: [Desktop](shots/anon__game-detail__events__desktop.jpg) · [Tablet](shots/anon__game-detail__events__tablet.jpg) · [Mobile](shots/anon__game-detail__events__mobile.jpg)
@@ -33,11 +38,11 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 - Yields: [Desktop](shots/anon__game-detail__yields__desktop.jpg) · [Tablet](shots/anon__game-detail__yields__tablet.jpg) · [Mobile](shots/anon__game-detail__yields__mobile.jpg)
 - Military: [Desktop](shots/anon__game-detail__military__desktop.jpg) · [Tablet](shots/anon__game-detail__military__tablet.jpg) · [Mobile](shots/anon__game-detail__military__mobile.jpg)
 - Cities: [Desktop](shots/anon__game-detail__cities__desktop.jpg) · [Tablet](shots/anon__game-detail__cities__tablet.jpg) · [Mobile](shots/anon__game-detail__cities__mobile.jpg)
-- Improvements: [Desktop](shots/anon__game-detail__improvements__desktop.jpg) · [Tablet](shots/anon__game-detail__improvements__tablet.jpg) · [Mobile](shots/anon__game-detail__improvements__mobile.jpg)
+- Improvements: ~~Desktop~~ (error) · ~~Tablet~~ (error) · ~~Mobile~~ (error)
 - Map: [Desktop](shots/anon__game-detail__map__desktop.jpg) · [Tablet](shots/anon__game-detail__map__tablet.jpg) · [Mobile](shots/anon__game-detail__map__mobile.jpg)
 - Settings: [Desktop](shots/anon__game-detail__settings__desktop.jpg) · [Tablet](shots/anon__game-detail__settings__tablet.jpg) · [Mobile](shots/anon__game-detail__settings__mobile.jpg)
 
-**User profile** — `/users/xuWIHsyF2uC7ybDPjqd1G?tab=overview`
+**User profile** — `/users/rkHvk1UV8SbUSCF505YEV?tab=overview`
 
 - Overview: [Desktop](shots/anon__user-profile__overview__desktop.jpg) · [Tablet](shots/anon__user-profile__overview__tablet.jpg) · [Mobile](shots/anon__user-profile__overview__mobile.jpg)
 - Games: [Desktop](shots/anon__user-profile__games__desktop.jpg) · [Tablet](shots/anon__user-profile__games__tablet.jpg) · [Mobile](shots/anon__user-profile__games__mobile.jpg)
@@ -45,11 +50,14 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 
 ### Signed in (.becked)
 
+
 **Home** — `/`
 
 - Home: [Desktop](shots/auth__home__desktop.jpg) · [Tablet](shots/auth__home__tablet.jpg) · [Mobile](shots/auth__home__mobile.jpg)
+- Cold feed: [Desktop](shots/auth__home__cold-feed__desktop.jpg) · [Tablet](shots/auth__home__cold-feed__tablet.jpg) · [Mobile](shots/auth__home__cold-feed__mobile.jpg)
+- Cold start: [Desktop](shots/auth__home__cold-start__desktop.jpg) · [Tablet](shots/auth__home__cold-start__tablet.jpg) · [Mobile](shots/auth__home__cold-start__mobile.jpg)
 
-**User profile** — `/users/xuWIHsyF2uC7ybDPjqd1G?tab=overview`
+**User profile** — `/users/rkHvk1UV8SbUSCF505YEV?tab=overview`
 
 - Overview: [Desktop](shots/auth__user-profile__overview__desktop.jpg) · [Tablet](shots/auth__user-profile__overview__tablet.jpg) · [Mobile](shots/auth__user-profile__overview__mobile.jpg)
 - Games: [Desktop](shots/auth__user-profile__games__desktop.jpg) · [Tablet](shots/auth__user-profile__games__tablet.jpg) · [Mobile](shots/auth__user-profile__games__mobile.jpg)
@@ -59,7 +67,7 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 
 - Account: [Desktop](shots/auth__account__desktop.jpg) · [Tablet](shots/auth__account__tablet.jpg) · [Mobile](shots/auth__account__mobile.jpg)
 
-**Game detail** — `/games/P5J5b0oR1IYan3cBtW2zt`
+**Game detail** — `/games/ig-lHvRp_8w-0Ik9d6lx_`
 
 - Overview: [Desktop](shots/auth__game-detail__overview__desktop.jpg) · [Tablet](shots/auth__game-detail__overview__tablet.jpg) · [Mobile](shots/auth__game-detail__overview__mobile.jpg)
 - Events: [Desktop](shots/auth__game-detail__events__desktop.jpg) · [Tablet](shots/auth__game-detail__events__tablet.jpg) · [Mobile](shots/auth__game-detail__events__mobile.jpg)
@@ -68,7 +76,7 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 - Yields: [Desktop](shots/auth__game-detail__yields__desktop.jpg) · [Tablet](shots/auth__game-detail__yields__tablet.jpg) · [Mobile](shots/auth__game-detail__yields__mobile.jpg)
 - Military: [Desktop](shots/auth__game-detail__military__desktop.jpg) · [Tablet](shots/auth__game-detail__military__tablet.jpg) · [Mobile](shots/auth__game-detail__military__mobile.jpg)
 - Cities: [Desktop](shots/auth__game-detail__cities__desktop.jpg) · [Tablet](shots/auth__game-detail__cities__tablet.jpg) · [Mobile](shots/auth__game-detail__cities__mobile.jpg)
-- Improvements: [Desktop](shots/auth__game-detail__improvements__desktop.jpg) · [Tablet](shots/auth__game-detail__improvements__tablet.jpg) · [Mobile](shots/auth__game-detail__improvements__mobile.jpg)
+- Improvements: ~~Desktop~~ (error) · ~~Tablet~~ (error) · ~~Mobile~~ (error)
 - Map: [Desktop](shots/auth__game-detail__map__desktop.jpg) · [Tablet](shots/auth__game-detail__map__tablet.jpg) · [Mobile](shots/auth__game-detail__map__mobile.jpg)
 - Settings: [Desktop](shots/auth__game-detail__settings__desktop.jpg) · [Tablet](shots/auth__game-detail__settings__tablet.jpg) · [Mobile](shots/auth__game-detail__settings__mobile.jpg)
 
@@ -76,9 +84,9 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 
 - Tournaments: [Desktop](shots/auth__tournaments__desktop.jpg) · [Tablet](shots/auth__tournaments__tablet.jpg) · [Mobile](shots/auth__tournaments__mobile.jpg)
 
-**Tournament detail** — `/tournaments/test-03`
+**Tournament detail** — `/tournaments/2026-community-tournament`
 
-- Tournament: test-03: [Desktop](shots/auth__tournament-detail__desktop.jpg) · [Tablet](shots/auth__tournament-detail__tablet.jpg) · [Mobile](shots/auth__tournament-detail__mobile.jpg)
+- Tournament: 2026-community-tournament: [Desktop](shots/auth__tournament-detail__desktop.jpg) · [Tablet](shots/auth__tournament-detail__tablet.jpg) · [Mobile](shots/auth__tournament-detail__mobile.jpg)
 
 **Admin** — `/admin`
 
@@ -87,6 +95,6 @@ Breakpoints: Desktop (1440×900), Tablet (768×1024), Mobile (390×844).
 **Redirect routes** — `(verification)`
 
 - Redirect routes — verification only:
-  - `/dashboard → /users/xuWIHsyF2uC7ybDPjqd1G  (→ /users/[id] (signed in) · /?next= (anon))`
-  - `/games → /users/xuWIHsyF2uC7ybDPjqd1G  (→ /dashboard → profile)`
+  - `/dashboard → /u/becked  (→ /users/[id] (signed in) · /?next= (anon))`
+  - `/games → /u/becked  (→ /dashboard → profile)`
   - `/auth/callback → /auth/callback  (OAuth landing (not renderable))`

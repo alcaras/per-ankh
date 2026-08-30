@@ -106,6 +106,35 @@ const REDIRECT_ROUTES = [
 	{ route: "/auth/callback", note: "OAuth landing (not renderable)" },
 ];
 
+// The files emitted alongside shots/. Named so the pre-run clear can remove
+// exactly these and leave anything hand-authored in the directory alone.
+const GENERATED_FILES = ["manifest.json", "README.md", "index.html"];
+
+// The home page's cold-start branches. Every home feed degrades to an empty
+// list on failure (see +page.ts), and +page.svelte reshapes around what's
+// left: with no videos the Recent Videos panel drops and the games feed
+// widens to the full row with its cards two-up; with no featured video the
+// hero loses its video tile and the tournament panel stands alone; with no
+// public games the feed swaps in its empty-state copy. Live local feeds never
+// produce any of that, so we stub the endpoints backing them.
+const COLD_VIDEO_FEEDS = {
+	"**/v1/creator-videos*": { videos: [] },
+	"**/v1/tournament-videos*": { videos: [] },
+	"**/v1/featured-videos*": { videos: [] },
+};
+const COLD_GAME_FEED = { "**/v1/games/public-recent*": { games: [] } };
+
+// Cold variants of home, in capture order. `stubs` maps a URL glob to the
+// JSON body its route handler answers with.
+const HOME_COLD_STATES = [
+	{ key: "cold-feed", title: "Cold feed", stubs: COLD_VIDEO_FEEDS },
+	{
+		key: "cold-start",
+		title: "Cold start",
+		stubs: { ...COLD_VIDEO_FEEDS, ...COLD_GAME_FEED },
+	},
+];
+
 function slug(s) {
 	return String(s)
 		.toLowerCase()
@@ -311,6 +340,75 @@ async function captureSingle(page, baseUrl, spec) {
 	return { ...spec, buf: await shoot(page) };
 }
 
+// Home, with one or more of its feeds stubbed empty. Yields one record.
+//
+// SSR is on (src/routes/+layout.ts), so a fresh goto("/") runs +page.ts on the
+// SvelteKit server and its fetches never touch the browser — out of reach of
+// Playwright's route handlers. So we land on another route, install the stubs,
+// then click the header wordmark: that client-side navigation re-runs the same
+// load in the browser, where the handlers do apply. Same component off the same
+// data shape, so the render matches what a cold SSR load would produce.
+async function captureHomeCold(page, baseUrl, pass, ids, coldState, authState) {
+	const spec = {
+		pass,
+		page: "home",
+		id: `${pass}__home__${coldState.key}`,
+		tab: coldState.title,
+		title: coldState.title,
+		route: "/",
+		state: authState,
+	};
+
+	// Any route but / — clicking the wordmark while already home is a no-op,
+	// and the load would never re-run. Game detail renders in both passes.
+	await page.goto(`${baseUrl}/games/${ids.gameId}`, { waitUntil: "load" });
+	// Settle before clicking: `load` fires before SvelteKit has hydrated, and a
+	// click on an unhydrated link is a native document navigation — which
+	// server-renders / and runs the load out of the browser's reach, so the
+	// stubs below never apply and the shot is a duplicate of warm home.
+	await settle(page);
+
+	const patterns = Object.keys(coldState.stubs);
+	for (const pattern of patterns) {
+		const body = coldState.stubs[pattern];
+		await page.route(pattern, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				// The client calls the Worker cross-origin with
+				// `credentials: "include"` (api-cloud's request()), so a fulfilled
+				// response still has to clear CORS — and a credentialed request
+				// rejects a wildcard origin, so echo the one that was sent.
+				headers: {
+					"access-control-allow-origin":
+						route.request().headers()["origin"] ?? baseUrl,
+					"access-control-allow-credentials": "true",
+				},
+				body: JSON.stringify(body),
+			}),
+		);
+	}
+
+	try {
+		const wordmark = page.getByRole("link", { name: "Per Ankh — home" });
+		if ((await wordmark.count()) === 0) {
+			return {
+				...spec,
+				error: "Header wordmark not found — can't reach / client-side.",
+			};
+		}
+		await wordmark.first().click();
+		await page.waitForURL((u) => u.pathname === "/", { timeout: 10_000 });
+		await settle(page);
+		return { ...spec, buf: await shoot(page) };
+	} catch (err) {
+		return { ...spec, error: `Cold-state capture failed: ${err.message}` };
+	} finally {
+		// Handlers are per-page and this page is reused by the next capture.
+		for (const pattern of patterns) await page.unroute(pattern);
+	}
+}
+
 // Game detail — click through all 10 tabs. Yields one record per tab.
 async function captureGameDetail(page, baseUrl, pass, gameId, state) {
 	const route = `/games/${gameId}`;
@@ -438,6 +536,11 @@ async function captureAnon(page, baseUrl, ids) {
 			errorHint: "Home failed",
 		}),
 	);
+	for (const coldState of HOME_COLD_STATES) {
+		recs.push(
+			await captureHomeCold(page, baseUrl, "anon", ids, coldState, "visitor"),
+		);
+	}
 	recs.push(
 		...(await captureGameDetail(page, baseUrl, "anon", ids.gameId, "visitor")),
 	);
@@ -462,6 +565,11 @@ async function captureAuth(page, baseUrl, ids, opts) {
 			errorHint: "Home failed",
 		}),
 	);
+	for (const coldState of HOME_COLD_STATES) {
+		recs.push(
+			await captureHomeCold(page, baseUrl, "auth", ids, coldState, "signed in"),
+		);
+	}
 	recs.push(
 		...(await captureUserProfile(
 			page,
@@ -584,7 +692,10 @@ function renderReadme({ meta, screens }) {
 			"(controls that should/shouldn't appear).\n" +
 			"- Consistency of headers, tables, and charts against the games-table " +
 			"theme.\n" +
-			"- Empty/edge states and any visibly broken renders.\n",
+			"- Empty/edge states and any visibly broken renders.\n" +
+			"- Cold-start home: the `Cold feed` / `Cold start` shots stub the " +
+			"home feeds empty, so the games column widens to two-up cards and " +
+			"the hero loses its video tile — layouts the live feed never shows.\n",
 	);
 	lines.push(
 		`## Inventory\n\nBreakpoints: ${meta.breakpoints
@@ -875,7 +986,13 @@ async function mergeRecord(bpId, rec) {
 
 const browser = await chromium.launch({ headless: true });
 try {
-	await rm(OUT_DIR, { recursive: true, force: true });
+	// Clear only the files this script owns. docs/ux-review also holds
+	// hand-authored analysis (review.html) that a regeneration must not
+	// destroy, so the output dir itself is never removed.
+	await rm(SHOTS_DIR, { recursive: true, force: true });
+	for (const f of GENERATED_FILES) {
+		await rm(path.join(OUT_DIR, f), { force: true });
+	}
 	await mkdir(SHOTS_DIR, { recursive: true });
 
 	for (const bp of BREAKPOINTS) {
