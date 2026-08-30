@@ -11,8 +11,9 @@
 		familyClassRowCount,
 		familyNations,
 		familyNationPicksOption,
+		familyNationPicksTitle,
 	} from "./charts/families";
-	import { ALL_NATIONS, barChartHeight, nationLabel } from "./charts/helpers";
+	import { ALL_NATIONS, barChartHeight } from "./charts/helpers";
 
 	// showNationSelect — false where the page owns a nation control of its own
 	// (/stats); the panel then renders the cross-nation aggregate, which is the
@@ -67,8 +68,8 @@
 	{/if}
 
 	<ChartContainer
-		option={familyNationPicksOption(bundle, nation)}
+		option={familyNationPicksOption(bundle, nation, showNationSelect)}
 		height={barChartHeight(familyClassRowCount(bundle, nation))}
-		title={nationLabel(nation)}
+		title={familyNationPicksTitle(nation, showNationSelect)}
 	/>
 {/if}

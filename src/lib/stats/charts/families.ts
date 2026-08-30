@@ -109,6 +109,22 @@ export function familyClassRowCount(
 	return nationPickRows(bundle, nation).rows.length;
 }
 
+// The chart's title, shared with FamilyStatsPanel so the in-chart title and the
+// container's fullscreen label can't drift apart.
+//
+// `nationInTitle` is false where the panel doesn't own the nation control
+// (/stats, which has a page-level facet). The nation is then not the panel's to
+// name: the facet narrowed the whole bundle server-side, so the panel's
+// ALL_NATIONS aggregate *is* that one nation and "All nations" would be a plain
+// lie — and naming it correctly would single this chart out among the sixteen
+// on the page that don't. The facet row and the page header carry the label.
+export function familyNationPicksTitle(
+	nation: string,
+	nationInTitle: boolean,
+): string {
+	return nationInTitle ? `${nationLabel(nation)} families` : "Families";
+}
+
 // For one nation: the shared wins/losses stack per family class its players
 // picked — bar length is how often the class was picked, the split how those
 // games ended — with the share of the empire it ran as a trailing label and the
@@ -117,13 +133,14 @@ export function familyClassRowCount(
 export function familyNationPicksOption(
 	bundle: ChartBundleCore,
 	nation: string,
+	nationInTitle: boolean,
 ): ChartOption {
 	const { games, rows } = nationPickRows(bundle, nation);
 	return winLossStackedOption({
 		rows,
 		label: fmtClass,
 		iconUrl: classCrestUrl,
-		title: `${nationLabel(nation)} families`,
+		title: familyNationPicksTitle(nation, nationInTitle),
 		tooltipFormatter: (r) => {
 			const lines = [
 				fmtClass(r.key),

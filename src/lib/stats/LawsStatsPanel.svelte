@@ -10,8 +10,9 @@
 		lawNations,
 		lawTimingOption,
 		openingLawsOption,
+		openingLawsTitle,
 	} from "./charts/laws";
-	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
+	import { ALL_NATIONS } from "./charts/helpers";
 
 	// showNationSelect — false where the page owns a nation control of its own
 	// (/stats); the panel then renders the cross-nation aggregate, which is the
@@ -74,8 +75,8 @@
 		title="Law adoption"
 	/>
 	<ChartContainer
-		option={openingLawsOption(bundle, nation)}
+		option={openingLawsOption(bundle, nation, showNationSelect)}
 		height={sequenceHeight}
-		title={`${nationLabel(nation)} opening law sequence`}
+		title={openingLawsTitle(nation, showNationSelect)}
 	/>
 {/if}

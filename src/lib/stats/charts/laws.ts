@@ -72,12 +72,28 @@ export function lawTimingOption(
 	};
 }
 
+// The chart's title, shared with LawsStatsPanel so the in-chart title and the
+// container's fullscreen label can't drift apart.
+//
+// `nationInTitle` is false where the panel doesn't own the nation control
+// (/stats, which has a page-level facet). See familyNationPicksTitle for why
+// the nation is then not the panel's to name.
+export function openingLawsTitle(
+	nation: string,
+	nationInTitle: boolean,
+): string {
+	return nationInTitle
+		? `${nationLabel(nation)} opening law sequence`
+		: "Opening law sequence";
+}
+
 // For one nation: the most common order-insensitive four-law openings as
 // horizontal bars, most common at the top. The label is the four law names
 // joined with "+" (order dropped); the tooltip carries the sample size.
 export function openingLawsOption(
 	bundle: ChartBundleCore,
 	nation: string,
+	nationInTitle: boolean,
 ): ChartOption {
 	const isAll = nation === ALL_NATIONS;
 	// "All nations": collapse the same four-law set across nations (order is
@@ -98,7 +114,7 @@ export function openingLawsOption(
 		...CHART_THEME,
 		title: {
 			...CHART_THEME.title,
-			text: `${nationLabel(nation)} opening law sequence`,
+			text: openingLawsTitle(nation, nationInTitle),
 		},
 		tooltip: {
 			...CHART_THEME.tooltip,
