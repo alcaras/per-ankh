@@ -6,6 +6,7 @@ import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	AXIS_NAME_X,
+	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
 	fmtLaw,
@@ -61,6 +62,7 @@ export function lawTimingOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.median_turn,
 					itemStyle: { color: getSeriesColor(i) },
@@ -121,6 +123,7 @@ export function openingLawsOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.count,
 					itemStyle: { color: getSeriesColor(i) },

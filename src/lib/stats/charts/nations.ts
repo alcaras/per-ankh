@@ -5,6 +5,7 @@ import type { ChartOption } from "$lib/echarts";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
 import type { ChartBundleCore } from "../types";
 import {
+	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
 	crestAxisLabel,
@@ -72,6 +73,7 @@ export function nationAvgPointsOption(bundle: ChartBundleCore): ChartOption {
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				// Each bar in its own nation's color, the same one the crest
 				// beside it wears — the shared helper the game-detail and
 				// tournament charts use, so a nation looks the same everywhere.

@@ -97,6 +97,14 @@ export function barChartHeight(rowCount: number): string {
 	return `${Math.max(rowCount, 1) * 34 + 90}px`;
 }
 
+// Bar thickness, as a share of the category band. ECharts' default leaves a
+// 20% category gap, so a bar fills ~80% of its band; 52% is 65% of that. The
+// band itself is untouched — the row pitch above and the grid margins stay
+// where they are, so slimming the marks never pulls the axis labels together.
+// Spread into every bar series here (all of them stacked or single, one mark
+// per category), so the whole catalog keeps one thickness.
+export const BAR_WIDTH = "52%";
+
 // Axis-title placement, mirroring the game-detail charts: the title sits
 // centered along the axis (x below it, y reading vertically beside it)
 // rather than ECharts' default corner placement. Spread alongside `name`.
@@ -236,6 +244,7 @@ export function winLossStackedOption<R extends WinLossRow>(opts: {
 				name: "Wins",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: sorted.map((r) => r.wins),
 				itemStyle: { color: WIN_COLOR },
 			},
@@ -243,6 +252,7 @@ export function winLossStackedOption<R extends WinLossRow>(opts: {
 				name: "Losses",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: sorted.map((r) => r.games - r.wins),
 				itemStyle: { color: LOSS_COLOR },
 				// Hung off the loss segment so it lands past the end of the whole

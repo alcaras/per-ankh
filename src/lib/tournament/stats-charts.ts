@@ -8,6 +8,7 @@ import type { ChartOption } from "$lib/echarts";
 import { CHART_THEME, getNationChartColor, getSeriesColor } from "$lib/config";
 import { toRgba } from "$lib/utils/color";
 import {
+	BAR_WIDTH,
 	COMMON_GRID,
 	crestAxisLabel,
 	fmtNation,
@@ -136,6 +137,7 @@ export function standingsOption(
 				name: "Wins",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.wins,
 					itemStyle: { color: getSeriesColor(i) },
@@ -145,6 +147,7 @@ export function standingsOption(
 				name: "Losses",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.losses,
 					itemStyle: { color: toRgba(getSeriesColor(i), 0.35) },
@@ -187,6 +190,7 @@ export function casterLeaderboardOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: leaderboard.map((c, i) => ({
 					value: c.appearances,
 					itemStyle: { color: getSeriesColor(i) },
@@ -253,6 +257,7 @@ export function playerPicksOption(
 			name: fmtNation(nation),
 			type: "bar" as const,
 			stack: "picks",
+			barWidth: BAR_WIDTH,
 			data: players.map(
 				(p) => p.picks.find((pk) => pk.nation === nation)?.games ?? 0,
 			),

@@ -3,7 +3,13 @@
 import type { ChartOption } from "$lib/echarts";
 import { getSeriesColor } from "$lib/config";
 import type { ChartBundleCore } from "../types";
-import { AXIS_NAME_X, AXIS_NAME_Y, CHART_THEME, COMMON_GRID } from "./helpers";
+import {
+	AXIS_NAME_X,
+	AXIS_NAME_Y,
+	BAR_WIDTH,
+	CHART_THEME,
+	COMMON_GRID,
+} from "./helpers";
 
 // Win rate vs. expansion speed: win rate per 5th-city-founding-turn bucket,
 // ordered fastest → slowest (with "never" — fewer than 5 cities — last).
@@ -44,6 +50,7 @@ export function expansionWinRateOption(bundle: ChartBundleCore): ChartOption {
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				// One rotation color per bucket. Seven buckets against eight
 				// colors, so this chart never reaches the wrap.
 				data: rows.map((r, i) => ({

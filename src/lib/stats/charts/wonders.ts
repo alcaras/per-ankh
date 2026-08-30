@@ -25,6 +25,7 @@ import { formatEnum } from "$lib/utils/formatting";
 import type { ChartBundleCore } from "../types";
 import {
 	AXIS_NAME_X,
+	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
 	OUTCOME_LOST,
@@ -80,10 +81,9 @@ function orderRows(rows: ChartBundleCore["wonderStats"]) {
 
 const pct = (v: number) => Math.round(v * 100);
 
-// Length a zero-span bar still gets drawn at. Bar thickness is left to ECharts
-// (~80% of the row band), same as the standings bars, so this matches roughly
-// the thickness the 34px row pitch barChartHeight allots — a wonder built once
-// then reads as a block rather than a sliver.
+// Length a zero-span bar still gets drawn at. Comfortably longer than the bar
+// is thick (BAR_WIDTH of the 34px row pitch barChartHeight allots), so a wonder
+// built once reads as a block rather than a sliver.
 const MIN_BAR_LENGTH = 27;
 
 // Turn-axis tick spacing. Set explicitly rather than left to splitNumber: the
@@ -201,6 +201,7 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 				// Transparent riser: the visible bar then starts at P25.
 				type: "bar",
 				stack: "span",
+				barWidth: BAR_WIDTH,
 				silent: true,
 				data: rows.map((r) => r.p25_turn ?? 0),
 				itemStyle: { color: "transparent" },
@@ -212,6 +213,7 @@ export function wonderOverviewOption(bundle: ChartBundleCore): ChartOption {
 				name: bucket.name,
 				type: "bar" as const,
 				stack: "span",
+				barWidth: BAR_WIDTH,
 				// A wonder built once has P25 === P75, so its bar has no length.
 				// barMinHeight renders it as a single block at that turn: the
 				// horizontal branch anchors the rect at the stack start and grows it

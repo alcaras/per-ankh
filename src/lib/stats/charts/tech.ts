@@ -9,6 +9,7 @@ import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	AXIS_NAME_X,
+	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
 	fmtTech,
@@ -55,6 +56,7 @@ export function techFirstOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.count,
 					itemStyle: { color: getSeriesColor(i) },
@@ -89,6 +91,7 @@ export function techTimingOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.median_turn,
 					itemStyle: { color: getSeriesColor(i) },
