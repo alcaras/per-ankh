@@ -82,7 +82,11 @@ For custom CSS where Tailwind isn't available, wrap the channel variable in `rgb
 
 ## Chart Color Palette
 
-The application uses a separate color palette for data visualization in charts. This palette is defined in `src/lib/config/charts.ts` and optimized for multi-series data visualization using Apache ECharts.
+`src/lib/config/charts.ts` holds two chart palettes with different jobs. They are not interchangeable — reaching for the wrong one is the usual way a chart ends up with six near-identical browns where it needed six categories.
+
+### `CHART_COLORS` — the civilization fallback ramp
+
+Six warm tones, indexed by series ordinal. This is what a **civilization** falls back to when it has no color of its own: an unrecognized nation or family, or a mirror match where two players field the same nation and still need telling apart. `getNationChartColor` and `getFamilyChartColor` are its real callers.
 
 | Color Name         | Hex Code  | Export            |
 | ------------------ | --------- | ----------------- |
@@ -93,18 +97,47 @@ The application uses a separate color palette for data visualization in charts. 
 | **Chocolate**      | `#D2691E` | `CHART_COLORS[4]` |
 | **Dark Goldenrod** | `#B8860B` | `CHART_COLORS[5]` |
 
+All six sit inside a 37-degree hue arc, which is what makes them read as one family of browns rather than six categories. Their closest pair is Chocolate/Dark Goldenrod at **0.017** in OKLab under deuteranopic simulation — close enough to read as a repeat. That is acceptable for a fallback nobody is asked to decode, and disqualifying for a rotation.
+
+### `SERIES_COLORS` — the categorical rotation
+
+Eight colors for a chart that needs its rows told apart — one per bar on the laws, tech and cities charts, one per person on the tournament standings and caster bars. Drawn from `YIELD_COLORS`, so the rotation is still the game's own palette.
+
+| Index | Yield          | Hex       |
+| ----- | -------------- | --------- |
+| 0     | Happiness      | `#f2c95e` |
+| 1     | Wood           | `#9b7d63` |
+| 2     | Iron           | `#DBDCDB` |
+| 3     | Stone          | `#78839a` |
+| 4     | Civics         | `#d78d46` |
+| 5     | Science        | `#a16ad1` |
+| 6     | Food           | `#739600` |
+| 7     | Discontent     | `#8f8fb3` |
+
+The eight are the yields that survive a pairwise separation floor where **each pair is scored on the worse of normal and deuteranopic vision**, so a red-green viewer sees the same eight categories rather than a collapsed subset. Closest survivor pair is Stone/Discontent at 0.056; the seven dropped (Culture, Growth, Legitimacy, Maintenance, Money, Orders, Training) each collided with a survivor below that.
+
+The **order is cyclic and load-bearing**. It maximizes the distance between neighboring indices *including the wrap from index 7 back to 0*, so consecutive rows contrast even where a chart outruns the palette and it repeats — adjacent separation never drops below 0.187. Reordering the array is a design change, not a cosmetic one.
+
 ### Using Chart Colors
 
 Import chart colors and theme from the config module:
 
 ```typescript
-import { CHART_COLORS, CHART_THEME, getChartColor } from "$lib/config";
+import {
+	CHART_COLORS,
+	CHART_THEME,
+	getChartColor,
+	getSeriesColor,
+} from "$lib/config";
 
 // Use individual colors directly
 const color = CHART_COLORS[0]; // "#C87941"
 
-// Use the helper function for automatic wrapping (RECOMMENDED)
-const color = getChartColor(7); // Wraps to CHART_COLORS[1]
+// A civilization with no color of its own — the fallback ramp, wrapping
+const fallback = getChartColor(7); // Wraps to CHART_COLORS[1]
+
+// One row per person / per category — the categorical rotation, wrapping
+const series = getSeriesColor(9); // Wraps to SERIES_COLORS[1] (Wood)
 
 // Apply the theme to chart options (RECOMMENDED)
 const chartOption: EChartsOption = {
@@ -119,7 +152,7 @@ const chartOption: EChartsOption = {
 
 ### Design Rationale: Why Separate Palettes?
 
-The application maintains two distinct color palettes for different purposes:
+The application maintains distinct color palettes for different purposes:
 
 1. **UI Palette** (CSS Variables + Tailwind)
    - For interface elements (backgrounds, borders, text)
@@ -241,10 +274,21 @@ Three rules decide that table, and each covers a case the XML alone cannot:
 
 ### Where yield colors apply
 
-They color the **pooled median line and its P25–P75 band** on `YieldsStatsPanel`, which is the yields panel on all three stats surfaces (profile stats tab, `/stats`, tournament stats). Two places deliberately do not use them:
+The yield palette colors **every chart on the three aggregate-stats surfaces** — the profile stats tab, `/stats`, and tournament stats — not just the yields panel. What varies is what a color is being asked to say.
 
-- **Winners-vs-losers split mode** keeps `WIN_COLOR` / `LOSS_COLOR`. There color means cohort, and it means the same thing on every chart that splits by outcome; color only names the yield when there is no cohort to name.
+**Color names the yield.** The pooled median line and its P25–P75 band on `YieldsStatsPanel`, one color per series. This is the original case: sixteen charts in a stack, and the hue tells you which yield you are looking at.
+
+**Color names the outcome.** A wins-vs-losses split takes `WIN_COLOR` / `LOSS_COLOR` — Happiness and Discontent, which Old World defines as a single opposed mechanic rather than two unrelated yields ("When a City's Happiness bar empties, its overall Discontent Level goes up by one"). That pair is shared by every chart that splits by outcome, so the cohorts mean the same thing everywhere: the nation win-rate bar, the leader archetype and trait bars, both family bars, and the yields panel's own split mode. The wonders chart buckets an outcome three ways instead of two and extends the same pair with Legitimacy as its neutral (`OUTCOME_WON` / `OUTCOME_MIXED` / `OUTCOME_LOST`).
+
+**Color keeps the rows apart.** Where a chart is a list of categories rather than a split or a single series, every bar takes its own `SERIES_COLORS` entry: both Laws charts (adoption, opening sequences), both Tech charts (first tech, tech timing), the Cities expansion chart, and the tournament standings and caster bars. This replaced a `getChartColor(i)` rotation of six near-identical browns, whose closest pair was indistinguishable.
+
+Cities is the only one of these that fits inside the palette — seven buckets against eight colors. The rest lap it: a 25-row tech or law chart goes round three times. That is what the cyclic ordering is for. Because adjacent indices are maximally far apart *including the wrap from 7 back to 0*, a bar never sits beside a near-twin of itself and the seam where the rotation restarts contrasts as hard as any other step.
+
+One place deliberately opts out:
+
 - **The game-detail Yields tab** draws one line per player and colors by nation (`getPlayerColor`). Color already means player there.
+
+And one place deliberately keeps a palette color: the **sample-size overlay** on `YieldsStatsPanel` draws in `getChartColor(5)`. It counts games, not a yield, so staying outside the yield palette is the point.
 
 ```typescript
 import { MILITARY_POWER_COLOR, YIELD_COLORS } from "$lib/generated/yield-colors";

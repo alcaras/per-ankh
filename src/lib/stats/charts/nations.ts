@@ -72,7 +72,7 @@ export function nationAvgPointsOption(bundle: ChartBundleCore): ChartOption {
 		series: [
 			{
 				type: "bar",
-				// Copper, matching the Win rate chart's wins color.
+				// Happiness, matching the Win rate chart's wins color.
 				data: rows.map((r) => Math.round(r.avg_points)),
 				itemStyle: { color: WIN_COLOR },
 			},

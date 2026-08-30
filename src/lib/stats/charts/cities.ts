@@ -1,7 +1,7 @@
 // Cities tab: expansion-speed win-rate for the corpus.
 
 import type { ChartOption } from "$lib/echarts";
-import { getChartColor } from "$lib/config";
+import { getSeriesColor } from "$lib/config";
 import type { ChartBundleCore } from "../types";
 import { AXIS_NAME_X, AXIS_NAME_Y, CHART_THEME, COMMON_GRID } from "./helpers";
 
@@ -44,8 +44,12 @@ export function expansionWinRateOption(bundle: ChartBundleCore): ChartOption {
 		series: [
 			{
 				type: "bar",
-				data: rows.map((r) => r.rate),
-				itemStyle: { color: getChartColor(0) },
+				// One rotation color per bucket. Seven buckets against eight
+				// colors, so this chart never reaches the wrap.
+				data: rows.map((r, i) => ({
+					value: r.rate,
+					itemStyle: { color: getSeriesColor(i) },
+				})),
 			},
 		],
 	};

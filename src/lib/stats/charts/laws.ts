@@ -1,7 +1,7 @@
 // Laws tab option builders.
 
 import type { ChartOption } from "$lib/echarts";
-import { getChartColor } from "$lib/config";
+import { getSeriesColor } from "$lib/config";
 import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
@@ -63,7 +63,7 @@ export function lawTimingOption(
 				type: "bar",
 				data: rows.map((r, i) => ({
 					value: r.median_turn,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],
@@ -123,7 +123,7 @@ export function openingLawsOption(
 				type: "bar",
 				data: rows.map((r, i) => ({
 					value: r.count,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],

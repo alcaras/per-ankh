@@ -3,7 +3,7 @@
 // builder just filters to the selected nation.
 
 import type { ChartOption } from "$lib/echarts";
-import { getChartColor } from "$lib/config";
+import { getSeriesColor } from "$lib/config";
 import { TECH_NAMES } from "$lib/generated/tech-names";
 import type { ChartBundleCore } from "../types";
 import {
@@ -57,7 +57,7 @@ export function techFirstOption(
 				type: "bar",
 				data: rows.map((r, i) => ({
 					value: r.count,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],
@@ -91,7 +91,7 @@ export function techTimingOption(
 				type: "bar",
 				data: rows.map((r, i) => ({
 					value: r.median_turn,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],
