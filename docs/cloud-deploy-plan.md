@@ -483,7 +483,17 @@ In order:
    from the current Pages headers). `curl -I https://per-ankh.app/share/test`
    should return `302` with `location: https://legacy.per-ankh.app/share/test`.
    `curl -I https://legacy.per-ankh.app/` should still serve the legacy
-   SPA. `curl -I https://api.per-ankh.app/v1/stats` should return `200`.
+   SPA. `curl -s -o /dev/null -w '%{http_code}\n'
+   https://api.per-ankh.app/v1/stats` should print `401`.
+
+   Two things about that last one. **Not `-I`:** that sends HEAD, and
+   `dispatch` (`cloud/src/index.ts`) matches methods exactly against a
+   GET-only route, so a HEAD 404s no matter how healthy the Worker is.
+   **Not `200`:** `/v1/stats` requires a session, so an unauthenticated
+   probe is *supposed* to be refused. What this step checks is that
+   `api.per-ankh.app` reaches the Worker at all, and a `401` from the
+   handler proves that exactly as well as a `200` would — where a DNS,
+   cert, or route-attach failure gives neither.
 8. **Run §5 smoke test against prod.** Do not announce until it passes.
 
 ## 5. Smoke test
@@ -518,9 +528,25 @@ feature surfaces real query patterns.
   covers solo-launch volume. Wire it into the API Worker first; SSR
   Worker second. Skip until week one is uneventful if it slows the deploy.
 - **Telemetry sinks — decided.** Workers Logs for the hot window, OTLP export for the durable archive, and automatic tracing alongside both; all configured in `cloud/wrangler.toml`. See §6.1 for what each is for, the two destinations the exports need that this repo cannot create, and why Logpush → R2 was abandoned.
-- **Synthetic uptime check.** Cloudflare Health Checks on `/v1/stats`
-  every 1–5 min. Catches DNS/cert/whole-site-down failures that
-  handler-level alerts miss.
+- **Synthetic uptime check.** Cloudflare Health Checks on
+  `/v1/featured-videos` every 1–5 min. Catches DNS/cert/whole-site-down
+  failures that handler-level alerts miss.
+
+  **Not `/v1/stats`,** which this section used to name. Three things rule
+  it out, and the first is fatal on its own: it requires a session, so a
+  synthetic check has no credential to pass and would sit permanently red
+  on a `401`. Even without the gate it would be the wrong probe — every
+  hit spends a slot of the `global_stats_view` per-IP budget from a single
+  checker address, and a hit that lands on a cold key (the minutes after a
+  `BUNDLE_SCHEMA_VERSION` bump orphans all 56 entries at once) triggers a
+  whole-corpus aggregation rather than a cheap read.
+
+  `/v1/featured-videos` has the shape a synthetic check wants: public and
+  sessionless, outside every rate-limit budget, a single small D1 read, and
+  best-effort — a D1 failure answers an empty feed rather than a 500, so
+  the check stays honest about "is the site reachable" instead of flapping
+  on a storage blip. Anything else chosen later needs those same four
+  properties.
 - **Audit-log spot check** at the end of week one. Grep `audit_events`
   for unexpected patterns (mass deletes, high-frequency reimports,
   PATCHes from unfamiliar IPs).
