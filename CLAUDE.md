@@ -29,7 +29,7 @@ The `./per-ankh` script at repo root is the project CLI (`scripts/per-ankh.ts`):
 
 Past contributions consistently *worked and had tests* but needed cleanup for **fit**: they built in isolation from the repo's existing patterns and parallel surfaces. Follow these, in priority order:
 
-1. **Reuse before you invent.** Grep the whole repo (and `main`) for an existing helper, component, or idiom before writing a new one — don't add a second or third way to do the same thing. Already present: `copyToClipboard` (`$lib/utils/clipboard`), `toRgba` (`$lib/utils/color`), `getNationChartColor`/`getChartColor` (`$lib/config`), `formatEnum` (`$lib/utils/formatting`), `goto(resolve(...))` for URL sync, and an annotate-then-filter idiom for request shaping.
+1. **Reuse before you invent.** Grep the whole repo (and `main`) for an existing helper, component, or idiom before writing a new one — don't add a second or third way to do the same thing. Already present: `copyToClipboard` (`$lib/utils/clipboard`), `toRgba` (`$lib/utils/color`), `getSeriesColor`/`getNationChartColor`/`getChartColor` (`$lib/config`), `formatEnum` (`$lib/utils/formatting`), `goto(resolve(...))` for URL sync, and an annotate-then-filter idiom for request shaping.
 2. **Speak the game's vocabulary.** Name domain things what Old World names them — `Reference/XML` (baked into `src/lib/generated/`) is the authority, and a term that appears nowhere else in the repo is a red flag.
 3. **Wire all N parallel surfaces.** When a prop/badge/gate/value lives on multiple sibling call sites or cards, update **every** one — uneven coverage is the single most-repeated defect.
 4. **Extract, don't copy-paste.** Duplicated SQL fragments and label/format helpers drift into divergent fallbacks and dropped guards. One shared helper.
@@ -75,7 +75,7 @@ For stores, convert to `$state` and subscribe **inside an effect** (returning th
 
 **Null/Undefined handling.** Domain/data layer (strict): `??` for null/undefined, `!= null` when `0`/`""` are valid; **never** `||` for data computation. UI rendering (pragmatic): `||` is fine for display fallbacks (`{game.name || "Unknown Game"}`).
 
-**Colors.** UI: Tailwind classes / CSS variables, don't hardcode hex. Charts: `import { CHART_THEME, getChartColor } from "$lib/config"` and color series via `getChartColor(i)`. Nation/civ: `getNationColor` / `getCivilizationColor` / `getNationChartColor` from `$lib/config` (e.g. `getCivilizationColor(player.nation) ?? getChartColor(i)`). Reference: `docs/reference/color-scheme.md`.
+**Colors.** UI: Tailwind classes / CSS variables, don't hardcode hex. Charts: `import { CHART_THEME, getSeriesColor } from "$lib/config"` and color categorical series via `getSeriesColor(i)` — `getChartColor(i)` is the *civilization fallback* ramp, not a rotation. Nation/civ: `getNationColor` / `getCivilizationColor` / `getNationChartColor` from `$lib/config` (e.g. `getCivilizationColor(player.nation) ?? getChartColor(i)`). Reference: `docs/reference/color-scheme.md`.
 
 **API layer.** All Worker calls go through `src/lib/api-cloud.ts` (`cloudApi`) — a thin fetch wrapper handling auth, JSON parsing, and typed error classes (`UnauthorizedError`, …). Add endpoints by extending the `cloudApi` object; keep request/response types adjacent to the function.
 
