@@ -561,6 +561,8 @@
 							turn: m.turn,
 							iconCategory: "icons" as const,
 							iconValue: null,
+							// Knowledge initials are unique (P/N/C/L/E), so plain
+							// initials are the shorthand.
 							label: `${knowledgeName(m.from)[0]}→${knowledgeName(m.to)[0]}`,
 							color: player.color,
 							tooltipHtml: knowledgeFlipTooltip(
