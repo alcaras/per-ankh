@@ -1,5 +1,57 @@
 # Changelog
 
+## [2026-08-30-76a439c] - 2026-08-30
+
+### Features
+
+- (stats) share the composition predicates the global slices select on — [f7e7d34](https://github.com/becked/per-ankh/commit/f7e7d3467601f8aeacefc2f352566106b6ea82c7)
+- (stats) resolve the global corpus, games and focal seats alike — [36e7d69](https://github.com/becked/per-ankh/commit/36e7d69be6785d1c738482a14739fe0f59a19fee)
+- (stats) precompute the global bundles nightly, a cron per slice — [1abe1b5](https://github.com/becked/per-ankh/commit/1abe1b507a3382c79026ee2b416d00e77bed4227)
+- (stats) serve the global bundle, on its own read budget — [db78a36](https://github.com/becked/per-ankh/commit/db78a36b1ca4ae9f3491078881eac8d2f41a7e7c)
+- (stats) the /stats route, on a slice and a nation facet — [4c4a622](https://github.com/becked/per-ankh/commit/4c4a62264189bbb333cfa6fd703357b10ee23503)
+- (stats) route into /stats from the home page and the menu — [a0945f3](https://github.com/becked/per-ankh/commit/a0945f3eee1457dc1a2fafb4a2b2a76e3168dd07)
+- (stats) colour yield charts from the game's own palette — [cadf9a6](https://github.com/becked/per-ankh/commit/cadf9a60be4cd5b6f447c64765b74ccc899b10b7)
+- (stats) colour the remaining charts from the yield palette — [68dbacc](https://github.com/becked/per-ankh/commit/68dbacc36cb633f4df1f9271aa5063d4296edab0)
+- (stats) recolour the outcome charts and the nation points bar — [20ad68b](https://github.com/becked/per-ankh/commit/20ad68b8448df975e016aafdb652fcb560826b71)
+- (stats) slim the bars to 65% of their band — [44331c3](https://github.com/becked/per-ankh/commit/44331c33d524a25ceab25b195ff59f7dd3b2a462)
+- (stats) require a session for global stats — [515a8a4](https://github.com/becked/per-ankh/commit/515a8a4bc473220a924ea39144fe269b6d711554)
+- (stats) warm the four unfaceted bundles on an hourly cron — [ce78547](https://github.com/becked/per-ankh/commit/ce7854740148072ec1528e76744e3531bab97237)
+- (stats) color the wonder bars in the app's win/loss pair — [38756c4](https://github.com/becked/per-ankh/commit/38756c44617ca8cee2db5d4cad37f49ae42a066c)
+
+### Fixes
+
+- (stats) scope a wonder's builds to the games that supplied its denominator — [5e0a104](https://github.com/becked/per-ankh/commit/5e0a10459181e7ebc5b9e59df66d7991162cce4f)
+- (stats) keep law and tech timing on the focal seats — [a8546d7](https://github.com/becked/per-ankh/commit/a8546d7ebaeba92ba78c9d044cfd6c9793b0b643)
+- (stats) make the sticky bars' outdent opt-in — [d019a4b](https://github.com/becked/per-ankh/commit/d019a4bb49759c6ad1a8d8d57d0cd3c02ab91cca)
+- (stats) denominate the yields overlay in the bundle's focal unit — [7f7e0ce](https://github.com/becked/per-ankh/commit/7f7e0ceaacf727db245a3451042ac04fca99fec4)
+- (stats) stop the panels titling a nation they don't own — [fbb650f](https://github.com/becked/per-ankh/commit/fbb650f30273e6582cf07b61317ced7c2541d78e)
+- (stats) give /stats a stable title and drop the game count — [5a92aa1](https://github.com/becked/per-ankh/commit/5a92aa17c5fadbbd6246b2bf039e74d586ee4de3)
+- (stats) steady the facet triggers and soften the bundle swap — [b016ae7](https://github.com/becked/per-ankh/commit/b016ae72de6da3969a9c54e3005e975606353679)
+
+### Performance
+
+- (stats) accumulate yield cohorts disjointly — [dda0d4c](https://github.com/becked/per-ankh/commit/dda0d4cd9d143019fc2769ba80dd5e9578e2444e)
+- (stats) bound openingLaws to what the chart can show — [7e866d5](https://github.com/becked/per-ankh/commit/7e866d558559ab5d942330950abd9322e071bd56)
+- (stats) move save_dates to the user bundle, drop favorite_day_of_week — [de9587e](https://github.com/becked/per-ankh/commit/de9587e35a5f86aca2288714dddf42dbf5982369)
+
+### Other
+
+- (stats) plan a public /stats over the whole public corpus — [5f786fb](https://github.com/becked/per-ankh/commit/5f786fb79419e812ae4e7dc20ebc8792617cc9ca)
+- (stats) size the global corpus and the cost of one aggregation — [e4b8b5b](https://github.com/becked/per-ankh/commit/e4b8b5bcbd92dad32f4fc573f7dcabfea0afeef6)
+- (stats) settle the field dispositions and the cache-miss rule — [fa531dd](https://github.com/becked/per-ankh/commit/fa531dd5428e89e6cd10cfd1e9a8098db5180e04)
+- (stats) one cache tier, and warming as the herd control — [9748589](https://github.com/becked/per-ankh/commit/974858937f72685af24f37a2a0c8072b3b63fd3a)
+- (stats) one nation facet, precomputed whole — [33f02de](https://github.com/becked/per-ankh/commit/33f02deb6683321520f71659d4683207829357c6)
+- (stats) specify the round-trip test, and defer the reparse sweep — [47269dd](https://github.com/becked/per-ankh/commit/47269ddd6e75459bd10b1a44a61f3e1144ac3b96)
+- (stats) pin the chart bundle with a fixture round-trip — [a6c2c6b](https://github.com/becked/per-ankh/commit/a6c2c6be1121b8a659cf78623917463cabee87cf)
+- (stats) branch the bundle call, not its argument — [e29d291](https://github.com/becked/per-ankh/commit/e29d291afe974e766bb578cd7b2bdd3b75d5d338)
+- (stats) type the chart registry at the bundle core — [33d5afa](https://github.com/becked/per-ankh/commit/33d5afa9a1f3265f83c5a8e5985a611a3818aa79)
+- (stats) record the global-stats build against its plan — [21daab2](https://github.com/becked/per-ankh/commit/21daab24c07d9d5faa6cbea3da59adf05106910f)
+- anchor the Reference gitignore rule to the repo root — [eaddf96](https://github.com/becked/per-ankh/commit/eaddf9672892a071bc2620b2d744281fc17e05af)
+- point the colour guidance at getSeriesColor — [aeefd24](https://github.com/becked/per-ankh/commit/aeefd248d4df4d1bee955d83afea7d1c97e7b38e)
+- (cloud) narrow ReadBudget to the read event types — [11fd7fc](https://github.com/becked/per-ankh/commit/11fd7fc6c7a19cf4e5e10bc9855d120114db9dbf)
+- (deploy) correct the /v1/stats health checks — [72d0297](https://github.com/becked/per-ankh/commit/72d0297ccc5eed2370ecb0850cf8e3ccaeeb8f82)
+- (stats) stop asserting a warm step that was never built — [1980eea](https://github.com/becked/per-ankh/commit/1980eea0d8041a99e809bda72bd0ef35a9aedc47)
+
 ## [2026-08-29-ea24eb6] - 2026-08-29
 
 ### Features
