@@ -112,7 +112,18 @@
 				aria-label="{menu.ariaLabel}: {menu.currentLabel}"
 				class="flex items-center gap-2 rounded bg-surface px-2 py-1 text-sm text-tan transition-colors hover:bg-surface-hover"
 			>
-				<span>{menu.currentLabel}</span>
+				<!-- Every option of this menu is laid into one grid cell, all but
+				     the current one hidden. The trigger is therefore as wide as its
+				     widest option and stays that width whichever is selected, so
+				     picking a shorter label can't move this control or the one
+				     beside it. Sizing off the options themselves rather than a px
+				     guess keeps it right as the slice and nation rosters change. -->
+				<span class="label-stack">
+					{#each menu.options as o (o.value)}
+						<span class="label-sizer" aria-hidden="true">{o.label}</span>
+					{/each}
+					<span>{menu.currentLabel}</span>
+				</span>
 				<span class="text-[9px] text-tan opacity-60">▼</span>
 			</button>
 
@@ -156,3 +167,19 @@
 		</div>
 	{/each}
 </div>
+
+<style>
+	.label-stack {
+		display: grid;
+		justify-items: start;
+	}
+
+	.label-stack > span {
+		grid-area: 1 / 1;
+		white-space: nowrap;
+	}
+
+	.label-sizer {
+		visibility: hidden;
+	}
+</style>
