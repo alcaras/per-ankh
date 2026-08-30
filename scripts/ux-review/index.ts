@@ -14,7 +14,7 @@
 // two auth states:
 //
 //   Anonymous  — the signed-out surface. Only three routes render real
-//                content without a session: / , /games/[id] (10 tabs),
+//                content without a session: / , /games/[id] (15 tabs),
 //                /users/[user_id] (3 tabs). Everything else redirects to
 //                /?next=… .
 //

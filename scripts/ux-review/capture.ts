@@ -22,23 +22,37 @@ export const BREAKPOINTS: Breakpoint[] = [
 	{ id: "mobile", label: "Mobile", width: 390, height: 844 },
 ];
 
-// Game-detail tabs in nav order. `label` is the trigger's accessible name
-// (bits-ui Tabs.Trigger emits role="tab"); getByRole matches by accessible
-// name and survives Tailwind churn. The Tabs.List uses flex-wrap, so every
-// trigger stays a clickable role="tab" even at mobile width (no dropdown
-// collapse). The "Timeline" tab is commented out in GameDetailView so it's
-// omitted here.
-const GAME_TABS = [
-	"Overview",
-	"Events",
-	"Laws",
-	"Techs",
-	"Yields",
-	"Military",
-	"Cities",
-	"Improvements",
-	"Map",
-	"Settings",
+interface GameTab {
+	label: string;
+	// Triggers GameDetailView renders conditionally. Their absence is a fact
+	// about the game, not a capture failure, so they're skipped rather than
+	// recorded as an error.
+	optional?: boolean;
+}
+
+// Game-detail tabs in nav order, mirroring the Tabs.List in GameDetailView.
+// `label` is the trigger's accessible name (bits-ui Tabs.Trigger emits
+// role="tab"); getByRole matches by accessible name and survives Tailwind
+// churn. The Tabs.List uses flex-wrap, so every trigger stays a clickable
+// role="tab" even at mobile width (no dropdown collapse). "Timeline" is
+// commented out there ("hidden pending redesign") so it's omitted here.
+const GAME_TABS: GameTab[] = [
+	{ label: "Overview" },
+	{ label: "Events" },
+	// Gated on hasLeaders — a blob has rulers only from OW 2.8.0 on.
+	{ label: "Leaders", optional: true },
+	{ label: "Laws" },
+	{ label: "Techs" },
+	{ label: "Orders" },
+	{ label: "Yields" },
+	{ label: "Military" },
+	{ label: "Cities" },
+	{ label: "Economy" },
+	{ label: "Wonders" },
+	{ label: "Families" },
+	{ label: "Specialists" },
+	{ label: "Map" },
+	{ label: "Settings" },
 ];
 
 // User-profile tabs are URL-driven (?tab=…) and the load() refetches per tab,
@@ -233,7 +247,7 @@ async function captureHomeCold(
 	}
 }
 
-// Game detail — click through all 10 tabs. Yields one record per tab.
+// Game detail — click through every tab. Yields one record per tab present.
 async function captureGameDetail(
 	page: Page,
 	baseUrl: string,
@@ -264,10 +278,11 @@ async function captureGameDetail(
 	}
 
 	const recs: CaptureRecord[] = [];
-	for (const label of GAME_TABS) {
+	for (const { label, optional } of GAME_TABS) {
 		const id = `${pass}__game-detail__${slug(label)}`;
 		const tab = page.getByRole("tab", { name: label, exact: true });
 		if ((await tab.count()) === 0) {
+			if (optional) continue;
 			recs.push({
 				...base,
 				id,
