@@ -107,7 +107,7 @@ Dark and warm-brown. Tokens live in `src/app.css` `:root` as space-separated RGB
 - **Accents**: `orange` `#ffa500`, `tan` `#d2b48c`, `brown` `#a52a2a`, `dark-brown` `#79261d`.
 - **Text**: `bright` `#DBDEE3` (values and titles), `tan` (panel headings), `muted` `#7a6a55` (labels), `gray-200` `#eeeeee`.
 - **Semantic**: `success` / `success-surface` and `danger` / `danger-surface` — advance/win and eliminate/loss.
-- **Charts**: `CHART_THEME` and `getChartColor(i)` from `$lib/config`; nation color via `getCivilizationColor(nation) ?? getChartColor(i)`. Never a hardcoded hex, never a gray fallback where a helper exists.
+- **Charts**: `CHART_THEME` and `getSeriesColor(i)` from `$lib/config` — that is the categorical rotation; `getChartColor(i)` is the civilization fallback ramp, not a rotation, so nation color goes `getCivilizationColor(nation) ?? getChartColor(i)`. Never a hardcoded hex, never a gray fallback where a helper exists.
 
 `docs/design-audit.html` is a live-rendered inventory of every visual pattern in the app with `file:line` citations — useful as a catalogue. **Its "divergences to consolidate" list is stale**: it predates the June tokenization (`26b6c1b`) that fixed its top-impact rows. The inline `#35302B`, `#2a2622` and `#DBDEE3` counts it reports as 15+, 7+ and 20+ are now 3, 2 and 1. Two findings do survive: `--color-tan-hover` is defined identical to `--color-tan`, so every `hover:bg-tan-hover` is a no-op, and `--color-yellow` is defined and never used. Treat the token ramp in `src/app.css` as the authority.
 
