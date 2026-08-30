@@ -1,14 +1,18 @@
-// The nightly /stats precompute, and the serve-stale read that covers the gap
-// a version bump opens in it.
+// The nightly /stats precompute, the hourly warm, and the serve-stale read
+// that covers the gap a version bump opens in them.
 //
-// Two things need proving here that the resolver tests don't reach. The first
-// is that the precompute writes the *faceted* bundle under a faceted key — the
-// plausible bug is one loop variable wide, caching the slice's bundle under
-// every nation's key, and the resulting page would look right until someone
-// compared a nation against itself. The second is the dispatch: `scheduled`
-// matches cron patterns by exact table with no fallback, because staging
-// declares these patterns and not the retention sweep's, and a fall-through
-// would delete staging's events the first time the two drifted.
+// Three things need proving here that the resolver tests don't reach. The
+// first is that the precompute writes the *faceted* bundle under a faceted key
+// — the plausible bug is one loop variable wide, caching the slice's bundle
+// under every nation's key, and the resulting page would look right until
+// someone compared a nation against itself. The second is that the warm stays
+// inside its brief: the four unfaceted bundles, only the ones missing. Warming
+// wider is ~963 queries against a 1,000 ceiling; warming unconditionally is a
+// day's D1 budget spent overwriting correct entries. The third is the
+// dispatch: `scheduled` matches cron patterns by exact table and exact
+// constant with no fallback, because staging declares these patterns and not
+// the retention sweep's, and a fall-through would delete staging's events the
+// first time the two drifted.
 
 import {
 	applyD1Migrations,
@@ -28,9 +32,12 @@ import {
 	getStaleGlobalCached,
 	putCached,
 } from "../../../src/stats/cache";
+import { CURRENT_PARSER_VERSION } from "../../../src/schemas/game";
 import {
 	STATS_PRECOMPUTE_CRONS,
+	STATS_WARM_CRON,
 	precomputeGlobalSlice,
+	warmGlobalSlices,
 } from "../../../src/stats/precompute";
 import { resolveGlobalCorpus } from "../../../src/stats/resolve";
 import type { ChartBundleCore, GlobalSlice } from "../../../src/stats/types";
@@ -48,6 +55,9 @@ import {
 const PARSER = "2.4.0";
 const STALE_PARSER = "2.13.0";
 const FRESH_PARSER = "2.14.0";
+// One per warm case, so neither leans on what the other left in KV.
+const WARM_COLD_PARSER = "2.5.0";
+const WARM_PRESENT_PARSER = "2.6.0";
 
 // Nations follow the roster seat (test/helpers/save-blob.ts): seat 0 is Egypt,
 // seat 1 Rome, seat 2 Greece.
@@ -236,6 +246,68 @@ describe("getStaleGlobalCached", () => {
 	});
 });
 
+describe("warmGlobalSlices", () => {
+	// The four the nightly builds. Reading them off the cron table rather than
+	// listing them again is the same coupling the warm itself has: a fifth slice
+	// adds a precompute pattern and both follow it.
+	const UNFACETED = Object.values(STATS_PRECOMPUTE_CRONS);
+
+	it("builds every missing unfaceted bundle and no other", async () => {
+		const before = await statsKeys();
+		const result = await warmGlobalSlices(env, WARM_COLD_PARSER);
+
+		expect(result.checked).toBe(UNFACETED.length);
+		expect(new Set(result.built)).toEqual(new Set(UNFACETED));
+
+		const added = [...(await statsKeys())].filter((k) => !before.has(k));
+		expect(new Set(added)).toEqual(
+			new Set(
+				UNFACETED.map((slice) =>
+					cacheKeyToString(globalKey(slice, [], WARM_COLD_PARSER)),
+				),
+			),
+		);
+
+		// Stated separately from the set above because it is the constraint, not
+		// an incidental consequence of it: the nightly writes one bundle per
+		// nation seated in the slice — Egypt and Rome both are, in the duel — and
+		// all 56 selections in one invocation is ~963 D1 queries against a
+		// 1,000-per-invocation ceiling. The warm builds four.
+		expect(await cachedBundle("duel", [EGYPT], WARM_COLD_PARSER)).toBeNull();
+		expect(await cachedBundle("duel", [ROME], WARM_COLD_PARSER)).toBeNull();
+
+		// A real bundle over the real corpus, not an empty shell keyed to look
+		// like one — the whole point of going through buildGlobalSelection is
+		// that the cron and the request path write the same bytes.
+		const all = await cachedBundle("all", [], WARM_COLD_PARSER);
+		expect(all?.meta.parser_version).toBe(WARM_COLD_PARSER);
+		expect(all?.meta.game_count).toBe(Object.keys(CORPUS).length);
+	});
+
+	it("leaves an entry that is already present alone", async () => {
+		// Sentinels rather than real bundles: the warm has to read one to decide,
+		// and anything it rebuilt would overwrite the tag. Steady state is these
+		// four KV reads and nothing else.
+		const keys = UNFACETED.map((slice) =>
+			cacheKeyToString(globalKey(slice, [], WARM_PRESENT_PARSER)),
+		);
+		for (const key of keys) {
+			await env.SESSIONS_KV.put(key, JSON.stringify({ tag: key }), {
+				expirationTtl: 3600,
+			});
+		}
+
+		const before = await statsKeys();
+		const result = await warmGlobalSlices(env, WARM_PRESENT_PARSER);
+
+		expect(result).toEqual({ checked: UNFACETED.length, built: [] });
+		expect(await statsKeys()).toEqual(before);
+		for (const key of keys) {
+			expect(await env.SESSIONS_KV.get(key)).toBe(JSON.stringify({ tag: key }));
+		}
+	});
+});
+
 describe("cron dispatch", () => {
 	const fire = async (cron: string): Promise<void> => {
 		const ctx = createExecutionContext();
@@ -263,6 +335,14 @@ describe("cron dispatch", () => {
 		expect(STATS_PRECOMPUTE_CRONS[RETENTION_CRON]).toBeUndefined();
 	});
 
+	it("gives the warm a pattern of its own", async () => {
+		// The dispatch is a chain of exact matches that each return, so a warm
+		// pattern shared with either of the other two would run whichever arm
+		// comes first and leave the other job never running at all.
+		expect(STATS_PRECOMPUTE_CRONS[STATS_WARM_CRON]).toBeUndefined();
+		expect(STATS_WARM_CRON).not.toBe(RETENTION_CRON);
+	});
+
 	it("precomputes the slice its pattern names", async () => {
 		const [cron, slice] =
 			Object.entries(STATS_PRECOMPUTE_CRONS).find(
@@ -278,6 +358,26 @@ describe("cron dispatch", () => {
 		const added = [...(await statsKeys())].filter((k) => !before.has(k));
 		expect(added).toHaveLength(3);
 		expect(added.every((k) => k.includes(":global:duel:"))).toBe(true);
+	});
+
+	it("warms the unfaceted bundles on the warm pattern", async () => {
+		const unfaceted = Object.values(STATS_PRECOMPUTE_CRONS).map((slice) =>
+			cacheKeyToString(globalKey(slice, [], CURRENT_PARSER_VERSION)),
+		);
+
+		const before = await statsKeys();
+		await fire(STATS_WARM_CRON);
+		const after = await statsKeys();
+
+		// Every unfaceted key is present afterwards however many were already —
+		// the duel case above fired its own pattern, so that one may not have
+		// been missing.
+		for (const key of unfaceted) expect(after.has(key)).toBe(true);
+		// And whatever it did add was unfaceted: the nation bundles belong to
+		// the nightly patterns, which is what keeps this invocation's query
+		// count at ~225 rather than ~963.
+		const added = [...after].filter((k) => !before.has(k));
+		expect(added.every((k) => unfaceted.includes(k))).toBe(true);
 	});
 
 	it("writes nothing on the sweep's pattern or an unknown one", async () => {

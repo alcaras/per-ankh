@@ -8,10 +8,11 @@
 //
 // Storage: R2 for blobs, D1 for indices/users, KV for sessions+OAuth state.
 //
-// Besides `fetch`, the Worker exports a `scheduled` handler running two jobs,
-// dispatched by cron pattern (crons in wrangler.toml): the nightly
-// events-retention sweep (policy in retention.ts) and the public /stats bundle
-// precompute, one pattern per slice (stats/precompute.ts).
+// Besides `fetch`, the Worker exports a `scheduled` handler running three
+// jobs, dispatched by cron pattern (crons in wrangler.toml): the nightly
+// events-retention sweep (policy in retention.ts), the public /stats bundle
+// precompute, one pattern per slice, and the hourly warm that rebuilds any
+// missing unfaceted /stats bundle (both in stats/precompute.ts).
 
 import {
 	adoptTrustedFrontend,
@@ -92,7 +93,9 @@ import { handleGlobalStats, handleUserStats } from "./stats/handlers";
 import type { GlobalStatsEnv } from "./stats/handlers";
 import {
 	STATS_PRECOMPUTE_CRONS,
+	STATS_WARM_CRON,
 	precomputeGlobalSlice,
+	warmGlobalSlices,
 } from "./stats/precompute";
 import { CURRENT_PARSER_VERSION } from "./schemas/game";
 import {
@@ -1193,11 +1196,12 @@ export default {
 		});
 	},
 
-	// Not a dispatch path, so it never goes through `routeEnv`, and both jobs
-	// run on the primary binding. That is automatic for the sweep, which is a
-	// DELETE, and deliberate for the read-only precompute: `routeEnv` is the
-	// only place allowed to derive a replica handle (d1.ts), and a nightly
-	// warm has no latency budget worth a second replication policy for.
+	// Not a dispatch path, so it never goes through `routeEnv`, and every job
+	// runs on the primary binding. That is automatic for the sweep, which is a
+	// DELETE, and deliberate for the read-only stats jobs: `routeEnv` is the
+	// only place allowed to derive a replica handle (d1.ts), and a cron with no
+	// client waiting on it has no latency budget worth a second replication
+	// policy for.
 	async scheduled(
 		controller: ScheduledController,
 		env: RawBindings,
@@ -1206,12 +1210,12 @@ export default {
 		// No runWithLogContext: log.ts is safe without a request context
 		// (request_id logs as null, which is accurate for a cron run).
 		//
-		// Both jobs are matched by exact pattern and there is no fallback: an
+		// Every job is matched by exact pattern and there is no fallback: an
 		// unrecognized cron logs and does nothing. A fall-through to the sweep
 		// would be the one shape that can't be allowed — staging declares the
-		// stats patterns and not the sweep's, so any drift between the tables
-		// and wrangler.toml would start deleting staging's events, which is
-		// exactly what keeping it off the cron protects.
+		// stats patterns and not the sweep's, so any drift between what is
+		// matched here and wrangler.toml would start deleting staging's events,
+		// which is exactly what keeping it off the cron protects.
 		const slice = STATS_PRECOMPUTE_CRONS[controller.cron];
 		if (slice !== undefined) {
 			logEvent("info", "stats_precompute_started", {
@@ -1233,6 +1237,28 @@ export default {
 				// Rethrown for the same reason the sweep's is: nothing awaits a
 				// cron, so the dashboard's run history is the only signal.
 				logError("stats_precompute_failed", err, { slice });
+				throw err;
+			}
+			return;
+		}
+
+		// The hourly warm, which covers all four unfaceted slices in one run and
+		// so has no row in the table above — see STATS_WARM_CRON for why it is a
+		// constant rather than a second table or a sentinel.
+		if (controller.cron === STATS_WARM_CRON) {
+			logEvent("info", "stats_warm_started", { cron: controller.cron });
+			try {
+				const result = await warmGlobalSlices(env, CURRENT_PARSER_VERSION);
+				logEvent("info", "stats_warm_completed", {
+					checked: result.checked,
+					// Empty on an ordinary pass; all four on the first run after a
+					// deploy that moved either version segment.
+					built: result.built,
+				});
+			} catch (err) {
+				// Rethrown for the same reason the other two are: nothing awaits a
+				// cron, so the dashboard's run history is the only signal.
+				logError("stats_warm_failed", err);
 				throw err;
 			}
 			return;

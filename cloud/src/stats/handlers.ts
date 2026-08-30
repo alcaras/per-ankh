@@ -130,13 +130,16 @@ const GLOBAL_STATS_BUDGET: ReadBudget = {
 // (cloudCorsHeaders), which is what keeps the origin-specific CORS headers from
 // being served to the wrong origin out of a shared cache.
 //
-// It is also the only herd control a cold key has: every colo answers its
+// It is also half the herd control a cold key has: every colo answers its
 // second and later requests from the edge, which takes a version bump from
-// "one recompute per request" to roughly one per colo. Design §12 pairs that
-// with a deploy-time warm of the four unfaceted slices — **that step does not
-// exist**; nothing in scripts/prod/ warms anything, so a bump leaves the edge
-// cache doing the whole job alone. Whether it holds is the trigger for a
-// single-flight lock, which the design defers until it measurably doesn't.
+// "one recompute per request" to roughly one per colo. The other half is the
+// hourly warm (STATS_WARM_CRON, stats/precompute.ts), which rebuilds any of
+// the four unfaceted bundles that a bump orphaned and so bounds the cold
+// window to one interval. Design §12 wanted that warm at deploy time instead;
+// it is a cron because a deploy step would need an app session the wrangler
+// toolchain has no way to mint. Whether the two hold together is the trigger
+// for a single-flight lock, which the design defers until they measurably
+// don't.
 function globalStatsResponse(
 	bundle: ChartBundleCore,
 	cors: Record<string, string>,
@@ -186,13 +189,13 @@ function globalStatsResponse(
 //      getStaleGlobalCached).
 //   3. Computing it here.
 //
-// Step 3 is not a vestige of step 1 and never refuses, and today it carries
-// more than the design planned for it. A schema bump orphans all 56 keys at
-// once, step 2 deliberately won't reach across that bump, and nothing warms
-// them back — design §12's deploy-time warm of the four unfaceted slices was
-// never built — so until the night's cron runs, every selection asked for is
-// served by building it here. Precompute-only is the one shape that would
-// make the facet model expensive to change later.
+// Step 3 is not a vestige of step 1 and never refuses. A schema bump orphans
+// all 56 keys at once and step 2 deliberately won't reach across that bump,
+// so what warms them back is the hourly cron (STATS_WARM_CRON,
+// stats/precompute.ts) — and it covers the four unfaceted slices only. Every
+// nation selection asked for between the bump and the night's precompute is
+// still served by building it here. Precompute-only is the one shape that
+// would make the facet model expensive to change later.
 //
 // Step 2 is skipped where the selection resolves to no games — see the
 // resolve below.
