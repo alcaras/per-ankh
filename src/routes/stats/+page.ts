@@ -46,7 +46,16 @@ export const load: PageLoad = async ({ fetch, url }) => {
 			slice,
 			nation,
 			meta: {
-				title: `${selection} · Global stats - Per-Ankh`,
+				// Constant, unlike the sibling stats surfaces: their varying
+				// segment names the entity the page belongs to (a tournament, a
+				// game), where this page's corpus is the whole site and the only
+				// thing that varies is which view of it you are looking at. A tab
+				// that renames itself as you work the facet row is the selection
+				// leaking into the page's identity — the facet row and the
+				// heading already say which slice you are on.
+				title: "Global Stats - Per-Ankh",
+				// The description still names the selection, so a shared link
+				// unfurls as the view it points at rather than as the bare page.
 				description: `Aggregate Old World statistics across every public game on Per-Ankh: ${selection}.`,
 			},
 		};

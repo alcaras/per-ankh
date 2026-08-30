@@ -17,9 +17,9 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// The headline number the nation facet has to move: a selection narrows
-	// the games as well as the focal seats, so this counts the games the
-	// charts below are actually drawn from.
+	// Not displayed — this is the empty-state gate. A selection narrows the
+	// games as well as the focal seats, so a facet the corpus has no game for
+	// resolves to a bundle with nothing in it rather than to an error.
 	const gameCount = $derived(data.bundle.meta.game_count);
 </script>
 
@@ -31,13 +31,7 @@
 		>
 			<div class="mx-auto max-w-screen-2xl">
 				<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-					<div class="flex items-baseline gap-3">
-						<h1 class="text-2xl font-bold text-gray-200">Global stats</h1>
-						<span class="text-sm text-tan opacity-70">
-							{gameCount}
-							{gameCount === 1 ? "game" : "games"}
-						</span>
-					</div>
+					<h1 class="text-2xl font-bold text-gray-200">Global Stats</h1>
 					<GlobalFacetRow slice={data.slice} nation={data.nation} />
 				</div>
 
