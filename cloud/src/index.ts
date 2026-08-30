@@ -88,7 +88,8 @@ import {
 	handleTournamentWithdraw,
 	handleUncastMatchPart,
 } from "./tournament/player";
-import { handleUserStats } from "./stats/handlers";
+import { handleGlobalStats, handleUserStats } from "./stats/handlers";
+import type { GlobalStatsEnv } from "./stats/handlers";
 import {
 	STATS_PRECOMPUTE_CRONS,
 	precomputeGlobalSlice,
@@ -155,6 +156,7 @@ interface Env
 		TournamentAdminEnv,
 		ChannelsEnv,
 		FeaturedVideosEnv,
+		GlobalStatsEnv,
 		SecurityEventsEnv,
 		TrustedFrontendEnv {
 	SHARE_BUCKET: R2Bucket;
@@ -890,6 +892,18 @@ const ROUTES: RouteSpec[] = [
 		},
 		route: "GET /v1/users/:user_id/tournaments",
 		handler: (r, e, m) => handleUserTournaments(m![1], r, e),
+	},
+	// The chart bundle over the whole public corpus — what /stats reads.
+	// Public and sessionless: is_public = 1 is the whole visibility rule, so
+	// every viewer gets the same bytes. ?slice= picks the roster composition,
+	// ?nation= facets it. Its own per-IP budget (GLOBAL_STATS_VIEW_PER_HOUR),
+	// not a share of anon_read. Passes ctx so a stale-served bundle can rebuild
+	// in the background.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/stats" },
+		route: "GET /v1/stats",
+		handler: (r, e, _m, c) => handleGlobalStats(r, e, c),
 	},
 	// Cross-creator home feed — newest uploads across all users' linked
 	// channels, merged newest-first for the home page's "Latest from creators"

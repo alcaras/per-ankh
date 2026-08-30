@@ -12,7 +12,7 @@
 // caller than /tournaments itself. When adding a public read, give it the
 // budget of the page it is fetched by, not of the feature it belongs to.
 
-import { logWarn } from "../log";
+import { ceilingFrom } from "../read-budget";
 
 // Per-user admin mutation budget. Spec said 30/hour/tournament; we
 // simplified to per-user because the threat model (stolen admin
@@ -50,39 +50,6 @@ export const TOURNAMENT_SCHEDULE_ACTIONS_PER_HOUR = 60;
 //
 // The default only — read the effective ceiling with tournamentViewPerHour().
 export const TOURNAMENT_VIEW_PER_HOUR = 2400;
-
-// A ceiling read off an env var, falling back to the compiled-in default.
-// Shared by all three read budgets so they can't drift in how they parse.
-//
-// Number(), not parseInt(): parseInt("600 per hour") is 600, which would let a
-// mangled value silently pass as a deliberate one. Anything below one whole
-// read is treated as unset rather than "refuse everything" — a fat-fingered 0
-// during an incident would 429 the whole surface, which is the outage these
-// knobs exist to shorten, and so would a slipped decimal point: the gate is
-// `count >= limit`, so 0.5 refuses every read after the first exactly as 0
-// refuses every read at all. Integers only, for the same reason — a ceiling of
-// 1.5 is 2 to the gate and 1.5 to whoever reads it back.
-//
-// Discarding a value is logged, once per isolate per var. Falling back is the
-// safe behaviour, but doing it silently means an operator who mistypes a
-// ceiling mid-incident sees the deploy succeed, the traffic unchanged, and no
-// reason why — and the value they most plausibly reach for under load, 0, is
-// one of the discarded ones. `name` is only carried for this line.
-const unparseableLogged = new Set<string>();
-
-function ceilingFrom(
-	raw: string | undefined,
-	fallback: number,
-	name: string,
-): number {
-	const parsed = Number(raw);
-	if (Number.isInteger(parsed) && parsed >= 1) return parsed;
-	if (raw !== undefined && !unparseableLogged.has(name)) {
-		unparseableLogged.add(name);
-		logWarn("read_ceiling_unparseable", { var: name, value: raw, fallback });
-	}
-	return fallback;
-}
 
 // Effective per-IP tournament view ceiling: the TOURNAMENT_VIEW_PER_HOUR var
 // when it parses, the constant above otherwise.

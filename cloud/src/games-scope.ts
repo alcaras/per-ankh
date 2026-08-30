@@ -98,6 +98,22 @@ export function parseScopeParam(raw: string | null): UserScope {
 	return "all";
 }
 
+// Parse a ?nation= query param into a nation zType, or null for "no nation
+// filter". A shape check, not a roster check: the worker bakes only the two
+// nations whose display name differs from their token (generated/nation-names.ts),
+// so there is nothing here to match a full roster against — and a token that
+// shapes right but names no nation selects nothing, which is the same answer
+// an unknown value would get.
+//
+// Shared by the Games tab's nation chip (handleGameList, filtering
+// games.user_nation) and the /stats nation facet (handleGlobalStats, narrowing
+// on player_summaries.nation). Both ask the same question of the same
+// vocabulary, so they ask it once.
+export function parseNationParam(raw: string | null): string | null {
+	if (!raw || raw.length > 64 || !/^[A-Z_]+$/.test(raw)) return null;
+	return raw;
+}
+
 // ---------- Global composition slices ----------
 //
 // The public /stats corpus is sliced by roster composition alone — no owner,
@@ -130,6 +146,29 @@ const COMPOSITION_GAME_IDS_SQL: Record<Exclude<GlobalSlice, "all">, string> = {
 export function buildGlobalSliceWhere(slice: GlobalSlice): string {
 	if (slice === "all") return "";
 	return ` AND game_id IN (${COMPOSITION_GAME_IDS_SQL[slice]})`;
+}
+
+// Parse the ?slice= query param into a GlobalSlice, the /stats sibling of
+// parseScopeParam above and deliberately as forgiving: a known value passes
+// through, anything else — a stale bookmark, a hand-edited URL, a slice this
+// version no longer has — falls back to the default rather than 400ing.
+//
+// The default is the duel slice, not "all". 94% of the public corpus is 1v1,
+// so the all-public numbers *are* the duel numbers; landing on the label that
+// describes the distribution beats landing on a superset whose name implies a
+// breadth it doesn't have.
+export const DEFAULT_GLOBAL_SLICE: GlobalSlice = "duel";
+
+export function parseSliceParam(raw: string | null): GlobalSlice {
+	if (
+		raw === "all" ||
+		raw === "duel" ||
+		raw === "ffa" ||
+		raw === "single_player"
+	) {
+		return raw;
+	}
+	return DEFAULT_GLOBAL_SLICE;
 }
 
 // ---------- Admin sweep filters ----------

@@ -14,7 +14,7 @@ import { putCached } from "./cache";
 import type { StatsCacheEnv } from "./cache";
 import { listGlobalSliceNations, resolveGlobalCorpus } from "./resolve";
 import type { ResolveEnv } from "./resolve";
-import type { GlobalSlice } from "./types";
+import type { ChartBundleCore, GlobalSlice } from "./types";
 
 // Cron pattern → the slice that pattern precomputes.
 //
@@ -42,11 +42,51 @@ export interface PrecomputeEnv
 	extends AggregateEnv, ResolveEnv, StatsCacheEnv {}
 
 export interface PrecomputeSliceResult {
-	// Bundles written: the unfaceted slice, plus one per nation seated in it.
+	// Selections built: the unfaceted slice, plus one per nation seated in it.
+	// Every one of them is also written, except in the degenerate case where
+	// the slice itself holds no public game — see buildGlobalSelection.
 	selections: number;
 	// Games in the unfaceted slice. The faceted selections are subsets of it,
 	// so this is the number the invocation's cost is denominated in.
 	games: number;
+}
+
+// Build one selection's bundle and cache it. The nightly loop below and the
+// request path's cache miss (stats/handlers.ts) both go through here, so the
+// two provably write the same bytes under the same key — a cron that warmed a
+// key the request path would then overwrite with something else would make the
+// warm step worse than useless.
+//
+// "humans" widens the focal set to every human seat, which is the whole point
+// of a corpus where both sides of a duel are someone's game. It returns a
+// ChartBundleCore; the cache is opaque JSON either way.
+//
+// An empty corpus is built but not cached. buildChartBundle short-circuits it
+// to a fully-shaped empty bundle without a single query, so the entry would
+// save nothing — and on the request path the selection that resolves to
+// nothing is a nation token no game holds, which anyone can mint from the URL
+// bar. Caching those is a KV write per distinct string, charged to us.
+export async function buildGlobalSelection(
+	env: PrecomputeEnv,
+	slice: GlobalSlice,
+	nations: string[],
+	parserVersion: string,
+): Promise<ChartBundleCore> {
+	const corpus = await resolveGlobalCorpus(env, slice, { nations });
+	const bundle = (await buildChartBundle(
+		env,
+		corpus,
+		parserVersion,
+		"humans",
+	)) as ChartBundleCore;
+	if (corpus.gameIds.length > 0) {
+		await putCached(
+			env,
+			{ kind: "global", slice, nations, parser_version: parserVersion },
+			bundle,
+		);
+	}
+	return bundle;
 }
 
 // Build and cache every selection of one slice.
@@ -71,24 +111,13 @@ export async function precomputeGlobalSlice(
 
 	let games = 0;
 	for (const selection of selections) {
-		const corpus = await resolveGlobalCorpus(env, slice, {
-			nations: selection,
-		});
-		if (selection.length === 0) games = corpus.gameIds.length;
-		// "humans" widens the focal set to every human seat, which is the whole
-		// point of a corpus where both sides of a duel are someone's game. It
-		// returns a ChartBundleCore; the cache is opaque JSON either way.
-		const bundle = await buildChartBundle(env, corpus, parserVersion, "humans");
-		await putCached(
+		const bundle = await buildGlobalSelection(
 			env,
-			{
-				kind: "global",
-				slice,
-				nations: selection,
-				parser_version: parserVersion,
-			},
-			bundle,
+			slice,
+			selection,
+			parserVersion,
 		);
+		if (selection.length === 0) games = bundle.meta.game_count;
 	}
 
 	return { selections: selections.length, games };

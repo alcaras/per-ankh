@@ -10,13 +10,8 @@ import {
 	type SessionData,
 	type SessionEnv,
 } from "../session";
-import {
-	cloudCorsHeaders,
-	errorResponse,
-	getClientIp,
-	jsonResponse,
-} from "../util";
-import { countEventsSince, isScraperUA } from "../games";
+import { cloudCorsHeaders, errorResponse, jsonResponse } from "../util";
+import { enforceReadRateLimit, type ReadBudget } from "../read-budget";
 import { logError } from "../log";
 import { isTournamentAdmin } from "./authz";
 import {
@@ -98,18 +93,6 @@ export interface TournamentPublicEnv
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 20;
 
-// A per-IP read budget: which events rows count toward it, and how it answers
-// once it's spent. One shape, three instances — see the three below, and
-// limits.ts for why they aren't one.
-interface ReadBudget {
-	eventType:
-		| "tournament_view"
-		| "tournament_list_view"
-		| "tournament_link_view";
-	message: string;
-	code: string;
-}
-
 const VIEW_BUDGET: ReadBudget = {
 	eventType: "tournament_view",
 	message: "Tournament view rate limit exceeded",
@@ -127,63 +110,6 @@ const LINK_BUDGET: ReadBudget = {
 	message: "Tournament link rate limit exceeded",
 	code: "RATE_LIMIT_TOURNAMENT_LINK",
 };
-
-// Per-IP rate limit on a public read. Scraper User-Agents (Discord/Slack/
-// Twitter link previews) bypass both the gate and the audit-log insert — they
-// fan out load that's not meaningful to count. Applies to everyone else,
-// including signed-in users.
-//
-// Every read is gated and charged, on every caller. There is no cheaper class
-// of read and no caller who pays less: a tournament page load costs one slot
-// per backend read it makes, whether it was server-rendered or navigated to in
-// a hydrated client. The ceilings are set in reads to match — see
-// TOURNAMENT_VIEW_PER_HOUR for what that works out to per page.
-//
-// This was briefly a per-*page-load* charge, where a sub-resource behind
-// loadViewableTournament skipped both the gate and the count if the caller
-// proved it was our SSR Worker. That saved three to five COUNT(*) per render,
-// and cost more than it saved: the same page charged 1 via SSR and 4–6 via a
-// hydrated navigation, the ceiling meant reads on one path and page loads on
-// the other, and the rate limiter had a branch on who you are. The shared key
-// now settles exactly one question — which visitor is this — and nothing about
-// what a read costs.
-//
-// `eventType` is interpolated into the INSERT rather than bound: event_type
-// is part of the statement's structure, not a value. The literal union closes
-// the injection path — same reasoning as RateLimitedEventType in games.ts.
-async function enforceReadRateLimit(
-	env: TournamentPublicEnv,
-	request: Request,
-	cors: Record<string, string>,
-	budget: ReadBudget,
-	limit: number,
-): Promise<Response | null> {
-	const ua = request.headers.get("User-Agent");
-	if (isScraperUA(ua)) return null;
-	const ip = getClientIp(request) ?? "untrusted";
-	const count = await countEventsSince(
-		env.EVENTS_DB,
-		budget.eventType,
-		"ip_address",
-		ip,
-	);
-	if (count >= limit) {
-		return errorResponse(budget.message, 429, cors, budget.code);
-	}
-	env.EVENTS_DB.prepare(
-		`INSERT INTO events (event_type, ip_address)
-		 VALUES ('${budget.eventType}', ?)`,
-	)
-		.bind(ip)
-		.run()
-		.catch((e: unknown) => {
-			logError("audit_event_log_failed", e, {
-				event_type: budget.eventType,
-				ip,
-			});
-		});
-	return null;
-}
 
 // The tournament pages' budget: detail/standings/bracket/rounds/matches/
 // match-detail and both stats reads. Retunable mid-event via the env var.

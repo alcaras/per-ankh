@@ -34,6 +34,7 @@ import {
 	buildAdminGameFilterWhere,
 	buildUserScopeWhere,
 	parseAdminGameFilter,
+	parseNationParam,
 	parseScopeParam,
 } from "./games-scope";
 import type { SessionData, SessionEnv } from "./session";
@@ -142,6 +143,7 @@ export type RateLimitedEventType =
 	| "tournament_create"
 	| "tournament_export"
 	| "tournament_schedule"
+	| "global_stats_view"
 	| "user_search"
 	| "user_search_public"
 	| "slug_claim_attempt";
@@ -2008,11 +2010,7 @@ export async function handleGameList(
 	// result / date chips. Empty strings are treated as absent.
 	const qRaw = url.searchParams.get("q");
 	const q = qRaw && qRaw.trim().length > 0 ? qRaw.trim() : null;
-	const nationRaw = url.searchParams.get("nation");
-	const nation =
-		nationRaw && /^[A-Z_]+$/.test(nationRaw) && nationRaw.length <= 64
-			? nationRaw
-			: null;
+	const nation = parseNationParam(url.searchParams.get("nation"));
 	const dateRaw = url.searchParams.get("date");
 	const date = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
 	const resultRaw = url.searchParams.get("result");

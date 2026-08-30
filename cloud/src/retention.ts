@@ -41,6 +41,11 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			// rather than tournament_view's, so /games/* crawls can't drain the
 			// tournament pages' allowance. Same 1h counter role, metadata-free.
 			"tournament_link_view",
+			// Public /stats bundle reads (stats/handlers.ts): its own budget
+			// rather than anon_read's, so a crawl of /games/* can't decide when
+			// the global stats page starts refusing — and vice versa. Same 1h
+			// counter role, metadata-free.
+			"global_stats_view",
 			"user_search",
 			// Header people search (users.ts): same counter role as
 			// user_search, its own budget. Metadata is q_length only.
