@@ -3,7 +3,10 @@
 
 import type { ChartOption } from "$lib/echarts";
 import { CHART_THEME } from "$lib/config";
-import { YIELD_COLORS } from "$lib/generated/yield-colors";
+import {
+	MILITARY_POWER_COLOR,
+	YIELD_COLORS,
+} from "$lib/generated/yield-colors";
 import { formatEnum, nationName } from "$lib/utils/formatting";
 
 // Strip leaderless enum prefix for axis labels. The stats SQL returns
@@ -29,46 +32,45 @@ export function fmtLaw(value: string): string {
 	return formatEnum(value, "LAW_");
 }
 
-// Win/loss series colors — Old World's own Happiness and Discontent.
+// Win/loss series colors — Growth against the combat rating's red.
 //
-// The game defines these two as a single opposed mechanic, not as two
-// unrelated yields: "When a City's Happiness bar empties, its overall
-// Discontent Level goes up by one" (text-yield.xml, TEXT_YIELD_DISCONTENT_HELP).
-// So the pair already carries a went-well / went-badly reading in the game's
-// own vocabulary, which is exactly what a wins-vs-losses split needs — the
-// same argument the yield colors themselves rest on, applied to a pair rather
-// than to one series.
+// Green against red, the split most readers already know how to read. Both
+// clear the contrast floor the yield bake enforces on the chart ground (5.23:1
+// and 4.57:1) and they hold 0.256 apart in OKLab.
 //
-// This also retires the worst contrast in the chart layer. The old loss tone
-// (#5a4d3f) sat at 2.10:1 on the chart ground, below every floor the yield
-// bake enforces; Discontent is 5.53:1. Separation improves with it: 0.241 →
-// 0.264 in OKLab, and 0.274 under deuteranopic simulation — better under
-// red-green color blindness than the copper/brown pair was under normal
-// vision, and with none of the green/red hazard the game's own
-// COLOR_POSITIVE / COLOR_NEGATIVE would have brought.
+// The cost is red-green color blindness, where hue is exactly what this pair
+// spends its distance on: 0.073 apart under deuteranopic simulation and 0.125
+// protanopic, against the 0.140 floor the palette holds elsewhere. What
+// carries the reading there is position and text, not hue — the stacked bars
+// put wins first and losses second in a fixed order, and every one of these
+// charts names the cohort in its tooltip ("Wins: n / games"). Legends are off
+// chart-wide (CHART_THEME.legend.show), so the tooltip is the whole of it.
+//
+// The loss tone has no YIELD_* token of its own: it is COLOR_RATING_COURAGE,
+// which the bake exports only under the name the Military Power series gave
+// it. On that one chart the same red is the pooled median in pooled mode and
+// the losers' line in split mode — never both at once, since color names the
+// yield only when there is no cohort to name.
 //
 // Shared by every chart that splits a series by outcome (the nation win-rate
 // bar, the leader and family bars, the yields winner/loser split) so the two
-// cohorts mean the same thing everywhere. The tournament standings bar
-// deliberately colors per-player instead, so it doesn't use these.
-export const WIN_COLOR = YIELD_COLORS.YIELD_HAPPINESS;
-export const LOSS_COLOR = YIELD_COLORS.YIELD_DISCONTENT;
+// cohorts mean the same thing everywhere. The nation average-points bar colors
+// per nation and the tournament standings bar per player, so neither uses
+// these — in both, a row is only ever itself.
+export const WIN_COLOR = YIELD_COLORS.YIELD_GROWTH;
+export const LOSS_COLOR = MILITARY_POWER_COLOR;
 
 // Fills for a chart that buckets an outcome three ways rather than splitting it
-// two (the wonders bars). The outer two are the same Happiness / Discontent
-// pair the two-way split uses, so "mostly won" and "mostly lost" read the same
-// on the wonders chart as everywhere else; Legitimacy sits between them as the
-// neutral, being the yield with no directional charge of its own.
+// two (the wonders bars). Culture / Food / Orders, from the same yield palette
+// the two-way split draws on but sharing no color with it — a scale of its
+// own, read on the one chart that uses it.
 //
-// The neutral was chosen on separation, not on taste. Against Happiness and
-// Discontent, Legitimacy holds a worst-pair distance of 0.140 in OKLab and
-// 0.142 deuteranopic — matching the blue/copper/rose triple this replaces
-// (0.150 / 0.138) rather than spending its separation to join the palette.
-// Culture is the trap here: it looks like the obvious neutral and collapses
-// against Discontent at 0.009 deuteranopic, one color for two buckets.
-export const OUTCOME_WON = YIELD_COLORS.YIELD_HAPPINESS;
-export const OUTCOME_MIXED = YIELD_COLORS.YIELD_LEGITIMACY;
-export const OUTCOME_LOST = YIELD_COLORS.YIELD_DISCONTENT;
+// All three clear the contrast floor the yield bake enforces on the chart
+// ground: 5.53 / 4.99 / 6.39:1. Separation at the worst pair is 0.142 in OKLab
+// (Culture/Orders) and 0.098 under deuteranopic simulation (Food/Orders).
+export const OUTCOME_WON = YIELD_COLORS.YIELD_CULTURE;
+export const OUTCOME_MIXED = YIELD_COLORS.YIELD_FOOD;
+export const OUTCOME_LOST = YIELD_COLORS.YIELD_ORDERS;
 
 // The app's body-text tan (--color-tan, what `text-tan` renders), spelled as a
 // literal because ECharts options can't read a CSS variable.
