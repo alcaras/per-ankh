@@ -60,7 +60,7 @@ npm run bake:finalize          # Emits committed manifest TS modules + reconcile
 npm run bake:all               # Every baker above except unit-stats + owtt, then finalize
 ```
 
-`bake:all` deliberately omits `bake:unit-stats` and `bake:owtt` — rerun those by hand when their sources change. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, and `bake:screenshots` / `ux:review` drive Playwright capture for UX review (output under `docs/ux-review/`).
+`bake:all` deliberately omits `bake:unit-stats` and `bake:owtt` — rerun those by hand when their sources change. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
 
 ## Adding a name-override table
 

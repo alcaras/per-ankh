@@ -66,7 +66,7 @@ These are the facts an agent won't infer from a doc alone, and the most common s
 - The repo was **rewritten from a Tauri desktop app (Rust + DuckDB) into a SvelteKit + Cloudflare-Worker web app.** There is no Tauri/Rust/DuckDB/desktop runtime. Any doc referencing `src-tauri/`, `*.rs`, DuckDB, SQL entity tables, or `match_id` composite keys is describing the **dead pre-rewrite world** — this is the single dominant staleness cause.
 - **`CLAUDE.md` is the current authoritative description** and its "Key docs" list is the blessed authoritative set. Re-verify it every audit.
 - **Save-file *format* knowledge is durable** even when its surrounding implementation is dead — the XML format didn't change because the parser was rewritten to TypeScript (`src/lib/parser/`). Lean `caveat`/`keep` on the format catalog, `archive` on the DuckDB/Rust framing around it.
-- **Some `docs/` files are generated build artifacts**, not hand-maintained prose (e.g. `docs/ux-review/{README,index}.html` from `scripts/capture-ux-review.mjs`). A regenerable artifact is not "stale" — judge it differently.
+- **Some `docs/` files are generated build artifacts**, not hand-maintained prose (e.g. `docs/ux-review/{README,index}.html` from `./per-ankh ux-review`, i.e. `scripts/ux-review/`). A regenerable artifact is not "stale" — judge it differently.
 - **The banner convention already works.** Docs that self-banner as historical are the easiest to adjudicate; the cheap win is applying it consistently and pairing it with a move to `docs/archive/`.
 
 ## Going forward: make the next audit a diff
