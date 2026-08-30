@@ -1,8 +1,8 @@
 # Global stats — design
 
-A public `/stats` surface that runs the existing chart catalog over the **whole public corpus** rather than one user's library or one tournament's games. Forward-looking: this is the plan, not the as-built record. When it ships, fold the outcome into `docs/aggregate-statistics.md` and retire this doc.
+A public `/stats` surface that runs the existing chart catalog over the **whole public corpus** rather than one user's library or one tournament's games. Written forward-looking, as the plan; §16's nine steps have since been built. The plan is kept intact and a **Built:** note marks every place the outcome diverged from it — the reasoning is why the code looks as it does, and deleting it would leave the divergences unexplained. When it ships, fold the outcome into `docs/aggregate-statistics.md` and retire this doc.
 
-Status: **planned, unbuilt.** Written 2026-08-28.
+Status: **built, not deployed.** Written 2026-08-28; built 2026-08-29 on `feat/global-stats`. All nine steps of §16 landed. Two things specified here did not: the `save_dates` / `favorite_day_of_week` drop (§8.1), and — deferred by the plan itself — the tournament chart tabs (§9). §17 says which of its doc updates are done.
 
 ## 1. What this is
 
@@ -14,13 +14,15 @@ Today the chart catalog answers "how do *my* games look" (`/users/[user_id]?tab=
 
 Most of the machinery is in place, and this is deliberate — `docs/aggregate-statistics.md` §"Core idea" kept the seam open on purpose.
 
-- **The corpus seam.** `buildChartBundle(env, corpus, parserVersion, focal)` (`cloud/src/stats/aggregate.ts:577`) takes an opaque game-id list and nothing else. Two resolvers feed it: `resolveUserCorpus` and `resolveTournamentCorpus` (`cloud/src/stats/resolve.ts`). A global slice is a third resolver.
-- **The focal widening.** `focal: "humans"` (`aggregate.ts:36`) already counts every human player rather than only the uploader — built for tournaments, and exactly right for a global corpus where both sides of a duel matter. It returns `ChartBundleCore`, which correctly omits the one-focal-per-game fields (`win_rate`, `summary.top_nation`) that read ~50% by construction over an all-humans corpus.
-- **Composition predicates.** The `vs_ai` / `mp` game-type fragments in `cloud/src/games-scope.ts:60-77` are pure `game_id IN (subquery)` with no `user_id` reference, so they lift to a global corpus unchanged.
+- **The corpus seam.** `buildChartBundle(env, corpus, parserVersion, focal)` (`cloud/src/stats/aggregate.ts:684`) takes an opaque game-id list and nothing else. Two resolvers feed it: `resolveUserCorpus` and `resolveTournamentCorpus` (`cloud/src/stats/resolve.ts`). A global slice is a third resolver.
+- **The focal widening.** `focal: "humans"` (`aggregate.ts:40`) already counts every human player rather than only the uploader — built for tournaments, and exactly right for a global corpus where both sides of a duel matter. It returns `ChartBundleCore`, which correctly omits the one-focal-per-game fields (`win_rate`, `summary.top_nation`) that read ~50% by construction over an all-humans corpus.
+- **Composition predicates.** The `vs_ai` / `mp` game-type fragments in `cloud/src/games-scope.ts:63-79` are pure `game_id IN (subquery)` with no `user_id` reference, so they lift to a global corpus unchanged.
 - **The KV bundle cache.** `cloud/src/stats/cache.ts` — parser-version and schema-version embedded in the key, 24h TTL, prefix-walk invalidation.
-- **The cron.** `wrangler.toml` already declares `crons = ["47 3 * * *"]` with a `scheduled` handler (`cloud/src/index.ts:1177`) that reads `controller.cron`.
+- **The cron.** `wrangler.toml` already declares `crons = ["47 3 * * *"]` with a `scheduled` handler (`cloud/src/index.ts:1201`) that reads `controller.cron`.
 
-What does **not** exist: a global resolver, a facet vocabulary, precomputation, the route, and the frontend's ability to render a `ChartBundleCore` through the chart registry (see §9).
+What did **not** exist when this was written — a global resolver, a facet vocabulary, precomputation, the route, and the frontend's ability to render a `ChartBundleCore` through the chart registry (see §9) — is exactly what §16's steps built.
+
+**Built:** `resolveGlobalCorpus` and `listGlobalSliceNations` (`cloud/src/stats/resolve.ts`), the composition fragments in `cloud/src/games-scope.ts`, `cloud/src/stats/precompute.ts`, `GET /v1/stats` (`cloud/src/stats/handlers.ts`), the registry typed at `ChartBundleCore` (`src/lib/stats/types.ts`), and the route at `src/routes/stats/`.
 
 ## 3. Slices
 
@@ -79,6 +81,8 @@ So a nation selection narrows twice: the corpus becomes the slice's games holdin
 `summary.total_games` and `meta.game_count` stay derived from the corpus id list, not from focal membership. Deriving them from the focal set would make the two impossible to drift apart, which is the better structure, but it is not free: `buildSelfMembership` selects on `is_uploader = 1` for the user corpus, and the 19 observer uploads carry no such row — they would silently drop out of a count that includes them today.
 
 Consequence: the focal convention gains a third form. It currently lives in exactly two places (`buildSelfMembership` and `loadYieldCurves`'s `selfClause`, both in `aggregate.ts`); a nation-restricted focal must thread through both and nowhere else.
+
+**Built: "nowhere else" was wrong, and the facet is what exposed it.** Those two are where the focal set is *decided*, but a field is only focal if it consults the result — and two never did. `lawTiming` and `techTiming` aggregated every seat in the corpus's games, so a Rome selection fed the Greek's laws and techs into a Rome bundle: the precise defect this section exists to prevent, surviving in the fields least likely to be checked for it, since `openingLaws` and `techFirst` are built from the same event arrays a few lines away and filtered correctly all along. Both now filter at the loop that feeds them (`aggregate.ts:1166`, `:1267`); doing it there rather than at each consumer also made `techFirst`'s own check redundant, so the population is decided once. The fix reaches the user surface too — Law adoption and Tech timing on a profile now show that user's seats instead of pooling their opponents' — and `cloud/test/integration/stats/round-trip.test.ts` states the invariant for both focal modes rather than only snapshotting it. The general form of the rule: **a field is focal only if it filters on `selfMembership`, and adding a field means saying which population it draws from** (§8.3).
 
 ### 4.3 Rejected: nation as a client-side display filter
 
@@ -141,7 +145,7 @@ Read these as an order of magnitude, not a contract, in two directions. SQLite r
 
 ## 7. Memory — the binding constraint
 
-`loadYieldCurves` (`aggregate.ts:273`) pulls **raw** `game_player_turn` rows and retains, per row, one number in each of 32 arrays (16 series × rate + cumulative). Decided games land in `pooled` *and* one of `winners`/`losers`, so they are stored twice.
+`loadYieldCurves` (`aggregate.ts:286`) pulls **raw** `game_player_turn` rows and retains, per row, one number in each of 32 arrays (16 series × rate + cumulative). Decided games land in `pooled` *and* one of `winners`/`losers`, so they are stored twice.
 
 The rate is **~890 bytes of live heap per focal row**, over a ~17 MB floor for the other eight loaders — a slope confirmed across corpus subsets from 143 to 572 games. `loadYieldCurves` is ~83% of the peak: holding the corpus fixed at 572 games and halving the focal set (`focal: "uploader"`) takes the peak from 97.7 MB to 57.3 MB.
 
@@ -199,6 +203,8 @@ Which `ChartBundleCore` fields survive the widening to a global corpus.
 | `techFirst` | keep | |
 | `techTiming` | keep | |
 
+**Built: neither drop happened.** The global bundle still carries `save_dates` and `favorite_day_of_week`. `buildChartBundle` has no per-corpus field disposition, and giving it one is a bundle-shape change — a `BUNDLE_SCHEMA_VERSION` bump (§12), orphaning every cached entry — for fields no chart on `/stats` reads: `save_dates` is consumed only by the profile Overview tab's calendar (`src/lib/users/OverviewTab.svelte`), which `StatsView` does not render, and `favorite_day_of_week` still has no consumer anywhere. So the cost is payload, not correctness. It does leave §8's size-stability claim resting on `openingLaws`'s bound alone, since `save_dates` is now the one field in the bundle that scales with game count. Do it on the next bump that is happening anyway.
+
 ### 8.2 Bounding `openingLaws`
 
 Distinct (nation, four-law-set) rows grow with the corpus — 139 at 143 games, 270 at 286, 469 at 572 — and 67% of them are singletons. At 51 KB it is the third-largest field, and the only one besides `save_dates` without a ceiling.
@@ -228,19 +234,41 @@ The rule's reach is small because the aggregator is already mostly self-consiste
 
 ## 9. Frontend
 
-`ChartSpec` and `StatsView` are typed against `ChartBundle` (the user shape) — `hasData`, `emptyMessage`, and `height` are all `(bundle: ChartBundle) => …` (`src/lib/stats/types.ts:220-227`). The global endpoint returns `ChartBundleCore`, so **the registry must be parameterized over the bundle shape.** This is the prerequisite for everything else on the frontend.
+`ChartSpec` and `StatsView` were typed against `ChartBundle` (the user shape) — `hasData`, `emptyMessage`, and `height` were all `(bundle: ChartBundle) => …` (now `ChartBundleCore`, `src/lib/stats/types.ts:230-237`). The global endpoint returns `ChartBundleCore`, so **the registry must be parameterized over the bundle shape.** This is the prerequisite for everything else on the frontend.
 
-The registry is also less general than it looks: `buildOption` is a hardcoded `switch` on spec id (`StatsView.svelte:62-73`), and four of eight categories (`yields`, `families`, `laws`, `tech`) are anchor-only stubs special-cased in the template dispatch (`StatsView.svelte:132-140`).
+**Built:** the predicates take `ChartBundleCore`, and that was the whole change — no generic parameter, no discriminant. `ChartBundle` extends `ChartBundleCore`, so it satisfies them structurally and the user page passes its richer bundle unchanged.
 
-Once parameterized, the tournament stats page's **chart tabs** can collapse onto the shared registry — it currently hand-rolls its own tabs and calls option builders directly. Its Plane A tabs (Matches, Players, Casters) stay bespoke: they render a different payload shape and a `MatchTable`, neither of which the spec loop models. **Deferred** — it is a refactor of a live surface with no dependency on the rest, and it is the natural thing to drop if the session runs long.
+The registry is also less general than it looks: `buildOption` is a hardcoded `switch` on spec id (`StatsView.svelte:76-92`), and four of eight categories (`yields`, `families`, `laws`, `tech`) are anchor-only stubs special-cased in the template dispatch (`StatsView.svelte:141-149`). Parameterizing the registry did not change that, and did not need to.
+
+Once parameterized, the tournament stats page's **chart tabs** can collapse onto the shared registry — it currently hand-rolls its own tabs and calls option builders directly. Its Plane A tabs (Matches, Players, Casters) stay bespoke: they render a different payload shape and a `MatchTable`, neither of which the spec loop models. **Deferred** — it is a refactor of a live surface with no dependency on the rest, and it is the natural thing to drop if the session runs long. It was dropped; the page still hand-rolls its tabs.
 
 The facet UI is a sibling of `ScopeRow.svelte` — a slice selector plus a single-select nation dropdown, the shape `ScopeRow` already has.
 
+**Built:** `src/lib/stats/GlobalFacetRow.svelte`, on `ScopeRow`'s markup — two hand-rolled popovers, one open at a time, each writing its own param. Both drop their param at the default rather than spelling it out, so the default view has one canonical URL and therefore one edge-cache entry (§11) instead of several spellings of the same bundle.
+
 Selection lives in the URL as `?slice=` and `?nation=`, parsed the way `parseScopeParam` parses `?scope=`: known values pass through, anything else falls back to the default, so a stale or hand-edited URL degrades instead of 400ing. The default slice is **Multiplayer duels**: 94% of the corpus is duels, so the all-public numbers *are* the duel numbers, and landing on the label that describes the distribution beats landing on a superset whose name implies breadth it does not have.
+
+**Built:** parsed a second time client-side, in `src/lib/stats/global-facets.ts`, the way `profileScope` mirrors `parseScopeParam`. The page has to land on the answer the Worker landed on, or the controls light a selection the payload is not for. The client parse is *stricter* on `?nation=`: the Worker only shape-checks, so a token naming no nation passes and then selects nothing, which would leave the control reading "All nations" over an empty bundle.
+
+### 9.1 Where the nation options come from
+
+Not from the payload. A faceted bundle reports only the nation it was faceted to — §4.2 narrows the focal seats, so `bundle.nations` comes back holding exactly one row — which is why the option list cannot be read off it the way the user page reads its nation chip off its own bundle. Fetching the unfaceted slice alongside the faceted one, purely for the list, would put two reads on a page whose rate-limit budget is denominated in one per page load (§11).
+
+So the list is the playable roster, `Object.keys(NATION_COLORS)` — the same 13 §4.1 sizes the precompute table by. The cost is that a nation with no seat in the selected slice is still offerable, and selecting it resolves to an empty corpus and the page's empty state. On the local dev corpus of 2026-08-29 (391 public games — smaller than §3's snapshot, same shape) all 13 are seated in both the all-public and the duel slice, 12 of 13 in FFA and 7 of 13 in single-player: invisible on the two slices that carry the page, confined to the two §3 already calls decorative.
+
+The exact fix, if the thin slices ever earn it: an optional `facet_nations` field on the global bundle. `listGlobalSliceNations` already computes it for the precompute, and keeping the field *optional* — with the roster as the fallback when it is absent — means a pre-bump cached bundle degrades instead of breaking, so it costs no `BUNDLE_SCHEMA_VERSION` bump.
+
+### 9.2 The per-panel nation selectors are hidden on /stats
+
+Families, Laws and Tech each carry their own `NationSelect`. That control is the client-side display filter §4.3 rejects — and at panel level it is right, because every field those three panels draw is nation-keyed, which is the exact condition §4.3 says the rejection turns on.
+
+On `/stats` it is redundant: the page facet answers the same question for the whole bundle, so the two are two ways to ask it, and for these fields they return the same rows. `StatsView` therefore takes `showNationSelect` (default `true`) and the route passes `false`.
+
+Worth recording that the redundancy is not free either way. For a nation-keyed field the panel selector is the *cheaper* control — the rows are already in the payload, so it costs nothing, where the page facet costs a navigation, a fetch and a rate-limit slot for the same answer. What the page facet buys that no panel selector can is the eight fields that are not nation-keyed, `yieldCurves` above all (§4). The profile stats tab and the tournament stats page keep their selectors: neither has a page-level facet, so there the panel control is the only way to read one nation at a time.
 
 ## 10. Visibility
 
-`is_public = 1` is the whole rule. It already encodes "public because the uploader said so, **or** because it is a tournament game": tournament-linked uploads force `is_public = 1` (`cloud/src/games.ts:980`, `linkTournamentMatch`, on both the fresh-upload and dedup-link paths), and `handleGameUpdate` refuses to un-public a game linked to a match in a non-`complete` tournament (`games.ts:2626-2645`). No union predicate is needed.
+`is_public = 1` is the whole rule. It already encodes "public because the uploader said so, **or** because it is a tournament game": tournament-linked uploads force `is_public = 1` (`cloud/src/games.ts:982`, `linkTournamentMatch`, on both the fresh-upload and dedup-link paths), and `handleGameUpdate` refuses to un-public a game linked to a match in a non-`complete` tournament (`games.ts:2626-2645`). No union predicate is needed.
 
 One residual edge, accepted: that lockout releases when a tournament reaches `complete`, so an owner can then make a finished tournament game private. It would drop out of `/stats` while remaining on the tournament stats page, whose corpus ignores `is_public` (issue #111).
 
@@ -272,7 +300,7 @@ Two mechanisms already in the repo cover it without a lock. A cold key follows a
 
 The Cache API does not single-flight, so a simultaneous burst within one colo can still double up. A KV or Durable Object lock is the answer only if the two mechanisms above measurably don't hold — it would be a third thing doing their job.
 
-Cache keys stay in `cacheKeyToString` (`cache.ts:77`) with a `global` variant carrying the slice and the nation set. The set is **normalized** — sorted and deduped before stringifying. That is trivial while the UI is single-select, and it is what makes §5's widening a UI change rather than a key migration.
+Cache keys stay in `cacheKeyToString` (`cache.ts:99`) with a `global` variant carrying the slice and the nation set. The set is **normalized** — sorted and deduped before stringifying. That is trivial while the UI is single-select, and it is what makes §5's widening a UI change rather than a key migration.
 
 ## 13. Testing
 
@@ -375,10 +403,14 @@ One branch, one session. Ordered so each step is verifiable before the next depe
 
 Turn-window chunking (§7.2) is out of scope here; it slots after step 2 only if a slice crosses the row count in §7.2.
 
+**Built:** all nine, in this order, on `feat/global-stats`. Step 1's round-trip test earned its place immediately — step 2 was provably byte-identical against it, step 3's chart-output change was readable as a diff, and it is what caught the §4.2 focal gap when the facet arrived. One step ran over its brief: step 9 also had to fix `lawTiming` / `techTiming` (§4.2), because the facet UI is the first thing that makes that defect visible.
+
 ## 17. Docs to update on ship
 
-- **`docs/aggregate-statistics.md`** — its "Future work" bullet predicts this feature and asserts the cost is caching ("an arbitrary game-id set hashes to a poor hit-rate key"). That is wrong: caching is the easy part once the slice set is enumerable, and the real costs are isolate memory and the per-invocation query ceiling. Correct it, and fold the as-built outcome in.
-- **`docs/api-reference.md`** — the new endpoint.
-- **`docs/cloud-deploy-plan.md`** — it still points a health check at the retired `/v1/stats` path (§486, §521), which this feature now claims for something else, and it gains a warm step for the four slices (§12 — optional for correctness, but the cheapest herd control there is).
-- **`docs/tournament-stats-design.md`** — §5's UI-generalization notes are superseded once the registry is parameterized.
-- **This doc** — retire it into `docs/aggregate-statistics.md` once built.
+Checked 2026-08-29.
+
+- **`docs/aggregate-statistics.md`** — **outstanding.** Its "Future work" bullet predicts this feature and asserts the cost is caching ("an arbitrary game-id set hashes to a poor hit-rate key"). That is wrong: caching is the easy part once the slice set is enumerable, and the real costs are isolate memory and the per-invocation query ceiling. Correct it, and fold the as-built outcome in. Its "No aggregator tests" limitation is also now stale — §13.1's round-trip test exists.
+- **`docs/api-reference.md`** — **done.** `GET /v1/stats` and the `global_stats_view` budget are both documented.
+- **`docs/cloud-deploy-plan.md`** — **outstanding**, and one item has changed shape. The health checks at §486 and §521 point at `/v1/stats`, which this feature has now claimed, so they resolve again rather than needing a new path — but a synthetic check spends the `global_stats_view` budget from one IP, which is worth stating where the check is configured. The warm step for the four unfaceted slices is not built: nothing in `scripts/prod/` warms anything.
+- **`docs/tournament-stats-design.md`** — **partly superseded.** §5's UI-generalization notes rest on the registry being user-shaped, which is no longer true. The tabs themselves have not collapsed onto it (§9), so the rest of the section still stands.
+- **This doc** — **outstanding.** Retire it into `docs/aggregate-statistics.md` on ship.
