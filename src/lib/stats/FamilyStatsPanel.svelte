@@ -17,11 +17,16 @@
 	// showNationSelect — false where the page owns a nation control of its own
 	// (/stats); the panel then renders the cross-nation aggregate, which is the
 	// only reading left once the page has chosen the nation. StatsView decides
-	// it and says why.
+	// it and says why, and passes toolbarFlush on to that selector.
 	let {
 		bundle,
 		showNationSelect = true,
-	}: { bundle: ChartBundleCore; showNationSelect?: boolean } = $props();
+		toolbarFlush = false,
+	}: {
+		bundle: ChartBundleCore;
+		showNationSelect?: boolean;
+		toolbarFlush?: boolean;
+	} = $props();
 
 	const nations = $derived(familyNations(bundle));
 	// Selector options: the cross-nation aggregate first, then each nation.
@@ -53,7 +58,12 @@
 	<p class="p-8 text-center italic text-brown">No family data available.</p>
 {:else}
 	{#if showNationSelect}
-		<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
+		<NationSelect
+			value={nation}
+			{options}
+			onChange={(v) => (chosen = v)}
+			{toolbarFlush}
+		/>
 	{/if}
 
 	<ChartContainer

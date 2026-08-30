@@ -139,13 +139,13 @@
 	{#each sections as section (section.id)}
 		<Tabs.Content value={section.id} class="px-4 pb-4">
 			{#if section.id === "yields"}
-				<YieldsStatsPanel {bundle} />
+				<YieldsStatsPanel {bundle} toolbarFlush />
 			{:else if section.id === "families"}
-				<FamilyStatsPanel {bundle} {showNationSelect} />
+				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "laws"}
-				<LawsStatsPanel {bundle} {showNationSelect} />
+				<LawsStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "tech"}
-				<TechStatsPanel {bundle} {showNationSelect} />
+				<TechStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else}
 				{#each section.specs as spec (spec.id)}
 					{#if spec.hasData(bundle)}
