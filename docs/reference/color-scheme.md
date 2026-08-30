@@ -206,6 +206,54 @@ series: playerHistory.map((player, i) => ({
 
 ---
 
+## Yield Colors
+
+The sixteen series on the aggregate yields panel are colored from **Old World's own yield palette** rather than the chart palette above. They live in `src/lib/generated/yield-colors.ts`, baked from the reference XML — do not edit that file by hand; run `npm run bake:yield-colors` to refresh it.
+
+Before this, every yield chart drew in `getChartColor(0)`, so color carried no information down a stack of sixteen charts. Coloring each series the way the game colors it makes the hue identify the yield.
+
+| Series | Color | Source | On `#211A12` |
+| --- | --- | --- | --- |
+| Science | `#a16ad1` | `color.xml` `#733b9f`, lifted | 4.50:1 |
+| Money | `#b4935e` | sprite (xml `#ffffff`) | 5.96:1 |
+| Training | `#d15f5c` | `color.xml` `#a93b3b`, lifted | 4.51:1 |
+| Civics | `#d78d46` | `color.xml` | 6.38:1 |
+| Culture | `#639aad` | `color.xml` | 5.53:1 |
+| Orders | `#bd976c` | sprite (xml `#ffffff`) | 6.39:1 |
+| Food | `#739600` | `color.xml` | 4.99:1 |
+| Growth | `#3d9f70` | `color.xml` | 5.23:1 |
+| Happiness | `#f2c95e` | `color.xml` | 10.88:1 |
+| Discontent | `#8f8fb3` | `color.xml` `#555475`, lifted | 5.53:1 |
+| Iron | `#DBDCDB` | `color.xml` | 12.51:1 |
+| Stone | `#78839a` | `color.xml` `#6B758C`, lifted | 4.51:1 |
+| Wood | `#9b7d63` | `color.xml` `#80634A`, lifted | 4.51:1 |
+| Maintenance | `#ee433e` | sprite (xml `#ffffff`), lifted | 4.51:1 |
+| Military Power | `#dc5a43` | `COLOR_RATING_COURAGE` | 4.57:1 |
+| Legitimacy | `#a7a164` | sprite (no `yield.xml` entry) | 6.49:1 |
+
+Three rules decide that table, and each covers a case the XML alone cannot:
+
+**The lift.** The game paints yields on its own UI, not on the chart ground. Six of its colors could not carry a 2px line there — Science at 2.34:1 and Discontent at 2.38:1 were close to invisible — so each is raised in OKLCh **lightness only**, holding hue exactly and clamping chroma only where the sRGB gamut demands it (it never has: every lift retained 100% chroma). Ten of the sixteen clear the floor untouched and are the game's colors verbatim. The floor is 4.5:1, except Discontent at 5.5:1 — at 4.5 it lands 0.022 from Stone in OKLab, effectively one color on two charts that sit two apart in the stack.
+
+**`#ffffff` means "no color of its own."** `color.xml` gives Money, Orders and Maintenance all white, which would ship as three identical white charts. Those fall through to their icon art, which does distinguish them and carries the meaning the table drops — Maintenance is a cost, and the game draws it red. The test is exactly `#ffffff`, **not** near-white: Iron is `#DBDCDB`, a deliberate light-metal grey whose sprite is achromatic enough that sampling would replace it with a muddy dark grey.
+
+**Military Power is not a yield.** It has no `yield.xml` entry, no sprite, and no `COLORCLASS_YIELDS` color; the token appears nowhere in the game XML. It is a per-ankh series over a derived stat, so it borrows `COLOR_RATING_COURAGE` and is exported separately as `MILITARY_POWER_COLOR` — keeping `YIELD_COLORS` keyed only by tokens the game actually has.
+
+### Where yield colors apply
+
+They color the **pooled median line and its P25–P75 band** on `YieldsStatsPanel`, which is the yields panel on all three stats surfaces (profile stats tab, `/stats`, tournament stats). Two places deliberately do not use them:
+
+- **Winners-vs-losers split mode** keeps `WIN_COLOR` / `LOSS_COLOR`. There color means cohort, and it means the same thing on every chart that splits by outcome; color only names the yield when there is no cohort to name.
+- **The game-detail Yields tab** draws one line per player and colors by nation (`getPlayerColor`). Color already means player there.
+
+```typescript
+import { MILITARY_POWER_COLOR, YIELD_COLORS } from "$lib/generated/yield-colors";
+
+const science = YIELD_COLORS.YIELD_SCIENCE; // "#a16ad1"
+```
+
+`YIELD_COLORS` is emitted `as const satisfies Readonly<Record<string, string>>`, so a mistyped `YIELD_*` key is a compile error rather than an `undefined` that silently falls back to the theme palette. (`FAMILY_COLORS` keeps a plain `Record` shape — it is indexed by a runtime zType, where an index signature is what you want.)
+
 ## Design Notes
 
 The overall color scheme combines warm, earthy tones (browns, oranges, tans) with a cool blue-gray background. This palette is fitting for an application themed around Old World game analytics, evoking ancient Egyptian aesthetics where "Per-Ankh" means "House of Life" in ancient Egyptian.

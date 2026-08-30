@@ -10,6 +10,10 @@
 
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
 import { getChartColor } from "$lib/config";
+import {
+	MILITARY_POWER_COLOR,
+	YIELD_COLORS,
+} from "$lib/generated/yield-colors";
 import type { ChartBundleCore, YieldBand } from "../types";
 import {
 	AXIS_NAME_Y,
@@ -21,24 +25,68 @@ import {
 
 // User-facing labels for the toggle. Order matters — the leading items
 // are the most-used yields.
+//
+// `key` is the bundle's series key (a game_player_turn column name), which is
+// a different vocabulary from the game's YIELD_* tokens — this table is where
+// the two meet. Military Power is the one series with no YIELD_* token at all:
+// it is a derived stat, not a yield, so it borrows the combat rating's colour
+// (see src/lib/generated/yield-colors.ts).
 export const YIELD_SERIES = [
-	{ key: "science_per_turn", label: "Science" },
-	{ key: "money_per_turn", label: "Money" },
-	{ key: "training_per_turn", label: "Training" },
-	{ key: "civics_per_turn", label: "Civics" },
-	{ key: "culture_per_turn", label: "Culture" },
-	{ key: "orders_per_turn", label: "Orders" },
-	{ key: "food_per_turn", label: "Food" },
-	{ key: "growth_per_turn", label: "Growth" },
-	{ key: "happiness_per_turn", label: "Happiness" },
-	{ key: "discontent_per_turn", label: "Discontent" },
-	{ key: "iron_per_turn", label: "Iron" },
-	{ key: "stone_per_turn", label: "Stone" },
-	{ key: "wood_per_turn", label: "Wood" },
-	{ key: "maintenance_per_turn", label: "Maintenance" },
-	{ key: "military_power", label: "Military Power" },
-	{ key: "legitimacy", label: "Legitimacy" },
+	{
+		key: "science_per_turn",
+		label: "Science",
+		color: YIELD_COLORS.YIELD_SCIENCE,
+	},
+	{ key: "money_per_turn", label: "Money", color: YIELD_COLORS.YIELD_MONEY },
+	{
+		key: "training_per_turn",
+		label: "Training",
+		color: YIELD_COLORS.YIELD_TRAINING,
+	},
+	{ key: "civics_per_turn", label: "Civics", color: YIELD_COLORS.YIELD_CIVICS },
+	{
+		key: "culture_per_turn",
+		label: "Culture",
+		color: YIELD_COLORS.YIELD_CULTURE,
+	},
+	{ key: "orders_per_turn", label: "Orders", color: YIELD_COLORS.YIELD_ORDERS },
+	{ key: "food_per_turn", label: "Food", color: YIELD_COLORS.YIELD_FOOD },
+	{ key: "growth_per_turn", label: "Growth", color: YIELD_COLORS.YIELD_GROWTH },
+	{
+		key: "happiness_per_turn",
+		label: "Happiness",
+		color: YIELD_COLORS.YIELD_HAPPINESS,
+	},
+	{
+		key: "discontent_per_turn",
+		label: "Discontent",
+		color: YIELD_COLORS.YIELD_DISCONTENT,
+	},
+	{ key: "iron_per_turn", label: "Iron", color: YIELD_COLORS.YIELD_IRON },
+	{ key: "stone_per_turn", label: "Stone", color: YIELD_COLORS.YIELD_STONE },
+	{ key: "wood_per_turn", label: "Wood", color: YIELD_COLORS.YIELD_WOOD },
+	{
+		key: "maintenance_per_turn",
+		label: "Maintenance",
+		color: YIELD_COLORS.YIELD_MAINTENANCE,
+	},
+	{
+		key: "military_power",
+		label: "Military Power",
+		color: MILITARY_POWER_COLOR,
+	},
+	{
+		key: "legitimacy",
+		label: "Legitimacy",
+		color: YIELD_COLORS.YIELD_LEGITIMACY,
+	},
 ] as const;
+
+// Resolved by the same key the band is resolved by, so the builder stays
+// callable with a bare series key rather than needing the whole entry.
+const COLOR_BY_KEY = new Map<string, string>(
+	YIELD_SERIES.map((s) => [s.key, s.color]),
+);
 
 const EMPTY_BAND: YieldBand = { p25: [], p50: [], p75: [] };
 
@@ -105,7 +153,12 @@ export function yieldChartOption(
 			: [
 					{
 						name: "Median",
-						color: getChartColor(0),
+						// The game's own colour for this yield. Split mode above
+						// keeps WIN_COLOR / LOSS_COLOR: there, colour means cohort,
+						// and it means the same thing on every chart that splits by
+						// outcome. Colour only names the yield when there is no
+						// cohort to name.
+						color: COLOR_BY_KEY.get(yieldKey) ?? getChartColor(0),
 						band: bandOf(pooled),
 						counts,
 					},
