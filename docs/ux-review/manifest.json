@@ -1,10 +1,10 @@
 {
-	"generatedAt": "2026-05-25T00:52:25.703Z",
+	"generatedAt": "2026-08-30T17:57:04.203Z",
 	"baseUrl": "http://localhost:1420",
 	"ids": {
-		"gameId": "P5J5b0oR1IYan3cBtW2zt",
-		"userId": "xuWIHsyF2uC7ybDPjqd1G",
-		"authUserId": "xuWIHsyF2uC7ybDPjqd1G",
+		"gameId": "ig-lHvRp_8w-0Ik9d6lx_",
+		"userId": "rkHvk1UV8SbUSCF505YEV",
+		"authUserId": "rkHvk1UV8SbUSCF505YEV",
 		"authLabel": ".becked"
 	},
 	"breakpoints": [
@@ -44,12 +44,42 @@
 			"errors": {}
 		},
 		{
+			"id": "anon__home__cold-feed",
+			"pass": "anon",
+			"page": "home",
+			"tab": "Cold feed",
+			"title": "Cold feed",
+			"route": "/",
+			"state": "visitor",
+			"shots": {
+				"desktop": "shots/anon__home__cold-feed__desktop.jpg",
+				"tablet": "shots/anon__home__cold-feed__tablet.jpg",
+				"mobile": "shots/anon__home__cold-feed__mobile.jpg"
+			},
+			"errors": {}
+		},
+		{
+			"id": "anon__home__cold-start",
+			"pass": "anon",
+			"page": "home",
+			"tab": "Cold start",
+			"title": "Cold start",
+			"route": "/",
+			"state": "visitor",
+			"shots": {
+				"desktop": "shots/anon__home__cold-start__desktop.jpg",
+				"tablet": "shots/anon__home__cold-start__tablet.jpg",
+				"mobile": "shots/anon__home__cold-start__mobile.jpg"
+			},
+			"errors": {}
+		},
+		{
 			"id": "anon__game-detail__overview",
 			"pass": "anon",
 			"page": "game-detail",
 			"tab": "Overview",
 			"title": "Overview",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__overview__desktop.jpg",
@@ -64,7 +94,7 @@
 			"page": "game-detail",
 			"tab": "Events",
 			"title": "Events",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__events__desktop.jpg",
@@ -79,7 +109,7 @@
 			"page": "game-detail",
 			"tab": "Laws",
 			"title": "Laws",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__laws__desktop.jpg",
@@ -94,7 +124,7 @@
 			"page": "game-detail",
 			"tab": "Techs",
 			"title": "Techs",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__techs__desktop.jpg",
@@ -109,7 +139,7 @@
 			"page": "game-detail",
 			"tab": "Yields",
 			"title": "Yields",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__yields__desktop.jpg",
@@ -124,7 +154,7 @@
 			"page": "game-detail",
 			"tab": "Military",
 			"title": "Military",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__military__desktop.jpg",
@@ -139,7 +169,7 @@
 			"page": "game-detail",
 			"tab": "Cities",
 			"title": "Cities",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__cities__desktop.jpg",
@@ -154,14 +184,14 @@
 			"page": "game-detail",
 			"tab": "Improvements",
 			"title": "Improvements",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
-			"shots": {
-				"desktop": "shots/anon__game-detail__improvements__desktop.jpg",
-				"tablet": "shots/anon__game-detail__improvements__tablet.jpg",
-				"mobile": "shots/anon__game-detail__improvements__mobile.jpg"
-			},
-			"errors": {}
+			"shots": {},
+			"errors": {
+				"desktop": "Tab not found",
+				"tablet": "Tab not found",
+				"mobile": "Tab not found"
+			}
 		},
 		{
 			"id": "anon__game-detail__map",
@@ -169,7 +199,7 @@
 			"page": "game-detail",
 			"tab": "Map",
 			"title": "Map",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__map__desktop.jpg",
@@ -184,7 +214,7 @@
 			"page": "game-detail",
 			"tab": "Settings",
 			"title": "Settings",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__game-detail__settings__desktop.jpg",
@@ -199,7 +229,7 @@
 			"page": "user-profile",
 			"tab": "Overview",
 			"title": "Overview",
-			"route": "/users/xuWIHsyF2uC7ybDPjqd1G?tab=overview",
+			"route": "/users/rkHvk1UV8SbUSCF505YEV?tab=overview",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__user-profile__overview__desktop.jpg",
@@ -214,7 +244,7 @@
 			"page": "user-profile",
 			"tab": "Games",
 			"title": "Games",
-			"route": "/users/xuWIHsyF2uC7ybDPjqd1G?tab=games",
+			"route": "/users/rkHvk1UV8SbUSCF505YEV?tab=games",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__user-profile__games__desktop.jpg",
@@ -229,7 +259,7 @@
 			"page": "user-profile",
 			"tab": "Stats",
 			"title": "Stats",
-			"route": "/users/xuWIHsyF2uC7ybDPjqd1G?tab=stats",
+			"route": "/users/rkHvk1UV8SbUSCF505YEV?tab=stats",
 			"state": "visitor",
 			"shots": {
 				"desktop": "shots/anon__user-profile__stats__desktop.jpg",
@@ -254,12 +284,42 @@
 			"errors": {}
 		},
 		{
+			"id": "auth__home__cold-feed",
+			"pass": "auth",
+			"page": "home",
+			"tab": "Cold feed",
+			"title": "Cold feed",
+			"route": "/",
+			"state": "signed in",
+			"shots": {
+				"desktop": "shots/auth__home__cold-feed__desktop.jpg",
+				"tablet": "shots/auth__home__cold-feed__tablet.jpg",
+				"mobile": "shots/auth__home__cold-feed__mobile.jpg"
+			},
+			"errors": {}
+		},
+		{
+			"id": "auth__home__cold-start",
+			"pass": "auth",
+			"page": "home",
+			"tab": "Cold start",
+			"title": "Cold start",
+			"route": "/",
+			"state": "signed in",
+			"shots": {
+				"desktop": "shots/auth__home__cold-start__desktop.jpg",
+				"tablet": "shots/auth__home__cold-start__tablet.jpg",
+				"mobile": "shots/auth__home__cold-start__mobile.jpg"
+			},
+			"errors": {}
+		},
+		{
 			"id": "auth__user-profile__overview",
 			"pass": "auth",
 			"page": "user-profile",
 			"tab": "Overview",
 			"title": "Overview",
-			"route": "/users/xuWIHsyF2uC7ybDPjqd1G?tab=overview",
+			"route": "/users/rkHvk1UV8SbUSCF505YEV?tab=overview",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__user-profile__overview__desktop.jpg",
@@ -274,7 +334,7 @@
 			"page": "user-profile",
 			"tab": "Games",
 			"title": "Games",
-			"route": "/users/xuWIHsyF2uC7ybDPjqd1G?tab=games",
+			"route": "/users/rkHvk1UV8SbUSCF505YEV?tab=games",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__user-profile__games__desktop.jpg",
@@ -289,7 +349,7 @@
 			"page": "user-profile",
 			"tab": "Stats",
 			"title": "Stats",
-			"route": "/users/xuWIHsyF2uC7ybDPjqd1G?tab=stats",
+			"route": "/users/rkHvk1UV8SbUSCF505YEV?tab=stats",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__user-profile__stats__desktop.jpg",
@@ -319,7 +379,7 @@
 			"page": "game-detail",
 			"tab": "Overview",
 			"title": "Overview",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__overview__desktop.jpg",
@@ -334,7 +394,7 @@
 			"page": "game-detail",
 			"tab": "Events",
 			"title": "Events",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__events__desktop.jpg",
@@ -349,7 +409,7 @@
 			"page": "game-detail",
 			"tab": "Laws",
 			"title": "Laws",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__laws__desktop.jpg",
@@ -364,7 +424,7 @@
 			"page": "game-detail",
 			"tab": "Techs",
 			"title": "Techs",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__techs__desktop.jpg",
@@ -379,7 +439,7 @@
 			"page": "game-detail",
 			"tab": "Yields",
 			"title": "Yields",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__yields__desktop.jpg",
@@ -394,7 +454,7 @@
 			"page": "game-detail",
 			"tab": "Military",
 			"title": "Military",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__military__desktop.jpg",
@@ -409,7 +469,7 @@
 			"page": "game-detail",
 			"tab": "Cities",
 			"title": "Cities",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__cities__desktop.jpg",
@@ -424,14 +484,14 @@
 			"page": "game-detail",
 			"tab": "Improvements",
 			"title": "Improvements",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
-			"shots": {
-				"desktop": "shots/auth__game-detail__improvements__desktop.jpg",
-				"tablet": "shots/auth__game-detail__improvements__tablet.jpg",
-				"mobile": "shots/auth__game-detail__improvements__mobile.jpg"
-			},
-			"errors": {}
+			"shots": {},
+			"errors": {
+				"desktop": "Tab not found",
+				"tablet": "Tab not found",
+				"mobile": "Tab not found"
+			}
 		},
 		{
 			"id": "auth__game-detail__map",
@@ -439,7 +499,7 @@
 			"page": "game-detail",
 			"tab": "Map",
 			"title": "Map",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__map__desktop.jpg",
@@ -454,7 +514,7 @@
 			"page": "game-detail",
 			"tab": "Settings",
 			"title": "Settings",
-			"route": "/games/P5J5b0oR1IYan3cBtW2zt",
+			"route": "/games/ig-lHvRp_8w-0Ik9d6lx_",
 			"state": "owner",
 			"shots": {
 				"desktop": "shots/auth__game-detail__settings__desktop.jpg",
@@ -483,8 +543,8 @@
 			"pass": "auth",
 			"page": "tournament-detail",
 			"tab": null,
-			"title": "Tournament: test-03",
-			"route": "/tournaments/test-03",
+			"title": "Tournament: 2026-community-tournament",
+			"route": "/tournaments/2026-community-tournament",
 			"state": "signed in",
 			"shots": {
 				"desktop": "shots/auth__tournament-detail__desktop.jpg",
@@ -518,7 +578,7 @@
 			"state": "—",
 			"shots": {},
 			"errors": {},
-			"note": "/dashboard → /users/xuWIHsyF2uC7ybDPjqd1G  (→ /users/[id] (signed in) · /?next= (anon))\n/games → /users/xuWIHsyF2uC7ybDPjqd1G  (→ /dashboard → profile)\n/auth/callback → /auth/callback  (OAuth landing (not renderable))"
+			"note": "/dashboard → /u/becked  (→ /users/[id] (signed in) · /?next= (anon))\n/games → /u/becked  (→ /dashboard → profile)\n/auth/callback → /auth/callback  (OAuth landing (not renderable))"
 		}
 	]
 }
