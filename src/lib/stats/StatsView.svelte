@@ -28,7 +28,16 @@
 	import { expansionWinRateOption } from "./charts/cities";
 	import type { ChartBundleCore, StatsCategory } from "./types";
 
-	let { bundle }: { bundle: ChartBundleCore } = $props();
+	// showNationSelect — whether the per-nation panels (Families, Laws, Tech)
+	// carry their own nation dropdown. /stats passes false: that page has a
+	// page-level nation facet over the whole bundle, so the panels' own
+	// dropdowns would be a second control for the same question. The profile
+	// stats tab has no such facet, so it keeps them — there they are the only
+	// way to read one nation at a time.
+	let {
+		bundle,
+		showNationSelect = true,
+	}: { bundle: ChartBundleCore; showNationSelect?: boolean } = $props();
 
 	// Group CHART_SPECS by category once at module init. Not reactive —
 	// a constant lookup over a static array.
@@ -132,11 +141,11 @@
 			{#if section.id === "yields"}
 				<YieldsStatsPanel {bundle} />
 			{:else if section.id === "families"}
-				<FamilyStatsPanel {bundle} />
+				<FamilyStatsPanel {bundle} {showNationSelect} />
 			{:else if section.id === "laws"}
-				<LawsStatsPanel {bundle} />
+				<LawsStatsPanel {bundle} {showNationSelect} />
 			{:else if section.id === "tech"}
-				<TechStatsPanel {bundle} />
+				<TechStatsPanel {bundle} {showNationSelect} />
 			{:else}
 				{#each section.specs as spec (spec.id)}
 					{#if spec.hasData(bundle)}

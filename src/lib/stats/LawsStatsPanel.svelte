@@ -13,7 +13,14 @@
 	} from "./charts/laws";
 	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
 
-	let { bundle }: { bundle: ChartBundleCore } = $props();
+	// showNationSelect — false where the page owns a nation control of its own
+	// (/stats); the panel then renders the cross-nation aggregate, which is the
+	// only reading left once the page has chosen the nation. StatsView decides
+	// it and says why.
+	let {
+		bundle,
+		showNationSelect = true,
+	}: { bundle: ChartBundleCore; showNationSelect?: boolean } = $props();
 
 	const nations = $derived(lawNations(bundle));
 	// Selector options: the cross-nation aggregate first, then each nation.
@@ -47,7 +54,9 @@
 {#if bundle.lawTiming.length === 0 && bundle.openingLaws.length === 0}
 	<p class="p-8 text-center italic text-brown">No law data available.</p>
 {:else}
-	<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
+	{#if showNationSelect}
+		<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
+	{/if}
 
 	<ChartContainer
 		option={lawTimingOption(bundle, nation)}

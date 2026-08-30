@@ -201,6 +201,12 @@ export type UserScope =
 	| "tournament"
 	| string;
 
+// The composition slice the public /stats corpus is cut by (mirrors the
+// Worker's GlobalSlice). Roster composition only: the global corpus has no
+// owner, so its is_public = 1 visibility is not part of the selection. Paired
+// with an optional nation facet — see $lib/stats/global-facets.
+export type GlobalSlice = "all" | "duel" | "ffa" | "single_player";
+
 export type StatsCategory =
 	| "nations"
 	| "leaders"
