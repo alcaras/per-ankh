@@ -130,3 +130,11 @@ export function getSeriesColor(index: number): string {
  * line reads as furniture rather than another data series.
  */
 export const CHART_REFERENCE_LINE_COLOR = "#6b6459";
+
+/**
+ * The app's orange accent (`--color-orange`), for chart chrome that marks
+ * where the reader is pointing — the axis pointer's turn label. Hex rather
+ * than the CSS variable because charts paint to canvas, which can't resolve
+ * `rgb(var(--color-orange))`.
+ */
+export const CHART_ACCENT_COLOR = "#FFA500";

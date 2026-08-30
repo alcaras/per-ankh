@@ -6,7 +6,11 @@
 	// click pins. No tooltip, no commentary: the panel is the data.
 	import type { ChartOption, ECharts } from "$lib/echarts";
 	import type { EventLog } from "$lib/types/EventLog";
-	import { CHART_THEME, CHART_REFERENCE_LINE_COLOR } from "$lib/config";
+	import {
+		CHART_THEME,
+		CHART_REFERENCE_LINE_COLOR,
+		CHART_ACCENT_COLOR,
+	} from "$lib/config";
 	import Chart from "$lib/Chart.svelte";
 	import { formatEnum, stripMarkup } from "$lib/utils/formatting";
 	import type { MomentumCurve } from "./momentum";
@@ -54,7 +58,18 @@
 		xAxis: {
 			type: "category",
 			data: curve.points.map((pt) => pt.turn),
-			axisPointer: { show: true, snap: true, type: "line" },
+			// `type: "none"` draws no pointer line — the highlighted point on the
+			// curve and the turn label under the axis already say where the
+			// reader is. The component stays live either way: it still snaps to
+			// the nearest turn and still emits updateAxisPointer, which is what
+			// drives the panel below (ECharts builds the label outside the
+			// pointer-graphic branch).
+			axisPointer: {
+				show: true,
+				snap: true,
+				type: "none",
+				label: { backgroundColor: CHART_ACCENT_COLOR, color: "#FFFFFF" },
+			},
 		},
 		yAxis: {
 			type: "value",
@@ -70,6 +85,12 @@
 				data: curve.points.map((pt) =>
 					Math.max(50, Math.round(pt.p * 1000) / 10),
 				),
+				// The axis pointer highlights every series it crosses, and these
+				// two clamp to 50, so the midline would grow a dot of its own.
+				// `symbol: "none"` is what suppresses it: LineView.highlight
+				// builds its temporary symbol without consulting
+				// `emphasis.disabled`, but a "none" symbol draws no path.
+				symbol: "none",
 				lineStyle: { opacity: 0 },
 				areaStyle: { origin: 50, color: a.color, opacity: 0.22 },
 			},
@@ -80,6 +101,12 @@
 				data: curve.points.map((pt) =>
 					Math.min(50, Math.round(pt.p * 1000) / 10),
 				),
+				// The axis pointer highlights every series it crosses, and these
+				// two clamp to 50, so the midline would grow a dot of its own.
+				// `symbol: "none"` is what suppresses it: LineView.highlight
+				// builds its temporary symbol without consulting
+				// `emphasis.disabled`, but a "none" symbol draws no path.
+				symbol: "none",
 				lineStyle: { opacity: 0 },
 				areaStyle: { origin: 50, color: b.color, opacity: 0.22 },
 			},
