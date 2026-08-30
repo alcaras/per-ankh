@@ -13,7 +13,7 @@ import type { AggregateEnv } from "./aggregate";
 import { putCached } from "./cache";
 import type { StatsCacheEnv } from "./cache";
 import { listGlobalSliceNations, resolveGlobalCorpus } from "./resolve";
-import type { ResolveEnv } from "./resolve";
+import type { ResolveEnv, StatsCorpus } from "./resolve";
 import type { ChartBundleCore, GlobalSlice } from "./types";
 
 // Cron pattern → the slice that pattern precomputes.
@@ -66,13 +66,21 @@ export interface PrecomputeSliceResult {
 // save nothing — and on the request path the selection that resolves to
 // nothing is a nation token no game holds, which anyone can mint from the URL
 // bar. Caching those is a KV write per distinct string, charged to us.
+//
+// `corpus` is for the caller that had to resolve the selection to make a
+// decision of its own — the request path checks for emptiness before deciding
+// whether a stale lookup is worth a keyspace walk (stats/handlers.ts). Passing
+// it back in is what keeps that from being a second resolve of the same
+// selection. The nightly loop has no such decision and omits it.
 export async function buildGlobalSelection(
 	env: PrecomputeEnv,
 	slice: GlobalSlice,
 	nations: string[],
 	parserVersion: string,
+	resolved?: StatsCorpus,
 ): Promise<ChartBundleCore> {
-	const corpus = await resolveGlobalCorpus(env, slice, { nations });
+	const corpus =
+		resolved ?? (await resolveGlobalCorpus(env, slice, { nations }));
 	const bundle = (await buildChartBundle(
 		env,
 		corpus,

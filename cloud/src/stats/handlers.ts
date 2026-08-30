@@ -21,7 +21,7 @@ import { buildChartBundle } from "./aggregate";
 import { getCached, getStaleGlobalCached, putCached } from "./cache";
 import { buildGlobalSelection } from "./precompute";
 import type { PrecomputeEnv } from "./precompute";
-import { resolveUserCorpus } from "./resolve";
+import { resolveGlobalCorpus, resolveUserCorpus } from "./resolve";
 import type { ChartBundle, ChartBundleCore, UserStatsScope } from "./types";
 import type { EventsEnv, QueryableD1 } from "../d1";
 
@@ -126,8 +126,9 @@ const GLOBAL_STATS_BUDGET: ReadBudget = {
 // so it takes an edge cache — the same header the other public reads carry
 // (channels.ts, featured.ts, tournament/public.ts). No browser cache, so a
 // visitor who reloads after the nightly precompute sees the new numbers rather
-// than waiting out a client TTL. Vary: Origin because the CORS headers are
-// origin-specific and the response is shared-cacheable.
+// than waiting out a client TTL. `cors` already carries Vary: Origin
+// (cloudCorsHeaders), which is what keeps the origin-specific CORS headers from
+// being served to the wrong origin out of a shared cache.
 //
 // It is also the herd control a cold key relies on: every colo answers its
 // second and later requests from the edge, which with the deploy's warm step
@@ -144,17 +145,28 @@ function globalStatsResponse(
 			"Content-Type": "application/json",
 			"Cache-Control": "public, max-age=0, s-maxage=60",
 			...cors,
-			Vary: "Origin",
 		},
 	});
 }
 
 // GET /v1/stats — the chart bundle over the whole public corpus.
 //
-// Public: anonymous, no session read at all. is_public = 1 is the whole
-// visibility rule (it already covers tournament games, which linkTournamentMatch
-// forces public), so there is no viewer-dependent half of this payload and
-// nothing for a session to decide.
+// Session required. Not because the payload is viewer-dependent — it is not:
+// is_public = 1 is the whole visibility rule (it already covers tournament
+// games, which linkTournamentMatch forces public), so every signed-in viewer
+// reads the same bytes and nothing here consults the session beyond its
+// existence. The gate is on who may spend a whole-corpus aggregation, not on
+// what they get to see.
+//
+// Checked before the rate limit, the way handleUserSearch does it: a request
+// that never reads anything should not spend an IP's read budget, and an
+// anonymous caller with no cookie is refused without touching KV or D1.
+//
+// One consequence worth naming: enforceReadRateLimit exempts scraper
+// User-Agents from the budget, but that exemption was only ever about counting.
+// A Discord or Slack link-preview bot carries no session, so it is refused here
+// like any other anonymous caller — and the frontend /stats route bounces the
+// same visitors to login, so a shared /stats link previews as the home page.
 //
 // The selection is a composition slice plus an optional nation, both parsed
 // forgivingly: an unknown ?slice= falls back to the duel default and an
@@ -177,12 +189,20 @@ function globalStatsResponse(
 // nation selection asked for in between has to be served by building it.
 // Precompute-only is the one shape that would make the facet model expensive
 // to change later.
+//
+// Step 2 is skipped where the selection resolves to no games — see the
+// resolve below.
 export async function handleGlobalStats(
 	request: Request,
 	env: GlobalStatsEnv,
 	ctx: ExecutionContext,
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
+
+	const session = await sessionFromRequest(env, request);
+	if (!session) {
+		return errorResponse("Authentication required", 401, cors, "UNAUTHORIZED");
+	}
 
 	const limited = await enforceReadRateLimit(
 		env,
@@ -210,29 +230,46 @@ export async function handleGlobalStats(
 	const cached = await getCached<ChartBundleCore>(env, cacheKey);
 	if (cached) return globalStatsResponse(cached, cors);
 
+	// Resolve before reaching for a stale entry, so a selection with no games
+	// never pays for the reach. Such a selection is deliberately never cached
+	// (precompute.ts — an empty bundle costs no queries, and caching one would
+	// be a KV write per distinct string anyone can mint), so it misses forever,
+	// and getStaleGlobalCached answers a miss by paginating every `stats:` key
+	// in the namespace — user and tournament bundles included — to conclude the
+	// same nothing every time.
+	//
+	// It is not only a hand-edited URL that lands here. The facet offers all 13
+	// nations in every slice by design (§9.1), so picking one that nobody has
+	// played in the FFA slice is an ordinary click, and it walks the keyspace on
+	// every request for as long as the corpus stays that way.
+	//
+	// Nothing is given up by skipping the lookup: an empty selection was never
+	// written under any parser version, so there is no stale entry to find. The
+	// cost is one D1 query ahead of a stale response, which already pays for the
+	// walk itself.
+	const corpus = await resolveGlobalCorpus(env, slice, { nations });
+	const build = () =>
+		buildGlobalSelection(env, slice, nations, CURRENT_PARSER_VERSION, corpus);
+
+	if (corpus.gameIds.length === 0) {
+		return globalStatsResponse(await build(), cors);
+	}
+
 	const stale = await getStaleGlobalCached<ChartBundleCore>(env, cacheKey);
 	if (stale) {
 		ctx.waitUntil(
-			buildGlobalSelection(env, slice, nations, CURRENT_PARSER_VERSION).catch(
-				(e: unknown) => {
-					// Nothing awaits this, so the log line is the only signal. The
-					// next request misses again and retries it, either from the
-					// request path or from the night's cron.
-					logError("global_stats_refresh_failed", e, {
-						slice,
-						nation: nation ?? "",
-					});
-				},
-			),
+			build().catch((e: unknown) => {
+				// Nothing awaits this, so the log line is the only signal. The
+				// next request misses again and retries it, either from the
+				// request path or from the night's cron.
+				logError("global_stats_refresh_failed", e, {
+					slice,
+					nation: nation ?? "",
+				});
+			}),
 		);
 		return globalStatsResponse(stale, cors);
 	}
 
-	const bundle = await buildGlobalSelection(
-		env,
-		slice,
-		nations,
-		CURRENT_PARSER_VERSION,
-	);
-	return globalStatsResponse(bundle, cors);
+	return globalStatsResponse(await build(), cors);
 }

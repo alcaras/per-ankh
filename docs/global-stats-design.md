@@ -272,9 +272,21 @@ Worth recording that the redundancy is not free either way. For a nation-keyed f
 
 One residual edge, accepted: that lockout releases when a tournament reaches `complete`, so an owner can then make a finished tournament game private. It would drop out of `/stats` while remaining on the tournament stats page, whose corpus ignores `is_public` (issue #111).
 
+**Built: the rule above still decides the corpus, but "public" stopped meaning "publicly reachable."** `/stats` and `GET /v1/stats` now require a session (§11's Built note). `is_public = 1` is unchanged and still the only predicate on which games are in — a signed-in viewer sees exactly the games this section describes and nothing more, and the payload is still the same bytes for every one of them. What changed is the door, not the room: this section's argument that no viewer-dependent half exists is why the gate could be a bare existence check on the session rather than anything that reaches the resolver.
+
 ## 11. Access and rate limiting
 
 `/stats` is **public** — anonymous access, no session required. It is public data, and it is the surface most likely to bring players to the site.
+
+**Built: reversed after the branch was built — the surface requires a session.** The argument above is kept because it is still the argument *against* the gate, and it is the one to re-read if the gate is ever lifted. What outweighed it: anonymous access makes a whole-corpus aggregation something any unauthenticated caller can trigger, so the cold-start cost of §12 and the abuse ceiling of this section end up defended by the same per-IP counter and nothing else. A session is a second, cheaper gate in front of both — it is checked before the rate limit (`handleGlobalStats`, the shape `handleUserSearch` uses), so a refused call costs one cookie parse and spends no budget.
+
+Three consequences, all accepted:
+
+- **The reach argument is conceded, not answered.** `/stats` no longer brings anyone to the site; it is a reason to stay. The route bounces an anonymous visitor to login carrying `?next=`, so a shared link survives the round trip and lands on the selection it named — but the visitor has to sign in to get there.
+- **Link previews degrade.** `enforceReadRateLimit` exempts scraper User-Agents from the *budget*, never from authentication, so a Discord or Slack unfurl of a `/stats` URL is refused like any other anonymous caller and previews as the home page. The `meta.title` / `meta.description` the route builds per selection are now only ever seen by a signed-in browser.
+- **The budget stays per-IP and stays its own.** Per-IP rather than per-user because that is the shape every other read budget has, and the session is the door rather than the meter. Its own rather than `anon_read`'s because the reason was never that both were anonymous — it was that the abuse ceiling and the cold-start ceiling should not be the same knob (§12).
+
+Not resolved here: the response still carries `Cache-Control: public, max-age=0, s-maxage=60`, a shared-cache header on a cookie-gated response. §12 leans on that edge cache as its herd control, and the payload really is byte-identical for every viewer, so the header is not obviously wrong — but it is not obviously right either, and it is deliberately left as it was rather than changed alongside the gate.
 
 It gets its **own rate-limit budget**, not a share of `anon_read`. The tournament budgets are separate for exactly this reason: the 2026-08-05 incident was one busy surface deciding when the others started refusing. `GLOBAL_STATS_VIEW_PER_HOUR = "600"` as a `[vars]` entry, so the ceiling can be retuned without a redeploy.
 
@@ -411,6 +423,6 @@ Checked 2026-08-29.
 
 - **`docs/aggregate-statistics.md`** — **outstanding.** Its "Future work" bullet predicts this feature and asserts the cost is caching ("an arbitrary game-id set hashes to a poor hit-rate key"). That is wrong: caching is the easy part once the slice set is enumerable, and the real costs are isolate memory and the per-invocation query ceiling. Correct it, and fold the as-built outcome in. Its "No aggregator tests" limitation is also now stale — §13.1's round-trip test exists.
 - **`docs/api-reference.md`** — **done.** `GET /v1/stats` and the `global_stats_view` budget are both documented.
-- **`docs/cloud-deploy-plan.md`** — **outstanding**, and one item has changed shape. The health checks at §486 and §521 point at `/v1/stats`, which this feature has now claimed, so they resolve again rather than needing a new path — but a synthetic check spends the `global_stats_view` budget from one IP, which is worth stating where the check is configured. The warm step for the four unfaceted slices is not built: nothing in `scripts/prod/` warms anything.
+- **`docs/cloud-deploy-plan.md`** — **health checks done, warm step outstanding.** The two checks that pointed at `/v1/stats` have been corrected. The step-7 probe was `curl -I`, which sends HEAD against a GET-only route and 404s regardless of health; it is now a status-code GET expecting the `401` the session gate returns (§11's Built note). The §521 synthetic check moved off `/v1/stats` entirely — a session-gated path can't be probed by a checker with no credential, and it would also have spent the `global_stats_view` budget from one address and triggered a whole-corpus aggregation on a cold key. It now names `/v1/featured-videos` and records the four properties that made it the choice. The warm step for the four unfaceted slices is still not built: nothing in `scripts/prod/` warms anything.
 - **`docs/tournament-stats-design.md`** — **partly superseded.** §5's UI-generalization notes rest on the registry being user-shaped, which is no longer true. The tabs themselves have not collapsed onto it (§9), so the rest of the section still stands.
 - **This doc** — **outstanding.** Retire it into `docs/aggregate-statistics.md` on ship.

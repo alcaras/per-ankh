@@ -1,9 +1,14 @@
-// GET /v1/stats — the public chart bundle over the whole public corpus.
+// GET /v1/stats — the chart bundle over the whole public corpus.
 //
 // The corpus itself is pinned by global-corpus.test.ts and the nightly warm by
-// precompute.test.ts. What is left to this file is the endpoint: how a URL
-// becomes a selection, which of the three answers a request gets (cached,
-// stale, computed), and the budget it spends getting there.
+// precompute.test.ts. What is left to this file is the endpoint: who may call
+// it, how a URL becomes a selection, which of the three answers a request gets
+// (cached, stale, computed), and the budget it spends getting there.
+//
+// "Public corpus" is about which games are in it, not who may read it: the
+// endpoint requires a session, so every case below signs in. `is_public = 1`
+// is still the whole visibility rule, and a signed-in caller sees exactly that
+// and nothing of their own.
 //
 // The selection cases matter because both params are parsed forgivingly. A
 // slice or nation that doesn't parse degrades to a neighbouring view rather
@@ -22,7 +27,7 @@ import {
 } from "../../../src/stats/cache";
 import { GLOBAL_STATS_VIEW_PER_HOUR } from "../../../src/stats/handlers";
 import type { ChartBundleCore, GlobalSlice } from "../../../src/stats/types";
-import { makeUser } from "../../helpers/builders";
+import { makeUser, type TestUser } from "../../helpers/builders";
 import { postMultipart } from "../../helpers/requests";
 import {
 	buildUploadFormData,
@@ -55,9 +60,15 @@ const CORPUS = {
 	ai_rome: { winnerIndex: 0, humans: 1, aiPlayer: true, turns: turnsFor(1) },
 } satisfies Record<string, UploadFixtureOpts>;
 
+// The corpus's uploader, and the signed-in viewer every read below is made as.
+// One user for both: the endpoint reads nothing off the session but its
+// existence, so who is holding it makes no difference to the payload.
+let viewer: TestUser;
+
 beforeAll(async () => {
 	await applyD1Migrations(env.SHARE_DB, env.TEST_MIGRATIONS);
 	const user = await makeUser();
+	viewer = user;
 	const ids: string[] = [];
 	for (const opts of Object.values(CORPUS) as UploadFixtureOpts[]) {
 		const res = await postMultipart({
@@ -79,10 +90,20 @@ beforeAll(async () => {
 // getClientIp ignores CF-Connecting-IP unless CF-RAY is present, and without it
 // every case in this file would share the "untrusted" budget and start 429ing
 // its neighbours. Each case passes its own address.
-const get = (query: string, ip: string): Promise<Response> =>
+//
+// `session` is omitted only by the gate cases below; every other read carries
+// the viewer's, because without one the handler never reaches a selection.
+const fetchStats = (
+	query: string,
+	ip: string,
+	extra: Record<string, string> = {},
+): Promise<Response> =>
 	SELF.fetch(`http://test/v1/stats${query}`, {
-		headers: { "CF-Connecting-IP": ip, "CF-RAY": "test-ray" },
+		headers: { "CF-Connecting-IP": ip, "CF-RAY": "test-ray", ...extra },
 	});
+
+const get = (query: string, ip: string): Promise<Response> =>
+	fetchStats(query, ip, { Cookie: `session=${viewer.sessionToken}` });
 
 const bundle = async (query: string, ip: string): Promise<ChartBundleCore> =>
 	expectOk<ChartBundleCore>(await get(query, ip));
@@ -163,6 +184,27 @@ describe("GET /v1/stats selection", () => {
 		// and the entry saves nothing: an empty corpus short-circuits the
 		// aggregator without a query.
 		expect(await cachedBundle("duel", ["NATION_NOWHERE"])).toBeNull();
+	});
+
+	it("does not reach for a stale entry when the selection has no games", async () => {
+		// Never cached and therefore missing forever, so the serve-stale lookup
+		// would walk every stats key in the namespace on every request — and
+		// find nothing, because an empty selection was never written under any
+		// parser version either. The handler resolves first and skips it.
+		//
+		// Planting an entry under exactly the suffix the walk matches is how the
+		// skip is observable from outside: reached for, it would be served.
+		await env.SESSIONS_KV.put(
+			cacheKeyToString(globalKey("duel", ["NATION_NOWHERE"], "0.0.1-stale")),
+			JSON.stringify({ tag: "would have been served" }),
+			{ expirationTtl: 3600 },
+		);
+		const body = await bundle(
+			"?slice=duel&nation=NATION_NOWHERE",
+			"203.0.113.11",
+		);
+		expect(body.meta.game_count).toBe(0);
+		expect(body.meta.parser_version).toBe(CURRENT_PARSER_VERSION);
 	});
 
 	it("excludes the AI's nation from a slice it is only seated in by an AI", async () => {
@@ -327,19 +369,51 @@ describe("GET /v1/stats rate limit", () => {
 		);
 	});
 
-	it("exempts scraper User-Agents from the gate and the count", async () => {
+	it("exempts scraper User-Agents from the budget and the count", async () => {
+		// A signed-in scraper, which is the only kind that gets this far — the
+		// exemption is about not counting a link-preview fan-out, never about
+		// authentication (see the auth block above).
 		const ip = "203.0.113.34";
 		await seedEvents("global_stats_view", ip, GLOBAL_STATS_VIEW_PER_HOUR);
-		const res = await SELF.fetch("http://test/v1/stats?slice=duel", {
-			headers: {
-				"CF-Connecting-IP": ip,
-				"CF-RAY": "test-ray",
-				"User-Agent": "Discordbot/2.0",
-			},
+		const res = await fetchStats("?slice=duel", ip, {
+			Cookie: `session=${viewer.sessionToken}`,
+			"User-Agent": "Discordbot/2.0",
 		});
 		expect(res.status).toBe(200);
 		expect(await countEvents("global_stats_view", ip)).toBe(
 			GLOBAL_STATS_VIEW_PER_HOUR,
 		);
+	});
+});
+
+describe("GET /v1/stats auth", () => {
+	it("refuses an anonymous read", async () => {
+		// The payload is the same bytes for every viewer, so the gate isn't
+		// hiding anything — it is who may spend a whole-corpus aggregation.
+		await expectErrorCode(await fetchStats("?slice=duel", "203.0.113.40"), {
+			status: 401,
+			code: "UNAUTHORIZED",
+		});
+	});
+
+	it("refuses an anonymous scraper too", async () => {
+		// enforceReadRateLimit lets scraper User-Agents past the budget. That
+		// exemption never covered authentication, so a link-preview bot with no
+		// session is refused like any other anonymous caller — which is why a
+		// shared /stats link unfurls as the home page.
+		const res = await fetchStats("?slice=duel", "203.0.113.41", {
+			"User-Agent": "Discordbot/2.0",
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it("does not spend the budget on a read it refuses", async () => {
+		// The session is checked before the rate limit, so an anonymous flood
+		// can't drain a shared address's allowance out from under the people
+		// signed in behind it.
+		const ip = "203.0.113.42";
+		await fetchStats("?slice=duel", ip);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(await countEvents("global_stats_view", ip)).toBe(0);
 	});
 });
