@@ -56,6 +56,8 @@ import {
 	COMPETITIVE_SCIENCE_STIPEND,
 	KNOWLEDGE_TIERS,
 	FAMILY_CLASS_SCIENCE_PER_SPECIALIST,
+	THEOLOGY_BUILDING_SCIENCE_PER_URBAN_SPECIALIST,
+	IMPROVEMENT_RELIGION,
 	NATION_CITY_SCIENCE,
 	THEOLOGY_SCIENCE_PER_RELIGION,
 	PROJECT_SCIENCE,
@@ -918,7 +920,9 @@ export function scienceBreakdown(
 		const specialists = citySpecialists.get(city.city_name) ?? 0;
 		if (familyRate > 0 && specialists > 0 && city.family_class != null) {
 			addEffect(
-				`${formatEnum(city.family_class, "FAMILYCLASS_")} cities`,
+				// Named for what it scales with, not just whose perk it is —
+				// a reader hunting for specialist science looks here last.
+				`${formatEnum(city.family_class, "FAMILYCLASS_")} per specialist`,
 				city.city_name,
 				familyRate * specialists,
 				specialists,
@@ -927,6 +931,39 @@ export function scienceBreakdown(
 					value: `ARCHETYPE_${city.family_class.slice("FAMILYCLASS_".length)}`,
 				},
 			);
+		}
+		// Gnosticism: a Temple of a religion that established the theology puts
+		// an effect in its city paying science per URBAN specialist
+		// (improvementClass aeTheologyCityEffect → aiYieldRateSpecialistUrban).
+		// The theology entry itself carries no science, so this is invisible to
+		// anyone reading theology.xml — the rule lives on the building.
+		const urban = cityUrban.get(city.city_name) ?? 0;
+		if (urban > 0) {
+			for (const [theology, byClass] of Object.entries(
+				THEOLOGY_BUILDING_SCIENCE_PER_URBAN_SPECIALIST,
+			)) {
+				for (const [cls, rate] of Object.entries(byClass)) {
+					// A building of that class in this city whose own religion
+					// established the theology.
+					const holds = improvements.some((i) => {
+						if (i.city_name !== city.city_name) return false;
+						const building = IMPROVEMENT_RELIGION[i.improvement];
+						if (building?.class !== cls) return false;
+						return (
+							cityContext.theologiesByReligion
+								.get(building.religion)
+								?.includes(theology) ?? false
+						);
+					});
+					if (!holds) continue;
+					addEffect(
+						`${formatEnum(theology, "THEOLOGY_")} per urban specialist`,
+						city.city_name,
+						rate * urban,
+						urban,
+					);
+				}
+			}
 		}
 		// Babylonia: flat science in every city, from the nation's player
 		// effect.

@@ -64,6 +64,11 @@ interface ResourceYieldPair {
 	zIndex?: string;
 	SubPair?: SubPair | SubPair[];
 }
+// A <Pair> mapping one type to another rather than to a number.
+interface TypePair {
+	zIndex?: string;
+	zValue?: string;
+}
 interface Entry {
 	zType?: string;
 	Class?: string;
@@ -80,6 +85,10 @@ interface Entry {
 	Bonus?: string;
 	CityProject?: string;
 	RequiresCulture?: string;
+	// project.xml — the tier below this one on a ladder (Archive II needs I).
+	ProjectPrereq?: string;
+	// improvement.xml — the religion a religious building belongs to.
+	ReligionPrereq?: string;
 	zIconName?: string;
 	iCost?: string;
 	iValue?: string;
@@ -153,6 +162,14 @@ async function loadBonuses(infosDir: string): Promise<Entry[]> {
 }
 
 function pairs(block?: { Pair?: YieldPair | YieldPair[] }): YieldPair[] {
+	const p = block?.Pair;
+	if (p == null) return [];
+	return Array.isArray(p) ? p : [p];
+}
+
+// The <Pair> list of a type→type table (<aeTheologyCityEffect>), which maps a
+// key type to another type rather than to a number.
+function typePairs(block?: { Pair?: TypePair | TypePair[] }): TypePair[] {
 	const p = block?.Pair;
 	if (p == null) return [];
 	return Array.isArray(p) ? p : [p];
@@ -393,6 +410,59 @@ async function main(): Promise<void> {
 		if (v > 0) theologySciencePerReligion[t.zType] = v / 10;
 	}
 
+	// A theology's science can hang off a BUILDING rather than the theology
+	// itself: improvementClass.xml <aeTheologyCityEffect> reads "a building of
+	// this class, of a religion that established this theology, puts this
+	// effect in the city" (Tile.changeImprovementYieldEffectCity). Gnosticism
+	// is the science one — a Temple of a Gnostic religion pays +1 per URBAN
+	// specialist in its city — and it is invisible to a sweep of theology.xml,
+	// which carries no YIELD_SCIENCE at all.
+	const theologyBuildingSciencePerUrbanSpecialist: Record<
+		string,
+		Record<string, number>
+	> = {};
+	for (const cls of improvementClasses) {
+		if (!cls.zType) continue;
+		for (const pair of typePairs(cls.aeTheologyCityEffect)) {
+			if (!pair.zIndex || !pair.zValue) continue;
+			const e = effectByType.get(pair.zValue);
+			if (!e) continue;
+			const v = yieldValue(
+				pairs(e.aiYieldRateSpecialistUrban),
+				"YIELD_SCIENCE",
+			);
+			if (v > 0) {
+				(theologyBuildingSciencePerUrbanSpecialist[pair.zIndex] ??= {})[
+					cls.zType
+				] = v / 10;
+			}
+		}
+	}
+
+	// The religion a building of one of those classes belongs to, so a city's
+	// Temple can be matched against the theologies its religion established.
+	// Only the classes the table above names, which keeps this to the handful
+	// of religious buildings that can pay science.
+	const theologyClasses = new Set(
+		Object.values(theologyBuildingSciencePerUrbanSpecialist).flatMap(
+			(byClass) => Object.keys(byClass),
+		),
+	);
+	const improvementReligion: Record<
+		string,
+		{ religion: string; class: string }
+	> = {};
+	for (const imp of improvements) {
+		if (!imp.zType || !imp.ReligionPrereq || !imp.Class) continue;
+		if (!theologyClasses.has(imp.Class)) continue;
+		// Carries its own class: a Temple pays no science of its own, so it is
+		// not in IMPROVEMENT_CLASS and the lookup would otherwise miss it.
+		improvementReligion[imp.zType] = {
+			religion: imp.ReligionPrereq,
+			class: imp.Class,
+		};
+	}
+
 	// Every city effect a completed project puts in the city — its <EffectCity>
 	// and <EffectCityExtra>. Both the conditional-grant tables and the city-HP
 	// table below key on these, because the XML expresses "a city holding an
@@ -515,20 +585,42 @@ async function main(): Promise<void> {
 		const science = yieldValue(pairs(b.aiGlobalYields), "YIELD_SCIENCE");
 		if (science > 0) bonusScience.set(b.zType, science);
 	}
+	const projectByType = new Map(
+		projects.filter((p) => p.zType != null).map((p) => [p.zType as string, p]),
+	);
+	// What one recorded completion is WORTH, which is not always what the tier
+	// itself pays. A ladder (Archive II needs I, III needs II) leaves only its
+	// highest rung in the save: City.finishProject zeroes the count of every
+	// project the finished one invalidates (City.cs), and <abInvalidBy> on the
+	// Archive line lists every higher tier. So a city recorded at Archive III
+	// built I and II on the way and was paid for all three — 10 + 20 + 30.
+	// Walking <ProjectPrereq> back down the ladder recovers that.
+	const cumulativeScience = (
+		zType: string,
+		seen = new Set<string>(),
+	): number => {
+		if (seen.has(zType)) return 0;
+		seen.add(zType);
+		const p = projectByType.get(zType);
+		if (!p?.Bonus) return 0;
+		const own = bonusScience.get(p.Bonus) ?? 0;
+		return (
+			own + (p.ProjectPrereq ? cumulativeScience(p.ProjectPrereq, seen) : 0)
+		);
+	};
 	const projectOneOffScience: Record<
 		string,
 		{ project: string; science: number; culture: string | null }[]
 	> = {};
 	for (const p of projects) {
 		if (!p.zType || !p.Bonus) continue;
-		const science = bonusScience.get(p.Bonus);
-		if (science == null) continue;
+		if (bonusScience.get(p.Bonus) == null) continue;
 		// Completions are recorded under the umbrella project when there is
 		// one, and under the project itself when there isn't.
 		const key = p.CityProject ?? p.zType;
 		(projectOneOffScience[key] ??= []).push({
 			project: p.zType,
-			science,
+			science: cumulativeScience(p.zType),
 			culture: p.RequiresCulture ?? null,
 		});
 	}
@@ -937,6 +1029,31 @@ async function main(): Promise<void> {
 	);
 	lines.push("");
 	lines.push(
+		"// Theology → improvement class → science per URBAN specialist, paid in",
+	);
+	lines.push(
+		"// every city holding a building of that class whose religion established",
+	);
+	lines.push(
+		"// the theology (Gnosticism's Temples). The theology entry itself carries",
+	);
+	lines.push("// no science — the rule lives on the improvement class.");
+	lines.push(
+		`export const THEOLOGY_BUILDING_SCIENCE_PER_URBAN_SPECIALIST: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(theologyBuildingSciencePerUrbanSpecialist))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// Religious building → the religion it belongs to (<ReligionPrereq>),",
+	);
+	lines.push(
+		"// for the classes the theology table above names. Lets a city's Temple",
+	);
+	lines.push("// be matched against the theologies its religion established.");
+	lines.push(
+		`export const IMPROVEMENT_RELIGION: Readonly<Record<string, { readonly religion: string; readonly class: string }>> = ${JSON.stringify(sorted(improvementReligion as unknown as Record<string, unknown>))};`,
+	);
+	lines.push("");
+	lines.push(
 		"// City project → flat science: `single` effects (bSingle — Archives)",
 	);
 	lines.push("// pay once regardless of count; the rest multiply (Convoys).");
@@ -1024,6 +1141,15 @@ async function main(): Promise<void> {
 	);
 	lines.push(
 		"// `culture` is the tier's RequiresCulture gate, which bounds what a",
+	);
+	lines.push(
+		"// given city's completions can have been worth. `science` is CUMULATIVE",
+	);
+	lines.push(
+		"// down a prereq ladder — an Archive III city was paid for I and II on",
+	);
+	lines.push(
+		"// the way up, and the save keeps only the highest rung (abInvalidBy).",
 	);
 	lines.push(
 		"// given city's completions can have been worth. Values are WHOLE",
