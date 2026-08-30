@@ -53,6 +53,12 @@ const LANDOWNERS = "FAMILYCLASS_LANDOWNERS";
 // from both law charts. Seeded so that exclusion is observable.
 const SUCCESSION_LAW = "LAW_PRIMOGENITURE";
 
+// The cross-nation aggregate key the law and tech fields carry alongside their
+// per-nation rows. Spelled out rather than imported: it is module-private to
+// the aggregator, and a test that reached for it would be asserting against
+// the same symbol it is checking.
+const ALL_NATIONS = "__all__";
+
 // The wonder the pool tests use: the lowest culture prereq, so a CULTURE_WEAK
 // city clears the eligibility gate.
 const WONDER = "IMPROVEMENT_PYRAMIDS";
@@ -310,6 +316,46 @@ describe("chart bundle round-trip", () => {
 				expect(b[field], `${focal}.${field}`).not.toHaveLength(0);
 			}
 			expect(b.favorite_day_of_week, focal).not.toBeNull();
+		}
+	});
+});
+
+describe("law and tech focal restriction", () => {
+	// All four nation-keyed law/tech fields draw from the focal seats, so over
+	// the uploader corpus none of them can name the opponent's nation. Stated
+	// here rather than left to the snapshot because two of them reached this
+	// late: lawTiming and techTiming aggregated every seat in the corpus's
+	// games, which put the opponent's laws and techs in the uploader's own
+	// charts and, under the global nation facet, the Greek's in a Rome bundle.
+	it("names only the focal nation over the uploader corpus", async () => {
+		const b = await bundleFor("uploader");
+		for (const [field, rows] of [
+			["lawTiming", b.lawTiming],
+			["openingLaws", b.openingLaws],
+			["techFirst", b.techFirst],
+			["techTiming", b.techTiming],
+		] as const) {
+			const nations = new Set(rows.map((r) => r.nation));
+			expect(nations.size, `${field} is populated`).toBeGreaterThan(0);
+			nations.delete(ALL_NATIONS);
+			expect([...nations], field).toEqual([EGYPT]);
+		}
+	});
+
+	// The counterpart reading: over the same corpus every seat is human, so the
+	// all-humans bundle keeps both nations. Together the two say the fields
+	// follow the focal set rather than simply having been narrowed to one row.
+	it("keeps both nations over the all-humans corpus", async () => {
+		const b = await bundleFor("humans");
+		for (const [field, rows] of [
+			["lawTiming", b.lawTiming],
+			["openingLaws", b.openingLaws],
+			["techFirst", b.techFirst],
+			["techTiming", b.techTiming],
+		] as const) {
+			const nations = new Set(rows.map((r) => r.nation));
+			nations.delete(ALL_NATIONS);
+			expect([...nations].sort(), field).toEqual([EGYPT, ROME].sort());
 		}
 	});
 });

@@ -1158,7 +1158,13 @@ export async function buildChartBundle(
 		{ nation: string; law: string; turns: number[] }
 	>();
 	for (const e of civicLawEvents) {
-		const nation = nationByPlayer.get(`${e.game_id}|${e.player_index}`) ?? null;
+		const k = `${e.game_id}|${e.player_index}`;
+		// Focal seats only, as openingLaws below already does. A law event
+		// belongs to the player who enacted it, so an opponent's is not part of
+		// this corpus's timing however the corpus was drawn — and under a nation
+		// facet it is the Greek's law landing in a Rome bundle.
+		if (!selfMembership.has(k)) continue;
+		const nation = nationByPlayer.get(k) ?? null;
 		const buckets = nation ? [nation, ALL_NATIONS] : [ALL_NATIONS];
 		for (const n of buckets) {
 			const key = `${n}|${e.law}`;
@@ -1254,6 +1260,11 @@ export async function buildChartBundle(
 	>();
 	for (const e of researchedTechEvents) {
 		const k = `${e.game_id}|${e.player_index}`;
+		// Focal seats only — the same restriction lawTiming above applies, and
+		// for the same reason. Filtering here rather than at each consumer is
+		// what keeps techTiming and techFirst on one population: everything
+		// downstream of this loop is already focal.
+		if (!selfMembership.has(k)) continue;
 		pushTechTurn(nationByPlayer.get(k) ?? null, e.tech, e.turn);
 		const parr = techEventsByPlayer.get(k) ?? [];
 		parr.push({ tech: e.tech, turn: e.turn });
@@ -1278,7 +1289,6 @@ export async function buildChartBundle(
 		techFirstMap.set(key, e);
 	};
 	for (const [k, arr] of techEventsByPlayer) {
-		if (!selfMembership.has(k)) continue;
 		const first = arr.sort((a, b) => a.turn - b.turn)[0];
 		if (!first) continue;
 		const nation = nationByPlayer.get(k);
