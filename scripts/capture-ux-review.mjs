@@ -362,6 +362,11 @@ async function captureHomeCold(page, baseUrl, pass, ids, coldState, authState) {
 	// Any route but / — clicking the wordmark while already home is a no-op,
 	// and the load would never re-run. Game detail renders in both passes.
 	await page.goto(`${baseUrl}/games/${ids.gameId}`, { waitUntil: "load" });
+	// Settle before clicking: `load` fires before SvelteKit has hydrated, and a
+	// click on an unhydrated link is a native document navigation — which
+	// server-renders / and runs the load out of the browser's reach, so the
+	// stubs below never apply and the shot is a duplicate of warm home.
+	await settle(page);
 
 	const patterns = Object.keys(coldState.stubs);
 	for (const pattern of patterns) {
