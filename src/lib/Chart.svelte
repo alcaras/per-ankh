@@ -41,6 +41,17 @@
 	let chartContainer: HTMLDivElement;
 	let chart: ECharts | null = null;
 
+	// How long an in-place data change takes to animate. CHART_THEME keeps
+	// `animation: false` so a chart still paints instantly on arrival — that is
+	// what the skeleton/instant-paint pass bought — but a chart already on
+	// screen swapping its data is a different moment: an instant swap there
+	// reads as a glitch rather than as speed. So animation is turned on for the
+	// update path below only, and the initial setOption keeps the theme's value.
+	//
+	// Shorter than ECharts' 1s default, which reads as sluggish beside the app's
+	// 200ms view crossfades, and long enough to be followed.
+	const UPDATE_ANIMATION_MS = 400;
+
 	onMount(() => {
 		let resizeObserver: ResizeObserver;
 
@@ -104,7 +115,14 @@
 		// when chart is initially null. See CLAUDE.md "Effect Dependency Tracking".
 		const currentOption = option;
 		if (chart && currentOption) {
-			chart.setOption(currentOption, true);
+			chart.setOption(
+				{
+					...currentOption,
+					animation: true,
+					animationDuration: UPDATE_ANIMATION_MS,
+				},
+				true,
+			);
 			// Force resize to handle tab visibility changes
 			chart.resize();
 			// untrack: the notify must not add the callback prop (or anything the

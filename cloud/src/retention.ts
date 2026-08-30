@@ -7,6 +7,13 @@
 // decision instead of silently inheriting a default. The deletion scope
 // is expected to grow over time (e.g. a future security_events table).
 
+// The cron pattern this sweep runs on. Named here so index.ts can dispatch on
+// it by exact match rather than by falling through: staging declares the stats
+// precompute's patterns and not this one, and a fall-through would sweep its
+// events the first time a stats pattern drifted out of sync. Kept in step by
+// eye with `crons` in wrangler.toml — nothing imports a wrangler config.
+export const RETENTION_CRON = "47 3 * * *";
+
 interface RetentionBucket {
 	readonly name: string;
 	// SQLite datetime() modifier, e.g. "-90 days".
@@ -34,6 +41,11 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			// rather than tournament_view's, so /games/* crawls can't drain the
 			// tournament pages' allowance. Same 1h counter role, metadata-free.
 			"tournament_link_view",
+			// Public /stats bundle reads (stats/handlers.ts): its own budget
+			// rather than anon_read's, so a crawl of /games/* can't decide when
+			// the global stats page starts refusing — and vice versa. Same 1h
+			// counter role, metadata-free.
+			"global_stats_view",
 			"user_search",
 			// Header people search (users.ts): same counter role as
 			// user_search, its own budget. Metadata is q_length only.

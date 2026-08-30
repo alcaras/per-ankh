@@ -45,17 +45,6 @@ export interface ChartBundleCore {
 
 	summary: ChartBundleSummaryCore;
 
-	// Per-game; correct over either focal set (final home on the tournament
-	// page is deferred).
-	save_dates: Array<{
-		date: string;
-		nation: string | null;
-		game_id: string;
-		game_name: string | null;
-		display_name: string | null;
-		total_turns: number;
-	}>;
-	favorite_day_of_week: Nullable<number>;
 	nations: Array<{ nation: string; games_played: number }>;
 
 	nationWinRate: Array<{
@@ -188,6 +177,19 @@ export interface ChartBundle extends ChartBundleCore {
 	// --- Overview (user corpus) — folded from the retired /v1/stats ---
 	win_rate: Nullable<number>;
 	games_with_outcome: number;
+
+	// The Overview tab's calendar heatmap. Per-game, so it would read fine
+	// over the all-humans focal set too — it is user-only because only the
+	// profile renders it, and because it is the one field that grows with the
+	// corpus instead of with the turn axis.
+	save_dates: Array<{
+		date: string;
+		nation: string | null;
+		game_id: string;
+		game_name: string | null;
+		display_name: string | null;
+		total_turns: number;
+	}>;
 }
 
 // The single scope selection for the user corpus (mirrors the Worker's
@@ -201,6 +203,12 @@ export type UserScope =
 	| "tournament"
 	| string;
 
+// The composition slice the public /stats corpus is cut by (mirrors the
+// Worker's GlobalSlice). Roster composition only: the global corpus has no
+// owner, so its is_public = 1 visibility is not part of the selection. Paired
+// with an optional nation facet — see $lib/stats/global-facets.
+export type GlobalSlice = "all" | "duel" | "ffa" | "single_player";
+
 export type StatsCategory =
 	| "nations"
 	| "leaders"
@@ -211,18 +219,22 @@ export type StatsCategory =
 	| "cities"
 	| "tech";
 
+// A chart in the catalog. Its predicates take ChartBundleCore, not
+// ChartBundle: none of them reads an Overview field, so one registry serves
+// every corpus — a user library, a tournament, and the global slices — and a
+// ChartBundle still satisfies them.
 export interface ChartSpec {
 	id: string;
 	category: StatsCategory;
 	title: string;
 	subtitle?: string;
 	// True when the chart can be rendered. False → empty-state card.
-	hasData: (bundle: ChartBundle) => boolean;
+	hasData: (bundle: ChartBundleCore) => boolean;
 	// Empty-state copy when hasData is false. Falls back to a generic
 	// message if not provided.
-	emptyMessage?: (bundle: ChartBundle) => string;
+	emptyMessage?: (bundle: ChartBundleCore) => string;
 	// Container height override. Horizontal-bar charts with many categories
 	// need room to breathe — return a CSS height scaled to the row count.
 	// Falls back to the default 400px when absent.
-	height?: (bundle: ChartBundle) => string;
+	height?: (bundle: ChartBundleCore) => string;
 }

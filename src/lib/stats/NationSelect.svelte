@@ -6,8 +6,13 @@
 	//
 	// Rendered as a sticky, left-aligned bar matching the Yields toolbar
 	// (same chrome as the subtab chip bar), so it stays reachable while
-	// scrolling the panel's chart stack. The `-ml-4` cancels Tabs.Content's
-	// px-4 to align the bar flush with the tab bars above it.
+	// scrolling the panel's chart stack.
+	//
+	// toolbarFlush pulls the bar out of a container's px-4 so it lines up with
+	// the tab bar above. Only StatsView pads its tab content, so only it opts
+	// in; a caller that doesn't pad (the tournament stats page) leaves it off,
+	// or the bar hangs a rem left of both the tabs above it and the charts
+	// below.
 
 	import { Select } from "bits-ui";
 	import { nationLabel } from "./charts/helpers";
@@ -16,16 +21,20 @@
 		value,
 		options,
 		onChange,
+		toolbarFlush = false,
 	}: {
 		value: string;
 		options: string[];
 		// eslint-disable-next-line no-unused-vars -- parameter in callback signature
 		onChange: (value: string) => void;
+		toolbarFlush?: boolean;
 	} = $props();
 </script>
 
 <div
-	class="sticky top-1 z-10 -ml-4 mb-4 flex w-fit items-center gap-2 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg"
+	class="sticky top-1 z-10 mb-4 flex w-fit items-center gap-2 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg {toolbarFlush
+		? '-ml-4'
+		: ''}"
 >
 	<Select.Root
 		type="single"

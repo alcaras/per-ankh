@@ -1,14 +1,20 @@
 // Cities tab: expansion-speed win-rate for the corpus.
 
 import type { ChartOption } from "$lib/echarts";
-import { getChartColor } from "$lib/config";
-import type { ChartBundle } from "../types";
-import { AXIS_NAME_X, AXIS_NAME_Y, CHART_THEME, COMMON_GRID } from "./helpers";
+import { getSeriesColor } from "$lib/config";
+import type { ChartBundleCore } from "../types";
+import {
+	AXIS_NAME_X,
+	AXIS_NAME_Y,
+	BAR_WIDTH,
+	CHART_THEME,
+	COMMON_GRID,
+} from "./helpers";
 
 // Win rate vs. expansion speed: win rate per 5th-city-founding-turn bucket,
 // ordered fastest → slowest (with "never" — fewer than 5 cities — last).
 // Empty buckets are dropped so a sparse corpus doesn't show gaps.
-export function expansionWinRateOption(bundle: ChartBundle): ChartOption {
+export function expansionWinRateOption(bundle: ChartBundleCore): ChartOption {
 	const order = ["≤25", "26–50", "51–75", "76–100", "101–150", "151+", "never"];
 	const rows = order
 		.map((b) => bundle.expansionWinRate.find((x) => x.bucket === b))
@@ -44,8 +50,13 @@ export function expansionWinRateOption(bundle: ChartBundle): ChartOption {
 		series: [
 			{
 				type: "bar",
-				data: rows.map((r) => r.rate),
-				itemStyle: { color: getChartColor(0) },
+				barWidth: BAR_WIDTH,
+				// One rotation color per bucket. Seven buckets against eight
+				// colors, so this chart never reaches the wrap.
+				data: rows.map((r, i) => ({
+					value: r.rate,
+					itemStyle: { color: getSeriesColor(i) },
+				})),
 			},
 		],
 	};

@@ -34,11 +34,14 @@ export interface AggregateEnv {
 // the uploader's own row per game; "humans" (tournament corpus) widens to every
 // human, so both sides of a 1v1 contribute. The convention lives in exactly two
 // places (buildSelfMembership + loadYieldCurves' selfClause), threaded from
-// here rather than forked into a parallel aggregation path.
+// here rather than forked into a parallel aggregation path. A global corpus's
+// nation facet (StatsCorpus.focalNations) narrows the same set further, at
+// those same two places and nowhere else.
 export type Focal = "uploader" | "humans";
 
-// D1 bind-parameter cap is 100. Leave headroom for joins with literal
-// params (we never need more than a few literals per statement). Exported
+// D1 bind-parameter cap is 100. Leave headroom for the params a statement
+// binds alongside the ids — the widest is loadYieldCurves under a nation
+// facet, one bind per selected nation (13 playable), so 63 of the 100. Exported
 // (with chunk) for other batched IN-list loaders, e.g. the tournament
 // player_summaries batch in tournament/public.ts.
 export const CHUNK_SIZE = 50;
@@ -183,12 +186,22 @@ function parseJsonArray(raw: string | null): string[] {
 // The corpus's focal (game_id, player_index) tuples, encoded as
 // `${game_id}|${player_index}` strings for quick membership checks. "uploader"
 // keeps only the uploader's own row per game; "humans" keeps every human row
-// (baseRows are already is_human=1, so that's all of them).
-function buildSelfMembership(baseRows: BaseRow[], focal: Focal): Set<string> {
+// (baseRows are already is_human=1, so that's all of them). A faceted global
+// corpus keeps only the seats playing one of its nations — the JS half of the
+// restriction loadYieldCurves applies in SQL.
+function buildSelfMembership(
+	baseRows: BaseRow[],
+	focal: Focal,
+	focalNations: string[] | null,
+): Set<string> {
+	const nations = focalNations === null ? null : new Set(focalNations);
 	const self = new Set<string>();
 	for (const r of baseRows) {
 		const isFocal = focal === "humans" ? r.is_human === 1 : r.is_uploader === 1;
-		if (isFocal) self.add(`${r.game_id}|${r.player_index}`);
+		if (!isFocal) continue;
+		if (nations !== null && (r.nation === null || !nations.has(r.nation)))
+			continue;
+		self.add(`${r.game_id}|${r.player_index}`);
 	}
 	return self;
 }
@@ -274,6 +287,7 @@ async function loadYieldCurves(
 	env: AggregateEnv,
 	gameIds: string[],
 	focal: Focal,
+	focalNations: string[] | null,
 ): Promise<ChartBundleCore["yieldCurves"]> {
 	if (gameIds.length === 0)
 		return { turns: [], counts: [], series: {}, outcome: null };
@@ -288,9 +302,17 @@ async function loadYieldCurves(
 	const selectList = [...columns].map((c) => `gpt.${c}`).join(", ");
 
 	// The focal-player filter — the second (and last) site the focal
-	// convention lives, mirroring buildSelfMembership.
+	// convention lives, mirroring buildSelfMembership. The rows are filtered in
+	// SQL rather than after the fact because they are what the memory bound is
+	// denominated in: a nation facet should never pull the other seats' rows
+	// into the isolate just to drop them.
 	const selfClause =
 		focal === "humans" ? "ps.is_human = 1" : "ps.is_uploader = 1";
+	const nationClause =
+		focalNations === null
+			? ""
+			: ` AND ps.nation IN (${focalNations.map(() => "?").join(", ")})`;
+	const nationBinds = focalNations ?? [];
 
 	// Per turn: a value sample per field (rate + cumulative) and a row count.
 	type Bucket = {
@@ -299,9 +321,14 @@ async function loadYieldCurves(
 		cum: Map<string, number[]>;
 	};
 	type Cohort = Map<number, Bucket>;
-	const pooled: Cohort = new Map();
+	// Three disjoint cohorts rather than pooled + winners + losers: a decided
+	// row belongs to exactly one of them, so it is stored once instead of
+	// twice. The pooled bands are the merge of all three at band time — the
+	// same multiset per turn, so the same percentiles. Halving what the samples
+	// retain is what keeps a whole-corpus aggregation inside the 128 MB isolate.
 	const winners: Cohort = new Map();
 	const losers: Cohort = new Map();
+	const undecided: Cohort = new Map();
 
 	const decided = await loadDecidedGames(env, gameIds);
 
@@ -332,28 +359,38 @@ async function loadYieldCurves(
 			 FROM game_player_turn gpt
 			 JOIN player_summaries ps ON ps.game_id = gpt.game_id
 			                          AND ps.player_index = gpt.player_index
-			 WHERE ${selfClause}
+			 WHERE ${selfClause}${nationClause}
 			   AND gpt.game_id IN (${placeholders(ids.length)})`,
 		)
-			.bind(...ids)
+			.bind(...nationBinds, ...ids)
 			.all<YieldRawRow>();
 
 		for (const row of (res.results ?? []) as YieldRawRow[]) {
-			const turn = row.turn;
-			accumulate(pooled, turn, row);
-			// Undecided games stay pooled-only: their all-zero is_winner would
-			// read as a clean sweep of losses.
-			if (!decided.has(row.game_id)) continue;
-			accumulate(row.is_winner === 1 ? winners : losers, turn, row);
+			// Undecided games stay out of the outcome split — their all-zero
+			// is_winner would read as a clean sweep of losses — but they are
+			// still part of the pooled merge.
+			accumulate(
+				!decided.has(row.game_id)
+					? undecided
+					: row.is_winner === 1
+						? winners
+						: losers,
+				row.turn,
+				row,
+			);
 		}
 	}
 
-	// The pooled cohort is the superset, so its turns are the shared x-axis;
-	// the split cohorts index against it and carry nulls where they have no
-	// sample.
-	const turns = [...pooled.keys()].sort((a, b) => a - b);
+	// Every turn any cohort saw is the shared x-axis; a cohort with no sample
+	// at one of them carries nulls there, so all of them stay index-aligned.
+	const turns = [
+		...new Set([...winners.keys(), ...losers.keys(), ...undecided.keys()]),
+	].sort((a, b) => a - b);
 
-	const bandsFor = (cohort: Cohort): YieldCohort => {
+	// One cohort, or the merge of several — pooled is all three at once.
+	// flatMap already returns a fresh array, so sorting it in place leaves the
+	// accumulated samples untouched for the next band.
+	const bandsFor = (...cohorts: Cohort[]): YieldCohort => {
 		const series: YieldCohort["series"] = {};
 		for (const [key] of YIELD_COLUMNS) {
 			const band = (which: "rate" | "cum") => {
@@ -361,8 +398,9 @@ async function loadYieldCurves(
 				const p50: Nullable<number>[] = [];
 				const p75: Nullable<number>[] = [];
 				for (const t of turns) {
-					const sample = cohort.get(t)?.[which].get(key) ?? [];
-					const sorted = [...sample].sort((a, b) => a - b);
+					const sorted = cohorts
+						.flatMap((c) => c.get(t)?.[which].get(key) ?? [])
+						.sort((a, b) => a - b);
 					p25.push(percentile(sorted, 25));
 					p50.push(percentile(sorted, 50));
 					p75.push(percentile(sorted, 75));
@@ -371,10 +409,15 @@ async function loadYieldCurves(
 			};
 			series[key] = { rate: band("rate"), cumulative: band("cum") };
 		}
-		return { counts: turns.map((t) => cohort.get(t)?.count ?? 0), series };
+		return {
+			counts: turns.map((t) =>
+				cohorts.reduce((n, c) => n + (c.get(t)?.count ?? 0), 0),
+			),
+			series,
+		};
 	};
 
-	const all = bandsFor(pooled);
+	const all = bandsFor(winners, losers, undecided);
 	return {
 		turns,
 		counts: all.counts,
@@ -512,7 +555,6 @@ async function loadFamilyCities(
 
 interface SaveDateRow {
 	date: string;
-	weekday: number | null;
 	nation: string | null;
 	// Identity + title inputs for the Overview calendar's click-through. The
 	// last three feed formatGameTitle on the frontend so a calendar cell links
@@ -524,11 +566,16 @@ interface SaveDateRow {
 	total_turns: number;
 }
 
-// One row per in-scope game with a save_date — feeds the Overview
-// calendar heatmap, the favorite-day stat, and the games-by-nation bar.
-// weekday is computed in SQL (strftime '%w', 0=Sun..6=Sat) to preserve
-// the semantics of the retired /v1/stats handler; nation falls back to
-// the first human player (the same COALESCE handleGameList uses).
+// One row per in-scope game with a save_date — feeds the Overview calendar
+// heatmap and nothing else. (The games-by-nation bar reads the self rows'
+// nationCount, not this; and the modal weekday this used to compute went with
+// favorite_day_of_week.) nation falls back to the first human player, the same
+// COALESCE handleGameList uses.
+//
+// Called only on the uploader focal path: save_dates is a ChartBundle field,
+// not a ChartBundleCore one, so an all-humans corpus has nowhere to put the
+// result and skipping the call is what makes that bundle cost eight chunked
+// query loops instead of nine.
 async function loadSaveDates(
 	env: AggregateEnv,
 	gameIds: string[],
@@ -537,7 +584,6 @@ async function loadSaveDates(
 	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
 			`SELECT substr(g.save_date, 1, 10) AS date,
-			        CAST(strftime('%w', g.save_date) AS INTEGER) AS weekday,
 			        g.game_id AS game_id,
 			        g.game_name AS game_name,
 			        g.display_name AS display_name,
@@ -558,10 +604,74 @@ async function loadSaveDates(
 	return out;
 }
 
+// Rows the opening-laws chart can reach: openingLawsOption
+// (src/lib/stats/charts/laws.ts) ranks and takes the top 15 in both its
+// per-nation and its "All nations" reading. Kept in sync by eye, like
+// ALL_NATIONS — no module is shared across the worker/frontend boundary.
+export const OPENING_LAWS_TOP_N = 15;
+
+type OpeningLawRow = ChartBundleCore["openingLaws"][number];
+
+// Bound `openingLaws` to what the chart can show. It is the one bundle field
+// sized by the corpus rather than by the turn axis — distinct (nation,
+// four-law-set) rows grew 139 → 270 → 469 across 143, 286 and 572 public games,
+// two thirds of them singletons — so left alone it is what makes the bundle
+// scale with game count.
+//
+// Not a per-nation slice(), because the "All nations" view sums a set's counts
+// across nations *before* ranking: a row outside its own nation's top N can
+// still place in the aggregate. Keeping the input to both readings — every
+// nation's own top N, plus every row of a set that places in the top N once
+// summed — leaves both rendering what they would render unbounded, save for
+// rows tied at the cut.
+//
+// Exported for unit tests.
+export function boundOpeningLaws(rows: OpeningLawRow[]): OpeningLawRow[] {
+	const setKey = (r: OpeningLawRow) => r.laws.join("|");
+	const rowKey = (r: OpeningLawRow) => `${r.nation}|${setKey(r)}`;
+	// Ties are the common case at this tail, and D1 returns rows unordered, so
+	// the ranking breaks ties on the law set — otherwise which rows survive the
+	// cut would vary from one build of the same corpus to the next.
+	const byCount = (a: OpeningLawRow, b: OpeningLawRow) =>
+		b.count - a.count || setKey(a).localeCompare(setKey(b));
+
+	const keep = new Set<string>();
+
+	const byNation = new Map<string, OpeningLawRow[]>();
+	for (const row of rows) {
+		const forNation = byNation.get(row.nation) ?? [];
+		forNation.push(row);
+		byNation.set(row.nation, forNation);
+	}
+	for (const forNation of byNation.values())
+		for (const row of forNation.sort(byCount).slice(0, OPENING_LAWS_TOP_N))
+			keep.add(rowKey(row));
+
+	// Every nation's row for a top set, not just the ones that got it there:
+	// the aggregate view's count for a set is that whole sum.
+	const summed = new Map<string, number>();
+	for (const row of rows)
+		summed.set(setKey(row), (summed.get(setKey(row)) ?? 0) + row.count);
+	const topSets = new Set(
+		[...summed]
+			.sort(([ka, a], [kb, b]) => b - a || ka.localeCompare(kb))
+			.slice(0, OPENING_LAWS_TOP_N)
+			.map(([k]) => k),
+	);
+	for (const row of rows) if (topSets.has(setKey(row))) keep.add(rowKey(row));
+
+	// Source order: row order is not part of the field's contract, and every
+	// consumer re-ranks.
+	return rows.filter((row) => keep.has(rowKey(row)));
+}
+
 // focal "uploader" → the full user ChartBundle (core + Overview extension).
 // focal "humans" → the tournament ChartBundleCore, with the one-focal-per-game
 // Overview fields (win_rate/games_with_outcome, summary.top_nation/top_archetype)
-// excluded by the return type, not nulled at runtime.
+// excluded by the return type, not nulled at runtime. Either mode narrows
+// further to corpus.focalNations when the corpus carries one; the per-game
+// facts (meta.game_count, summary.total_games, avg_total_turns) stay the
+// corpus's own and don't move with it.
 export function buildChartBundle(
 	env: AggregateEnv,
 	corpus: StatsCorpus,
@@ -590,8 +700,14 @@ export async function buildChartBundle(
 					top_archetype: null,
 					win_rate: null,
 					games_with_outcome: 0,
+					save_dates: [],
 				});
 	}
+
+	// A faceted global corpus restricts the focal set to its nations' seats;
+	// empty and absent read alike, so no caller can express "restricted to
+	// nothing".
+	const focalNations = corpus.focalNations?.length ? corpus.focalNations : null;
 
 	const [
 		baseRows,
@@ -604,16 +720,18 @@ export async function buildChartBundle(
 		saveDateRows,
 	] = await Promise.all([
 		loadBaseRows(env, corpus.gameIds),
-		loadYieldCurves(env, corpus.gameIds, focal),
+		loadYieldCurves(env, corpus.gameIds, focal, focalNations),
 		loadTechEvents(env, corpus.gameIds),
 		loadLawEvents(env, corpus.gameIds),
 		loadWonderEvents(env, corpus.gameIds),
 		loadWonderPool(env, corpus.gameIds),
 		loadFamilyCities(env, corpus.gameIds),
-		loadSaveDates(env, corpus.gameIds),
+		focal === "uploader"
+			? loadSaveDates(env, corpus.gameIds)
+			: Promise.resolve<SaveDateRow[]>([]),
 	]);
 
-	const selfMembership = buildSelfMembership(baseRows, focal);
+	const selfMembership = buildSelfMembership(baseRows, focal, focalNations);
 	const selfRows = baseRows.filter((r) =>
 		selfMembership.has(`${r.game_id}|${r.player_index}`),
 	);
@@ -677,7 +795,8 @@ export async function buildChartBundle(
 		.map(([nation, games_played]) => ({ nation, games_played }))
 		.sort((a, b) => b.games_played - a.games_played);
 
-	// Calendar heatmap data + modal weekday.
+	// Calendar heatmap data. Empty on the all-humans path, where the loader
+	// above never ran and the field is off the returned type anyway.
 	const saveDates = saveDateRows.map((r) => ({
 		date: r.date,
 		nation: r.nation,
@@ -686,25 +805,6 @@ export async function buildChartBundle(
 		display_name: r.display_name,
 		total_turns: r.total_turns,
 	}));
-	const weekdayCount = new Map<number, number>();
-	for (const r of saveDateRows) {
-		if (r.weekday != null) {
-			weekdayCount.set(r.weekday, (weekdayCount.get(r.weekday) ?? 0) + 1);
-		}
-	}
-	let favoriteDayOfWeek: number | null = null;
-	let favoriteDayCount = -1;
-	for (const [weekday, count] of weekdayCount) {
-		// Tiebreak on the lower weekday for a stable result, matching the
-		// old ORDER BY COUNT(*) DESC, weekday ASC.
-		if (
-			count > favoriteDayCount ||
-			(count === favoriteDayCount && weekday < (favoriteDayOfWeek ?? Infinity))
-		) {
-			favoriteDayCount = count;
-			favoriteDayOfWeek = weekday;
-		}
-	}
 
 	// --- Nation win rate / avg points ---------------------------------
 	const nationStats = new Map<
@@ -801,7 +901,14 @@ export async function buildChartBundle(
 	// 1. The pool. Old World enables only a subset of the wonders per game (a
 	//    base save disables 15 of 28), so the wonder has to be in that game's
 	//    pool. Blobs predating the parser that captures the pool have no rows in
-	//    it; they contribute no denominator rather than a wrong one.
+	//    it; they contribute no denominator rather than a wrong one. Gate 1 is
+	//    the one gate that also scopes the *numerator*: a corpus mixing pooled
+	//    and poolless games would otherwise divide every build it saw by the
+	//    eligibility only the pooled games could supply, and the chart reads the
+	//    two as one fraction ("Built in N of E games"). So a wonder that has a
+	//    denominator reports the builds from pooled games only, and a wonder
+	//    that has none (eligible: null) reports every build — each row's numbers
+	//    describe one population, named by whether `eligible` is null.
 	// 2. Culture. A wonder's only build requirement is a city at its
 	//    <CulturePrereq>, so the player has to have reached that level
 	//    (best_culture_level — see derive-player-summary.ts for what that
@@ -835,17 +942,25 @@ export async function buildChartBundle(
 		taken.add(w.wonder);
 		takenByNonHuman.set(w.game_id, taken);
 	}
-	const wonderTurns = new Map<string, number[]>();
-	const wonderWins = new Map<string, number>();
+	// Build turns and builder wins, tallied over the pooled subset and over
+	// every game. Which pair a wonder reports is decided below by whether it
+	// has a denominator; the two are never mixed within a row (gate 1).
+	const pooledTurns = new Map<string, number[]>();
+	const pooledWins = new Map<string, number>();
+	const allTurns = new Map<string, number[]>();
+	const allWins = new Map<string, number>();
 	for (const w of wonderEvents) {
 		if (w.is_human !== 1) continue;
 		if (!selfMembership.has(`${w.game_id}|${w.player_index}`)) continue;
-		const turns = wonderTurns.get(w.wonder) ?? [];
-		turns.push(w.turn);
-		wonderTurns.set(w.wonder, turns);
-		if (winnerRows.has(`${w.game_id}|${w.player_index}`)) {
-			wonderWins.set(w.wonder, (wonderWins.get(w.wonder) ?? 0) + 1);
-		}
+		const won = winnerRows.has(`${w.game_id}|${w.player_index}`);
+		const tally = (turns: Map<string, number[]>, wins: Map<string, number>) => {
+			const t = turns.get(w.wonder) ?? [];
+			t.push(w.turn);
+			turns.set(w.wonder, t);
+			if (won) wins.set(w.wonder, (wins.get(w.wonder) ?? 0) + 1);
+		};
+		tally(allTurns, allWins);
+		if (wonderPool.has(w.game_id)) tally(pooledTurns, pooledWins);
 	}
 	// Wonders we have pool coverage for at all — named by at least one focal
 	// row's game pool. Distinguishes "on the board, nobody qualified" (a real
@@ -876,16 +991,16 @@ export async function buildChartBundle(
 	}
 	// Every wonder someone could have built or did build, so an available one
 	// that nobody took still shows up with its zero.
-	const wonderKeys = new Set([
-		...eligibleByWonder.keys(),
-		...wonderTurns.keys(),
-	]);
+	const wonderKeys = new Set([...eligibleByWonder.keys(), ...allTurns.keys()]);
 	const wonderStats = [...wonderKeys].map((wonder) => {
-		const turns = (wonderTurns.get(wonder) ?? []).sort((a, b) => a - b);
-		const eligible = coveredWonders.has(wonder)
-			? (eligibleByWonder.get(wonder) ?? 0)
-			: null;
-		const wins = wonderWins.get(wonder) ?? 0;
+		// Covered ⇔ some pooled game accounted for this wonder ⇔ `eligible` is a
+		// number. That is exactly the condition for reporting the pooled builds.
+		const covered = coveredWonders.has(wonder);
+		const turns = ((covered ? pooledTurns : allTurns).get(wonder) ?? []).sort(
+			(a, b) => a - b,
+		);
+		const eligible = covered ? (eligibleByWonder.get(wonder) ?? 0) : null;
+		const wins = (covered ? pooledWins : allWins).get(wonder) ?? 0;
 		return {
 			wonder,
 			culture_prereq: WONDER_CULTURE_PREREQ[wonder] ?? null,
@@ -1031,7 +1146,13 @@ export async function buildChartBundle(
 		{ nation: string; law: string; turns: number[] }
 	>();
 	for (const e of civicLawEvents) {
-		const nation = nationByPlayer.get(`${e.game_id}|${e.player_index}`) ?? null;
+		const k = `${e.game_id}|${e.player_index}`;
+		// Focal seats only, as openingLaws below already does. A law event
+		// belongs to the player who enacted it, so an opponent's is not part of
+		// this corpus's timing however the corpus was drawn — and under a nation
+		// facet it is the Greek's law landing in a Rome bundle.
+		if (!selfMembership.has(k)) continue;
+		const nation = nationByPlayer.get(k) ?? null;
 		const buckets = nation ? [nation, ALL_NATIONS] : [ALL_NATIONS];
 		for (const n of buckets) {
 			const key = `${n}|${e.law}`;
@@ -1095,7 +1216,7 @@ export async function buildChartBundle(
 		existing.count += 1;
 		openingMap.set(key, existing);
 	}
-	const openingLaws = [...openingMap.values()];
+	const openingLaws = boundOpeningLaws([...openingMap.values()]);
 
 	// Tech: first tech per player + median timing per tech, each broken down by
 	// nation (the player's nation) with an extra ALL_NATIONS aggregate row so
@@ -1127,6 +1248,11 @@ export async function buildChartBundle(
 	>();
 	for (const e of researchedTechEvents) {
 		const k = `${e.game_id}|${e.player_index}`;
+		// Focal seats only — the same restriction lawTiming above applies, and
+		// for the same reason. Filtering here rather than at each consumer is
+		// what keeps techTiming and techFirst on one population: everything
+		// downstream of this loop is already focal.
+		if (!selfMembership.has(k)) continue;
 		pushTechTurn(nationByPlayer.get(k) ?? null, e.tech, e.turn);
 		const parr = techEventsByPlayer.get(k) ?? [];
 		parr.push({ tech: e.tech, turn: e.turn });
@@ -1151,7 +1277,6 @@ export async function buildChartBundle(
 		techFirstMap.set(key, e);
 	};
 	for (const [k, arr] of techEventsByPlayer) {
-		if (!selfMembership.has(k)) continue;
 		const first = arr.sort((a, b) => a.turn - b.turn)[0];
 		if (!first) continue;
 		const nation = nationByPlayer.get(k);
@@ -1189,8 +1314,6 @@ export async function buildChartBundle(
 			total_games: totalGames,
 			avg_total_turns: avgTotalTurns,
 		},
-		save_dates: saveDates,
-		favorite_day_of_week: favoriteDayOfWeek,
 		nations,
 		nationWinRate,
 		nationAvgPoints,
@@ -1214,6 +1337,7 @@ export async function buildChartBundle(
 		top_archetype: topArchetype,
 		win_rate: winRate,
 		games_with_outcome: gamesWithOutcome,
+		save_dates: saveDates,
 	});
 }
 
@@ -1227,6 +1351,7 @@ function withOverview(
 		top_archetype: ChartBundle["summary"]["top_archetype"];
 		win_rate: Nullable<number>;
 		games_with_outcome: number;
+		save_dates: ChartBundle["save_dates"];
 	},
 ): ChartBundle {
 	return {
@@ -1238,6 +1363,7 @@ function withOverview(
 		},
 		win_rate: overview.win_rate,
 		games_with_outcome: overview.games_with_outcome,
+		save_dates: overview.save_dates,
 	};
 }
 
@@ -1266,8 +1392,6 @@ function emptyCore(parserVersion: string): ChartBundleCore {
 			total_games: 0,
 			avg_total_turns: null,
 		},
-		save_dates: [],
-		favorite_day_of_week: null,
 		nations: [],
 		nationWinRate: [],
 		nationAvgPoints: [],

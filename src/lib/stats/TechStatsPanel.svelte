@@ -5,7 +5,7 @@
 
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import NationSelect from "./NationSelect.svelte";
-	import type { ChartBundle } from "./types";
+	import type { ChartBundleCore } from "./types";
 	import {
 		techNations,
 		techFirstOption,
@@ -13,7 +13,19 @@
 	} from "./charts/tech";
 	import { ALL_NATIONS } from "./charts/helpers";
 
-	let { bundle }: { bundle: ChartBundle } = $props();
+	// showNationSelect — false where the page owns a nation control of its own
+	// (/stats); the panel then renders the cross-nation aggregate, which is the
+	// only reading left once the page has chosen the nation. StatsView decides
+	// it and says why, and passes toolbarFlush on to that selector.
+	let {
+		bundle,
+		showNationSelect = true,
+		toolbarFlush = false,
+	}: {
+		bundle: ChartBundleCore;
+		showNationSelect?: boolean;
+		toolbarFlush?: boolean;
+	} = $props();
 
 	const nations = $derived(techNations(bundle));
 	// Selector options: the cross-nation aggregate first, then each nation.
@@ -40,7 +52,14 @@
 {#if bundle.techTiming.length === 0 && bundle.techFirst.length === 0}
 	<p class="p-8 text-center italic text-brown">No tech data available.</p>
 {:else}
-	<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
+	{#if showNationSelect}
+		<NationSelect
+			value={nation}
+			{options}
+			onChange={(v) => (chosen = v)}
+			{toolbarFlush}
+		/>
+	{/if}
 
 	<ChartContainer
 		option={techFirstOption(bundle, nation)}

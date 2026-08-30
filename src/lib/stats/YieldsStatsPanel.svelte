@@ -11,8 +11,21 @@
 
 	// ChartBundleCore, not ChartBundle: the panel only reads yieldCurves, so
 	// it renders on the tournament bundle too (which has no Overview fields).
-	let { bundle, countLabel }: { bundle: ChartBundleCore; countLabel?: string } =
-		$props();
+	//
+	// toolbarFlush pulls the sticky toolbar out of a container's px-4 so it
+	// lines up with the tab bar above. Only StatsView pads its tab content, so
+	// only it opts in; a caller that doesn't pad (the tournament stats page)
+	// leaves it off, or the bar hangs a rem left of both the tabs above it and
+	// the charts below.
+	let {
+		bundle,
+		countLabel,
+		toolbarFlush = false,
+	}: {
+		bundle: ChartBundleCore;
+		countLabel?: string;
+		toolbarFlush?: boolean;
+	} = $props();
 
 	let mode = $state<"rate" | "cumulative">("rate");
 	let showBand = $state(true);
@@ -43,7 +56,9 @@
 	<p class="p-8 text-center italic text-brown">No yield data available.</p>
 {:else}
 	<Toolbar.Root
-		class="sticky top-1 z-10 -ml-4 mb-4 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg"
+		class="sticky top-1 z-10 mb-4 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg {toolbarFlush
+			? '-ml-4'
+			: ''}"
 	>
 		<Toolbar.Group
 			type="single"

@@ -75,9 +75,11 @@ test-data/saves/*
 
 # Game asset reference checkout (XML, source, graphics) — read by
 # scripts/bake-improvements.ts at bake time. Local-only; not committed.
-# Bare name (not Reference/) so it also matches when Reference is a symlink
-# into the Steam install directory.
-Reference
+# No trailing slash, so it still matches when Reference is a symlink into
+# the Steam install directory. Leading slash anchors it to the repo root:
+# a slashless pattern matches any path component of that name, which with
+# core.ignorecase also caught our own tracked docs/reference/.
+/Reference
 
 # Python (from old experiments/demos)
 __pycache__/

@@ -6,7 +6,7 @@ Bracket / standings / match components for the tournament subsystem, consumed ma
 
 - **Reuse the existing helper — grep first, don't re-inline.** This directory already has one way to do most things:
   - Copy-to-clipboard: `copyToClipboard` from `$lib/utils/clipboard` (don't hand-roll a `$state` flag + `setTimeout` + "Copied!" swap per button).
-  - Series / nation colors: `getNationChartColor(nation, i)` and `getChartColor(i)` from `$lib/config` — never a `?? '#888888'` gray literal.
+  - Series colors: `getSeriesColor(i)` from `$lib/config` — one per row on a chart whose categories have to be told apart. Nation colors: `getNationChartColor(nation, i)`, which falls back to the `getChartColor(i)` ramp. Never a `?? '#888888'` gray literal.
   - Color + alpha: `toRgba(color, alpha)` from `$lib/utils/color` — don't add a third alpha mechanism.
   - Enum display: `formatEnum()` from `$lib/utils/formatting`.
   - URL sync: `goto(resolve(...))` — the app navigates this way everywhere; don't introduce shallow `replaceState`.

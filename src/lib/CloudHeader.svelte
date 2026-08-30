@@ -195,6 +195,21 @@
 					class="absolute right-0 z-50 mt-2 w-40 rounded border-2 border-black bg-blue-gray shadow-lg"
 				>
 					{#if user}
+						<!--
+							Global stats leads the signed-in branch: it's a destination rather
+							than an account action, and the divider keeps it read that way. It
+							sits inside the gate because /stats requires a session — the route
+							bounces an anonymous visitor to login, so offering the link to one
+							would be an invitation to a redirect.
+						-->
+						<a
+							href={resolve("/stats")}
+							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
+							onclick={closeMenu}
+						>
+							Global Stats
+						</a>
+						<div class="border-t border-black"></div>
 						<a
 							href={resolve("/account")}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"

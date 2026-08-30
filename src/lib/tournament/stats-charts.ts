@@ -5,9 +5,10 @@
 // the shared ChartContainer, reusing the chart theme + grid helpers.
 
 import type { ChartOption } from "$lib/echarts";
-import { CHART_THEME, getChartColor, getNationChartColor } from "$lib/config";
+import { CHART_THEME, getNationChartColor, getSeriesColor } from "$lib/config";
 import { toRgba } from "$lib/utils/color";
 import {
+	BAR_WIDTH,
 	COMMON_GRID,
 	crestAxisLabel,
 	fmtNation,
@@ -89,6 +90,12 @@ function avatarAxisLabel(
 // segment a muted (translucent) version of it. The caller selects, orders, and
 // filters the rows (combined cross-division ranking vs. per-division preview)
 // and preloads `avatarImages` (loadCircularAvatars, aligned to the rows).
+//
+// Colors come from SERIES_COLORS, not the warm CHART_COLORS ramp: this is a
+// row-per-person chart, so the palette's job is to keep the rows apart. A
+// division outruns any palette and wraps regardless, but eight colors reach
+// further than six before repeating, and the wrap lands on a contrasting hue
+// rather than on a near-twin of the row above.
 export function standingsOption(
 	rows: StandingRow[],
 	avatarImages?: (string | undefined)[],
@@ -130,18 +137,20 @@ export function standingsOption(
 				name: "Wins",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.wins,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 			{
 				name: "Losses",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.losses,
-					itemStyle: { color: toRgba(getChartColor(i), 0.35) },
+					itemStyle: { color: toRgba(getSeriesColor(i), 0.35) },
 				})),
 			},
 		],
@@ -150,7 +159,8 @@ export function standingsOption(
 
 // Caster leaderboard — horizontal bar of part-appearances per caster, most
 // active at top. The list arrives pre-sorted descending from the server; each
-// caster gets a distinct palette color. The caller preloads `avatarImages`
+// caster gets a distinct SERIES_COLORS entry, the same row-per-person palette
+// the standings bars use. The caller preloads `avatarImages`
 // (loadCircularAvatars, aligned to the leaderboard).
 export function casterLeaderboardOption(
 	leaderboard: CasterLeaderboardEntry[],
@@ -180,9 +190,10 @@ export function casterLeaderboardOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: leaderboard.map((c, i) => ({
 					value: c.appearances,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],
@@ -246,6 +257,7 @@ export function playerPicksOption(
 			name: fmtNation(nation),
 			type: "bar" as const,
 			stack: "picks",
+			barWidth: BAR_WIDTH,
 			data: players.map(
 				(p) => p.picks.find((pk) => pk.nation === nation)?.games ?? 0,
 			),

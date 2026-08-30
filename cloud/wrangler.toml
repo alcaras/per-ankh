@@ -126,12 +126,39 @@ binding = "SESSIONS_KV"
 id = "b7029ad65b8f410b84b4b55623b25e56"
 preview_id = "e4725d2a3a324ec98580f6d6cae1f209"
 
-# Nightly retention sweep over the D1 `events` table — see the `scheduled`
-# handler in src/index.ts and the per-event-type policy in src/retention.ts.
-# 03:47 UTC is off-peak for the player base and deliberately off the hour
-# boundary.
+# Cron triggers. Three jobs, dispatched by exact pattern in the `scheduled`
+# handler (src/index.ts) with no fallback — a pattern listed here and matched
+# by none of them there logs and does nothing.
+#
+#   47 3      the retention sweep over the D1 `events` table. Per-event-type
+#             policy in src/retention.ts, which also names the pattern
+#             (RETENTION_CRON).
+#   17 4..7   the public /stats bundle precompute, one pattern per composition
+#             slice (STATS_PRECOMPUTE_CRONS in src/stats/precompute.ts, which
+#             maps each to its slice). Four patterns rather than one because
+#             both the 1,000-query ceiling and the 128 MB isolate are charged
+#             per invocation, and the four slices together are ~856 queries —
+#             so a pattern each buys a fresh budget and a fresh isolate. The
+#             hourly spacing is load-bearing twice over: it keeps every one of
+#             them clear of the others, and an interval of an hour or more is
+#             what puts a cron on the 15-minute CPU tier instead of the
+#             30-second one.
+#   37 *      the /stats warm (STATS_WARM_CRON, same module). Rebuilds any of
+#             the four *unfaceted* bundles that is missing, and only those:
+#             the 52 nation bundles belong to the nightly patterns above,
+#             because all 56 in one invocation is ~856 queries against the
+#             1,000 ceiling while the four unfaceted are ~200. Both segments
+#             of the cache key are Worker-compiled, so a deploy is what
+#             orphans them, and hourly bounds the cold window to one interval
+#             rather than to the night's run. Conditional, so the steady state
+#             is four KV reads an hour instead of ~5,400 D1 queries a day
+#             overwriting entries that were already correct. Hourly and not
+#             tighter for the same CPU-tier reason as above.
+#
+# The five daily patterns are off-peak UTC for the player base and deliberately
+# off the hour boundary; the warm runs at :37, clear of both.
 [triggers]
-crons = ["47 3 * * *"]
+crons = ["47 3 * * *", "17 4 * * *", "17 5 * * *", "17 6 * * *", "17 7 * * *", "37 * * * *"]
 
 [vars]
 # === Cloud rewrite upload limits ===
@@ -179,6 +206,19 @@ TOURNAMENT_VIEW_PER_HOUR = "2400"
 TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
 TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 
+# === Public /stats read limit ===
+# Per-IP hourly ceiling on GET /v1/stats (the global chart bundle), on the same
+# lever and with the same override caveat as the three tournament ceilings
+# above. Its own budget rather than a share of anon_read, for the reason those
+# three are separate from each other: /stats and /games/* are different
+# populations, and a shared budget lets the busier one decide when the other
+# starts refusing.
+#
+# One read per page load, so 600 is 600 page loads an hour — the arithmetic
+# TOURNAMENT_LIST_VIEW_PER_HOUR does at the same number, not a number copied
+# across from it.
+GLOBAL_STATS_VIEW_PER_HOUR = "600"
+
 # === Cloud rewrite (/v1/auth/*, /v1/games/*) ===
 # CORS allowlist for new routes — comma-separated origins. Cookie-based
 # auth requires Access-Control-Allow-Credentials: true, which forbids the
@@ -219,9 +259,9 @@ SESSION_COOKIE_NAME = "session"
 #   - routes IS inherited — this block MUST declare its own routes. If it were
 #     removed, `wrangler deploy --env staging` would inherit the prod route and
 #     attach api.per-ankh.app to the staging worker.
-#   - triggers IS inherited — the empty [env.staging.triggers] below opts
-#     staging out of the nightly retention cron. Staging D1 is recloned from
-#     prod; an independent sweep there would skew prod/staging diffs.
+#   - triggers IS inherited — the [env.staging.triggers] block below replaces
+#     the inherited list wholesale, so staging runs the /stats precompute and
+#     not the retention sweep.
 #   - observability IS inherited, nested tables included — staging gets the
 #     same hot windows and exports to the same OTLP destinations (logs and
 #     traces alike) with no duplicate keys here. Exported records carry the
@@ -237,9 +277,13 @@ SESSION_COOKIE_NAME = "session"
 [env.staging]
 routes = [{ pattern = "api-staging.per-ankh.app", custom_domain = true }]
 
-# Opt out of the inherited nightly retention cron (see top-level comment).
+# Replaces the inherited list (see top-level comment). The /stats precompute
+# and warm both run here so the cron path is exercised before prod; the
+# retention sweep is left out because staging D1 is recloned from prod and an
+# independent sweep there would skew prod/staging diffs. Neither stats job has
+# that problem — both only read D1, and write to staging's own KV.
 [env.staging.triggers]
-crons = []
+crons = ["17 4 * * *", "17 5 * * *", "17 6 * * *", "17 7 * * *", "37 * * * *"]
 
 [[env.staging.r2_buckets]]
 binding = "SHARE_BUCKET"
@@ -281,6 +325,7 @@ GLOBAL_UPLOADS_PER_HOUR = "5000"
 TOURNAMENT_VIEW_PER_HOUR = "2400"
 TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
 TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
+GLOBAL_STATS_VIEW_PER_HOUR = "600"
 ALLOWED_ORIGINS = "https://staging.per-ankh.app"
 # Separate staging Discord OAuth app — paste its client ID:
 DISCORD_CLIENT_ID = "1512545079493922927"

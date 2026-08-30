@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Stats catalog renderer. Renders the ChartBundle as category subtabs
+	// Stats catalog renderer. Renders a ChartBundleCore as category subtabs
 	// (styled like the game-detail tabs); each category shows a single
 	// column of full-width ChartContainers, matching the game-detail chart
 	// UI (in-chart titles + fullscreen-expand). The active category lives
@@ -26,9 +26,30 @@
 	} from "./charts/leaders";
 	import { wonderOverviewOption } from "./charts/wonders";
 	import { expansionWinRateOption } from "./charts/cities";
-	import type { ChartBundle, StatsCategory } from "./types";
+	import type { ChartBundleCore, StatsCategory } from "./types";
 
-	let { bundle }: { bundle: ChartBundle } = $props();
+	// showNationSelect — whether the per-nation panels (Families, Laws, Tech)
+	// carry their own nation dropdown. /stats passes false: that page has a
+	// page-level nation facet over the whole bundle, so the panels' own
+	// dropdowns would be a second control for the same question. The profile
+	// stats tab has no such facet, so it keeps them — there they are the only
+	// way to read one nation at a time.
+	//
+	// countLabel — what one sample on the yields overlay is, which follows the
+	// focal mode the bundle was built in and so is the caller's to name. A
+	// uploader-focal bundle has one seat per game ("Games"); a humans-focal one
+	// has a seat per human player ("Players"), where a one-duel corpus counts 2.
+	// Forwarded to YieldsStatsPanel, which is where the tournament stats page
+	// passes its own.
+	let {
+		bundle,
+		showNationSelect = true,
+		countLabel,
+	}: {
+		bundle: ChartBundleCore;
+		showNationSelect?: boolean;
+		countLabel?: string;
+	} = $props();
 
 	// Group CHART_SPECS by category once at module init. Not reactive —
 	// a constant lookup over a static array.
@@ -130,13 +151,13 @@
 	{#each sections as section (section.id)}
 		<Tabs.Content value={section.id} class="px-4 pb-4">
 			{#if section.id === "yields"}
-				<YieldsStatsPanel {bundle} />
+				<YieldsStatsPanel {bundle} {countLabel} toolbarFlush />
 			{:else if section.id === "families"}
-				<FamilyStatsPanel {bundle} />
+				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "laws"}
-				<LawsStatsPanel {bundle} />
+				<LawsStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "tech"}
-				<TechStatsPanel {bundle} />
+				<TechStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else}
 				{#each section.specs as spec (spec.id)}
 					{#if spec.hasData(bundle)}

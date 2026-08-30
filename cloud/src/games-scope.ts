@@ -1,6 +1,6 @@
 // Shared "what's in scope" predicates over the games table.
 //
-// Two selections live here:
+// Three selections live here:
 //
 //   * buildUserScopeWhere — which of one user's saves a viewer sees. The
 //     Games tab (handleGameList) and the Stats/Overview ChartBundle
@@ -8,6 +8,10 @@
 //     aggregate numbers desync. Both query `FROM games`, so it builds the
 //     AND-fragments that follow a base `WHERE user_id = ?` clause using
 //     bare column names.
+//   * buildGlobalSliceWhere — which composition of game a public /stats
+//     slice covers. Composition only: the global corpus has no owner, so
+//     its is_public=1 visibility is the resolver's base clause, not the
+//     slice's.
 //   * buildAdminGameFilterWhere — which slice of the whole corpus an admin
 //     sweep acts on. Shared by both admin list endpoints.
 //
@@ -15,7 +19,7 @@
 // row presents it as one dropdown. Identity visibility (visitors only
 // ever see is_public=1) composes on top.
 
-import type { UserScope } from "./stats/types";
+import type { GlobalSlice, UserScope } from "./stats/types";
 
 export interface UserScopeOpts {
 	scope: UserScope;
@@ -92,6 +96,79 @@ export function parseScopeParam(raw: string | null): UserScope {
 	}
 	if (raw && /^\d+$/.test(raw)) return parseInt(raw, 10);
 	return "all";
+}
+
+// Parse a ?nation= query param into a nation zType, or null for "no nation
+// filter". A shape check, not a roster check: the worker bakes only the two
+// nations whose display name differs from their token (generated/nation-names.ts),
+// so there is nothing here to match a full roster against — and a token that
+// shapes right but names no nation selects nothing, which is the same answer
+// an unknown value would get.
+//
+// Shared by the Games tab's nation chip (handleGameList, filtering
+// games.user_nation) and the /stats nation facet (handleGlobalStats, narrowing
+// on player_summaries.nation). Both ask the same question of the same
+// vocabulary, so they ask it once.
+export function parseNationParam(raw: string | null): string | null {
+	if (!raw || raw.length > 64 || !/^[A-Z_]+$/.test(raw)) return null;
+	return raw;
+}
+
+// ---------- Global composition slices ----------
+//
+// The public /stats corpus is sliced by roster composition alone — no owner,
+// no collection, no visibility. The fragments below follow the same base
+// `WHERE` a global resolver opens with (`is_public = 1`), in the same bare-
+// column form buildUserScopeWhere returns.
+//
+// They count *players*, where the vs_ai/mp fragments above filter
+// `WHERE is_human = 1` and only then count. Each reading is right for its
+// surface: a 2-human, 4-AI save is multiplayer to the person who played it,
+// and it is not a duel — counting only its humans would call it one. So a
+// duel is `COUNT(*) = 2 AND SUM(is_human) = 2` — the same composition test
+// the `duel-event-titles` admin sweep applies. The two forms stay apart
+// deliberately; migrating the user page onto this vocabulary is issue #228.
+//
+// The three compositions do not partition the corpus: a game with 2 humans
+// and any AI is too few humans for FFA, too many for single-player and too
+// many players for a duel. That is why "all" applies no composition filter
+// rather than unioning the other three.
+const COMPOSITION_GAME_IDS_SQL: Record<Exclude<GlobalSlice, "all">, string> = {
+	duel: "SELECT game_id FROM player_summaries GROUP BY game_id HAVING COUNT(*) = 2 AND SUM(is_human) = 2",
+	ffa: "SELECT game_id FROM player_summaries GROUP BY game_id HAVING SUM(is_human) >= 3",
+	single_player:
+		"SELECT game_id FROM player_summaries GROUP BY game_id HAVING SUM(is_human) = 1",
+};
+
+// Returns the SQL fragment to append after the global corpus's base clause
+// (begins with " AND " when non-empty, else ""). No binds — every fragment is
+// constant SQL.
+export function buildGlobalSliceWhere(slice: GlobalSlice): string {
+	if (slice === "all") return "";
+	return ` AND game_id IN (${COMPOSITION_GAME_IDS_SQL[slice]})`;
+}
+
+// Parse the ?slice= query param into a GlobalSlice, the /stats sibling of
+// parseScopeParam above and deliberately as forgiving: a known value passes
+// through, anything else — a stale bookmark, a hand-edited URL, a slice this
+// version no longer has — falls back to the default rather than 400ing.
+//
+// The default is the duel slice, not "all". 94% of the public corpus is 1v1,
+// so the all-public numbers *are* the duel numbers; landing on the label that
+// describes the distribution beats landing on a superset whose name implies a
+// breadth it doesn't have.
+export const DEFAULT_GLOBAL_SLICE: GlobalSlice = "duel";
+
+export function parseSliceParam(raw: string | null): GlobalSlice {
+	if (
+		raw === "all" ||
+		raw === "duel" ||
+		raw === "ffa" ||
+		raw === "single_player"
+	) {
+		return raw;
+	}
+	return DEFAULT_GLOBAL_SLICE;
 }
 
 // ---------- Admin sweep filters ----------

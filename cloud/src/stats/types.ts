@@ -70,24 +70,6 @@ export interface ChartBundleCore {
 	// --- Summary -----------------------------------------------------
 	summary: ChartBundleSummaryCore;
 
-	// One entry per in-scope game with a save_date, for the calendar
-	// heatmap. nation falls back to the first human when user_nation is
-	// null (matching the games-list COALESCE). The id + title inputs let a
-	// calendar cell link through to the game page; the frontend titles each
-	// game with formatGameTitle (nation = save_owner_nation). Per-game, so it
-	// stays in the core (its final home on the tournament page is deferred).
-	save_dates: Array<{
-		date: string;
-		nation: string | null;
-		game_id: string;
-		game_name: string | null;
-		display_name: string | null;
-		total_turns: number;
-	}>;
-
-	// Modal weekday of save dates (0=Sunday..6=Saturday), or null.
-	favorite_day_of_week: Nullable<number>;
-
 	// Games played per nation (the focal players' picks), for the
 	// games-by-nation bar. Same buckets as nationWinRate.
 	nations: Array<{ nation: string; games_played: number }>;
@@ -300,6 +282,29 @@ export interface ChartBundle extends ChartBundleCore {
 	// ~50% by construction with a doubled game count).
 	win_rate: Nullable<number>;
 	games_with_outcome: number;
+
+	// One entry per in-scope game with a save_date, for the Overview tab's
+	// calendar heatmap. nation falls back to the first human when user_nation
+	// is null (matching the games-list COALESCE). The id + title inputs let a
+	// calendar cell link through to the game page; the frontend titles each
+	// game with formatGameTitle (nation = save_owner_nation).
+	//
+	// Per-game rather than per-focal-seat, so it would aggregate correctly over
+	// either focal set — it sits here because nothing outside the profile
+	// Overview tab renders it, not because the all-humans reading is wrong. A
+	// calendar of every save on the site is not a chart, and it is the one
+	// field whose size grows with the corpus rather than with the turn axis,
+	// which is what decided its home (global-stats design §8.1). The tournament
+	// page never rendered it either, which is the question tournament-stats
+	// design §6 left open.
+	save_dates: Array<{
+		date: string;
+		nation: string | null;
+		game_id: string;
+		game_name: string | null;
+		display_name: string | null;
+		total_turns: number;
+	}>;
 }
 
 // The single scope selection for the user corpus — one mutually-exclusive
@@ -314,6 +319,13 @@ export type UserScope =
 	| "mp"
 	| "tournament"
 	| number;
+
+// The single slice selection for the global corpus — one composition of the
+// player roster, the /stats sibling of UserScope's game-type buckets. "all" is
+// every public game rather than the union of the other three: a game with two
+// humans and any AI at all matches no composition, so it appears only there.
+// The predicates live in games-scope.ts.
+export type GlobalSlice = "all" | "duel" | "ffa" | "single_player";
 
 // Visibility scope for user corpus — owner sees private+public, others
 // see public only. Embedded in the cache key.

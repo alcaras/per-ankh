@@ -3,6 +3,10 @@
 
 import type { ChartOption } from "$lib/echarts";
 import { CHART_THEME } from "$lib/config";
+import {
+	MILITARY_POWER_COLOR,
+	YIELD_COLORS,
+} from "$lib/generated/yield-colors";
 import { formatEnum, nationName } from "$lib/utils/formatting";
 
 // Strip leaderless enum prefix for axis labels. The stats SQL returns
@@ -28,31 +32,49 @@ export function fmtLaw(value: string): string {
 	return formatEnum(value, "LAW_");
 }
 
-// Win/loss series colors. Copper for wins and a muted dark tone for losses —
-// on-theme with the warm palette and distinct from each other without reading
-// as a civ color. Shared by every chart that splits a series by outcome (the
-// nation win-rate bar, the yields winner/loser split) so the two cohorts mean
-// the same thing everywhere. (The tournament standings bar deliberately colors
-// per-player instead, so it doesn't use these.)
-export const WIN_COLOR = "#C87941";
-export const LOSS_COLOR = "#5a4d3f";
+// Win/loss series colors — Growth against the combat rating's red.
+//
+// Green against red, the split most readers already know how to read. Both
+// clear the contrast floor the yield bake enforces on the chart ground (5.23:1
+// and 4.57:1) and they hold 0.256 apart in OKLab.
+//
+// The cost is red-green color blindness, where hue is exactly what this pair
+// spends its distance on: 0.073 apart under deuteranopic simulation and 0.125
+// protanopic, against the 0.140 floor the palette holds elsewhere. What
+// carries the reading there is position and text, not hue — the stacked bars
+// put wins first and losses second in a fixed order, and every one of these
+// charts names the cohort in its tooltip ("Wins: n / games"). Legends are off
+// chart-wide (CHART_THEME.legend.show), so the tooltip is the whole of it.
+//
+// The loss tone has no YIELD_* token of its own: it is COLOR_RATING_COURAGE,
+// which the bake exports only under the name the Military Power series gave
+// it. On that one chart the same red is the pooled median in pooled mode and
+// the losers' line in split mode — never both at once, since color names the
+// yield only when there is no cohort to name.
+//
+// Shared by every chart that splits a series by outcome (the nation win-rate
+// bar, the leader and family bars, the yields winner/loser split) so the two
+// cohorts mean the same thing everywhere. The nation average-points bar colors
+// per nation and the tournament standings bar per player, so neither uses
+// these — in both, a row is only ever itself.
+export const WIN_COLOR = YIELD_COLORS.YIELD_GROWTH;
+export const LOSS_COLOR = MILITARY_POWER_COLOR;
 
-// Fills for a chart that buckets an outcome three ways rather than splitting it
-// two (the wonders bars). Blue, copper, rose: three hues far enough apart that
-// the buckets don't need shade to tell them apart, which the two-copper-plus-a-
-// pink arrangements this replaced never managed — copper and rose sit close on
-// the hue wheel, so a third fill between them halved an already-short arc. All
-// three hold the chroma and lightness of the app's warm chart palette and differ
-// from it only in hue, which is what lets them read as belonging while still
-// standing apart; the blue is a near-twin of RESOURCE_FISH in config/terrain.ts.
-// The rose is pulled as far toward the app's wine end as it can go — copper
-// against rose is the tightest pair, and at this hue it sits at ΔE 13.5
-// deuteranopic, 15.0 under normal vision, right on the floor of 15. Warming it
-// further collides with the copper. Kept here so the chart palette stays in one
-// file.
-export const OUTCOME_WON = "#4489c2";
-export const OUTCOME_MIXED = "#bd7d4c";
-export const OUTCOME_LOST = "#a44a60";
+// The middle fill for a chart that buckets an outcome three ways rather than
+// splitting it two (the wonders bars). The outer two buckets are WIN_COLOR and
+// LOSS_COLOR above: a bucket that means "mostly won" and a stack segment that
+// means "won" are the same claim, so they read in the same green and red
+// everywhere. Culture sits between them for the bucket that is neither.
+//
+// Culture clears the same contrast floor on the chart ground (5.53:1). The
+// three-way separation is tighter than the two-way pair it extends — 0.107 in
+// OKLab at the worst pair (Growth/Culture) against the 0.256 of green-to-red —
+// and under deuteranopic simulation the worst pair is still green-to-red at
+// 0.073. What carries the reading is the same thing that carries it on the
+// two-way charts: fixed order (won, mixed, lost, top to bottom) plus text —
+// here a legend the wonders chart turns on and a tooltip that spells the rate
+// out with its sample.
+export const OUTCOME_MIXED = YIELD_COLORS.YIELD_CULTURE;
 
 // The app's body-text tan (--color-tan, what `text-tan` renders), spelled as a
 // literal because ECharts options can't read a CSS variable.
@@ -78,6 +100,14 @@ export const COMMON_GRID = { left: 60, right: 30, top: 40, bottom: 60 };
 export function barChartHeight(rowCount: number): string {
 	return `${Math.max(rowCount, 1) * 34 + 90}px`;
 }
+
+// Bar thickness, as a share of the category band. ECharts' default leaves a
+// 20% category gap, so a bar fills ~80% of its band; 52% is 65% of that. The
+// band itself is untouched — the row pitch above and the grid margins stay
+// where they are, so slimming the marks never pulls the axis labels together.
+// Spread into every bar series here (all of them stacked or single, one mark
+// per category), so the whole catalog keeps one thickness.
+export const BAR_WIDTH = "52%";
 
 // Axis-title placement, mirroring the game-detail charts: the title sits
 // centered along the axis (x below it, y reading vertically beside it)
@@ -218,6 +248,7 @@ export function winLossStackedOption<R extends WinLossRow>(opts: {
 				name: "Wins",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: sorted.map((r) => r.wins),
 				itemStyle: { color: WIN_COLOR },
 			},
@@ -225,6 +256,7 @@ export function winLossStackedOption<R extends WinLossRow>(opts: {
 				name: "Losses",
 				type: "bar",
 				stack: "outcome",
+				barWidth: BAR_WIDTH,
 				data: sorted.map((r) => r.games - r.wins),
 				itemStyle: { color: LOSS_COLOR },
 				// Hung off the loss segment so it lands past the end of the whole

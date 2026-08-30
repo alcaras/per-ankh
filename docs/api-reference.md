@@ -13,6 +13,7 @@ This reference is drift-guarded: `cloud/src/routes-doc.test.ts` asserts it docum
 - [Games](#games----v1games) — `/v1/games/*`
 - [Collections](#collections----v1collections) — `/v1/collections`
 - [Users & profiles](#users--profiles) — `/v1/users/*` (public)
+- [Global stats](#global-stats----v1stats) — `/v1/stats`
 - [Account](#account) — `/v1/users/me/online-ids`, profile URL, settings
 - [Tournaments — reads](#tournaments--reads)
 - [Tournaments — lifecycle & configuration](#tournaments--lifecycle--configuration)
@@ -96,6 +97,7 @@ The three tournament read buckets are split by the *surface that spends them*, n
 | `tournament_view` | 2400 reads / hr per IP | the tournament page reads: detail, standings, bracket, rounds, matches, match detail, both stats endpoints, and the profile Tournaments tab. ~4 reads per page load (6 on stats), so ~600 page loads an hour. The ceiling is the `TOURNAMENT_VIEW_PER_HOUR` var, so it can be retuned mid-event with `wrangler secret put` instead of a redeploy — until the next deploy restores the `wrangler.toml` value |
 | `tournament_list_view` | 600 reads / hr per IP | `GET /v1/tournaments`. Its own budget, not `tournament_view`'s: the **home page** fetches the list on every render, so sharing would let ordinary landing-page traffic decide when `/tournaments/[slug]` starts refusing. Own ceiling var (`TOURNAMENT_LIST_VIEW_PER_HOUR`), retuned the same way |
 | `tournament_link_view` | 600 reads / hr per IP | `GET /v1/games/:id/tournament-link`. Its own budget for the same reason: every game-page render calls it, and sharing let a `/games/*` crawl 429 the tournament pages. Own ceiling var too (`TOURNAMENT_LINK_VIEW_PER_HOUR`) |
+| `global_stats_view` | 600 reads / hr per IP | `GET /v1/stats`. Per IP even though the endpoint requires a session, matching the other read budgets — the session is the door, this is the throughput. Its own budget rather than a share of `anon_read`: the two never overlap now that `/stats` is signed-in only, and pooling them would still tie `/stats`'s abuse ceiling to the cold-start ceiling, two knobs that want to move independently. One read per page load, so 600 is 600 page loads an hour. Own ceiling var (`GLOBAL_STATS_VIEW_PER_HOUR`), retuned like the tournament ones |
 | `tournament_export` | 30 / hr per user | `GET /v1/tournaments/:id/export` |
 | `tournament_admin` | 30 / hr per user | tournament admin mutations |
 | `tournament_schedule` | 60 / hr per user | match schedule + caster self-service |
@@ -340,7 +342,7 @@ User-corpus aggregate stats bundle.
 - **Auth:** Public (owner extras) — owner (`self`) corpus includes private games; visitor/anon forced to public.
 - **Path:** `user_id` (21-char).
 - **Query:** `scope` (default `all`; `public`|`vs_ai`|`mp`|`tournament`|`<collection_id>`; collection and `public` narrowing are owner-only).
-- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, wonder build/timing stats, yield curves, law/tech timing…) plus user-only `win_rate` and `games_with_outcome`.
+- **Response 200:** `ChartBundle` — `ChartBundleCore` (meta, summary, nations, win rates, starting-leader archetype/trait win rates, wonder build/timing stats, yield curves, law/tech timing…) plus the user-only extension: `win_rate`, `games_with_outcome`, `summary.top_nation`/`top_archetype`, and `save_dates` (the Overview calendar; user-only since bundle schema 9, along with the removal of `favorite_day_of_week` — the profile card's copy of that comes from `GET /v1/users/:user_id`, not here).
 - **Errors:** `400 INVALID_USER_ID`, `404 NOT_FOUND`.
 - **Notes:** KV-cached, keyed on `{ user_id, viewerScope, scope, parser_version }`.
 
@@ -383,6 +385,20 @@ The site-admin featured set (see [Site admin: featured videos](#site-admin-featu
 - **Auth:** Public — the same videos, and the same uploader identity, the creator strip and tournament playlists already serve to anyone. Outside the `anon_read` budget (no `429` here), like both sibling video feeds.
 - **Response 200:** `{ videos: FeaturedVideo[] }` — the same three-way uploader attribution as [`GET /v1/admin/featured-videos`](#get-v1adminfeatured-videos). Empty when nothing is featured.
 - **Notes:** Read straight from D1 — the set is a small curated table, not a platform fan-out, so there's no KV layer. Ordered `published_at DESC` (the video's own date, not when an admin starred it) and capped at 12, matching the strip. Edge-cached 60s (`s-maxage`), no browser cache, so a newly-starred video shows up on reload. Best-effort: a D1 failure answers an empty feed rather than 500-ing the home page.
+
+---
+
+## Global stats — `/v1/stats`
+
+### `GET /v1/stats`
+
+The chart bundle over the **whole public corpus** — the same catalog `GET /v1/users/:user_id/stats` renders for one library, run across everyone's public games.
+
+- **Auth:** Session. Not because the payload is viewer-dependent — it is not: `is_public = 1` is the whole visibility rule, and it already covers both "public because the uploader said so" and "public because it is a tournament game" (a tournament-linked upload is forced public), so every signed-in caller reads the same bytes. The session gates who may spend a whole-corpus aggregation, and it is checked before the rate limit, so a refused call spends no budget. Scraper User-Agents are exempt from the budget but not from the gate, so link-preview bots get `401` here.
+- **Query:** `slice` (default `duel`; `all`|`duel`|`ffa`|`single_player`) and `nation` (a nation zType, e.g. `NATION_ROME`; default none). Both parse forgivingly like `?scope=` elsewhere — an unknown slice falls back to the default and an unknown nation to no facet, so a stale bookmark degrades to a neighbouring view instead of `400`ing.
+- **Response 200:** `ChartBundleCore` — the same shape `GET /v1/tournaments/:id/stats/games` returns. No `win_rate` / `top_nation`: this corpus counts every human seat, where those fields assume one focal player per game and would read ~50% by construction. No `save_dates` either, for a different reason — a calendar of every save on the site is not a chart, and it was the one bundle field whose size grew with the corpus rather than with the turn axis.
+- **Errors:** `401 UNAUTHORIZED`, `429 RATE_LIMIT_GLOBAL_STATS`.
+- **Notes:** The slices are roster **compositions** — `duel` is exactly two players both human, `ffa` three or more humans, `single_player` exactly one — and they do **not** partition the corpus: a game with two humans and any AI matches none of them, so it appears only under `all`. A `nation` selection narrows twice, the games *and* the seats within them, so a Rome facet over a Rome-vs-Greece duel bands only the Roman's rows. KV-cached, keyed on `{ slice, nations, parser_version }`, with all 56 selections warmed nightly by cron (one pattern per slice). A miss computes in the request and never refuses; across a parser-version bump the previous entry is served stale while the new one rebuilds in the background, but never across a `BUNDLE_SCHEMA_VERSION` bump — that changes the bundle's shape. Edge-cached 60s (`s-maxage`), no browser cache.
 
 ---
 
@@ -468,7 +484,7 @@ Competition stats (standings + caster leaderboard + player picks).
 ### `GET /v1/tournaments/:id/stats/games`
 Aggregate game/chart stats over the tournament's completed matches.
 
-- **Response 200:** `ChartBundleCore` (same core fields as user stats, "humans" focal — every human player).
+- **Response 200:** `ChartBundleCore` (same core fields as user stats, "humans" focal — every human player; no `save_dates` or the other user-only Overview fields).
 - **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 - **Notes:** KV-cached, keyed on `{ tournament_id, updated_at, parser_version }`.
 

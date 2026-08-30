@@ -5,7 +5,13 @@
 // Configure via VITE_API_URL (see .env.example).
 
 import type { FullGameData } from "$lib/parser/types";
-import type { ChartBundle, ChartBundleCore, UserScope } from "$lib/stats/types";
+import { DEFAULT_GLOBAL_SLICE } from "$lib/stats/global-facets";
+import type {
+	ChartBundle,
+	ChartBundleCore,
+	GlobalSlice,
+	UserScope,
+} from "$lib/stats/types";
 
 const DEFAULT_API_BASE = "https://api.per-ankh.app/v1";
 const API_BASE = (import.meta.env.VITE_API_URL ?? DEFAULT_API_BASE) as string;
@@ -1019,6 +1025,29 @@ export const cloudApi = {
 				: "";
 		const res = await request(`/users/${userId}/stats${qs}`, opts);
 		return res.json() as Promise<ChartBundle>;
+	},
+
+	// Aggregate ChartBundleCore over the whole public corpus — feeds /stats.
+	// Session-gated — 401 without one, which is why this goes through the
+	// credentialed `request` rather than a bare fetch. The payload is still the
+	// same bytes for every viewer (which is what lets the Worker put an
+	// s-maxage on a cookie-gated response).
+	// The selection is a composition slice plus an optional nation; each is
+	// omitted at its default so the default view has one canonical URL, and
+	// so one edge-cache entry rather than several spellings of one bundle.
+	// Served from the nightly precompute in the steady state; a miss computes
+	// in the request, so a cold key is slower and never a failure.
+	getGlobalStats: async (
+		opts?: CallOpts & { slice?: GlobalSlice; nation?: string | null },
+	): Promise<ChartBundleCore> => {
+		const params = new URLSearchParams();
+		if (opts?.slice != null && opts.slice !== DEFAULT_GLOBAL_SLICE) {
+			params.set("slice", opts.slice);
+		}
+		if (opts?.nation) params.set("nation", opts.nation);
+		const qs = params.toString();
+		const res = await request(`/stats${qs ? `?${qs}` : ""}`, opts);
+		return res.json() as Promise<ChartBundleCore>;
 	},
 
 	// Anonymous discovery feed for the marketing home (/). Returns the 20

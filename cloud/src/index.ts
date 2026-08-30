@@ -8,8 +8,11 @@
 //
 // Storage: R2 for blobs, D1 for indices/users, KV for sessions+OAuth state.
 //
-// Besides `fetch`, the Worker exports a `scheduled` handler: the nightly
-// events-retention sweep (cron in wrangler.toml, policy in retention.ts).
+// Besides `fetch`, the Worker exports a `scheduled` handler running three
+// jobs, dispatched by cron pattern (crons in wrangler.toml): the nightly
+// events-retention sweep (policy in retention.ts), the public /stats bundle
+// precompute, one pattern per slice, and the hourly warm that rebuilds any
+// missing unfaceted /stats bundle (both in stats/precompute.ts).
 
 import {
 	adoptTrustedFrontend,
@@ -27,7 +30,7 @@ import {
 	runWithLogContext,
 	setRoute,
 } from "./log";
-import { sweepEvents, sweepSecurityEvents } from "./retention";
+import { RETENTION_CRON, sweepEvents, sweepSecurityEvents } from "./retention";
 import { emitSecurityEvent } from "./security-events";
 import type { SecurityEventsEnv } from "./security-events";
 import {
@@ -86,7 +89,15 @@ import {
 	handleTournamentWithdraw,
 	handleUncastMatchPart,
 } from "./tournament/player";
-import { handleUserStats } from "./stats/handlers";
+import { handleGlobalStats, handleUserStats } from "./stats/handlers";
+import type { GlobalStatsEnv } from "./stats/handlers";
+import {
+	STATS_PRECOMPUTE_CRONS,
+	STATS_WARM_CRON,
+	precomputeGlobalSlice,
+	warmGlobalSlices,
+} from "./stats/precompute";
+import { CURRENT_PARSER_VERSION } from "./schemas/game";
 import {
 	handlePublicUserSearch,
 	handleReleaseSlug,
@@ -148,6 +159,7 @@ interface Env
 		TournamentAdminEnv,
 		ChannelsEnv,
 		FeaturedVideosEnv,
+		GlobalStatsEnv,
 		SecurityEventsEnv,
 		TrustedFrontendEnv {
 	SHARE_BUCKET: R2Bucket;
@@ -884,6 +896,21 @@ const ROUTES: RouteSpec[] = [
 		route: "GET /v1/users/:user_id/tournaments",
 		handler: (r, e, m) => handleUserTournaments(m![1], r, e),
 	},
+	// The chart bundle over the whole public corpus — what /stats reads.
+	// Session-gated, and not because the payload is viewer-dependent: it isn't.
+	// is_public = 1 is the whole visibility rule, so every signed-in caller
+	// reads the same bytes. What the session gates is who may spend a
+	// whole-corpus aggregation, and it is checked ahead of the budget so a
+	// refused call spends none of it. ?slice= picks the roster composition,
+	// ?nation= facets it. Its own per-IP budget (GLOBAL_STATS_VIEW_PER_HOUR),
+	// not a share of anon_read. Passes ctx so a stale-served bundle can rebuild
+	// in the background.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/stats" },
+		route: "GET /v1/stats",
+		handler: (r, e, _m, c) => handleGlobalStats(r, e, c),
+	},
 	// Cross-creator home feed — newest uploads across all users' linked
 	// channels, merged newest-first for the home page's "Latest from creators"
 	// strip. One pre-assembled KV entry (SWR); passes ctx for background refresh.
@@ -1172,8 +1199,12 @@ export default {
 		});
 	},
 
-	// Not a dispatch path, so it never goes through `routeEnv` — the retention
-	// sweep is a DELETE and stays on the primary binding by construction.
+	// Not a dispatch path, so it never goes through `routeEnv`, and every job
+	// runs on the primary binding. That is automatic for the sweep, which is a
+	// DELETE, and deliberate for the read-only stats jobs: `routeEnv` is the
+	// only place allowed to derive a replica handle (d1.ts), and a cron with no
+	// client waiting on it has no latency budget worth a second replication
+	// policy for.
 	async scheduled(
 		controller: ScheduledController,
 		env: RawBindings,
@@ -1181,6 +1212,66 @@ export default {
 	): Promise<void> {
 		// No runWithLogContext: log.ts is safe without a request context
 		// (request_id logs as null, which is accurate for a cron run).
+		//
+		// Every job is matched by exact pattern and there is no fallback: an
+		// unrecognized cron logs and does nothing. A fall-through to the sweep
+		// would be the one shape that can't be allowed — staging declares the
+		// stats patterns and not the sweep's, so any drift between what is
+		// matched here and wrangler.toml would start deleting staging's events,
+		// which is exactly what keeping it off the cron protects.
+		const slice = STATS_PRECOMPUTE_CRONS[controller.cron];
+		if (slice !== undefined) {
+			logEvent("info", "stats_precompute_started", {
+				cron: controller.cron,
+				slice,
+			});
+			try {
+				const result = await precomputeGlobalSlice(
+					env,
+					slice,
+					CURRENT_PARSER_VERSION,
+				);
+				logEvent("info", "stats_precompute_completed", {
+					slice,
+					selections: result.selections,
+					games: result.games,
+				});
+			} catch (err) {
+				// Rethrown for the same reason the sweep's is: nothing awaits a
+				// cron, so the dashboard's run history is the only signal.
+				logError("stats_precompute_failed", err, { slice });
+				throw err;
+			}
+			return;
+		}
+
+		// The hourly warm, which covers all four unfaceted slices in one run and
+		// so has no row in the table above — see STATS_WARM_CRON for why it is a
+		// constant rather than a second table or a sentinel.
+		if (controller.cron === STATS_WARM_CRON) {
+			logEvent("info", "stats_warm_started", { cron: controller.cron });
+			try {
+				const result = await warmGlobalSlices(env, CURRENT_PARSER_VERSION);
+				logEvent("info", "stats_warm_completed", {
+					checked: result.checked,
+					// Empty on an ordinary pass; all four on the first run after a
+					// deploy that moved either version segment.
+					built: result.built,
+				});
+			} catch (err) {
+				// Rethrown for the same reason the other two are: nothing awaits a
+				// cron, so the dashboard's run history is the only signal.
+				logError("stats_warm_failed", err);
+				throw err;
+			}
+			return;
+		}
+
+		if (controller.cron !== RETENTION_CRON) {
+			logWarn("cron_unrecognized", { cron: controller.cron });
+			return;
+		}
+
 		logEvent("info", "retention_sweep_started", { cron: controller.cron });
 		try {
 			const result = await sweepEvents(env.SHARE_DB);

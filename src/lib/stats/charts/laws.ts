@@ -1,11 +1,12 @@
 // Laws tab option builders.
 
 import type { ChartOption } from "$lib/echarts";
-import { getChartColor } from "$lib/config";
-import type { ChartBundle } from "../types";
+import { getSeriesColor } from "$lib/config";
+import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	AXIS_NAME_X,
+	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
 	fmtLaw,
@@ -15,7 +16,7 @@ import {
 // Nations present in the law data, most-played first — drives the selector in
 // LawsStatsPanel (and its default, after the ALL_NATIONS entry). lawTiming has
 // the broadest coverage (any civic law), so derive from it.
-export function lawNations(bundle: ChartBundle): string[] {
+export function lawNations(bundle: ChartBundleCore): string[] {
 	const games = new Map(bundle.nationWinRate.map((r) => [r.nation, r.games]));
 	const set = new Set<string>();
 	for (const r of bundle.lawTiming)
@@ -24,7 +25,7 @@ export function lawNations(bundle: ChartBundle): string[] {
 }
 
 export function lawTimingOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
 ): ChartOption {
 	const rows = bundle.lawTiming
@@ -61,21 +62,38 @@ export function lawTimingOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.median_turn,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],
 	};
 }
 
+// The chart's title, shared with LawsStatsPanel so the in-chart title and the
+// container's fullscreen label can't drift apart.
+//
+// `nationInTitle` is false where the panel doesn't own the nation control
+// (/stats, which has a page-level facet). See familyNationPicksTitle for why
+// the nation is then not the panel's to name.
+export function openingLawsTitle(
+	nation: string,
+	nationInTitle: boolean,
+): string {
+	return nationInTitle
+		? `${nationLabel(nation)} opening law sequence`
+		: "Opening law sequence";
+}
+
 // For one nation: the most common order-insensitive four-law openings as
 // horizontal bars, most common at the top. The label is the four law names
 // joined with "+" (order dropped); the tooltip carries the sample size.
 export function openingLawsOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
+	nationInTitle: boolean,
 ): ChartOption {
 	const isAll = nation === ALL_NATIONS;
 	// "All nations": collapse the same four-law set across nations (order is
@@ -96,7 +114,7 @@ export function openingLawsOption(
 		...CHART_THEME,
 		title: {
 			...CHART_THEME.title,
-			text: `${nationLabel(nation)} opening law sequence`,
+			text: openingLawsTitle(nation, nationInTitle),
 		},
 		tooltip: {
 			...CHART_THEME.tooltip,
@@ -121,9 +139,10 @@ export function openingLawsOption(
 		series: [
 			{
 				type: "bar",
+				barWidth: BAR_WIDTH,
 				data: rows.map((r, i) => ({
 					value: r.count,
-					itemStyle: { color: getChartColor(i) },
+					itemStyle: { color: getSeriesColor(i) },
 				})),
 			},
 		],

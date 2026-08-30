@@ -1,12 +1,13 @@
 // Nations tab option builders.
 
+import { getNationChartColor } from "$lib/config";
 import type { ChartOption } from "$lib/echarts";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
-import type { ChartBundle, ChartBundleCore } from "../types";
+import type { ChartBundleCore } from "../types";
 import {
+	BAR_WIDTH,
 	CHART_THEME,
 	COMMON_GRID,
-	WIN_COLOR,
 	crestAxisLabel,
 	fmtNation,
 	winLossStackedOption,
@@ -37,7 +38,7 @@ export function nationWinLossStackedOption(
 
 // Average final points by nation — horizontal bar sorted by points, best
 // at top (mirrors the win-rate bar's orientation, no rotated labels).
-export function nationAvgPointsOption(bundle: ChartBundle): ChartOption {
+export function nationAvgPointsOption(bundle: ChartBundleCore): ChartOption {
 	const rows = [...bundle.nationAvgPoints].sort(
 		(a, b) => a.avg_points - b.avg_points,
 	);
@@ -72,9 +73,17 @@ export function nationAvgPointsOption(bundle: ChartBundle): ChartOption {
 		series: [
 			{
 				type: "bar",
-				// Copper, matching the Win rate chart's wins color.
-				data: rows.map((r) => Math.round(r.avg_points)),
-				itemStyle: { color: WIN_COLOR },
+				barWidth: BAR_WIDTH,
+				// Each bar in its own nation's color, the same one the crest
+				// beside it wears — the shared helper the game-detail and
+				// tournament charts use, so a nation looks the same everywhere.
+				// The win-rate bar above stays on WIN_COLOR / LOSS_COLOR: there
+				// color answers a different question, and this is the one chart
+				// on the tab where a row is only ever itself.
+				data: rows.map((r, i) => ({
+					value: Math.round(r.avg_points),
+					itemStyle: { color: getNationChartColor(r.nation, i) },
+				})),
 			},
 		],
 	};
