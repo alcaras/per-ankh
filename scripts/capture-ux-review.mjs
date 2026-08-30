@@ -106,6 +106,10 @@ const REDIRECT_ROUTES = [
 	{ route: "/auth/callback", note: "OAuth landing (not renderable)" },
 ];
 
+// The files emitted alongside shots/. Named so the pre-run clear can remove
+// exactly these and leave anything hand-authored in the directory alone.
+const GENERATED_FILES = ["manifest.json", "README.md", "index.html"];
+
 function slug(s) {
 	return String(s)
 		.toLowerCase()
@@ -875,7 +879,13 @@ async function mergeRecord(bpId, rec) {
 
 const browser = await chromium.launch({ headless: true });
 try {
-	await rm(OUT_DIR, { recursive: true, force: true });
+	// Clear only the files this script owns. docs/ux-review also holds
+	// hand-authored analysis (review.html) that a regeneration must not
+	// destroy, so the output dir itself is never removed.
+	await rm(SHOTS_DIR, { recursive: true, force: true });
+	for (const f of GENERATED_FILES) {
+		await rm(path.join(OUT_DIR, f), { force: true });
+	}
 	await mkdir(SHOTS_DIR, { recursive: true });
 
 	for (const bp of BREAKPOINTS) {
