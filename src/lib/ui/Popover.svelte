@@ -52,6 +52,34 @@
 		trigger?: Snippet<[{ props: Record<string, unknown> }]>;
 		children: Snippet;
 	} = $props();
+
+	// Focus return on close, minus the scroll jump. bits-ui restores focus to
+	// whatever was focused before the popover opened, calling `.focus()` with no
+	// `preventScroll` (focus-scope.svelte.js #handleCloseAutoFocus). When that
+	// element sits off-screen the browser drags its scroll container back to it
+	// — and because the close fires on pointerdown, the page moves mid-click and
+	// `click` never lands on the element you aimed at. On the tournament page
+	// that meant a second bracket cell opened nothing and snapped you back to
+	// the first (#231). We take the restore over: same element, scroll
+	// suppressed.
+	let preFocused: HTMLElement | null = null;
+
+	// Capture matches bits-ui's own: mount() registers the scope — snapshotting
+	// document.activeElement — then fires onOpenAutoFocus synchronously, moving
+	// focus only in a later frame. So activeElement here is still the element
+	// bits-ui memorized, and there is no second source of truth to drift.
+	function rememberPreFocus(): void {
+		const active = document.activeElement;
+		preFocused =
+			active instanceof HTMLElement && active !== document.body ? active : null;
+	}
+
+	function restorePreFocus(event: Event): void {
+		event.preventDefault();
+		const el = preFocused;
+		preFocused = null; // don't pin a detached node
+		if (el && document.contains(el)) el.focus({ preventScroll: true });
+	}
 </script>
 
 <Popover.Root bind:open {onOpenChange}>
@@ -68,6 +96,8 @@
 			{align}
 			{sideOffset}
 			{customAnchor}
+			onOpenAutoFocus={rememberPreFocus}
+			onCloseAutoFocus={restorePreFocus}
 			aria-label={ariaLabel}
 			class="z-50 max-h-[85vh] overflow-y-auto rounded-lg text-tan {frameClass} {contentClass}"
 		>
