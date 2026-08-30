@@ -3,15 +3,17 @@
 Everything needed to brief a redesign of `/` in one place.
 
 - **`brief.md`** — the design brief. Written from source rather than screenshots, against `main`. It carries the data contract, the render states, the design intent already encoded in the component, and the token ramp, so it stands on its own.
-- **`shots/`** — the home page as it renders today: 3 breakpoints × 2 auth passes × 3 feed states.
+- **the shots** — the home page as it renders today: 3 breakpoints × 2 auth passes × 3 feed states, in [`../ux-review/shots/`](../ux-review/shots/).
 
 ## The shots
 
+They live in the UX-review bundle rather than beside this README, so there is one copy and no step to repeat after a capture: `./per-ankh ux-review` refreshes them in place. Paths below are relative to this file.
+
 | File | State |
 | --- | --- |
-| `{anon,auth}__home__{desktop,tablet,mobile}.jpg` | Warm — every feed populated |
-| `{anon,auth}__home__cold-feed__{…}.jpg` | No videos anywhere: the video panels drop and the games feed widens to the full row, two-up |
-| `{anon,auth}__home__cold-start__{…}.jpg` | No videos and no public games: the feed shows its empty-state copy |
+| `../ux-review/shots/{anon,auth}__home__{desktop,tablet,mobile}.jpg` | Warm — every feed populated |
+| `../ux-review/shots/{anon,auth}__home__cold-feed__{…}.jpg` | No videos anywhere: the video panels drop and the games feed widens to the full row, two-up |
+| `../ux-review/shots/{anon,auth}__home__cold-start__{…}.jpg` | No videos and no public games: the feed shows its empty-state copy |
 
 Breakpoints are desktop 1440×900, tablet 768×1024, mobile 390×844.
 
@@ -23,4 +25,6 @@ The cold states cannot be reached by loading the page with a normal local databa
 
 ## Provenance
 
-Captured 2026-08-30 from a local dev server against local D1, via `npm run ux:review -- --game-id ig-lHvRp_8w-0Ik9d6lx_`. The content is development data, so the specific games, videos and names are not production; the layout, density and state behaviour are.
+Captured 2026-08-30 from a local dev server against local D1, via `./per-ankh ux-review --game-id ig-lHvRp_8w-0Ik9d6lx_`. The content is development data, so the specific games, videos and names are not production; the layout, density and state behaviour are.
+
+Home does not vary with the pinned game, so a later capture run — which picks its game at random — refreshes these shots without changing what they show. `../ux-review/README.md` records the game and date of whatever run produced the current set.
