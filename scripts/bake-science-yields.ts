@@ -74,6 +74,12 @@ interface Entry {
 	TechPrereq?: string;
 	LawClass?: string;
 	Specialist?: string;
+	// project.xml — the one-off Bonus a completed project pays, the umbrella
+	// CityProject the blob records the completion under, and the culture level
+	// the tier needs.
+	Bonus?: string;
+	CityProject?: string;
+	RequiresCulture?: string;
 	zIconName?: string;
 	iCost?: string;
 	iValue?: string;
@@ -84,6 +90,7 @@ interface Entry {
 	bNoDamage?: string;
 	bNoAssimilate?: string;
 	LeaderEffectPlayer?: string;
+	aiGlobalYields?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldOutput?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRate?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldModifier?: { Pair?: YieldPair | YieldPair[] };
@@ -124,6 +131,21 @@ function isProjectDefFile(name: string): boolean {
 
 async function loadProjects(infosDir: string): Promise<Entry[]> {
 	const files = (await readdir(infosDir)).filter(isProjectDefFile).sort();
+	const loaded = await Promise.all(
+		files.map((f) => loadEntries(resolve(infosDir, f))),
+	);
+	return loaded.flat();
+}
+
+// Bonus definitions: the base table plus the event bonuses, whose DLC
+// variants are hyphenated — the same shape the project files use, and the
+// event projects' bonuses live in them.
+function isBonusDefFile(name: string): boolean {
+	return name === "bonus.xml" || /^bonus-event(-.*)?\.xml$/.test(name);
+}
+
+async function loadBonuses(infosDir: string): Promise<Entry[]> {
+	const files = (await readdir(infosDir)).filter(isBonusDefFile).sort();
 	const loaded = await Promise.all(
 		files.map((f) => loadEntries(resolve(infosDir, f))),
 	);
@@ -188,6 +210,7 @@ async function main(): Promise<void> {
 		projects,
 		knowledges,
 		traits,
+		bonuses,
 	] = await Promise.all([
 		loadEntries(resolve(infosDir, "improvement.xml")),
 		loadEntries(resolve(infosDir, "improvementClass.xml")),
@@ -206,6 +229,7 @@ async function main(): Promise<void> {
 		loadProjects(infosDir),
 		loadEntries(resolve(infosDir, "knowledge.xml")),
 		loadEntries(resolve(infosDir, "trait.xml")),
+		loadBonuses(infosDir),
 	]);
 
 	const effectByType = new Map(effects.map((e) => [e.zType, e]));
@@ -469,6 +493,54 @@ async function main(): Promise<void> {
 		if (Object.keys(grants).length > 0) {
 			archetypeProjectScience[trait.zType] = grants;
 		}
+	}
+
+	// ─── One-off project science (Inquiries) ─────────────────────────────
+	//
+	// A few projects pay a LUMP of science on completion rather than a rate:
+	// project.xml <Bonus> → bonus.xml <aiGlobalYields> YIELD_SCIENCE, paid
+	// through Player.processYieldWhole (Player.cs:17199), which multiplies by
+	// YIELDS_MULTIPLIER — so unlike every other value in this file these are
+	// already WHOLE science and are NOT divided by 10.
+	//
+	// The Inquiry line is the one that matters: four repeatable tiers, each
+	// gated on the city's culture level and worth 40/80/120/160. A save
+	// records completions under the hidden umbrella <CityProject>
+	// (PROJECT_INQUIRY) with no tier and no turn, so the table keys by that
+	// umbrella and carries each tier's culture gate — enough to bound what a
+	// city's completions were worth.
+	const bonusScience = new Map<string, number>();
+	for (const b of bonuses) {
+		if (!b.zType) continue;
+		const science = yieldValue(pairs(b.aiGlobalYields), "YIELD_SCIENCE");
+		if (science > 0) bonusScience.set(b.zType, science);
+	}
+	const projectOneOffScience: Record<
+		string,
+		{ project: string; science: number; culture: string | null }[]
+	> = {};
+	for (const p of projects) {
+		if (!p.zType || !p.Bonus) continue;
+		const science = bonusScience.get(p.Bonus);
+		if (science == null) continue;
+		// Completions are recorded under the umbrella project when there is
+		// one, and under the project itself when there isn't.
+		const key = p.CityProject ?? p.zType;
+		(projectOneOffScience[key] ??= []).push({
+			project: p.zType,
+			science,
+			culture: p.RequiresCulture ?? null,
+		});
+	}
+	for (const tiers of Object.values(projectOneOffScience)) {
+		tiers.sort(
+			(a, b) => a.science - b.science || a.project.localeCompare(b.project),
+		);
+	}
+	if (projectOneOffScience["PROJECT_INQUIRY"] == null) {
+		throw new Error(
+			"bake-science-yields: no one-off science found for PROJECT_INQUIRY — the project/bonus shape changed",
+		);
 	}
 
 	// City HP a completed project adds (effectCity <iCityHP>), the denominator
@@ -936,6 +1008,31 @@ async function main(): Promise<void> {
 	lines.push("// was completed.");
 	lines.push(
 		`export const PROJECT_CITY_HP: Readonly<Record<string, number>> = ${JSON.stringify(sorted(projectCityHp))};`,
+	);
+	lines.push("");
+	lines.push(
+		"// City project → the tiers that pay a ONE-OFF lump of science when",
+	);
+	lines.push(
+		"// completed, cheapest first. Keyed by the umbrella <CityProject> the",
+	);
+	lines.push(
+		"// save records completions under (PROJECT_INQUIRY), because a blob",
+	);
+	lines.push(
+		"// carries neither the tier nor the turn — only how many a city ran.",
+	);
+	lines.push(
+		"// `culture` is the tier's RequiresCulture gate, which bounds what a",
+	);
+	lines.push(
+		"// given city's completions can have been worth. Values are WHOLE",
+	);
+	lines.push(
+		"// science, not the file's usual ÷10 (Player.processYieldWhole).",
+	);
+	lines.push(
+		`export const PROJECT_ONE_OFF_SCIENCE: Readonly<Record<string, readonly { readonly project: string; readonly science: number; readonly culture: string | null }[]>> = ${JSON.stringify(sorted(projectOneOffScience as unknown as Record<string, unknown>))};`,
 	);
 	lines.push("");
 	lines.push(

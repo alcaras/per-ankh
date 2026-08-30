@@ -605,6 +605,51 @@ export const PROJECT_CITY_HP: Readonly<Record<string, number>> = {
 	PROJECT_WALLS: 10,
 };
 
+// City project → the tiers that pay a ONE-OFF lump of science when
+// completed, cheapest first. Keyed by the umbrella <CityProject> the
+// save records completions under (PROJECT_INQUIRY), because a blob
+// carries neither the tier nor the turn — only how many a city ran.
+// `culture` is the tier's RequiresCulture gate, which bounds what a
+// given city's completions can have been worth. Values are WHOLE
+// science, not the file's usual ÷10 (Player.processYieldWhole).
+export const PROJECT_ONE_OFF_SCIENCE: Readonly<
+	Record<
+		string,
+		readonly {
+			readonly project: string;
+			readonly science: number;
+			readonly culture: string | null;
+		}[]
+	>
+> = {
+	PROJECT_ARCHIVE_1: [
+		{ project: "PROJECT_ARCHIVE_1", science: 10, culture: null },
+	],
+	PROJECT_ARCHIVE_2: [
+		{ project: "PROJECT_ARCHIVE_2", science: 20, culture: null },
+	],
+	PROJECT_ARCHIVE_3: [
+		{ project: "PROJECT_ARCHIVE_3", science: 30, culture: null },
+	],
+	PROJECT_ARCHIVE_4: [
+		{ project: "PROJECT_ARCHIVE_4", science: 40, culture: null },
+	],
+	PROJECT_INQUIRY: [
+		{ project: "PROJECT_INQUIRY_1", science: 40, culture: "CULTURE_WEAK" },
+		{
+			project: "PROJECT_INQUIRY_2",
+			science: 80,
+			culture: "CULTURE_DEVELOPING",
+		},
+		{ project: "PROJECT_INQUIRY_3", science: 120, culture: "CULTURE_STRONG" },
+		{
+			project: "PROJECT_INQUIRY_4",
+			science: 160,
+			culture: "CULTURE_LEGENDARY",
+		},
+	],
+};
+
 // ─── Knowledge tiers (Player.calculateKnowledgeOf) ──────────────────
 
 // knowledge.xml in file order. A player's knowledge OF another is
