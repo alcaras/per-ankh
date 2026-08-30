@@ -2,7 +2,7 @@
 
 import type { ChartOption } from "$lib/echarts";
 import { getChartColor } from "$lib/config";
-import type { ChartBundle } from "../types";
+import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	AXIS_NAME_X,
@@ -15,7 +15,7 @@ import {
 // Nations present in the law data, most-played first — drives the selector in
 // LawsStatsPanel (and its default, after the ALL_NATIONS entry). lawTiming has
 // the broadest coverage (any civic law), so derive from it.
-export function lawNations(bundle: ChartBundle): string[] {
+export function lawNations(bundle: ChartBundleCore): string[] {
 	const games = new Map(bundle.nationWinRate.map((r) => [r.nation, r.games]));
 	const set = new Set<string>();
 	for (const r of bundle.lawTiming)
@@ -24,7 +24,7 @@ export function lawNations(bundle: ChartBundle): string[] {
 }
 
 export function lawTimingOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
 ): ChartOption {
 	const rows = bundle.lawTiming
@@ -74,7 +74,7 @@ export function lawTimingOption(
 // horizontal bars, most common at the top. The label is the four law names
 // joined with "+" (order dropped); the tooltip carries the sample size.
 export function openingLawsOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
 ): ChartOption {
 	const isAll = nation === ALL_NATIONS;

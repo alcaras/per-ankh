@@ -5,7 +5,7 @@
 
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import NationSelect from "./NationSelect.svelte";
-	import type { ChartBundle } from "./types";
+	import type { ChartBundleCore } from "./types";
 	import {
 		techNations,
 		techFirstOption,
@@ -13,7 +13,7 @@
 	} from "./charts/tech";
 	import { ALL_NATIONS } from "./charts/helpers";
 
-	let { bundle }: { bundle: ChartBundle } = $props();
+	let { bundle }: { bundle: ChartBundleCore } = $props();
 
 	const nations = $derived(techNations(bundle));
 	// Selector options: the cross-nation aggregate first, then each nation.

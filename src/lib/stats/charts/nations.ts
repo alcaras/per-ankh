@@ -2,7 +2,7 @@
 
 import type { ChartOption } from "$lib/echarts";
 import { SPRITE_MANIFEST } from "$lib/generated/sprite-manifest";
-import type { ChartBundle, ChartBundleCore } from "../types";
+import type { ChartBundleCore } from "../types";
 import {
 	CHART_THEME,
 	COMMON_GRID,
@@ -37,7 +37,7 @@ export function nationWinLossStackedOption(
 
 // Average final points by nation — horizontal bar sorted by points, best
 // at top (mirrors the win-rate bar's orientation, no rotated labels).
-export function nationAvgPointsOption(bundle: ChartBundle): ChartOption {
+export function nationAvgPointsOption(bundle: ChartBundleCore): ChartOption {
 	const rows = [...bundle.nationAvgPoints].sort(
 		(a, b) => a.avg_points - b.avg_points,
 	);

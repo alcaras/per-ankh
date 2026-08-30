@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Stats catalog renderer. Renders the ChartBundle as category subtabs
+	// Stats catalog renderer. Renders a ChartBundleCore as category subtabs
 	// (styled like the game-detail tabs); each category shows a single
 	// column of full-width ChartContainers, matching the game-detail chart
 	// UI (in-chart titles + fullscreen-expand). The active category lives
@@ -26,9 +26,9 @@
 	} from "./charts/leaders";
 	import { wonderOverviewOption } from "./charts/wonders";
 	import { expansionWinRateOption } from "./charts/cities";
-	import type { ChartBundle, StatsCategory } from "./types";
+	import type { ChartBundleCore, StatsCategory } from "./types";
 
-	let { bundle }: { bundle: ChartBundle } = $props();
+	let { bundle }: { bundle: ChartBundleCore } = $props();
 
 	// Group CHART_SPECS by category once at module init. Not reactive —
 	// a constant lookup over a static array.

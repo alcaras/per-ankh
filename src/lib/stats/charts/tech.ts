@@ -5,7 +5,7 @@
 import type { ChartOption } from "$lib/echarts";
 import { getChartColor } from "$lib/config";
 import { TECH_NAMES } from "$lib/generated/tech-names";
-import type { ChartBundle } from "../types";
+import type { ChartBundleCore } from "../types";
 import {
 	ALL_NATIONS,
 	AXIS_NAME_X,
@@ -20,7 +20,7 @@ function techLabel(value: string): string {
 
 // Nations present in the tech data, most-played first — drives the selector
 // in TechStatsPanel (and its default, after the ALL_NATIONS entry).
-export function techNations(bundle: ChartBundle): string[] {
+export function techNations(bundle: ChartBundleCore): string[] {
 	const games = new Map(bundle.nationWinRate.map((r) => [r.nation, r.games]));
 	const set = new Set<string>();
 	for (const r of bundle.techTiming)
@@ -31,7 +31,7 @@ export function techNations(bundle: ChartBundle): string[] {
 }
 
 export function techFirstOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
 ): ChartOption {
 	const rows = bundle.techFirst
@@ -65,7 +65,7 @@ export function techFirstOption(
 }
 
 export function techTimingOption(
-	bundle: ChartBundle,
+	bundle: ChartBundleCore,
 	nation: string,
 ): ChartOption {
 	const rows = bundle.techTiming

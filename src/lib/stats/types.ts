@@ -211,18 +211,22 @@ export type StatsCategory =
 	| "cities"
 	| "tech";
 
+// A chart in the catalog. Its predicates take ChartBundleCore, not
+// ChartBundle: none of them reads an Overview field, so one registry serves
+// every corpus — a user library, a tournament, and the global slices — and a
+// ChartBundle still satisfies them.
 export interface ChartSpec {
 	id: string;
 	category: StatsCategory;
 	title: string;
 	subtitle?: string;
 	// True when the chart can be rendered. False → empty-state card.
-	hasData: (bundle: ChartBundle) => boolean;
+	hasData: (bundle: ChartBundleCore) => boolean;
 	// Empty-state copy when hasData is false. Falls back to a generic
 	// message if not provided.
-	emptyMessage?: (bundle: ChartBundle) => string;
+	emptyMessage?: (bundle: ChartBundleCore) => string;
 	// Container height override. Horizontal-bar charts with many categories
 	// need room to breathe — return a CSS height scaled to the row count.
 	// Falls back to the default 400px when absent.
-	height?: (bundle: ChartBundle) => string;
+	height?: (bundle: ChartBundleCore) => string;
 }

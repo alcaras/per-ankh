@@ -5,7 +5,7 @@
 
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import NationSelect from "./NationSelect.svelte";
-	import type { ChartBundle } from "./types";
+	import type { ChartBundleCore } from "./types";
 	import {
 		lawNations,
 		lawTimingOption,
@@ -13,7 +13,7 @@
 	} from "./charts/laws";
 	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
 
-	let { bundle }: { bundle: ChartBundle } = $props();
+	let { bundle }: { bundle: ChartBundleCore } = $props();
 
 	const nations = $derived(lawNations(bundle));
 	// Selector options: the cross-nation aggregate first, then each nation.
