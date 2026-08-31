@@ -1052,13 +1052,13 @@ export const cloudApi = {
 			period?: GlobalPeriod;
 		},
 	): Promise<ChartBundleCore> => {
+		// Each default drops its param, so the default view has one canonical
+		// URL and so one edge-cache entry.
 		const params = new URLSearchParams();
 		if (opts?.slice != null && opts.slice !== DEFAULT_GLOBAL_SLICE) {
 			params.set("slice", opts.slice);
 		}
 		if (opts?.nation) params.set("nation", opts.nation);
-		// Each default drops its param, so the default view has one canonical
-		// URL and so one edge-cache entry.
 		if (opts?.period != null && opts.period !== DEFAULT_GLOBAL_PERIOD) {
 			params.set("period", opts.period);
 		}

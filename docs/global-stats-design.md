@@ -55,7 +55,7 @@ Eight bundle fields are already nation-keyed (§4.3), so the unfaceted bundle pu
 
 ### 4.1 The selection space is precomputable
 
-13 playable nations in the public corpus, single-select, across 4 slices: **52 faceted bundles plus the 4 unfaceted slices, 56 in all.** Every one is precomputed nightly (§5).
+13 playable nations in the public corpus, single-select, across 4 slices: **52 faceted bundles plus the 4 unfaceted slices, 56 in all.** Every one is precomputed nightly (§5). This section is about the nation facet: the recency window (§4.4) is deliberately outside the precompute table, so "every selection" here means every all-time selection, and a narrowed window is served by the compute-on-miss path §5 keeps for exactly that reason.
 
 A faceted selection is a subset of its slice, so it costs `ceil(N/50) × 9` against its own smaller N rather than the slice's:
 

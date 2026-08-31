@@ -50,10 +50,14 @@ export function parseGlobalSlice(raw: string | null): GlobalSlice {
 		: DEFAULT_GLOBAL_SLICE;
 }
 
-// How recently the game was PLAYED, from games.save_date rather than from the
-// upload date: an old save uploaded last week is old-meta evidence whatever
-// its created_at says. Mirrors parsePeriodParam / DEFAULT_GLOBAL_PERIOD in
-// cloud/src/games-scope.ts, for the same reason the slice parse is mirrored.
+// The recency window: how recently the game was PLAYED, from games.save_date
+// rather than from the upload date — an old save uploaded last week is
+// old-meta evidence whatever its created_at says. Mirrors parsePeriodParam /
+// DEFAULT_GLOBAL_PERIOD in cloud/src/games-scope.ts, for the same reason the
+// slice parse is mirrored.
+//
+// A total map, like the slice labels above and for the same reason: adding a
+// window to GlobalPeriod is a type error here until it has a label.
 const GLOBAL_PERIOD_LABELS: Readonly<Record<GlobalPeriod, string>> = {
 	all: "All time",
 	"12m": "Last 12 months",
@@ -108,7 +112,7 @@ export function parseNationFacet(raw: string | null): string | null {
 export function globalSelectionLabel(
 	slice: GlobalSlice,
 	nation: string | null,
-	period: GlobalPeriod = DEFAULT_GLOBAL_PERIOD,
+	period: GlobalPeriod,
 ): string {
 	const parts = [globalSliceLabel(slice)];
 	if (nation !== null) parts.unshift(nationName(nation));
