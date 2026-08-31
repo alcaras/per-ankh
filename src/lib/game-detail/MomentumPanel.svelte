@@ -14,7 +14,7 @@
 	} from "$lib/config";
 	import Chart from "$lib/Chart.svelte";
 	import { formatEnum, stripMarkup } from "$lib/utils/formatting";
-	import type { MomentumCurve } from "./momentum";
+	import type { MomentumCurve, MomentumPoint } from "./momentum";
 	import type { DetailPlayer } from "./helpers";
 
 	let {
@@ -158,6 +158,7 @@
 	const leadPct = $derived(Math.round((aLeads ? pt.p : 1 - pt.p) * 100));
 
 	type BarRow = { dim: string; v: number };
+	type Bars = { pos: BarRow[]; neg: BarRow[]; max: number };
 
 	/** Display floor for a bar — below this a row is noise, not a story. */
 	const BAR_MIN = 0.03;
@@ -166,15 +167,7 @@
 
 	// Contributions flipped toward the named player, so positive always means
 	// "helped them"; split into helping and working-against.
-	function bars(
-		vals: number[],
-		towardA: boolean,
-		min: number,
-	): {
-		pos: BarRow[];
-		neg: BarRow[];
-		max: number;
-	} {
+	function bars(vals: number[], towardA: boolean, min: number): Bars {
 		const sgn = towardA ? 1 : -1;
 		const rows = curve.dims
 			.map((dim, j) => ({ dim, v: Math.round(vals[j] * sgn * 100) / 100 }))
@@ -186,22 +179,35 @@
 		};
 	}
 
-	const levelBars = $derived(bars(pt.lv, aLeads, BAR_MIN));
-	const delta = $derived(prev ? pt.p - prev.p : 0);
-	const deltaPts = $derived(Math.round(Math.abs(delta) * 100));
-	const gainerIsA = $derived(delta >= 0);
-	const gainer = $derived(gainerIsA ? a : b);
+	// Bar sets take a point and its predecessor and nothing else, so the code
+	// that renders the shown turn can also run over the whole curve when the
+	// panel reserves its height.
+	const levelBarsFor = (p: MomentumPoint): Bars =>
+		bars(p.lv, p.p >= 0.5, BAR_MIN);
+
 	// BAR_MIN is per-dimension while the header quotes their sum, so five
 	// dimensions each moving just under the floor still add to a move the
 	// header prints. When that happens, drop the floor rather than caption a
 	// non-zero header with "no dimension moved much" — the bars and the
 	// header describe the same number and must never disagree.
-	const changeBars = $derived.by(() => {
-		if (!prev) return null;
-		const shownBars = bars(pt.ch, gainerIsA, BAR_MIN);
+	function changeBarsFor(
+		p: MomentumPoint,
+		before: MomentumPoint | null,
+	): Bars | null {
+		if (!before) return null;
+		const towardA = p.p - before.p >= 0;
+		const shownBars = bars(p.ch, towardA, BAR_MIN);
 		if (shownBars.pos.length > 0 || shownBars.neg.length > 0) return shownBars;
-		return deltaPts > 0 ? bars(pt.ch, gainerIsA, BAR_MIN_ANY) : shownBars;
-	});
+		const movedPts = Math.round(Math.abs(p.p - before.p) * 100);
+		return movedPts > 0 ? bars(p.ch, towardA, BAR_MIN_ANY) : shownBars;
+	}
+
+	const levelBars = $derived(levelBarsFor(pt));
+	const delta = $derived(prev ? pt.p - prev.p : 0);
+	const deltaPts = $derived(Math.round(Math.abs(delta) * 100));
+	const gainerIsA = $derived(delta >= 0);
+	const gainer = $derived(gainerIsA ? a : b);
+	const changeBars = $derived(changeBarsFor(pt, prev));
 
 	// Key stats: each side's own numbers, leader-per-row coloured.
 	const STAT_ROWS: { label: string; index: number; dp: number }[] = [
@@ -213,15 +219,20 @@
 	const fmtStat = (v: number, dp: number): string =>
 		dp ? v.toFixed(1) : Math.round(v).toLocaleString("en-US");
 
+	type SummaryRow = { kind: string; who: string | null; text: string };
+
 	// Battles aren't in the event log — derive them the owglick way, from
 	// military-power drops across the window. Both sides bleeding hard is a
 	// trade (named for who lost less); one side collapsing alone is an army
 	// destroyed.
-	const battleEvents = $derived.by(() => {
-		if (!prev) return [];
-		const da = pt.sa[3] - prev.sa[3];
-		const db = pt.sb[3] - prev.sb[3];
-		const out: { kind: string; who: string | null; text: string }[] = [];
+	function battlesFor(
+		p: MomentumPoint,
+		before: MomentumPoint | null,
+	): SummaryRow[] {
+		if (!before) return [];
+		const da = p.sa[3] - before.sa[3];
+		const db = p.sb[3] - before.sb[3];
+		const out: SummaryRow[] = [];
 		const f = (v: number): string => `${v > 0 ? "+" : ""}${Math.round(v)}`;
 		if (da < -25 && db < -25) {
 			if (Math.abs(da - db) < 15) {
@@ -247,7 +258,7 @@
 			});
 		}
 		return out;
-	});
+	}
 
 	// Events logged in the window since the previous scored turn — data, not
 	// attribution.
@@ -265,26 +276,62 @@
 	// The turns these rows cover: everything after the previous scored point, up
 	// to this one. Adjacent points make that a single turn; a gap in the scored
 	// series (featsAt skips a turn when either side is missing power, orders or
-	// science) stretches it. The heading and the filter read the same bound, so
-	// they can never disagree about which turns are on screen.
-	const eventsFrom = $derived(prev ? prev.turn : pt.turn - 1);
-	const eventSpan = $derived(
-		eventsFrom < pt.turn - 1 ? `T${eventsFrom + 1}–T${pt.turn}` : `T${pt.turn}`,
-	);
-	const windowEvents = $derived.by(() =>
-		eventLogs
+	// science) stretches it.
+	function logRowsFor(
+		p: MomentumPoint,
+		before: MomentumPoint | null,
+	): SummaryRow[] {
+		const from = before ? before.turn : p.turn - 1;
+		return eventLogs
 			.filter(
-				(e) =>
-					e.turn > eventsFrom && e.turn <= pt.turn && KIND[e.log_type] != null,
+				(e) => e.turn > from && e.turn <= p.turn && KIND[e.log_type] != null,
 			)
 			.slice(0, 4)
 			.map((e) => ({
 				kind: KIND[e.log_type],
 				who: e.player_name as string | null,
 				text: stripMarkup(e.description) || formatEnum(e.log_type, ""),
-			})),
+			}));
+	}
+
+	const summaryFor = (
+		p: MomentumPoint,
+		before: MomentumPoint | null,
+	): SummaryRow[] => [...battlesFor(p, before), ...logRowsFor(p, before)];
+
+	const summaryRows = $derived(summaryFor(pt, prev));
+
+	// ─── Reserved height ──────────────────────────────────────────────
+	// The panel hangs off a hover target, so it must not resize as the pointer
+	// crosses the chart. Every row that varies turn to turn is one text line
+	// (py-0.5 + text-xs), so reserving the largest row count this game ever
+	// reaches pins the layout for the whole curve. The counts come from the same
+	// functions that render, so a reservation can never disagree with what lands
+	// in it.
+	const ROW_REM = 1.25;
+	const reserve = (rows: number): string => `min-height: ${rows * ROW_REM}rem;`;
+	const pointBefore = (i: number): MomentumPoint | null =>
+		i > 0 ? curve.points[i - 1] : null;
+
+	const maxBarRows = $derived.by(() =>
+		curve.points.reduce((most, p, i) => {
+			const lv = levelBarsFor(p);
+			// The "against …" caption between the two groups is a row of its own.
+			const lvRows =
+				lv.pos.length + lv.neg.length + (lv.neg.length > 0 ? 1 : 0);
+			const ch = changeBarsFor(p, pointBefore(i));
+			// An empty change set still prints "no dimension moved much".
+			const chRows = ch ? Math.max(ch.pos.length + ch.neg.length, 1) : 0;
+			return Math.max(most, lvRows, chRows);
+		}, 0),
 	);
-	const shownEvents = $derived([...battleEvents, ...windowEvents]);
+
+	const maxSummaryRows = $derived.by(() =>
+		curve.points.reduce(
+			(most, p, i) => Math.max(most, summaryFor(p, pointBefore(i)).length),
+			0,
+		),
+	);
 
 	const playerFor = (name: string | null): DetailPlayer | null =>
 		name === a.player_name || name === a.label
@@ -407,7 +454,7 @@
 							<div
 								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
 							>
-								At T… — the numbers
+								The numbers
 							</div>
 							<p class="text-xs leading-relaxed text-bright">
 								Each side's own figures at the shown turn — growth, orders and
@@ -454,7 +501,7 @@
 							<div
 								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
 							>
-								Events
+								Turn summary
 							</div>
 							<p class="text-xs leading-relaxed text-bright">
 								Battles are not in the save's event log, so they are read from
@@ -487,11 +534,6 @@
 						<div class="grid gap-4 md:grid-cols-3">
 							<!-- Key stats -->
 							<div>
-								<div
-									class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
-								>
-									At T{pt.turn}
-								</div>
 								<table class="w-full text-xs">
 									<thead>
 										<tr class="text-left">
@@ -538,26 +580,28 @@
 									>'s
 									{leadPct}%
 								</div>
-								{@render barRows(
-									levelBars.pos,
-									levelBars.max,
-									leader.color,
-									aLeads ? b.color : a.color,
-								)}
-								{#if levelBars.neg.length > 0}
-									<div class="mt-1 text-[10px] italic text-tan">
-										against {leader.label}
-									</div>
+								<div style={reserve(maxBarRows)}>
 									{@render barRows(
-										levelBars.neg,
+										levelBars.pos,
 										levelBars.max,
 										leader.color,
 										aLeads ? b.color : a.color,
 									)}
-								{/if}
+									{#if levelBars.neg.length > 0}
+										<div class="mt-1 text-[10px] italic text-tan">
+											against {leader.label}
+										</div>
+										{@render barRows(
+											levelBars.neg,
+											levelBars.max,
+											leader.color,
+											aLeads ? b.color : a.color,
+										)}
+									{/if}
+								</div>
 							</div>
 
-							<!-- Change + events -->
+							<!-- Change: the swing since the previous point -->
 							<div>
 								{#if changeBars && prev}
 									<div
@@ -567,47 +611,51 @@
 										<span style="color: {gainer.color};">{gainer.label}</span>
 										+{deltaPts} pts
 									</div>
-									{#if changeBars.pos.length === 0 && changeBars.neg.length === 0}
-										<div class="text-xs italic text-tan">
-											no dimension moved much
-										</div>
-									{:else}
-										{@render barRows(
-											changeBars.pos,
-											changeBars.max,
-											gainer.color,
-											gainerIsA ? b.color : a.color,
-										)}
-										{@render barRows(
-											changeBars.neg,
-											changeBars.max,
-											gainer.color,
-											gainerIsA ? b.color : a.color,
-										)}
-									{/if}
-								{/if}
-								{#if shownEvents.length > 0}
-									<div
-										class="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wide text-tan"
-									>
-										At {eventSpan}
+									<div style={reserve(maxBarRows)}>
+										{#if changeBars.pos.length === 0 && changeBars.neg.length === 0}
+											<div class="text-xs italic text-tan">
+												no dimension moved much
+											</div>
+										{:else}
+											{@render barRows(
+												changeBars.pos,
+												changeBars.max,
+												gainer.color,
+												gainerIsA ? b.color : a.color,
+											)}
+											{@render barRows(
+												changeBars.neg,
+												changeBars.max,
+												gainer.color,
+												gainerIsA ? b.color : a.color,
+											)}
+										{/if}
 									</div>
-									{#each shownEvents as ev, i (i)}
-										<div class="py-0.5 text-xs text-bright">
-											<span
-												class="mr-1 rounded-sm px-1 text-[9px] uppercase text-tan"
-												style="background-color: rgb(var(--color-surface));"
-												>{ev.kind}</span
-											>{#if ev.who}<b
-													style="color: {playerFor(ev.who)?.color ??
-														'inherit'};">{ev.who}</b
-												>{/if}
-											{ev.text.slice(0, 90)}
-										</div>
-									{/each}
 								{/if}
 							</div>
 						</div>
+						{#if maxSummaryRows > 0}
+							<div
+								class="mb-1 mt-3 text-[11px] font-bold uppercase tracking-wide text-tan"
+							>
+								Turn summary
+							</div>
+							<div style={reserve(maxSummaryRows)}>
+								{#each summaryRows as ev, i (i)}
+									<div class="py-0.5 text-xs text-bright">
+										<span
+											class="mr-1 rounded-sm px-1 text-[9px] uppercase text-tan"
+											style="background-color: rgb(var(--color-surface));"
+											>{ev.kind}</span
+										>{#if ev.who}<b
+												style="color: {playerFor(ev.who)?.color ?? 'inherit'};"
+												>{ev.who}</b
+											>{/if}
+										{ev.text.slice(0, 90)}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
