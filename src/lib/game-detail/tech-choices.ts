@@ -25,10 +25,9 @@
 import { NATION_STARTING_TECHS } from "$lib/generated/starting-techs";
 import type { PlayerTech } from "$lib/types/PlayerTech";
 import type { TechChoiceInfo } from "$lib/parser/types";
-import type { DetailPlayer } from "./helpers";
 
 /** How a player came to hold one tech. */
-export type TechOrigin = "drafted" | "starting" | "granted";
+type TechOrigin = "drafted" | "starting" | "granted";
 
 export type TechChoiceRow = {
 	tech: string;
@@ -37,13 +36,6 @@ export type TechChoiceRow = {
 	alternates: string[];
 	// The turn the tech completed, when the blob knows it.
 	turn: number | null;
-};
-
-export type PlayerTechChoices = {
-	player: DetailPlayer;
-	rows: TechChoiceRow[];
-	drafted: number;
-	granted: number;
 };
 
 /**
