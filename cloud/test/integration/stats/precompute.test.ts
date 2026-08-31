@@ -186,7 +186,10 @@ describe("precomputeGlobalSlice", () => {
 // find. Built through the real path rather than hand-written, so what
 // serve-stale hands back is a bundle and not a stand-in shaped like one.
 const cacheStaleFfaRome = async (): Promise<ChartBundleCore> => {
-	const corpus = await resolveGlobalCorpus(env, "ffa", { nations: [ROME] });
+	const corpus = await resolveGlobalCorpus(env, "ffa", {
+		nations: [ROME],
+		period: "all",
+	});
 	const bundle = (await buildChartBundle(
 		env,
 		corpus,
