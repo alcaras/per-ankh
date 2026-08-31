@@ -4,6 +4,7 @@
 	// and the 50% midline filled in whoever-leads' colour, and the numbers for
 	// the hovered turn in a stable panel below the chart — hover explores,
 	// click pins. No tooltip, no commentary: the panel is the data.
+	import { fade } from "svelte/transition";
 	import type { ChartOption, ECharts } from "$lib/echarts";
 	import type { EventLog } from "$lib/types/EventLog";
 	import {
@@ -28,6 +29,11 @@
 		b: DetailPlayer;
 		eventLogs?: EventLog[];
 	} = $props();
+
+	// The card has two sides — the chart and the notes on how it's computed —
+	// switched by the corner icon and crossfaded in place, the same way the
+	// tournament page switches bracket and standings.
+	let side = $state<"chart" | "about">("chart");
 
 	// Hover explores, click pins; the panel always shows *some* turn, so it
 	// starts pinned on the last point (the finished position).
@@ -313,140 +319,313 @@
 {/snippet}
 
 <div
-	class="rounded-lg p-4"
+	class="relative rounded-lg p-4"
 	style="background-color: rgb(var(--color-surface));"
 >
-	<Chart option={chartOption} height="280px" onReady={wireChart} />
-
-	<!-- Detail for the hovered / pinned turn -->
-	<div
-		class="mt-2 rounded-md border border-border-subtle p-3"
-		style="background-color: rgb(var(--color-surface-sunken));"
+	<button
+		type="button"
+		onclick={() => (side = side === "about" ? "chart" : "about")}
+		class="absolute right-3 top-3 z-10 cursor-pointer p-1.5 text-tan transition-colors hover:text-white"
+		aria-label={side === "about"
+			? "Back to the chart"
+			: "How momentum is calculated"}
 	>
-		<div class="mb-2 flex items-baseline gap-3 text-sm">
-			<b class="text-white">T{pt.turn}</b>
-			<span class="font-bold" style="color: {leader.color};"
-				>{leader.label} {leadPct}%</span
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			class="block h-4 w-4"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke="currentColor"
+			stroke-width="2"
+			aria-hidden="true"
+		>
+			<path
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				d={side === "about"
+					? "M6 18L18 6M6 6l12 12"
+					: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"}
+			/>
+		</svg>
+	</button>
+
+	<div class="view-stack">
+		{#key side}
+			<div
+				class="view-pane"
+				in:fade={{ duration: 200 }}
+				out:fade={{ duration: 200 }}
 			>
-		</div>
-
-		<div class="grid gap-4 md:grid-cols-3">
-			<!-- Key stats -->
-			<div>
-				<div
-					class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
-				>
-					At T{pt.turn}
-				</div>
-				<table class="w-full text-xs">
-					<thead>
-						<tr class="text-left">
-							<th></th>
-							<th class="pb-1 font-semibold" style="color: {a.color};"
-								>{a.label}</th
+				{#if side === "about"}
+					<h3 class="mb-3 text-center text-xl font-bold text-white">
+						Momentum
+					</h3>
+					<div class="grid gap-x-6 gap-y-3 md:grid-cols-2">
+						<section>
+							<div
+								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
 							>
-							<th class="pb-1 font-semibold" style="color: {b.color};"
-								>{b.label}</th
+								The curve
+							</div>
+							<p class="text-xs leading-relaxed text-bright">
+								One point per turn: the model's probability that <b
+									style="color: {a.color};">{a.label}</b
+								>
+								was ahead, with the gap to the 50% midline filled in whoever leads
+								—
+								<b style="color: {a.color};">{a.label}</b>
+								above it, <b style="color: {b.color};">{b.label}</b> below. Hover
+								a turn to read it out below the chart, click to pin it. It is a retrospective
+								reading of a finished game, not a forecast: a turn is weighted by
+								how far through the match it falls, which needs the final turn to
+								be known.
+							</p>
+						</section>
+
+						<section>
+							<div
+								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
 							>
-						</tr>
-					</thead>
-					<tbody>
-						{#each STAT_ROWS as row (row.label)}
-							{@const va = pt.sa[row.index]}
-							{@const vb = pt.sb[row.index]}
-							<tr>
-								<td class="py-0.5 pr-2 text-tan">{row.label}</td>
-								<td
-									class="py-0.5 pr-2 tabular-nums"
-									style={va > vb ? `color: ${a.color}; font-weight: 700;` : ""}
-									>{fmtStat(va, row.dp)}</td
-								>
-								<td
-									class="py-0.5 tabular-nums"
-									style={vb > va ? `color: ${b.color}; font-weight: 700;` : ""}
-									>{fmtStat(vb, row.dp)}</td
-								>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
+								What is scored
+							</div>
+							<p class="text-xs leading-relaxed text-bright">
+								Five differences between the two players at each turn: growth,
+								orders and science (yield rates); eco — which side has the
+								higher rate for money, food, iron, stone and wood, ±1 apiece;
+								and military, the power gap relative to the two sides' average
+								power, since absolute power grows many times over across a
+								match. Each difference is divided by how far apart duellists
+								typically are at that turn, multiplied by a fitted weight and
+								summed into log-odds, which the logistic curve turns into the
+								percentage. The weights are fitted separately for successive
+								stages of a game and interpolated between them, so the same lead
+								is worth different amounts at T20 and at T80.
+							</p>
+						</section>
 
-			<!-- Level: what's behind the lead -->
-			<div>
-				<div
-					class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
-				>
-					Behind <span style="color: {leader.color};">{leader.label}</span>'s
-					{leadPct}%
-				</div>
-				{@render barRows(
-					levelBars.pos,
-					levelBars.max,
-					leader.color,
-					aLeads ? b.color : a.color,
-				)}
-				{#if levelBars.neg.length > 0}
-					<div class="mt-1 text-[10px] italic text-tan">
-						against {leader.label}
-					</div>
-					{@render barRows(
-						levelBars.neg,
-						levelBars.max,
-						leader.color,
-						aLeads ? b.color : a.color,
-					)}
-				{/if}
-			</div>
+						<section>
+							<div
+								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+							>
+								At T… — the numbers
+							</div>
+							<p class="text-xs leading-relaxed text-bright">
+								Each side's own figures at the shown turn — growth, orders and
+								science yield rates, and military power — with the higher of the
+								pair in that player's colour. The model reads only the
+								difference between the two; these are here raw so the arithmetic
+								can be checked against the game.
+							</p>
+						</section>
 
-			<!-- Change + events -->
-			<div>
-				{#if changeBars && prev}
-					<div
-						class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
-					>
-						T{prev.turn} → T{pt.turn}:
-						<span style="color: {gainer.color};">{gainer.label}</span>
-						+{deltaPts} pts
+						<section>
+							<div
+								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+							>
+								Behind the lead
+							</div>
+							<p class="text-xs leading-relaxed text-bright">
+								The current log-odds split by dimension — weight × standardised
+								lead, one bar each — signed so that a positive bar helps the
+								leader and the bars add up to the whole lead. Dimensions pulling
+								the other way are listed separately, under a heading naming the
+								leader they work against. A dimension worth less than 0.03 is
+								dropped as noise.
+							</p>
+						</section>
+
+						<section>
+							<div
+								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+							>
+								The swing
+							</div>
+							<p class="text-xs leading-relaxed text-bright">
+								The same split applied to the move since the previous scored
+								turn: the exact difference between the two turns' contributions,
+								so the bars always add up to the heading's swing, and positive
+								is toward whoever gained. A tied dimension contributes nothing;
+								a steady lead still drifts a little as the weights shift with
+								game progress.
+							</p>
+						</section>
+
+						<section>
+							<div
+								class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+							>
+								Events
+							</div>
+							<p class="text-xs leading-relaxed text-bright">
+								Battles are not in the save's event log, so they are read from
+								military power across the window: both sides losing more than 25
+								power is a trade, named for whoever lost less; one side alone
+								losing more than 60 is an army destroyed. The rest are logged
+								events — cities, wonders, laws, techs, religions, successions,
+								wars — for the turns since the previous scored point. A turn
+								missing either side's power, orders or science is not scored, so
+								that window can span several turns. They are context, not
+								causes: nothing here is attributed to the swing above.
+							</p>
+						</section>
 					</div>
-					{#if changeBars.pos.length === 0 && changeBars.neg.length === 0}
-						<div class="text-xs italic text-tan">no dimension moved much</div>
-					{:else}
-						{@render barRows(
-							changeBars.pos,
-							changeBars.max,
-							gainer.color,
-							gainerIsA ? b.color : a.color,
-						)}
-						{@render barRows(
-							changeBars.neg,
-							changeBars.max,
-							gainer.color,
-							gainerIsA ? b.color : a.color,
-						)}
-					{/if}
-				{/if}
-				{#if shownEvents.length > 0}
+				{:else}
+					<Chart option={chartOption} height="280px" onReady={wireChart} />
+
+					<!-- Detail for the hovered / pinned turn -->
 					<div
-						class="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wide text-tan"
+						class="mt-2 rounded-md border border-border-subtle p-3"
+						style="background-color: rgb(var(--color-surface-sunken));"
 					>
-						At {eventSpan}
-					</div>
-					{#each shownEvents as ev, i (i)}
-						<div class="py-0.5 text-xs text-bright">
-							<span
-								class="mr-1 rounded-sm px-1 text-[9px] uppercase text-tan"
-								style="background-color: rgb(var(--color-surface));"
-								>{ev.kind}</span
-							>{#if ev.who}<b
-									style="color: {playerFor(ev.who)?.color ?? 'inherit'};"
-									>{ev.who}</b
-								>{/if}
-							{ev.text.slice(0, 90)}
+						<div class="mb-2 flex items-baseline gap-3 text-sm">
+							<b class="text-white">T{pt.turn}</b>
+							<span class="font-bold" style="color: {leader.color};"
+								>{leader.label} {leadPct}%</span
+							>
 						</div>
-					{/each}
+
+						<div class="grid gap-4 md:grid-cols-3">
+							<!-- Key stats -->
+							<div>
+								<div
+									class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+								>
+									At T{pt.turn}
+								</div>
+								<table class="w-full text-xs">
+									<thead>
+										<tr class="text-left">
+											<th></th>
+											<th class="pb-1 font-semibold" style="color: {a.color};"
+												>{a.label}</th
+											>
+											<th class="pb-1 font-semibold" style="color: {b.color};"
+												>{b.label}</th
+											>
+										</tr>
+									</thead>
+									<tbody>
+										{#each STAT_ROWS as row (row.label)}
+											{@const va = pt.sa[row.index]}
+											{@const vb = pt.sb[row.index]}
+											<tr>
+												<td class="py-0.5 pr-2 text-tan">{row.label}</td>
+												<td
+													class="py-0.5 pr-2 tabular-nums"
+													style={va > vb
+														? `color: ${a.color}; font-weight: 700;`
+														: ""}>{fmtStat(va, row.dp)}</td
+												>
+												<td
+													class="py-0.5 tabular-nums"
+													style={vb > va
+														? `color: ${b.color}; font-weight: 700;`
+														: ""}>{fmtStat(vb, row.dp)}</td
+												>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+
+							<!-- Level: what's behind the lead -->
+							<div>
+								<div
+									class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+								>
+									Behind <span style="color: {leader.color};"
+										>{leader.label}</span
+									>'s
+									{leadPct}%
+								</div>
+								{@render barRows(
+									levelBars.pos,
+									levelBars.max,
+									leader.color,
+									aLeads ? b.color : a.color,
+								)}
+								{#if levelBars.neg.length > 0}
+									<div class="mt-1 text-[10px] italic text-tan">
+										against {leader.label}
+									</div>
+									{@render barRows(
+										levelBars.neg,
+										levelBars.max,
+										leader.color,
+										aLeads ? b.color : a.color,
+									)}
+								{/if}
+							</div>
+
+							<!-- Change + events -->
+							<div>
+								{#if changeBars && prev}
+									<div
+										class="mb-1 text-[11px] font-bold uppercase tracking-wide text-tan"
+									>
+										T{prev.turn} → T{pt.turn}:
+										<span style="color: {gainer.color};">{gainer.label}</span>
+										+{deltaPts} pts
+									</div>
+									{#if changeBars.pos.length === 0 && changeBars.neg.length === 0}
+										<div class="text-xs italic text-tan">
+											no dimension moved much
+										</div>
+									{:else}
+										{@render barRows(
+											changeBars.pos,
+											changeBars.max,
+											gainer.color,
+											gainerIsA ? b.color : a.color,
+										)}
+										{@render barRows(
+											changeBars.neg,
+											changeBars.max,
+											gainer.color,
+											gainerIsA ? b.color : a.color,
+										)}
+									{/if}
+								{/if}
+								{#if shownEvents.length > 0}
+									<div
+										class="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wide text-tan"
+									>
+										At {eventSpan}
+									</div>
+									{#each shownEvents as ev, i (i)}
+										<div class="py-0.5 text-xs text-bright">
+											<span
+												class="mr-1 rounded-sm px-1 text-[9px] uppercase text-tan"
+												style="background-color: rgb(var(--color-surface));"
+												>{ev.kind}</span
+											>{#if ev.who}<b
+													style="color: {playerFor(ev.who)?.color ??
+														'inherit'};">{ev.who}</b
+												>{/if}
+											{ev.text.slice(0, 90)}
+										</div>
+									{/each}
+								{/if}
+							</div>
+						</div>
+					</div>
 				{/if}
 			</div>
-		</div>
+		{/key}
 	</div>
 </div>
+
+<style>
+	/* Crossfade the two sides: both panes share one grid cell so the outgoing
+	   and incoming overlap in place — no transform, nothing shifts. Mirrors the
+	   tournament page's bracket/standings switch. */
+	.view-stack {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.view-stack > :global(.view-pane) {
+		grid-area: 1 / 1;
+		min-width: 0;
+	}
+</style>
