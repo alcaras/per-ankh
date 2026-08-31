@@ -27,6 +27,7 @@ import { displayNameSql } from "../identity";
 import { UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL } from "../online-ids";
 import {
 	parseNationParam,
+	parsePeriodParam,
 	parseScopeParam,
 	parseSliceParam,
 } from "../games-scope";
@@ -288,6 +289,7 @@ async function handleGlobalStatsPayload(
 	const url = new URL(request.url);
 	const slice = parseSliceParam(url.searchParams.get("slice"));
 	const nation = parseNationParam(url.searchParams.get("nation"));
+	const period = parsePeriodParam(url.searchParams.get("period"));
 	// The resolver and the cache key both take a set, even though the UI is
 	// single-select, so widening the facet to multi-select later costs the
 	// nightly precompute table rather than this call chain.
@@ -297,6 +299,7 @@ async function handleGlobalStatsPayload(
 		kind: "global" as const,
 		slice,
 		nations,
+		period,
 		parser_version: CURRENT_PARSER_VERSION,
 	};
 	const cached = await getCached<ChartBundleCore | RecordsBundle>(
@@ -323,9 +326,16 @@ async function handleGlobalStatsPayload(
 	// written under any parser version, so there is no stale entry to find. The
 	// cost is one D1 query ahead of a stale response, which already pays for the
 	// walk itself.
-	const corpus = await resolveGlobalCorpus(env, slice, { nations });
+	const corpus = await resolveGlobalCorpus(env, slice, { nations, period });
 	const build = () =>
-		buildGlobalSelection(env, slice, nations, CURRENT_PARSER_VERSION, corpus);
+		buildGlobalSelection(
+			env,
+			slice,
+			nations,
+			CURRENT_PARSER_VERSION,
+			corpus,
+			period,
+		);
 	const pick = (built: { bundle: ChartBundleCore; records: RecordsBundle }) =>
 		payload === "records" ? built.records : built.bundle;
 
@@ -347,6 +357,7 @@ async function handleGlobalStatsPayload(
 				logError("global_stats_refresh_failed", e, {
 					slice,
 					nation: nation ?? "",
+					period,
 				});
 			}),
 		);

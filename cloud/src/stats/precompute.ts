@@ -17,9 +17,15 @@ import { buildChartBundle } from "./aggregate";
 import type { AggregateEnv } from "./aggregate";
 import { getCached, putCached } from "./cache";
 import type { StatsCacheEnv } from "./cache";
+import { DEFAULT_GLOBAL_PERIOD } from "../games-scope";
 import { listGlobalSliceNations, resolveGlobalCorpus } from "./resolve";
 import type { ResolveEnv, StatsCorpus } from "./resolve";
-import type { ChartBundleCore, GlobalSlice, RecordsBundle } from "./types";
+import type {
+	ChartBundleCore,
+	GlobalPeriod,
+	GlobalSlice,
+	RecordsBundle,
+} from "./types";
 
 // Cron pattern → the slice that pattern precomputes.
 //
@@ -113,15 +119,17 @@ export async function buildGlobalSelection(
 	nations: string[],
 	parserVersion: string,
 	resolved?: StatsCorpus,
+	period: GlobalPeriod = DEFAULT_GLOBAL_PERIOD,
 ): Promise<{ bundle: ChartBundleCore; records: RecordsBundle }> {
 	const corpus =
-		resolved ?? (await resolveGlobalCorpus(env, slice, { nations }));
+		resolved ?? (await resolveGlobalCorpus(env, slice, { nations, period }));
 	const built = await buildChartBundle(env, corpus, parserVersion, "humans");
 	if (corpus.gameIds.length > 0) {
 		const key = {
 			kind: "global" as const,
 			slice,
 			nations,
+			period,
 			parser_version: parserVersion,
 		};
 		await putCached(env, key, built.bundle);
@@ -227,6 +235,11 @@ export async function warmGlobalSlices(
 			kind: "global",
 			slice,
 			nations: [],
+			// The nightly warms the all-time window only. A recency window is a
+			// secondary facet, and tripling a cron whose cost is denominated in
+			// the unfaceted slice's game count — to warm views most visits never
+			// open — buys less than serve-stale already gives them.
+			period: DEFAULT_GLOBAL_PERIOD,
 			parser_version: parserVersion,
 		});
 		if (cached !== null) continue;
