@@ -11,11 +11,18 @@
 // the nation restriction a faceted global corpus applies within them.
 
 import {
+	DEFAULT_GLOBAL_PERIOD,
+	TOURNAMENT_GAME_IDS_SQL,
 	buildGlobalSliceWhere,
 	buildUserScopeWhere,
-	TOURNAMENT_GAME_IDS_SQL,
+	periodCutoff,
 } from "../games-scope";
-import type { GlobalSlice, UserScope, UserStatsScope } from "./types";
+import type {
+	GlobalPeriod,
+	GlobalSlice,
+	UserScope,
+	UserStatsScope,
+} from "./types";
 import type { QueryableD1 } from "../d1";
 
 export interface ResolveEnv {
@@ -126,7 +133,7 @@ const globalSliceGamesSql = (slice: GlobalSlice): string =>
 export async function resolveGlobalCorpus(
 	env: ResolveEnv,
 	slice: GlobalSlice,
-	opts: { nations: string[] },
+	opts: { nations: string[]; period?: GlobalPeriod },
 ): Promise<StatsCorpus> {
 	const nations = [...new Set(opts.nations)].sort();
 	const nationClause =
@@ -135,10 +142,16 @@ export async function resolveGlobalCorpus(
 			     WHERE is_human = 1 AND nation IN (${nations.map(() => "?").join(", ")}))`
 			: "";
 
+	// A window narrows the games only. Unlike a nation selection it says
+	// nothing about which SEATS are focal — every seat of a recent game is a
+	// recent seat — so focalNations is untouched by it.
+	const cutoff = periodCutoff(opts.period ?? DEFAULT_GLOBAL_PERIOD);
+	const periodClause = cutoff === null ? "" : " AND save_date >= ?";
+
 	const rows = await env.SHARE_DB.prepare(
-		`${globalSliceGamesSql(slice)}${nationClause}`,
+		`${globalSliceGamesSql(slice)}${nationClause}${periodClause}`,
 	)
-		.bind(...nations)
+		.bind(...nations, ...(cutoff === null ? [] : [cutoff]))
 		.all<{ game_id: string }>();
 
 	return {
