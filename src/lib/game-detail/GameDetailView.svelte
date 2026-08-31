@@ -490,6 +490,7 @@
 	<Tabs.Content value="overview" class="tab-pane min-h-[400px]">
 		<OverviewTab
 			{gameDetails}
+			{eventLogs}
 			players={resolvedPlayers}
 			{playerHistory}
 			{allYields}

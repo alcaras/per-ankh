@@ -1,0 +1,246 @@
+// Momentum scoring — the per-turn win-probability curve for a finished duel,
+// with the exact decomposition of why the line is where it is (level) and
+// what moved it (change).
+//
+// Consumes the fitted weights/scales from $lib/generated/momentum (baked by
+// scripts/bake-momentum.ts, where the model and its data gotchas are
+// documented). Everything here is pure arithmetic over blob fields; the
+// Worker's mirror at cloud/src/momentum.ts is GENERATED from this file
+// (`npm run bake:momentum -- --mirror-only`), and a regeneration test keeps
+// the on-disk mirror exactly what the transform produces.
+//
+// Honesty note for any consumer: this is a retrospective reading of a
+// finished match, not a forecast. Weights are fitted over the corpus and the
+// progress interpolation needs the final turn. Present it as "who was
+// winning", not "who would have won".
+
+import {
+	MOMENTUM_BUCKETS,
+	MOMENTUM_DIMS,
+	MOMENTUM_SD,
+	MOMENTUM_WEIGHTS,
+} from "../generated/momentum";
+
+const ECO5 = [
+	"YIELD_MONEY",
+	"YIELD_FOOD",
+	"YIELD_IRON",
+	"YIELD_STONE",
+	"YIELD_WOOD",
+];
+
+export interface MomentumInput {
+	/** The two duellists' player xml ids, in display order. */
+	a: number;
+	b: number;
+	finalTurn: number;
+	yieldHistory: {
+		player_id: number;
+		yield_type: string;
+		data: { turn: number; rate: number | null }[];
+	}[];
+	playerHistory: {
+		player_id: number;
+		history: { turn: number; military_power: number | null }[];
+	}[];
+}
+
+export interface MomentumPoint {
+	turn: number;
+	/** P(player `a` wins), 0..1. */
+	p: number;
+	/** Per-dimension contribution to the current log-odds; Σ lv = log-odds. */
+	lv: number[];
+	/**
+	 * Per-dimension contribution to the move since the previous point — the
+	 * exact difference of lv, so Σ ch = Δ log-odds identically and the panel
+	 * header can never disagree with the bars. A tied stat contributes
+	 * exactly 0; a constant nonzero lead contributes only the small, smooth
+	 * drift of the interpolated weights and per-turn scales.
+	 */
+	ch: number[];
+	/** Raw A−B leads, MOMENTUM_DIMS order — for the detail panel. */
+	raw: number[];
+	/**
+	 * Each side's own numbers at this turn — growth, orders, science,
+	 * military power — for the "key stats" table. Not model inputs (the model
+	 * sees only differences); kept raw so the reader can check the arithmetic.
+	 */
+	sa: number[];
+	sb: number[];
+}
+
+export interface MomentumCurve {
+	points: MomentumPoint[];
+	dims: readonly string[];
+}
+
+// ---------- Series assembly ----------
+
+type ByTurn = Map<number, number>;
+
+function yieldSeries(
+	input: MomentumInput,
+	playerId: number,
+): Map<string, ByTurn> {
+	const out = new Map<string, ByTurn>();
+	for (const row of input.yieldHistory) {
+		if (row.player_id !== playerId) continue;
+		const byTurn = new Map<number, number>();
+		for (const p of row.data) if (p.rate != null) byTurn.set(p.turn, p.rate);
+		out.set(row.yield_type, byTurn);
+	}
+	return out;
+}
+
+function powerSeries(input: MomentumInput, playerId: number): ByTurn {
+	const byTurn = new Map<number, number>();
+	for (const row of input.playerHistory) {
+		if (row.player_id !== playerId) continue;
+		for (const p of row.history)
+			if (p.military_power != null) byTurn.set(p.turn, p.military_power);
+	}
+	return byTurn;
+}
+
+// ---------- Features / standardisation / scoring ----------
+
+function featsAt(
+	ya: Map<string, ByTurn>,
+	yb: Map<string, ByTurn>,
+	ma: ByTurn,
+	mb: ByTurn,
+	T: number,
+): number[] | null {
+	const pa = ma.get(T);
+	const pb = mb.get(T);
+	if (pa == null || pb == null) return null;
+	const ordersA = ya.get("YIELD_ORDERS")?.get(T);
+	const ordersB = yb.get("YIELD_ORDERS")?.get(T);
+	const sciA = ya.get("YIELD_SCIENCE")?.get(T);
+	const sciB = yb.get("YIELD_SCIENCE")?.get(T);
+	// Orders and science exist from T2 — genuinely absent means no data.
+	if (ordersA == null || ordersB == null || sciA == null || sciB == null)
+		return null;
+	// Growth: absent = zero income, like the eco resources.
+	const growth =
+		(ya.get("YIELD_GROWTH")?.get(T) ?? 0) -
+		(yb.get("YIELD_GROWTH")?.get(T) ?? 0);
+	let eco = 0;
+	for (const key of ECO5) {
+		// Absent eco yield = zero income, not missing data; ties contribute 0.
+		const va = ya.get(key)?.get(T) ?? 0;
+		const vb = yb.get(key)?.get(T) ?? 0;
+		eco += va > vb ? 1 : va < vb ? -1 : 0;
+	}
+	// MOMENTUM_DIMS order: growth, orders, science, eco, mil.
+	return [
+		growth,
+		ordersA - ordersB,
+		sciA - sciB,
+		eco,
+		// Relative, because absolute power grows ~20× over a match.
+		(pa - pb) / Math.max(1, (pa + pb) / 2),
+	];
+}
+
+const SD_TURNS = Object.keys(MOMENTUM_SD)
+	.map(Number)
+	.sort((x, y) => x - y);
+
+function sdAt(T: number): Readonly<Record<string, number>> {
+	let best = SD_TURNS[0];
+	for (const t of SD_TURNS) if (Math.abs(t - T) < Math.abs(best - T)) best = t;
+	return MOMENTUM_SD[String(best)];
+}
+
+function zOf(raw: number[], T: number): number[] {
+	const s = sdAt(T);
+	return raw.map((v, j) => v / s[MOMENTUM_DIMS[j]]);
+}
+
+// The weights are FITTED per progress bucket but SCORED with piecewise-linear
+// interpolation between the bucket centres (clamped flat outside them) — a
+// hard switch at the bucket edges puts four structural jumps into every
+// game's curve that read as battles. Thin (null) buckets are skipped.
+const WEIGHT_CENTRES: { c: number; w: readonly number[] }[] =
+	MOMENTUM_BUCKETS.flatMap(([lo, hi], i) => {
+		const w = MOMENTUM_WEIGHTS[i];
+		return w ? [{ c: (lo + hi) / 2, w }] : [];
+	});
+
+function weightsAt(progress: number): number[] | null {
+	if (WEIGHT_CENTRES.length === 0) return null;
+	const first = WEIGHT_CENTRES[0];
+	if (progress <= first.c) return [...first.w];
+	for (let i = 1; i < WEIGHT_CENTRES.length; i++) {
+		const hi = WEIGHT_CENTRES[i];
+		if (progress <= hi.c) {
+			const lo = WEIGHT_CENTRES[i - 1];
+			const t = (progress - lo.c) / (hi.c - lo.c);
+			return lo.w.map((v, j) => v + t * (hi.w[j] - v));
+		}
+	}
+	return [...WEIGHT_CENTRES[WEIGHT_CENTRES.length - 1].w];
+}
+
+/**
+ * The full curve, or null when the game isn't scoreable (missing series,
+ * fewer than five scoreable turns). Callers decide who `a` and `b` are;
+ * antisymmetry guarantees swapping them yields exactly 1 − p.
+ */
+export function momentumCurve(input: MomentumInput): MomentumCurve | null {
+	if (input.finalTurn < 10) return null;
+	const ya = yieldSeries(input, input.a);
+	const yb = yieldSeries(input, input.b);
+	const ma = powerSeries(input, input.a);
+	const mb = powerSeries(input, input.b);
+
+	const side = (y: Map<string, ByTurn>, m: ByTurn, t: number): number[] => [
+		y.get("YIELD_GROWTH")?.get(t) ?? 0,
+		y.get("YIELD_ORDERS")?.get(t) ?? 0,
+		y.get("YIELD_SCIENCE")?.get(t) ?? 0,
+		m.get(t) ?? 0,
+	];
+	const pts: { turn: number; raw: number[]; sa: number[]; sb: number[] }[] =
+		[];
+	for (let t = 2; t <= input.finalTurn; t++) {
+		const raw = featsAt(ya, yb, ma, mb, t);
+		if (raw)
+			pts.push({
+				turn: t,
+				raw,
+				sa: side(ya, ma, t),
+				sb: side(yb, mb, t),
+			});
+	}
+	if (pts.length < 5) return null;
+
+	const points: MomentumPoint[] = [];
+	let prevLv: number[] | null = null;
+	for (const { turn, raw, sa, sb } of pts) {
+		const w = weightsAt(turn / input.finalTurn);
+		if (!w) continue;
+		const z = zOf(raw, turn);
+		const lv = z.map((v, j) => w[j] * v);
+		const logOdds = lv.reduce((s, v) => s + v, 0);
+		// Change: the exact difference of lv (see the MomentumPoint doc).
+		const prev = prevLv;
+		const ch = prev
+			? lv.map((v, j) => v - prev[j])
+			: new Array<number>(MOMENTUM_DIMS.length).fill(0);
+		prevLv = lv;
+		points.push({
+			turn,
+			p: 1 / (1 + Math.exp(-logOdds)),
+			// `+ 0` folds IEEE −0 (a negative weight times a zero change) into 0,
+			// which would otherwise display as "−0.00".
+			lv: lv.map((v) => Math.round(v * 100) / 100 + 0),
+			ch: ch.map((v) => Math.round(v * 100) / 100 + 0),
+			raw,
+			sa,
+			sb,
+		});
+	}
+	return points.length >= 5 ? { points, dims: MOMENTUM_DIMS } : null;
+}
