@@ -2,46 +2,56 @@
 	// "Records": the leaderboard behind the yield bands — for each series, the
 	// player-games holding the biggest numbers, linked to the game.
 	//
-	// Two selectors, because the same series has six honest answers and they
+	// Two selectors, because the same series has seven honest answers and they
 	// disagree:
 	//
-	//   Peak / End of game favour long matches — yields compound, so these are
-	//   partly a "who played the most turns" board. Kept because they're the
-	//   ones people actually ask for, and labelled so nobody mistakes them for
-	//   a like-for-like comparison.
+	//   Best ever / End of game favour long matches — yields compound, so these
+	//   are partly a "who played the most turns" board. Kept because they're the
+	//   ones people actually ask for, and sat beside the checkpoints so nobody
+	//   mistakes them for a like-for-like comparison.
 	//
-	//   T40 / T60 / T80 / T100 compare everyone who reached that turn AT that
-	//   turn, which is the only length-blind board of the six.
+	//   T20 / T40 / T60 / T80 / T100 compare everyone who reached that turn AT
+	//   that turn, the only length-blind boards of the seven.
 	//
-	// The accumulated measure means two different things depending on the
-	// series and the card says which: growth, science, culture and orders are
-	// never spent, so their total is lifetime production; money, food, iron,
-	// stone and wood are, so theirs is the stockpile held at that turn.
+	// The cumulative measure means two different things depending on the series
+	// and the card says which — see SPENDABLE.
+	import { Toolbar } from "bits-ui";
 	import { resolve } from "$app/paths";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { nationName } from "$lib/utils/formatting";
 	import { YIELD_SERIES } from "./charts/yields";
 	import type { ChartBundleCore } from "./types";
 
-	let { bundle }: { bundle: ChartBundleCore } = $props();
+	// toolbarFlush pulls the sticky toolbar out of a container's px-4, exactly
+	// as it does on the sibling panels — StatsView pads its tab content and
+	// opts in, an unpadded caller leaves it off.
+	let {
+		bundle,
+		toolbarFlush = false,
+	}: { bundle: ChartBundleCore; toolbarFlush?: boolean } = $props();
+
+	// Same tokens as YieldsStatsPanel's toolbar, which carries the same
+	// per-turn / cumulative choice one tab over.
+	const itemClass =
+		"px-2.5 py-1 text-xs text-tan transition-colors data-[state=off]:bg-surface data-[state=on]:bg-surface-raised";
 
 	// Which of the game's yields are spent, and so carry a stockpile rather
 	// than a production total. Everything else only ever climbs.
+	//
+	// Established from the corpus, not from the manual: over the local
+	// game_player_turn rows, money / food / iron / stone / wood / training /
+	// civics all have turns where the cumulative column DROPS (wood 34,287
+	// times, civics 816, training 474), while science, culture, orders and
+	// growth never once decrease. A column that can fall is a stockpile.
 	const SPENDABLE = new Set([
 		"money_per_turn",
 		"food_per_turn",
 		"iron_per_turn",
 		"stone_per_turn",
 		"wood_per_turn",
-		"maintenance_per_turn",
-		"happiness_per_turn",
-		"discontent_per_turn",
 		"training_per_turn",
 		"civics_per_turn",
 	]);
-	// Levels, not flows — they have no separate accumulated column, so the
-	// accumulated board would repeat the rate board.
-	const LEVELS = new Set(["military_power", "legitimacy"]);
 
 	const WHENS = [
 		{ key: "peak", label: "Best ever" },
@@ -53,14 +63,10 @@
 		{ key: "t100", label: "At T100" },
 	] as const;
 
-	// The bundle ships ten; the panel shows them all. Kept as a constant so a
-	// board that wants a shorter list has one place to say so.
-	const TOP_N = 10;
-
 	let measure = $state<"rate" | "cum">("rate");
 	let when = $state<(typeof WHENS)[number]["key"]>("peak");
 
-	const boardCount = $derived(bundle.recordCounts?.[when] ?? 0);
+	const boardCount = $derived(bundle.recordCounts[when] ?? 0);
 	// On a checkpoint board every row shares the same turn, so it belongs in
 	// the card's header once rather than down the whole column. Peak and
 	// end-of-game rows each have their own turn and keep it.
@@ -75,7 +81,7 @@
 		gameId: string,
 		playerIndex: number,
 	): { holder: boolean; nation: string | null; label: string }[] {
-		const all = bundle.recordGames?.[gameId]?.seats ?? {};
+		const all = bundle.recordGames[gameId]?.seats ?? {};
 		const rows = Object.entries(all).map(([i, seat]) => ({
 			index: Number(i),
 			holder: Number(i) === playerIndex,
@@ -129,26 +135,22 @@
 					const series = byKey.get(k);
 					return series ? [card(series)] : [];
 				})
-				.filter((c) => !c.muted && c.rows.length > 0),
+				.filter((c) => c.rows.length > 0),
 		})).filter((g) => g.cards.length > 0),
 	);
 	type Series = (typeof YIELD_SERIES)[number];
 	function card(series: Series) {
-		const isLevel = LEVELS.has(series.key);
-		const key =
-			measure === "cum" && !isLevel ? `${series.key}:cum` : series.key;
+		const cum = measure === "cum";
+		// Military power and legitimacy are levels, not flows — the aggregate
+		// ships them no cumulative board rather than mirroring the rate one, so
+		// an absent board is the signal to drop the card. Keeping a list of
+		// which series are levels here would be the same fact in two places.
+		const key = cum ? `${series.key}:cum` : series.key;
+		const rows = bundle.records[key]?.[when] ?? [];
 		return {
 			...series,
-			// A level has no accumulated column; showing the rate board twice
-			// under a second name would be a lie of omission, so it sits out.
-			muted: measure === "cum" && isLevel,
-			note:
-				measure === "cum" && !isLevel
-					? SPENDABLE.has(series.key)
-						? "held"
-						: "produced"
-					: null,
-			rows: (bundle.records?.[key]?.[when] ?? []).slice(0, TOP_N),
+			note: cum ? (SPENDABLE.has(series.key) ? "held" : "produced") : null,
+			rows,
 		};
 	}
 
@@ -158,33 +160,49 @@
 			: (Math.round(v * 10) / 10).toString();
 </script>
 
-{#if Object.keys(bundle.records ?? {}).length > 0}
+{#if Object.keys(bundle.records).length > 0}
 	<section class="mb-6">
-		<div class="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-			<h3 class="text-base font-bold text-tan">Records</h3>
-			<div class="flex flex-wrap gap-1 text-xs">
-				{#each [{ k: "rate", l: "Per turn" }, { k: "cum", l: "Accumulated" }] as m (m.k)}
-					<button
-						type="button"
-						class="rounded px-2 py-0.5 {measure === m.k
-							? 'bg-orange/25 font-semibold text-bright'
-							: 'text-gray-400 hover:text-tan'}"
-						onclick={() => (measure = m.k as "rate" | "cum")}>{m.l}</button
+		<Toolbar.Root
+			class="sticky top-1 z-10 mb-3 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg {toolbarFlush
+				? '-ml-4'
+				: ''}"
+		>
+			<Toolbar.Group
+				type="single"
+				value={measure}
+				onValueChange={(v: string) => {
+					if (v) measure = v as "rate" | "cum";
+				}}
+				class="flex overflow-hidden rounded"
+			>
+				<Toolbar.GroupItem value="rate" class="rounded-l {itemClass}">
+					Per Turn
+				</Toolbar.GroupItem>
+				<Toolbar.GroupItem value="cum" class="rounded-r {itemClass}">
+					Cumulative
+				</Toolbar.GroupItem>
+			</Toolbar.Group>
+
+			<Toolbar.Group
+				type="single"
+				value={when}
+				onValueChange={(v: string) => {
+					if (v) when = v as (typeof WHENS)[number]["key"];
+				}}
+				class="flex overflow-hidden rounded"
+			>
+				{#each WHENS as w, i (w.key)}
+					<Toolbar.GroupItem
+						value={w.key}
+						class="{i === 0 ? 'rounded-l' : ''} {i === WHENS.length - 1
+							? 'rounded-r'
+							: ''} {itemClass}"
 					>
+						{w.label}
+					</Toolbar.GroupItem>
 				{/each}
-			</div>
-			<div class="flex flex-wrap gap-1 text-xs">
-				{#each WHENS as w (w.key)}
-					<button
-						type="button"
-						class="rounded px-2 py-0.5 {when === w.key
-							? 'bg-orange/25 font-semibold text-bright'
-							: 'text-gray-400 hover:text-tan'}"
-						onclick={() => (when = w.key)}>{w.label}</button
-					>
-				{/each}
-			</div>
-		</div>
+			</Toolbar.Group>
+		</Toolbar.Root>
 		{#if boardCount > 0}
 			<p class="mb-3 text-xs text-gray-400">
 				{boardCount.toLocaleString("en-US")} player-games
@@ -199,10 +217,7 @@
 				</div>
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
 					{#each group.cards as card (card.key)}
-						<div
-							class="rounded-lg p-3"
-							style="background-color: rgb(var(--color-surface));"
-						>
+						<div class="rounded-lg bg-surface p-3">
 							<div class="mb-1 flex items-baseline justify-between gap-2">
 								<span class="flex items-baseline gap-1.5">
 									<span class="text-xs font-bold" style="color: {card.color};"
@@ -234,7 +249,7 @@
 												?.turns ?? '?'} — open the game"
 										>
 											{#each seats(row.game_id, row.player_index) as seat, si (seat.label + si)}
-												{#if si > 0}<span class="text-gray-600">v</span>{/if}
+												{#if si > 0}<span class="text-brown">v</span>{/if}
 												{#if seat.nation}
 													<SpriteIcon
 														category="crests"

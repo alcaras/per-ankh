@@ -66,17 +66,24 @@
 	})();
 	// A category earns its tab by having charts, except Records — one bespoke
 	// panel with no specs, kept whenever the bundle actually carries records.
-	const sections = CATEGORIES.map((c) => ({
-		id: c.id,
-		label: c.label,
-		specs: SPEC_GROUPS.get(c.id) ?? [],
-	})).filter(
-		(s) =>
-			s.specs.length > 0 ||
-			(s.id === "records" && Object.keys(bundle.records ?? {}).length > 0),
+	//
+	// $derived, not a plain const: this reads the bundle, and `bundle` is a
+	// prop that changes on navigation (the global page passes `data.bundle`
+	// into an unkeyed component when the slice changes). validIds and
+	// activeCategory hang off it, so a stale list would keep a dead tab valid.
+	const sections = $derived(
+		CATEGORIES.map((c) => ({
+			id: c.id,
+			label: c.label,
+			specs: SPEC_GROUPS.get(c.id) ?? [],
+		})).filter(
+			(s) =>
+				s.specs.length > 0 ||
+				(s.id === "records" && Object.keys(bundle.records).length > 0),
+		),
 	);
 
-	const validIds = new Set(sections.map((s) => s.id));
+	const validIds = $derived(new Set(sections.map((s) => s.id)));
 	const activeCategory = $derived.by<StatsCategory>(() => {
 		const fromUrl = page.url.searchParams.get("category");
 		if (fromUrl && validIds.has(fromUrl as StatsCategory)) {
@@ -160,7 +167,7 @@
 			{#if section.id === "yields"}
 				<YieldsStatsPanel {bundle} {countLabel} toolbarFlush />
 			{:else if section.id === "records"}
-				<RecordsPanel {bundle} />
+				<RecordsPanel {bundle} toolbarFlush />
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "laws"}

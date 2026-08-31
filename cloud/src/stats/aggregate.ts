@@ -93,6 +93,7 @@ interface BaseRow {
 type YieldRawRow = {
 	turn: number;
 	game_id: string;
+	player_index: number;
 	is_winner: number;
 } & Record<string, number | string | null>;
 
@@ -310,9 +311,20 @@ async function loadDecidedGames(
 const RECORD_CHECKPOINTS = [20, 40, 60, 80, 100] as const;
 const RECORD_TOP_N = 10;
 
+// Series with no record board. A leaderboard asserts "biggest is best", and
+// for these three the biggest number is a burden, not an achievement — the
+// largest maintenance bill and the most unrest are not records anyone set out
+// to break, and happiness only reads against the discontent it offsets. They
+// still get bands, which make no such claim.
+const RECORD_EXCLUDED = new Set([
+	"maintenance_per_turn",
+	"happiness_per_turn",
+	"discontent_per_turn",
+]);
+
 type RecordWhen = "peak" | "final" | `t${(typeof RECORD_CHECKPOINTS)[number]}`;
 
-interface PlayerGameRecord {
+export interface PlayerGameRecord {
 	gameId: string;
 	playerIndex: number;
 	// Per series key: the best value seen and the turn it happened.
@@ -324,7 +336,7 @@ interface PlayerGameRecord {
 	at: Map<number, Map<string, number>>;
 }
 
-function emptyPlayerGame(
+export function emptyPlayerGame(
 	gameId: string,
 	playerIndex: number,
 ): PlayerGameRecord {
@@ -339,7 +351,7 @@ function emptyPlayerGame(
 }
 
 // Fold one row into its player-game accumulator, for one measure.
-function foldRecordRow(
+export function foldRecordRow(
 	acc: PlayerGameRecord,
 	turn: number,
 	values: Map<string, number>,
@@ -357,12 +369,29 @@ function foldRecordRow(
 	}
 }
 
-// Rank the player-games into a top-N per series per board, keeping one entry
-// per underlying match: both sides of a duel upload the same save, so without
-// this a record shows up twice under two game ids.
-function rankRecords(
+// Both sides of a duel upload the same save, so one match arrives as two
+// game_ids carrying the same seats. Collapse them here, before any ranking:
+// deduping per board instead would let one match's "peak" come from one upload
+// and its "final" from the other, and would leave recordCounts advertising a
+// population twice the size of the one the boards actually rank.
+//
+// The survivor is the upload that saw more turns — same match, more of it.
+export function dedupePlayerGames(
 	accs: Map<string, PlayerGameRecord>,
 	xmlGameId: Map<string, string>,
+): PlayerGameRecord[] {
+	const best = new Map<string, PlayerGameRecord>();
+	for (const acc of accs.values()) {
+		const key = `${xmlGameId.get(acc.gameId) ?? acc.gameId}|${acc.playerIndex}`;
+		const held = best.get(key);
+		if (!held || acc.lastTurn > held.lastTurn) best.set(key, acc);
+	}
+	return [...best.values()];
+}
+
+// Rank the deduped player-games into a top-N per series per board.
+export function rankRecords(
+	accs: readonly PlayerGameRecord[],
 	seatOf: Map<string, { nation: string | null; name: string | null }>,
 	turnsOf: Map<string, number>,
 ): {
@@ -383,7 +412,7 @@ function rankRecords(
 		const series = (boards[key] ??= {});
 		(series[when] ??= []).push(row);
 	};
-	for (const acc of accs.values()) {
+	for (const acc of accs) {
 		counts.peak = (counts.peak ?? 0) + 1;
 		counts.final = (counts.final ?? 0) + 1;
 		for (const cp of RECORD_CHECKPOINTS) {
@@ -420,17 +449,8 @@ function rankRecords(
 	}
 	for (const series of Object.values(boards)) {
 		for (const when of Object.keys(series)) {
-			const seen = new Set<string>();
 			series[when] = series[when]
 				.sort((a, b) => b.value - a.value)
-				.filter((r) => {
-					// One row per match AND per player: the same save uploaded by
-					// both players is one record, not two.
-					const id = `${xmlGameId.get(r.game_id) ?? r.game_id}|${r.player_index}`;
-					if (seen.has(id)) return false;
-					seen.add(id);
-					return true;
-				})
 				.slice(0, RECORD_TOP_N);
 		}
 	}
@@ -438,7 +458,6 @@ function rankRecords(
 	// Identity for the games that actually made a board, as a lookup rather
 	// than repeated on every row — the same game holds many records, and the
 	// rows outnumber the games several times over.
-	//
 	const recordGames: ChartBundleCore["recordGames"] = {};
 	for (const series of Object.values(boards)) {
 		for (const rows of Object.values(series)) {
@@ -460,21 +479,25 @@ function rankRecords(
 	return { records: boards, recordGames, recordCounts: counts };
 }
 
-// (game_id|player_index) → nation, and game_id → total turns, for the record
-// rows' identity. Both are small — one row per seat, one per game — so they
-// are read once rather than carried on every turn row.
-async function loadRecordIdentity(
+// Everything the record rows need beyond the numbers: (game_id|player_index) →
+// seat, game_id → total turns, and game_id → the save's own id (which is what
+// collapses the two uploads of one match). All three are small — one row per
+// seat, one per game — so they are read once rather than carried on every turn
+// row.
+export async function loadRecordIdentity(
 	env: AggregateEnv,
 	gameIds: string[],
 ): Promise<{
 	seat: Map<string, { nation: string | null; name: string | null }>;
 	turns: Map<string, number>;
+	xmlGameId: Map<string, string>;
 }> {
 	const seat = new Map<
 		string,
 		{ nation: string | null; name: string | null }
 	>();
 	const turns = new Map<string, number>();
+	const xmlGameId = new Map<string, string>();
 	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
 		// player_name is the handle the SAVE records, and is what every public
 		// game page already prints beside the nation. online_id is the platform
@@ -499,34 +522,21 @@ async function loadRecordIdentity(
 			});
 		}
 		const games = await env.SHARE_DB.prepare(
-			`SELECT game_id, total_turns FROM games
+			`SELECT game_id, total_turns, xml_game_id FROM games
 			 WHERE game_id IN (${placeholders(ids.length)})`,
 		)
 			.bind(...ids)
-			.all<{ game_id: string; total_turns: number | null }>();
+			.all<{
+				game_id: string;
+				total_turns: number | null;
+				xml_game_id: string | null;
+			}>();
 		for (const row of games.results ?? []) {
 			if (row.total_turns != null) turns.set(row.game_id, row.total_turns);
+			if (row.xml_game_id != null) xmlGameId.set(row.game_id, row.xml_game_id);
 		}
 	}
-	return { seat, turns };
-}
-
-// game_id → the save's own id, so the two uploads of one match collapse.
-async function loadXmlGameIds(
-	env: AggregateEnv,
-	gameIds: string[],
-): Promise<Map<string, string>> {
-	const out = new Map<string, string>();
-	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
-		const res = await env.SHARE_DB.prepare(
-			`SELECT game_id, xml_game_id FROM games
-			 WHERE game_id IN (${placeholders(ids.length)})`,
-		)
-			.bind(...ids)
-			.all<{ game_id: string; xml_game_id: string }>();
-		for (const row of res.results ?? []) out.set(row.game_id, row.xml_game_id);
-	}
-	return out;
+	return { seat, turns, xmlGameId };
 }
 
 // Per-turn yield distribution curves. Restricted to the corpus's focal rows so
@@ -630,22 +640,27 @@ async function loadYieldCurves(
 		for (const row of (res.results ?? []) as YieldRawRow[]) {
 			// Records ride the same rows the bands are built from: one pass,
 			// no second query.
-			const playerIndex = Number(row.player_index ?? 0);
-			const pgKey = `${row.game_id}|${playerIndex}`;
+			const pgKey = `${row.game_id}|${row.player_index}`;
 			let pg = byPlayerGame.get(pgKey);
 			if (!pg) {
-				pg = emptyPlayerGame(row.game_id, playerIndex);
+				pg = emptyPlayerGame(row.game_id, row.player_index);
 				byPlayerGame.set(pgKey, pg);
 			}
-			const rates = new Map<string, number>();
-			const cums = new Map<string, number>();
+			const values = new Map<string, number>();
 			for (const [key, rateCol, cumCol] of YIELD_COLUMNS) {
+				if (RECORD_EXCLUDED.has(key)) continue;
 				const rateVal = row[rateCol];
-				if (typeof rateVal === "number") rates.set(key, rateVal);
-				const cumVal = cumCol ? row[cumCol] : row[rateCol];
-				if (typeof cumVal === "number") cums.set(`${key}:cum`, cumVal);
+				if (typeof rateVal === "number") values.set(key, rateVal);
+				// A level has no cumulative column. The bands mirror the level
+				// into the cumulative series to keep their shape uniform; a
+				// record board can't borrow that, because mirroring would ship
+				// a second leaderboard identical to the first under a name that
+				// claims otherwise.
+				if (!cumCol) continue;
+				const cumVal = row[cumCol];
+				if (typeof cumVal === "number") values.set(`${key}:cum`, cumVal);
 			}
-			foldRecordRow(pg, row.turn, new Map([...rates, ...cums]));
+			foldRecordRow(pg, row.turn, values);
 
 			// Undecided games stay out of the outcome split — their all-zero
 			// is_winner would read as a clean sweep of losses — but they are
@@ -698,6 +713,13 @@ async function loadYieldCurves(
 		};
 	};
 
+	const identity = await loadRecordIdentity(env, gameIds);
+	const records = rankRecords(
+		dedupePlayerGames(byPlayerGame, identity.xmlGameId),
+		identity.seat,
+		identity.turns,
+	);
+
 	const all = bandsFor(winners, losers, undecided);
 	return {
 		curves: {
@@ -709,13 +731,7 @@ async function loadYieldCurves(
 					? null
 					: { winners: bandsFor(winners), losers: bandsFor(losers) },
 		},
-		...(await (async () => {
-			const [xmlIds, identity] = await Promise.all([
-				loadXmlGameIds(env, gameIds),
-				loadRecordIdentity(env, gameIds),
-			]);
-			return rankRecords(byPlayerGame, xmlIds, identity.seat, identity.turns);
-		})()),
+		...records,
 	};
 }
 

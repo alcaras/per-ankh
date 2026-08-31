@@ -217,23 +217,22 @@ export interface ChartBundleCore {
 		}>;
 	};
 
-	// --- Laws --------------------------------------------------------
-	// Per (nation, law) with an extra "__all__" aggregate row per law
-	// (frontend ALL_NATIONS), like the tech charts.
 	// --- Records -----------------------------------------------------
 	// The leaderboard behind the yield bands: per series, the top few
 	// player-games on each board. Keyed series → board → rows, where a board
-	// is "peak" (best turn of the game), "final" (the last turn) or "t40" /
-	// "t60" / "t80" / "t100" (the value at a fixed checkpoint, which is the
-	// only length-blind comparison of the six).
+	// is "peak" (the best turn of the game), "final" (the last turn) or
+	// "t20" / "t40" / "t60" / "t80" / "t100" (the value at a fixed
+	// checkpoint — the only length-blind comparisons of the seven).
 	//
-	// A cumulative series is keyed "<series>:cum". For growth, science,
-	// culture and orders that is lifetime production; for the spendables
-	// (money, food, iron, stone, wood) it is the stockpile held at that turn,
-	// because the game's own total is what the player had, not what they
-	// earned. Presentation has to name the two apart.
+	// A cumulative series is keyed "<series>:cum", and means one of two things.
+	// Science, culture, orders and growth never decrease over a game, so for
+	// them it is lifetime production; money, food, iron, stone, wood, training
+	// and civics all have turns where the total falls, so for them it is the
+	// stockpile held at that turn. Presentation has to name the two apart.
+	// Levels (military_power, legitimacy) get no ":cum" key at all.
 	//
-	// Identity is game_id + player_index only — no names, per the PII rule.
+	// One row per match per seat: the two uploads of a duel are collapsed on
+	// the save's own xml_game_id before anything is ranked.
 	records: Record<
 		string,
 		Record<
@@ -249,11 +248,12 @@ export interface ChartBundleCore {
 
 	// Identity for the games appearing in `records`, as a lookup rather than
 	// repeated on every row: one game commonly holds several records, and the
-	// rows outnumber the games several times over. Nations only — who was at
-	// the keyboard is on the game page, not in a cached bundle.
+	// rows outnumber the games several times over.
+	//
 	// Per seat: the nation and the handle the SAVE records — the same pair
-	// every public game page prints. Never online_id, which is the platform
-	// identifier the share blob strips for anonymous viewers.
+	// every public game page already prints. Never online_id, which is the
+	// platform identifier the share blob strips for anonymous viewers, and
+	// never discord_id or username, which stay in D1 metadata.
 	recordGames: Record<
 		string,
 		{
@@ -267,6 +267,9 @@ export interface ChartBundleCore {
 	// say so reads as a record over everyone.
 	recordCounts: Record<string, number>;
 
+	// --- Laws --------------------------------------------------------
+	// Per (nation, law) with an extra "__all__" aggregate row per law
+	// (frontend ALL_NATIONS), like the tech charts.
 	lawTiming: Array<{
 		nation: string;
 		law: string;
