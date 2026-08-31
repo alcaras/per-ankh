@@ -11,6 +11,7 @@
 	import { page } from "$app/state";
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import YieldsStatsPanel from "./YieldsStatsPanel.svelte";
+	import RecordsPanel from "./RecordsPanel.svelte";
 	import FamilyStatsPanel from "./FamilyStatsPanel.svelte";
 	import LawsStatsPanel from "./LawsStatsPanel.svelte";
 	import TechStatsPanel from "./TechStatsPanel.svelte";
@@ -63,11 +64,17 @@
 		}
 		return map;
 	})();
+	// A category earns its tab by having charts, except Records — one bespoke
+	// panel with no specs, kept whenever the bundle actually carries records.
 	const sections = CATEGORIES.map((c) => ({
 		id: c.id,
 		label: c.label,
 		specs: SPEC_GROUPS.get(c.id) ?? [],
-	})).filter((s) => s.specs.length > 0);
+	})).filter(
+		(s) =>
+			s.specs.length > 0 ||
+			(s.id === "records" && Object.keys(bundle.records ?? {}).length > 0),
+	);
 
 	const validIds = new Set(sections.map((s) => s.id));
 	const activeCategory = $derived.by<StatsCategory>(() => {
@@ -152,6 +159,8 @@
 		<Tabs.Content value={section.id} class="px-4 pb-4">
 			{#if section.id === "yields"}
 				<YieldsStatsPanel {bundle} {countLabel} toolbarFlush />
+			{:else if section.id === "records"}
+				<RecordsPanel {bundle} />
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "laws"}

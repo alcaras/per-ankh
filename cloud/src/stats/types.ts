@@ -220,6 +220,53 @@ export interface ChartBundleCore {
 	// --- Laws --------------------------------------------------------
 	// Per (nation, law) with an extra "__all__" aggregate row per law
 	// (frontend ALL_NATIONS), like the tech charts.
+	// --- Records -----------------------------------------------------
+	// The leaderboard behind the yield bands: per series, the top few
+	// player-games on each board. Keyed series → board → rows, where a board
+	// is "peak" (best turn of the game), "final" (the last turn) or "t40" /
+	// "t60" / "t80" / "t100" (the value at a fixed checkpoint, which is the
+	// only length-blind comparison of the six).
+	//
+	// A cumulative series is keyed "<series>:cum". For growth, science,
+	// culture and orders that is lifetime production; for the spendables
+	// (money, food, iron, stone, wood) it is the stockpile held at that turn,
+	// because the game's own total is what the player had, not what they
+	// earned. Presentation has to name the two apart.
+	//
+	// Identity is game_id + player_index only — no names, per the PII rule.
+	records: Record<
+		string,
+		Record<
+			string,
+			Array<{
+				game_id: string;
+				player_index: number;
+				turn: number;
+				value: number;
+			}>
+		>
+	>;
+
+	// Identity for the games appearing in `records`, as a lookup rather than
+	// repeated on every row: one game commonly holds several records, and the
+	// rows outnumber the games several times over. Nations only — who was at
+	// the keyboard is on the game page, not in a cached bundle.
+	// Per seat: the nation and the handle the SAVE records — the same pair
+	// every public game page prints. Never online_id, which is the platform
+	// identifier the share blob strips for anonymous viewers.
+	recordGames: Record<
+		string,
+		{
+			turns: number;
+			seats: Record<number, { nation: string | null; name: string | null }>;
+		}
+	>;
+
+	// Player-games each board could draw on. The late checkpoints are a
+	// fraction of the corpus (T100 is ~18% of it), and a board that doesn't
+	// say so reads as a record over everyone.
+	recordCounts: Record<string, number>;
+
 	lawTiming: Array<{
 		nation: string;
 		law: string;
