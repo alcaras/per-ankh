@@ -1,5 +1,52 @@
 # Changelog
 
+## [2026-08-31-5edcf08] - 2026-08-31
+
+### Features
+
+- (scripts) capture the home page's cold-start states — [3adac10](https://github.com/becked/per-ankh/commit/3adac10c777a18128810f54dd7defc347b32a353)
+- (scripts) sign the UX-review pass in as the local admin — [06e1409](https://github.com/becked/per-ankh/commit/06e14099a224c75d931434bf34d3ba1599e7091b)
+- (bake) military power tiers from power.xml — [2bce4ca](https://github.com/becked/per-ankh/commit/2bce4ca78a3f218909c58a92b43fce5708d833cb)
+- (military) power-standing shift chips on the rail — [c426181](https://github.com/becked/per-ankh/commit/c426181ca76dee56a7a7b0d1385f79cf58250f63)
+- momentum — a per-turn win-probability curve for duels — [3d5f449](https://github.com/becked/per-ankh/commit/3d5f449569e924cb31073fe282a6a65aed90d10e)
+- momentum gains the growth dimension (spec update) — [7fc248e](https://github.com/becked/per-ankh/commit/7fc248e4646826c23aeb4d68607f7c4b5f0fc377)
+- (game-detail) momentum gets the owglick viewer's presentation — [3a16c16](https://github.com/becked/per-ankh/commit/3a16c16201e4c3e26781433bdb949171fadf45d8)
+- (game-detail) derive battle events for the momentum window — [57724da](https://github.com/becked/per-ankh/commit/57724dac33a9df4665da34f290a98facda19cba5)
+- (momentum) record the model version beside every momentum score — [392cbd7](https://github.com/becked/per-ankh/commit/392cbd7cb8d9d797b9ca1f6a3755d65494094fd3)
+- (momentum) model v2 — interpolated weights, exact deltas, no cities — [e8e24a6](https://github.com/becked/per-ankh/commit/e8e24a6ebde7aeefc3082fc5482c1114ae0d0663)
+- (momentum) the panel admits the early game is uncertain — [83102dc](https://github.com/becked/per-ankh/commit/83102dc55cbbdf9615ea0289865911c14823f47a)
+- (momentum) an info side that explains every number in the panel — [ea038fe](https://github.com/becked/per-ankh/commit/ea038fe10d0f129846a864a9250626d2558ff02a)
+
+### Fixes
+
+- (scripts) keep hand-authored files when regenerating the UX review — [75be563](https://github.com/becked/per-ankh/commit/75be5632947f9013b4a7902d05764bc40c368a4d)
+- (scripts) settle before the cold-state navigation — [b8353f8](https://github.com/becked/per-ankh/commit/b8353f89ddd85a8fa39da9979b88ce7297e29a54)
+- (ui) stop popover close from scrolling its trigger back into view — [0ca6b32](https://github.com/becked/per-ankh/commit/0ca6b32586a1e35bc0bf9ab43789ec62c22d725a)
+- (scripts) walk the game-detail tabs the app actually renders — [c4881e3](https://github.com/becked/per-ankh/commit/c4881e38a1a46221cfa1a6a344633da40623ae52)
+- (game-detail) confine the momentum tooltip to the chart — [e402c19](https://github.com/becked/per-ankh/commit/e402c1943ed7d775aaea07b64700beda73e5c3d5)
+- (momentum) fit on a deduped corpus with wider SD smoothing — [d47aedc](https://github.com/becked/per-ankh/commit/d47aedc4993960343fdfc43138de22b61ca9c64e)
+- (momentum) drop the early-game fade, and bars that can't contradict the header — [c748e6c](https://github.com/becked/per-ankh/commit/c748e6c113176cafa83b6990bd654bc1cbd2319a)
+- (momentum) a solid 50% midline — [0ee8a7d](https://github.com/becked/per-ankh/commit/0ee8a7d82451f2bf2850149e59b17afa1379aae2)
+- (momentum) the hover marks the turn, and nothing else — [45ead09](https://github.com/becked/per-ankh/commit/45ead091b23f63585aff9bee83e3b06399a263f8)
+- (momentum) the events heading names its own turns — [2a8f83a](https://github.com/becked/per-ankh/commit/2a8f83a3b876bcf7d6ec50ba067fcf7a01e979ce)
+- (momentum) a turn summary of its own, at a height that holds still — [4364217](https://github.com/becked/per-ankh/commit/4364217b52fd03d1dcea9a7625e09ffb1ca4108f)
+
+### Other
+
+- add a home page design brief — [4f0e730](https://github.com/becked/per-ankh/commit/4f0e7300988b669b411e10bd7e94f896be92d7b4)
+- (ux-review) regenerate the bundle against a game that renders — [49d6987](https://github.com/becked/per-ankh/commit/49d6987035843b01778f4ee535f8c8384d39e615)
+- collect the home redesign package — [61bbdef](https://github.com/becked/per-ankh/commit/61bbdeff41fc1c582f98d8366492b68fed8388f7)
+- name the right chart-color helper in the home brief — [33fde94](https://github.com/becked/per-ankh/commit/33fde94f3e8b8fdb9037564fc16ab1962e0ff5e4)
+- (scripts) move the UX-review capture into the per-ankh CLI — [68bf767](https://github.com/becked/per-ankh/commit/68bf767fe0459b89736564c872c4fc75635ac7c5)
+- point the home-redesign package at the ux-review shots — [483069e](https://github.com/becked/per-ankh/commit/483069e892c61c82efdf2d242fe47db6db454117)
+- (momentum) drop the unused momentumDrama export — [5a9394b](https://github.com/becked/per-ankh/commit/5a9394b3e12a4ad154061fab3461fbcb822aac1a)
+- share the chart midline colour, refresh panel-era comments — [f5be89b](https://github.com/becked/per-ankh/commit/f5be89b39d7bd0c4e1b5c35d98f79d75462f3b90)
+- (momentum) renumber the momentum migration to 0041 — [431b581](https://github.com/becked/per-ankh/commit/431b5811c395c7dbbabd7aba6cd8e1af134a3f2d)
+- (momentum) renumber the momentum migration to 0043 — [43dbbee](https://github.com/becked/per-ankh/commit/43dbbeeded39d568232945bab788316ab496284c)
+- (momentum) generate the Worker mirror from the frontend scorer — [311da81](https://github.com/becked/per-ankh/commit/311da811c6696dd5c5bb4994a616c106c0e7a0ad)
+- (momentum) CLAUDE.md notes for the generated mirror and refit policy — [e7be0c8](https://github.com/becked/per-ankh/commit/e7be0c8af3b5dc534c39adac6c89692ecf7bb92d)
+- prettier pass over the momentum sources and mirror — [5edcf08](https://github.com/becked/per-ankh/commit/5edcf08f76b29b7ca5be152b9f5435ee55caa784)
+
 ## [2026-08-30-76a439c] - 2026-08-30
 
 ### Features
