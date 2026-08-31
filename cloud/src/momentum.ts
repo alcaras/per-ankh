@@ -207,8 +207,7 @@ export function momentumCurve(input: MomentumInput): MomentumCurve | null {
 		y.get("YIELD_SCIENCE")?.get(t) ?? 0,
 		m.get(t) ?? 0,
 	];
-	const pts: { turn: number; raw: number[]; sa: number[]; sb: number[] }[] =
-		[];
+	const pts: { turn: number; raw: number[]; sa: number[]; sb: number[] }[] = [];
 	for (let t = 2; t <= input.finalTurn; t++) {
 		const raw = featsAt(ya, yb, ma, mb, t);
 		if (raw)

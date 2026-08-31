@@ -108,7 +108,10 @@ describe("momentum mirror", () => {
 			new URL("../../src/lib/game-detail/momentum.ts", import.meta.url),
 			"utf8",
 		);
-		const mirror = readFileSync(new URL("./momentum.ts", import.meta.url), "utf8");
+		const mirror = readFileSync(
+			new URL("./momentum.ts", import.meta.url),
+			"utf8",
+		);
 		expect(mirror).toBe(mirrorMomentumSource(front));
 	});
 

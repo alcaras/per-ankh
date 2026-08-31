@@ -25,6 +25,7 @@ export function mirrorMomentumSource(front: string): string {
 		);
 	}
 	return (
-		MIRROR_HEADER + front.replace(FRONT_IMPORT, `} from "./generated/momentum";`)
+		MIRROR_HEADER +
+		front.replace(FRONT_IMPORT, `} from "./generated/momentum";`)
 	);
 }
