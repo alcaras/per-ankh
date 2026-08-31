@@ -256,19 +256,28 @@
 		TEAM_DIPLOMACY: "war",
 		OCCURRENCE: "event",
 	};
-	const windowEvents = $derived.by(() => {
-		const from = prev ? prev.turn : pt.turn - 1;
-		return eventLogs
+	// The turns these rows cover: everything after the previous scored point, up
+	// to this one. Adjacent points make that a single turn; a gap in the scored
+	// series (featsAt skips a turn when either side is missing power, orders or
+	// science) stretches it. The heading and the filter read the same bound, so
+	// they can never disagree about which turns are on screen.
+	const eventsFrom = $derived(prev ? prev.turn : pt.turn - 1);
+	const eventSpan = $derived(
+		eventsFrom < pt.turn - 1 ? `T${eventsFrom + 1}–T${pt.turn}` : `T${pt.turn}`,
+	);
+	const windowEvents = $derived.by(() =>
+		eventLogs
 			.filter(
-				(e) => e.turn > from && e.turn <= pt.turn && KIND[e.log_type] != null,
+				(e) =>
+					e.turn > eventsFrom && e.turn <= pt.turn && KIND[e.log_type] != null,
 			)
 			.slice(0, 4)
 			.map((e) => ({
 				kind: KIND[e.log_type],
 				who: e.player_name as string | null,
 				text: stripMarkup(e.description) || formatEnum(e.log_type, ""),
-			}));
-	});
+			})),
+	);
 	const shownEvents = $derived([...battleEvents, ...windowEvents]);
 
 	const playerFor = (name: string | null): DetailPlayer | null =>
@@ -319,9 +328,6 @@
 			<span class="font-bold" style="color: {leader.color};"
 				>{leader.label} {leadPct}%</span
 			>
-			<span class="ml-auto text-[10px] text-tan">
-				{hovered != null ? "click to pin" : "hover the chart to explore"}
-			</span>
 		</div>
 
 		<div class="grid gap-4 md:grid-cols-3">
@@ -424,7 +430,7 @@
 					<div
 						class="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wide text-tan"
 					>
-						Logged this window
+						At {eventSpan}
 					</div>
 					{#each shownEvents as ev, i (i)}
 						<div class="py-0.5 text-xs text-bright">
