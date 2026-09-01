@@ -235,8 +235,6 @@ export interface EmpireSeries {
  */
 export const YIELD_MAINTENANCE = "YIELD_MAINTENANCE";
 
-export type { GdpComponent };
-
 /**
  * One turn of one player's GDP: the total, and what each basket item paid.
  * Commodities come first, richest first, with money last — money is the unit
@@ -368,30 +366,15 @@ export function nationalWealth(
 			held.set(row.yield_type, row.amount / STOCKPILE_SCALE);
 		}
 
-		const components: GdpComponent[] = [];
-		let total = 0;
-		for (const commodity of GDP_COMMODITIES) {
-			const amount = held.get(commodity);
-			const price = priceCurves.get(commodity)?.[finalTurn];
-			if (amount == null || price == null) continue;
-			const value = amount * price;
-			total += value;
-			if (amount !== 0) {
-				components.push({ yieldType: commodity, amount, value, price });
-			}
-		}
-		components.sort((a, b) => b.value - a.value);
-
-		const money = held.get(GDP_MONEY) ?? 0;
-		total += money;
-		if (money !== 0) {
-			components.push({
-				yieldType: GDP_MONEY,
-				amount: money,
-				value: money,
-				price: null,
-			});
-		}
+		// The same basket, priced the same way — what differs is only what is
+		// being priced: a stockpile held at the final turn rather than a turn's
+		// income. Pricing it here a second time is how the two would drift.
+		const components = gdpComponents(
+			finalTurn,
+			(y) => held.get(y),
+			priceCurves,
+		);
+		const total = components.reduce((sum, c) => sum + c.value, 0);
 		return { player, components, total };
 	});
 }
