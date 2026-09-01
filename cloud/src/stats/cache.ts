@@ -58,6 +58,7 @@ const BUNDLE_SCHEMA_CHANGELOG: Record<number, string> = {
 	9: "favorite_day_of_week dropped (no consumer — the profile card reads its own copy from GET /v1/users/:user_id), and save_dates moved from ChartBundleCore to the user-only ChartBundle: only the profile Overview calendar renders it, and it was the one field whose size grew with the corpus rather than with the turn axis",
 	10: "familyKeeps — per-family-class keep rate against the pool's chance baseline, overall and per nation",
 	11: "records moved to their own entry — per yield series, the top seats on each of seven boards (peak, end-of-game, and the T20/T40/T60/T80/T100 checkpoints), for both the rate and the cumulative column. Folded into the pass that already builds the bands, so no new query, but stored and served separately (the ':records' payload segment above) because only the Records tab reads them",
+	12: "gdp — a per-turn GDP series on yieldCurves and a GDP record board, from the game_player_turn columns migration 0048 adds. A new key inside an existing Record rather than a new declared field, so nothing dereferences it blind, but a bundle cached before the deploy would draw an empty GDP chart on the Yields tab for up to a TTL. A flush is cheaper than that",
 };
 
 export const BUNDLE_SCHEMA_VERSION = Math.max(
