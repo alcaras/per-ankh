@@ -114,6 +114,8 @@
 		{
 			title: "Resources",
 			keys: [
+				// GDP first: the others are what it is made of.
+				"gdp_per_turn",
 				"money_per_turn",
 				"food_per_turn",
 				"iron_per_turn",

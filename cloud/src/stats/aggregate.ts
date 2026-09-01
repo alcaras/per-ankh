@@ -117,6 +117,11 @@ const YIELD_COLUMNS: Array<
 	["stone_per_turn", "stone_per_turn", "stone_cumulative"],
 	["wood_per_turn", "wood_per_turn", "wood_cumulative"],
 	["maintenance_per_turn", "maintenance_per_turn", "maintenance_cumulative"],
+	// Not a yield: GDP is derived at index time from the money and commodity
+	// rates priced at each turn's market rate (migration 0044). Its cumulative
+	// column is a running sum of the rate — a flow's total is lifetime output,
+	// never a stockpile.
+	["gdp_per_turn", "gdp_per_turn", "gdp_cumulative"],
 	["military_power", "military_power", null],
 	["legitimacy", "legitimacy", null],
 ];

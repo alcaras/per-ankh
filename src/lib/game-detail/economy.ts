@@ -16,6 +16,13 @@
 // of the component so the shapes stay testable.
 
 import { IMPROVEMENT_BUILDS } from "$lib/generated/improvement-builds";
+import {
+	type GdpComponent,
+	GDP_COMMODITIES,
+	GDP_MONEY,
+	gdpComponents,
+	pricesByTurn,
+} from "./gdp-basket";
 import type { CityInfo } from "$lib/types/CityInfo";
 import type { EventLog } from "$lib/types/EventLog";
 import type { ImprovementInfo } from "$lib/types/ImprovementInfo";
@@ -214,19 +221,11 @@ export interface EmpireSeries {
 
 // ─── GDP ──────────────────────────────────────────────────────────────
 //
-// The commodity yields the game runs a market in, so each has a money price
-// per turn to value it at. Orders are priced too but deliberately left out:
-// they're an action budget, not production, and at ~100 money a point they'd
-// swamp everything else.
-const GDP_COMMODITIES = [
-	"YIELD_FOOD",
-	"YIELD_WOOD",
-	"YIELD_STONE",
-	"YIELD_IRON",
-] as const;
-
-/** Money is the numéraire — counted at face value, never priced. */
-const GDP_MONEY = "YIELD_MONEY";
+// What the basket IS, what a price means, and what a turn is worth all live in
+// gdp-basket.ts, because the Worker's D1 indexer prices the same basket when
+// it writes game_player_turn.gdp_per_turn and the two must not drift. What
+// stays here is the charting: per-player curves and the breakdown the tooltip
+// reads.
 
 /**
  * Upkeep. NOT a GDP term: yield.xml files YIELD_MAINTENANCE with
@@ -236,24 +235,7 @@ const GDP_MONEY = "YIELD_MONEY";
  */
 export const YIELD_MAINTENANCE = "YIELD_MAINTENANCE";
 
-// The save stores market prices as money ×10,000: yield.xml gives each
-// commodity <iPrice>4</iPrice> and the earliest recorded price in every game
-// is raw ~40,200, so 4 money is the base. yield.xml's <iMinPrice>20</iMinPrice>
-// / <iMaxPrice>1000</iMaxPrice> are NOT in the same units — they're tenths, so
-// the price is bounded to 2..100 money. Reading those two as whole money is
-// what makes ×1,000 look right; it isn't.
-const PRICE_SCALE = 10_000;
-
-/** One basket item's contribution to a turn's GDP. */
-export interface GdpComponent {
-	yieldType: string;
-	/** The income itself, in yield units — what the player actually earned. */
-	amount: number;
-	/** What that income is worth in money. Money's own row is worth its face. */
-	value: number;
-	/** Market price that turn; null for money, which is the numéraire. */
-	price: number | null;
-}
+export type { GdpComponent };
 
 /**
  * One turn of one player's GDP: the total, and what each basket item paid.
@@ -268,37 +250,6 @@ export interface GdpBreakdown {
 export interface GdpSeries extends EmpireSeries {
 	/** Index-aligned to `data` — `breakdown[t]` explains `data[t]`. */
 	breakdown: GdpBreakdown[];
-}
-
-/**
- * Per-turn market price of each commodity, in money, indexed by turn.
- * `yield_price_history` only records turns where a price moved, so each
- * series is forward-filled; turns before its first entry take that first
- * price, which costs nothing because turn 1 carries no yield rate to value.
- */
-function pricesByTurn(
-	prices: YieldPriceEntry[],
-	finalTurn: number,
-): Map<string, number[]> {
-	const out = new Map<string, number[]>();
-	for (const commodity of GDP_COMMODITIES) {
-		const observed = prices
-			.filter((p) => p.yield_type === commodity)
-			.sort((a, b) => a.turn - b.turn);
-		if (observed.length === 0) continue;
-		const curve = new Array<number>(finalTurn + 1);
-		let latest = observed[0].price / PRICE_SCALE;
-		let next = 0;
-		for (let t = 0; t <= finalTurn; t++) {
-			while (next < observed.length && observed[next].turn <= t) {
-				latest = observed[next].price / PRICE_SCALE;
-				next += 1;
-			}
-			curve[t] = latest;
-		}
-		out.set(commodity, curve);
-	}
-	return out;
 }
 
 /**
@@ -340,35 +291,12 @@ export function gdpSeries(
 		const data = new Array<number>(finalTurn + 1).fill(0);
 		const breakdown: GdpBreakdown[] = [];
 		for (let t = 0; t <= finalTurn; t++) {
-			const commodities: GdpComponent[] = [];
-			let total = 0;
-			for (const commodity of GDP_COMMODITIES) {
-				const amount = rates.get(commodity)?.get(t);
-				const price = priceCurves.get(commodity)?.[t];
-				if (amount == null || price == null) continue;
-				const value = amount * price;
-				total += value;
-				if (amount !== 0)
-					commodities.push({ yieldType: commodity, amount, value, price });
-			}
-			commodities.sort((a, b) => b.value - a.value);
-
-			const money = rates.get(GDP_MONEY)?.get(t) ?? 0;
-			total += money;
-			// Money last: it's the unit the rows above were converted into.
-			const components =
-				money !== 0
-					? [
-							...commodities,
-							{
-								yieldType: GDP_MONEY,
-								amount: money,
-								value: money,
-								price: null,
-							},
-						]
-					: commodities;
-
+			const components = gdpComponents(
+				t,
+				(y) => rates.get(y)?.get(t),
+				priceCurves,
+			);
+			const total = components.reduce((sum, c) => sum + c.value, 0);
 			data[t] = total;
 			breakdown.push({ total, components });
 		}

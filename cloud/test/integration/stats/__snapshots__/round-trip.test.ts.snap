@@ -2651,6 +2651,42 @@ exports[`chart bundle round-trip > builds the all-humans bundle from the same co
               ],
             },
           },
+          "gdp_per_turn": {
+            "cumulative": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+            "rate": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+          },
           "growth_per_turn": {
             "cumulative": {
               "p25": [
@@ -3236,6 +3272,42 @@ exports[`chart bundle round-trip > builds the all-humans bundle from the same co
               ],
             },
           },
+          "gdp_per_turn": {
+            "cumulative": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+            "rate": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+          },
           "growth_per_turn": {
             "cumulative": {
               "p25": [
@@ -3813,6 +3885,42 @@ exports[`chart bundle round-trip > builds the all-humans bundle from the same co
             17.75,
             19.75,
             21.75,
+          ],
+        },
+      },
+      "gdp_per_turn": {
+        "cumulative": {
+          "p25": [
+            null,
+            null,
+            null,
+          ],
+          "p50": [
+            null,
+            null,
+            null,
+          ],
+          "p75": [
+            null,
+            null,
+            null,
+          ],
+        },
+        "rate": {
+          "p25": [
+            null,
+            null,
+            null,
+          ],
+          "p50": [
+            null,
+            null,
+            null,
+          ],
+          "p75": [
+            null,
+            null,
+            null,
           ],
         },
       },
@@ -5874,6 +5982,42 @@ exports[`chart bundle round-trip > builds the user bundle from the fixture corpu
               ],
             },
           },
+          "gdp_per_turn": {
+            "cumulative": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+            "rate": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+          },
           "growth_per_turn": {
             "cumulative": {
               "p25": [
@@ -6459,6 +6603,42 @@ exports[`chart bundle round-trip > builds the user bundle from the fixture corpu
               ],
             },
           },
+          "gdp_per_turn": {
+            "cumulative": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+            "rate": {
+              "p25": [
+                null,
+                null,
+                null,
+              ],
+              "p50": [
+                null,
+                null,
+                null,
+              ],
+              "p75": [
+                null,
+                null,
+                null,
+              ],
+            },
+          },
           "growth_per_turn": {
             "cumulative": {
               "p25": [
@@ -7036,6 +7216,42 @@ exports[`chart bundle round-trip > builds the user bundle from the fixture corpu
             15,
             16.5,
             18,
+          ],
+        },
+      },
+      "gdp_per_turn": {
+        "cumulative": {
+          "p25": [
+            null,
+            null,
+            null,
+          ],
+          "p50": [
+            null,
+            null,
+            null,
+          ],
+          "p75": [
+            null,
+            null,
+            null,
+          ],
+        },
+        "rate": {
+          "p25": [
+            null,
+            null,
+            null,
+          ],
+          "p50": [
+            null,
+            null,
+            null,
+          ],
+          "p75": [
+            null,
+            null,
+            null,
           ],
         },
       },
