@@ -38,7 +38,14 @@ export const GDP_MONEY = "YIELD_MONEY";
  */
 export const PRICE_SCALE = 10_000;
 
-/** One `yield_price_history` entry, structurally — the wire shape both callers hold. */
+/**
+ * One `yield_price_history` entry. Structurally identical to the parser's
+ * `YieldPriceEntry` and declared again here rather than imported, because
+ * importing it would pull `$lib/parser/types` — and with it the alias
+ * resolution this module exists to avoid — into the Worker bundle. Callers on
+ * the frontend pass their `YieldPriceEntry[]` straight in; the Worker uses
+ * this one.
+ */
 export interface PricePoint {
 	turn: number;
 	yield_type: string;

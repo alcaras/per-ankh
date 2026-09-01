@@ -31,7 +31,11 @@ import {
 // that drags nothing with it — gdp-basket.ts is deliberately dependency-free
 // (no $lib aliases) so the Worker bundle can hold the one definition of the
 // basket rather than a mirror of it that drifts.
-import { gdpForTurn, pricesByTurn } from "../../src/lib/game-detail/gdp-basket";
+import {
+	gdpForTurn,
+	type PricePoint,
+	pricesByTurn,
+} from "../../src/lib/game-detail/gdp-basket";
 import { NATION_NAMES } from "./generated/nation-names";
 import { WONDER_CULTURE_PREREQ } from "./generated/wonders";
 import { sessionFromRequest } from "./session";
@@ -609,18 +613,16 @@ function buildGamePlayerTurnStatements(
 		}
 	}
 
+	if (rowsByKey.size === 0) return [];
+
 	// ── GDP, priced per player from the rates already pivoted above.
 	//
 	// A game whose save recorded no prices gets no GDP at all rather than a
 	// curve priced at some assumed base: NULL means "not known here", and a
 	// reader that treats it as zero would be inventing a claim about the game.
 	const priceCurves = pricesByTurn(
-		(blob.yield_price_history ?? []) as Array<{
-			turn: number;
-			yield_type: string;
-			price: number;
-		}>,
-		Math.max(0, ...[...rowsByKey.values()].map((r) => Number(r.turn ?? 0))),
+		(blob.yield_price_history ?? []) as PricePoint[],
+		Math.max(0, ...[...rowsByKey.values()].map((r) => Number(r.turn))),
 	);
 	if (priceCurves.size > 0) {
 		// Per player, in turn order, so the running sum is a running sum.
@@ -651,8 +653,6 @@ function buildGamePlayerTurnStatements(
 			}
 		}
 	}
-
-	if (rowsByKey.size === 0) return [];
 
 	// Momentum: score the fitted win-probability model for finished duels —
 	// exactly two humans, known winner — and attach p to each player's turn
