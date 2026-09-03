@@ -199,6 +199,13 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         anyone has seen. The same correction is applied at read time to the
 //         map turn slider and the Economy tab's territory curve, which need no
 //         reparse.
+// 2.20.0 — build_turns_left and city_xml_id on improvement_data.improvements
+//         (a tile carries its improvement from the turn work starts, so a
+//         half-built wonder was indistinguishable from a built one),
+//         original_tribe on units (a hired mercenary vs a trained unit) and
+//         tile_xml_id on city_statistics.cities (dates a capture through
+//         tile_ownership_history). Read by the challenge scorer; purely
+//         additive.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -225,13 +232,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.17.0",
 	"2.18.0",
 	"2.19.0",
+	"2.20.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.19.0";
+export const CURRENT_PARSER_VERSION = "2.20.0";
 
 // ----- Reusable atoms -----
 

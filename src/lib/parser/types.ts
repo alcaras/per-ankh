@@ -210,6 +210,9 @@ export interface UnitInfo {
 	create_turn: number | null;
 	facing: string | null;
 	original_player_xml_id: number | null;
+	// The tribe a mercenary was hired from (<OriginalTribe>); null for a unit
+	// the player trained. Optional: absent on blobs before PARSER_VERSION 2.20.0.
+	original_tribe?: string | null;
 	turns_since_last_move: number | null;
 	gender: string | null;
 	is_sleeping: boolean;
@@ -432,4 +435,4 @@ export interface FullGameData {
  * fixes, MINOR for additive fields, MAJOR for breaking schema changes.
  * Initial value `2.0.0` mirrors `FullGameData.version: 2`.
  */
-export const PARSER_VERSION = "2.19.0";
+export const PARSER_VERSION = "2.20.0";
