@@ -9,6 +9,7 @@
 	import type {
 		cloudApi,
 		CollectionInfo,
+		GameChallengeLink,
 		GameTournamentLink,
 	} from "$lib/api-cloud";
 	import { isNewer } from "$lib/utils/semver";
@@ -27,11 +28,13 @@
 		isOwner,
 		collections,
 		tournamentLink,
+		challengeLink,
 	}: {
 		game: Awaited<ReturnType<typeof cloudApi.getGame>>;
 		isOwner: boolean;
 		collections?: CollectionInfo[];
 		tournamentLink: GameTournamentLink | null;
+		challengeLink: GameChallengeLink | null;
 	} = $props();
 
 	// Cloud game id from URL — distinct from the in-game `xml_game_id`
@@ -114,6 +117,14 @@
 					slug: tournamentLink.tournament.slug,
 				}),
 			});
+		} else if (challengeLink) {
+			trail.push({ label: "Challenges", href: resolve("/challenges") });
+			trail.push({
+				label: `#${challengeLink.number} ${challengeLink.title}`,
+				href: resolve("/challenges/[number]", {
+					number: String(challengeLink.number),
+				}),
+			});
 		} else if (game.user_id && game.user_display_name) {
 			trail.push({
 				label: game.user_display_name,
@@ -163,6 +174,24 @@
 		</p>
 	</div>
 </div>
+
+{#if challengeLink}
+	<div
+		class="mb-4 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-surface bg-surface-sunken p-2 shadow-lg"
+	>
+		<p class="rounded bg-surface px-2.5 py-1 text-xs text-tan">
+			<a
+				href={resolve("/challenges/[number]", {
+					number: String(challengeLink.number),
+				})}
+				class="font-bold hover:text-orange"
+			>
+				Challenge #{challengeLink.number}: {challengeLink.title}
+			</a>
+			— scores T{challengeLink.score_turn} · rank #{challengeLink.rank}
+		</p>
+	</div>
+{/if}
 
 {#if isReimportAvailable || adminReparseTarget}
 	<div

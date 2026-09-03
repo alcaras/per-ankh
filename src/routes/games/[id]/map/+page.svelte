@@ -159,6 +159,7 @@
 				isOwner={data.isOwner}
 				collections={data.collections}
 				tournamentLink={data.tournamentLink}
+				challengeLink={data.challengeLink}
 			/>
 		</div>
 	</div>

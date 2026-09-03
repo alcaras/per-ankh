@@ -100,6 +100,12 @@ export const load: LayoutLoad = async ({ params, fetch, url }) => {
 		.getGameTournamentLink(params.id, { fetch })
 		.then((res) => res.link)
 		.catch(() => null);
+	// Same shape for the challenge link — a game is a run of at most one
+	// challenge, and the banner/breadcrumb only need the number and rank.
+	const challengeLinkPromise = cloudApi
+		.getGameChallengeLink(params.id, { fetch })
+		.then((res) => res.link)
+		.catch(() => null);
 
 	let game;
 	try {
@@ -135,12 +141,14 @@ export const load: LayoutLoad = async ({ params, fetch, url }) => {
 	// Failure here just falls back to the uploader's profile — don't block
 	// the page render. Issued above, concurrently with the game read.
 	const tournamentLink = await linkPromise;
+	const challengeLink = await challengeLinkPromise;
 
 	return {
 		game,
 		isOwner,
 		collections,
 		tournamentLink,
+		challengeLink,
 		meta: buildMeta(game),
 	};
 };

@@ -271,7 +271,7 @@ export interface RecordsBundle {
 // UserScope; collection id is a string in the URL/client layer, a number
 // server-side). One mutually-exclusive slice of a user's library.
 export type UserScope =
-	"all" | "public" | "vs_ai" | "mp" | "tournament" | string;
+	"all" | "public" | "vs_ai" | "mp" | "tournament" | "challenge" | string;
 
 // The composition slice the public /stats corpus is cut by (mirrors the
 // Worker's GlobalSlice). Roster composition only: the global corpus has no
