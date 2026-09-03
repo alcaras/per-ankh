@@ -35,6 +35,12 @@
 	const challenge = $derived(data.challenge);
 	const isOpen = $derived(challenge.status === "open");
 	const canManage = $derived(data.viewer?.can_manage ?? false);
+	// The Worker refuses a creator's delete once runs are on the board
+	// (CHALLENGE_HAS_RUNS); only an admin can remove those.
+	const canDelete = $derived(
+		canManage &&
+			(challenge.submission_count === 0 || (data.user?.is_admin ?? false)),
+	);
 	const setupLine = $derived(describeSetup(challenge.setup).join(" · "));
 
 	const crumbs = $derived([
@@ -183,6 +189,8 @@
 							>
 								Edit
 							</button>
+						{/if}
+						{#if canDelete}
 							<button
 								type="button"
 								class="whitespace-nowrap rounded border border-red-400 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-400 hover:text-black disabled:opacity-50"
