@@ -8,6 +8,12 @@
 // since/until window (until exclusive; closed windows cache for a day), the
 // season_view gate, and the PII stance: linking online ids must never appear
 // in the response.
+//
+// They also pin the visibility rule the board shares with every other public
+// reader (users.ts, stats/resolve.ts): a save its owner kept private reaches
+// no public counter, down neither credit path. Windows are caller-supplied to
+// the day, so a counter that moved would be an activity log for a game its
+// owner never published.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -33,6 +39,10 @@ async function seedPlayedGame(opts: {
 	xmlGameId?: string;
 	gameMode?: string | null;
 	createdAt?: string; // ISO date; defaults to now
+	// Defaults to public, matching the upload default
+	// (games.ts: pref?.default_game_public !== 0). Set false to seed a save
+	// its owner kept private.
+	isPublic?: boolean;
 	seats: Seat[];
 }): Promise<string> {
 	const gameId = nanoid(21);
@@ -41,7 +51,7 @@ async function seedPlayedGame(opts: {
 			game_id, user_id, xml_game_id, total_turns, file_hash,
 			game_name, is_public, blob_version, blob_size_bytes, parser_version,
 			game_mode, created_at
-		) VALUES (?, ?, ?, 50, ?, 'Leaderboard Game', 1, 2, 1024, '1.0.0', ?,
+		) VALUES (?, ?, ?, 50, ?, 'Leaderboard Game', ?, 2, 1024, '1.0.0', ?,
 		          COALESCE(?, datetime('now')))`,
 	)
 		.bind(
@@ -49,6 +59,7 @@ async function seedPlayedGame(opts: {
 			opts.uploader.userId,
 			opts.xmlGameId ?? nanoid(36),
 			nanoid(64),
+			(opts.isPublic ?? true) ? 1 : 0,
 			opts.gameMode ?? null,
 			opts.createdAt ?? null,
 		)
@@ -188,6 +199,60 @@ describe("GET /v1/stats/players", () => {
 
 		const body = (await (await get("")).json()) as LeaderboardBody;
 		expect(rowFor(body, uploader)!.total).toBe(1);
+	});
+
+	it("credits nobody for a private game, on either path", async () => {
+		const uploader = await makeUser();
+		const opponent = await makeUser();
+		const onlineId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(opponent, onlineId);
+
+		await seedPlayedGame({
+			uploader,
+			gameMode: "NETWORK",
+			isPublic: false,
+			seats: [{ is_uploader: true }, { online_id: onlineId }],
+		});
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		// Absent, not zeroed — a private save is the only game either player
+		// has here, so neither may appear at all. A row of zeroes would still
+		// name an account whose every game is private.
+		expect(rowFor(body, uploader)).toBeUndefined();
+		expect(rowFor(body, opponent)).toBeUndefined();
+	});
+
+	it("counts a match once for both when only one side's upload is public", async () => {
+		const uploader = await makeUser();
+		const opponent = await makeUser();
+		const onlineId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(opponent, onlineId);
+
+		// The same match uploaded by both, public on one side and private on
+		// the other. One public upload makes the match public, and it is that
+		// upload's seats that credit both players — so the private copy
+		// neither adds a second credit nor withdraws the public one.
+		const xmlGameId = nanoid(36);
+		for (const user of [uploader, opponent]) {
+			await seedPlayedGame({
+				uploader: user,
+				xmlGameId,
+				gameMode: "NETWORK",
+				isPublic: user === uploader,
+				seats: [
+					{ is_uploader: user === uploader },
+					{ online_id: onlineId, is_uploader: user === opponent },
+				],
+			});
+		}
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		for (const user of [uploader, opponent]) {
+			const row = rowFor(body, user);
+			expect(row).toBeDefined();
+			expect(row!.duels_network).toBe(1);
+			expect(row!.total).toBe(1);
+		}
 	});
 
 	it("windows on created_at with until exclusive, and 400s malformed dates", async () => {

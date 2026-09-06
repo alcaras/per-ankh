@@ -397,6 +397,21 @@ export async function handlePlayerLeaderboard(
 	// upload of it (all uploads of a match carry the same save, so humans
 	// and game_mode agree). Duel = exactly two humans, split by game mode;
 	// two-human hotseat/LAN lands in `other` (derived client-side).
+	//
+	// Every arm carries is_public = 1 — the same visibility rule the profile
+	// card (users.ts) and the global corpus (stats/resolve.ts) enforce. A
+	// private game must not reach a public counter: the increment alone
+	// publishes that the game happened, how many humans were in it and its
+	// game mode, and — through the online-id arm — that a second player was
+	// there, which is a visibility decision that player never made. Windows
+	// are caller-supplied down to a single day, so the counters are fine
+	// enough to read as an activity log rather than as a season total.
+	// `match_class` is the load-bearing arm (the final JOIN is inner, so a
+	// match missing from it drops out entirely), but all three carry the
+	// predicate rather than resting a visibility guarantee on join
+	// semantics. A match uploaded publicly by one player and privately by
+	// another stays public — the public upload classifies it, and both
+	// players are credited once.
 	const rows = await env.SHARE_DB.prepare(
 		`WITH humans AS (
 		   SELECT game_id, SUM(is_human) AS n
@@ -407,7 +422,8 @@ export async function handlePlayerLeaderboard(
 		   FROM games g
 		   JOIN player_summaries ps
 		     ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
-		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		   WHERE g.is_public = 1
+		     AND (?1 IS NULL OR g.created_at >= ?1)
 		     AND (?2 IS NULL OR g.created_at < ?2)
 		   UNION
 		   SELECT uo.user_id, g.xml_game_id
@@ -416,14 +432,16 @@ export async function handlePlayerLeaderboard(
 		     ON ps.game_id = g.game_id AND ps.is_human = 1
 		        AND ps.online_id IS NOT NULL
 		   JOIN user_online_ids uo ON uo.online_id = ps.online_id
-		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		   WHERE g.is_public = 1
+		     AND (?1 IS NULL OR g.created_at >= ?1)
 		     AND (?2 IS NULL OR g.created_at < ?2)
 		 ),
 		 match_class AS (
 		   SELECT g.xml_game_id, MAX(h.n) AS n_humans, MAX(g.game_mode) AS game_mode
 		   FROM games g
 		   JOIN humans h ON h.game_id = g.game_id
-		   WHERE (?1 IS NULL OR g.created_at >= ?1)
+		   WHERE g.is_public = 1
+		     AND (?1 IS NULL OR g.created_at >= ?1)
 		     AND (?2 IS NULL OR g.created_at < ?2)
 		   GROUP BY g.xml_game_id
 		 )
