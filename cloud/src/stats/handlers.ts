@@ -2,19 +2,17 @@
 //
 //   GET /v1/users/:user_id/stats           — user corpus
 //   GET /v1/stats                          — global (public) corpus
+//   GET /v1/stats/players                  — played-games leaderboard
 //
-// Resolve corpus → check cache → compute on miss → return bundle.
+// The first two resolve corpus → check cache → compute on miss → return
+// bundle. The third is not a bundle at all — it counts games played per user
+// straight out of D1, uncached — and shares this file for the corpus it reads
+// rather than for the shape it returns.
 
 import { CURRENT_PARSER_VERSION } from "../schemas/game";
 import { sessionFromRequest } from "../session";
 import type { SessionEnv } from "../session";
-import {
-	cloudCorsHeaders,
-	errorResponse,
-	getClientIp,
-	jsonResponse,
-} from "../util";
-import { ANON_READS_PER_HOUR, countEventsSince, isScraperUA } from "../games";
+import { cloudCorsHeaders, errorResponse, jsonResponse } from "../util";
 import { displayNameSql } from "../identity";
 import {
 	parseNationParam,
@@ -304,7 +302,55 @@ export interface PlayerLeaderboardEnv {
 	SHARE_DB: QueryableD1;
 	EVENTS_DB: D1Database;
 	ALLOWED_ORIGINS: string;
+	// Per-IP hourly ceiling on the /season read budget. Optional: unset falls
+	// back to the constant below. A var rather than a bare const for the same
+	// reason the other read ceilings are — retunable without a redeploy.
+	SEASON_VIEW_PER_HOUR?: string;
 }
+
+// Per-IP budget for the public /season reads, spent one slot per board.
+//
+// Its own budget, deliberately not a share of anon_read. /season and /games/*
+// are different populations, and a shared budget lets whichever is busier
+// decide when the other starts refusing — the coupling that took the
+// tournament pages down on 2026-08-05, and the reason tournament/limits.ts
+// says to give a public read the budget of the page that fetches it rather
+// than of the feature it belongs to. anon_read is also the wrong size and the
+// wrong shape for this page: its 200/hr is already shared with the home feed
+// and every game-detail view, and it is a bare constant, so the season read
+// would be the only budgeted public read an operator can't retune without a
+// redeploy.
+//
+// Not a share of global_stats_view either, close as the two surfaces sound:
+// /season is anonymous where /stats is session-gated, so pooling them would
+// let a crawl of the public board decide when signed-in visitors stop getting
+// charts.
+//
+// 1200 arrived through the fan-out, not by copying a number across: the Season
+// page fetches two boards per load — all-time plus the selected season
+// (src/routes/season/+page.ts) — and each step through the season archive
+// costs another two. So 1200 is ~600 page loads an hour, the same headroom
+// GLOBAL_STATS_VIEW_PER_HOUR buys at 600 on one read a load and
+// TOURNAMENT_VIEW_PER_HOUR at 2400 on four to six.
+//
+// The default only — read the effective ceiling with seasonViewPerHour().
+export const SEASON_VIEW_PER_HOUR = 1200;
+
+export function seasonViewPerHour(env: {
+	SEASON_VIEW_PER_HOUR?: string;
+}): number {
+	return ceilingFrom(
+		env.SEASON_VIEW_PER_HOUR,
+		SEASON_VIEW_PER_HOUR,
+		"SEASON_VIEW_PER_HOUR",
+	);
+}
+
+const SEASON_BUDGET: ReadBudget = {
+	eventType: "season_view",
+	message: "Season view rate limit exceeded",
+	code: "RATE_LIMIT_SEASON",
+};
 
 interface PlayedGamesRow {
 	user_id: string;
@@ -321,32 +367,14 @@ export async function handlePlayerLeaderboard(
 ): Promise<Response> {
 	const cors = cloudCorsHeaders(env, request);
 
-	// Same anon_read budget as the other public list reads (public-recent,
-	// game detail): scrapers exempt by UA, untrusted IPs share one bucket.
-	const ip = getClientIp(request) ?? "untrusted";
-	const ua = request.headers.get("User-Agent");
-	if (!isScraperUA(ua)) {
-		const count = await countEventsSince(
-			env.EVENTS_DB,
-			"anon_read",
-			"ip_address",
-			ip,
-		);
-		if (count >= ANON_READS_PER_HOUR) {
-			return errorResponse(
-				"Rate limit exceeded. Try again later.",
-				429,
-				cors,
-				"RATE_LIMIT",
-			);
-		}
-		env.EVENTS_DB.prepare(
-			`INSERT INTO events (event_type, ip_address) VALUES ('anon_read', ?)`,
-		)
-			.bind(ip)
-			.run()
-			.catch(() => {});
-	}
+	const limited = await enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		SEASON_BUDGET,
+		seasonViewPerHour(env),
+	);
+	if (limited) return limited;
 
 	// Optional season window: `since`/`until` (YYYY-MM-DD, until exclusive)
 	// count only games UPLOADED in the window — created_at is

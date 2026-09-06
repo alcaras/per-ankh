@@ -6,13 +6,13 @@
 // against user_online_ids), with double-uploaded matches deduped on
 // xml_game_id. These tests pin that attribution, the category split, the
 // since/until window (until exclusive; closed windows cache for a day), the
-// anon_read gate, and the PII stance: linking online ids must never appear
+// season_view gate, and the PII stance: linking online ids must never appear
 // in the response.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { nanoid } from "nanoid";
-import { ANON_READS_PER_HOUR } from "../../../src/games";
+import { SEASON_VIEW_PER_HOUR } from "../../../src/stats/handlers";
 import { expectErrorCode } from "../../helpers/assertions";
 import { makeUser, type TestUser } from "../../helpers/builders";
 
@@ -225,21 +225,23 @@ describe("GET /v1/stats/players", () => {
 		);
 	});
 
-	it("429s an anonymous read once the per-IP anon_read cap is reached", async () => {
+	it("429s a read once the per-IP season_view cap is reached", async () => {
 		const ip = `10.8.${nanoid(6)}`;
 		// Same single-statement bucket fill as anon-read-rate-limit.test.ts.
+		// Its own budget, so filling anon_read would not reach this gate — the
+		// bucket the page spends is the one this fills.
 		await env.SHARE_DB.prepare(
 			`INSERT INTO events (event_type, ip_address)
 			 WITH RECURSIVE seq(i) AS (
 			   SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < ?
 			 )
-			 SELECT 'anon_read', ? FROM seq`,
+			 SELECT 'season_view', ? FROM seq`,
 		)
-			.bind(ANON_READS_PER_HOUR, ip)
+			.bind(SEASON_VIEW_PER_HOUR, ip)
 			.run();
 
 		const limited = await get("", { ip });
-		await expectErrorCode(limited, { status: 429, code: "RATE_LIMIT" });
+		await expectErrorCode(limited, { status: 429, code: "RATE_LIMIT_SEASON" });
 
 		// Scraper UAs stay exempt.
 		const scraper = await get("", { ip, ua: "Discordbot/2.0" });

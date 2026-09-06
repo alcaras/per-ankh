@@ -3,6 +3,7 @@
 // `?s=` slug (shareable, e.g. ?s=summer-2026), defaulting to the current
 // one; past seasons are closed windows the archive keeps forever.
 import { cloudApi } from "$lib/api-cloud";
+import { rethrowRateLimit } from "$lib/utils/load-errors";
 import type { PageLoad } from "./$types";
 
 export interface Season {
@@ -71,18 +72,28 @@ export const load: PageLoad = async ({ fetch, url }) => {
 	const slug = url.searchParams.get("s");
 	const selected =
 		seasons.find((s) => s.slug === slug) ?? seasons[seasons.length - 1];
-	const [allTime, seasonBoard] = await Promise.all([
-		cloudApi.getPlayerLeaderboard({ fetch }),
-		cloudApi.getPlayerLeaderboard({
-			fetch,
-			since: selected.since,
-			until: selected.until,
-		}),
-	]);
-	return {
-		allTime: allTime.players,
-		season: seasonBoard.players,
-		seasons,
-		selected,
-	};
+	try {
+		const [allTime, seasonBoard] = await Promise.all([
+			cloudApi.getPlayerLeaderboard({ fetch }),
+			cloudApi.getPlayerLeaderboard({
+				fetch,
+				since: selected.since,
+				until: selected.until,
+			}),
+		]);
+		return {
+			allTime: allTime.players,
+			season: seasonBoard.players,
+			seasons,
+			selected,
+		};
+	} catch (err) {
+		// /season spends its own per-IP budget (season_view, not anon_read), so
+		// a 429 here means this surface alone was hammered — and it costs two
+		// slots a load, so an archive walk is what reaches the ceiling. Same
+		// remedy as everywhere else: wait out the rolling hour. Without this the
+		// ApiError falls through and SvelteKit renders a 500.
+		rethrowRateLimit(err);
+		throw err;
+	}
 };

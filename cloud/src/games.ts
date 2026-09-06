@@ -146,6 +146,7 @@ export type RateLimitedEventType =
 	| "tournament_export"
 	| "tournament_schedule"
 	| "global_stats_view"
+	| "season_view"
 	| "user_search"
 	| "user_search_public"
 	| "slug_claim_attempt";
