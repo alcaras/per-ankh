@@ -194,23 +194,23 @@
 				<div
 					class="absolute right-0 z-50 mt-2 w-40 rounded border-2 border-black bg-blue-gray shadow-lg"
 				>
+					<!--
+						The roster leads the menu in both states, outside the gate: /players is
+						a public page, so a signed-out viewer reading a shared game or a profile
+						has a way to it that is not a trip back to the home page for its button.
+						/stats is the one that needs a session. The divider below keeps the
+						destinations reading as destinations rather than account actions, and
+						they are ordered as the home page's action cluster orders them: the
+						roster of players, then the corpus they played.
+					-->
+					<a
+						href={resolve("/players")}
+						class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
+						onclick={closeMenu}
+					>
+						Players
+					</a>
 					{#if user}
-						<!--
-							Two destinations lead the signed-in branch rather than an account
-							action, and the divider below keeps them read that way. They are
-							ordered as the home page's action cluster orders them: the roster
-							of players, then the corpus they played. Both sit inside the gate
-							even though only /stats needs a session — the anonymous menu is
-							the About-only branch, and /players reaches signed-out viewers
-							through the home page's own button.
-						-->
-						<a
-							href={resolve("/players")}
-							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
-							onclick={closeMenu}
-						>
-							Players
-						</a>
 						<a
 							href={resolve("/stats")}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
@@ -252,6 +252,7 @@
 							{signingOut ? "Logging out…" : "Log out"}
 						</button>
 					{:else}
+						<div class="border-t border-black"></div>
 						<button
 							class="w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
 							type="button"
