@@ -55,12 +55,16 @@
 
 	// The board in the server's own order, each row carrying its rank.
 	//
-	// Standard competition ranking: equal totals share a rank and the next
-	// rank skips the tie (1, 1, 3). A positional ordinal would hand out a
-	// different number to players the board itself can't tell apart, which
-	// at a season's start — where most of the field sits on one game — is
-	// nearly the whole board. The server orders by total DESC, so tied rows
-	// are always adjacent and one backward look is enough.
+	// A plain ordinal: the row's position, 1, 2, 3, with nothing shared. This
+	// was standard competition ranking (equal totals sharing a rank, 1, 1, 3)
+	// on the grounds that a board can't hand out different numbers to players
+	// it can't tell apart — and at a season's start, where most of the field
+	// sits on one game, that was nearly the whole board. It can tell them
+	// apart now: the server breaks a tied total on who reached it first
+	// (total_reach, stats/handlers.ts), the same rule the crowns use, so the
+	// order is a real one and the numbers on it are earned rather than
+	// alphabetical. Sharing a rank would now be the board declining to say
+	// something it knows.
 	//
 	// The rank is computed here, before any sort, and travels on the row: it
 	// is the player's standing on this board, not their position in whatever
@@ -68,17 +72,9 @@
 	// 1, 4, 2 down the # column is the point — it says who those players are
 	// on the board you are looking at.
 	type Ranked = Row & { rank: number };
-	const ranked = $derived.by(() => {
-		const base = withOther(data.players);
-		const out: Ranked[] = [];
-		base.forEach((r, i) => {
-			out.push({
-				...r,
-				rank: i > 0 && r.total === base[i - 1].total ? out[i - 1].rank : i + 1,
-			});
-		});
-		return out;
-	});
+	const ranked = $derived.by(() =>
+		withOther(data.players).map((r, i) => ({ ...r, rank: i + 1 })),
+	);
 
 	// Column sorting. Local state rather than a URL param: this page's load
 	// re-fetches the board on any URL change — a D1 read and a season_view
@@ -99,9 +95,14 @@
 	// board answers is who has the most. Rank and name open ascending, where
 	// first and A are the top of the column.
 	const OPENS_ASCENDING: SortKey[] = ["rank", "display_name"];
-	// The board opens on the order the server sent it in.
-	let sortColumn = $state<SortKey>("total");
-	let sortDirection = $state<"asc" | "desc">("desc");
+	// The board opens on the order the server sent it in — which is now the
+	// # column, not Total. The two used to be the same ordering; they are
+	// not any more, because the server settles a tied total on who reached
+	// it first and the rank carries that, where a Total sort only sees the
+	// number. Opening on Total would put a row the board ranks third at the
+	// top of it.
+	let sortColumn = $state<SortKey>("rank");
+	let sortDirection = $state<"asc" | "desc">("asc");
 	function toggleSort(key: SortKey): void {
 		if (sortColumn === key) {
 			sortDirection = sortDirection === "asc" ? "desc" : "asc";
@@ -113,15 +114,29 @@
 	const rows = $derived.by(() => {
 		const key = sortColumn;
 		const dir = sortDirection === "asc" ? 1 : -1;
-		// Array.prototype.sort is stable and `ranked` arrives in board order,
-		// so players who tie on the sorted column keep their standing between
-		// them — sorting by FFAs puts the higher total first within a tie —
-		// and no secondary comparator is needed to make the order definite.
-		return [...ranked].sort((a, b) =>
-			key === "display_name"
-				? dir * a.display_name.localeCompare(b.display_name)
-				: dir * (a[key] - b[key]),
-		);
+		return [...ranked].sort((a, b) => {
+			if (key === "display_name")
+				return dir * a.display_name.localeCompare(b.display_name);
+			const by = dir * (a[key] - b[key]);
+			if (by !== 0) return by;
+			// A counted format's column ties exactly where its crown does, so
+			// it breaks the tie the same way: sorting by Network has to open
+			// on the player wearing the Network crown, or the column and the
+			// card above it name two different leaders. `crownBeats` ranks the
+			// whole column, not just its top — every tied group in it is a
+			// group that reached the same number, which is the only thing the
+			// rule ever asks. Direction flips the counts, never this: the
+			// question it answers is who got there first, which reversing
+			// would turn into nothing anyone asked.
+			if (isFormatKey(key)) {
+				if (crownBeats(a, b, key)) return -1;
+				if (crownBeats(b, a, key)) return 1;
+			}
+			// Array.prototype.sort is stable and `ranked` arrives in board
+			// order, so everything else keeps its standing within a tie —
+			// sorting by Other puts the higher total first.
+			return 0;
+		});
 	});
 
 	// Board navigation: the stepper walks the archive (every season since
@@ -204,7 +219,7 @@
 	});
 
 	// Crowns of the board — most games played in each format, foursquare-
-	// mayor style. Ties share a crown. A past season's crowns are settled;
+	// mayor style. One player holds each. A past season's crowns are settled;
 	// the current season's and the career board's are up for grabs.
 	//
 	// They describe whichever board is on screen: switch to All time and the
@@ -223,37 +238,70 @@
 		{ key: "ffas", label: "FFA", header: "FFA" },
 	] as const;
 	type FormatKey = (typeof CROWN_FORMATS)[number]["key"];
-	// How many holders a shared crown names before it counts the rest instead.
-	// A fresh season ties its whole field on one game, so the co-holder list
-	// is longest exactly when the card matters most — past the cap it is a
-	// +N, and its tooltip still names everyone it didn't draw.
-	const CROWN_HOLDERS_SHOWN = 3;
-	// A crown holder as the card names them — one line per holder, face and
-	// name, so a tie reads as the players sharing it rather than a face stack.
+	// Whether a sortable column is one of the counted formats — the columns
+	// that have a crown, and so the ones whose ties the crown rule settles.
+	const isFormatKey = (key: SortKey): key is FormatKey =>
+		CROWN_FORMATS.some((f) => f.key === key);
+	// A crown holder as the card names them — one face, one name.
 	type Holder = Pick<Row, "user_id" | "display_name" | "avatar_url">;
+	// Which of two players tied at the top of a format keeps its crown.
+	//
+	// Whoever reached the number first: `_at` is when the server saw each of
+	// them get there (stats/handlers.ts), so the earlier timestamp wins. A
+	// season opens with its whole field tied on one game, so this is the
+	// common path, not the corner case.
+	//
+	// Equal timestamps mean one match — the two of them played *each other*,
+	// and one upload gave both their count at the same instant — so the game
+	// decides itself and `_won` takes it. Beyond that there is nothing left
+	// to read: a winnerless duel, or two matches that landed in the same
+	// second. The board's own secondary order (the server's `total DESC,
+	// display_name ASC`) settles those rather than a second rule.
+	const crownBeats = (a: Row, b: Row, key: FormatKey): boolean => {
+		const aAt = a[`${key}_at`];
+		const bAt = b[`${key}_at`];
+		// Null is a format the player has no games in, which a holder of a
+		// crown at count > 0 cannot be — guarded so it can never win the
+		// comparison by sorting ahead of a real timestamp.
+		if (aAt == null || bAt == null) return aAt != null;
+		if (aAt !== bAt) return aAt < bAt;
+		const aWon = a[`${key}_won`];
+		if (aWon !== b[`${key}_won`]) return aWon;
+		return a.display_name.localeCompare(b.display_name) < 0;
+	};
 	const crowns = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived, not mutated after
-		const out = new Map<FormatKey, { holders: Holder[]; count: number }>();
+		const out = new Map<FormatKey, { holder: Holder | null; count: number }>();
 		for (const f of CROWN_FORMATS) {
-			// Reduced rather than spread into Math.max: the board is unbounded
-			// (every player with a public game is on it), and a spread passes
-			// one argument per row.
-			const max = ranked.reduce((m, r) => (r[f.key] > m ? r[f.key] : m), 0);
+			// One pass for both the number and who holds it: the board is
+			// unbounded (every player with a public game is on it), so a max
+			// spread into Math.max would pass one argument per row, and a
+			// filter-then-reduce would walk it twice. A row at a new high
+			// replaces the holder; a row that ties one is put to `crownBeats`.
+			let max = 0;
+			let best: Ranked | null = null;
+			for (const r of ranked) {
+				const n = r[f.key];
+				if (n === 0) continue;
+				if (n > max) {
+					max = n;
+					best = r;
+				} else if (n === max && best !== null && crownBeats(r, best, f.key)) {
+					best = r;
+				}
+			}
 			// Every format gets an entry, claimed or not: a crown nobody holds
 			// yet is the season's standing invitation, so it is named rather
-			// than omitted. `count: 0` is what `hasCrown` already reads as
+			// than omitted. A null holder is what `hasCrown` already reads as
 			// unclaimed, so no row wears a crown for an empty format.
 			out.set(f.key, {
-				holders:
-					max > 0
-						? ranked
-								.filter((r) => r[f.key] === max)
-								.map(({ user_id, display_name, avatar_url }) => ({
-									user_id,
-									display_name,
-									avatar_url,
-								}))
-						: [],
+				holder: best
+					? {
+							user_id: best.user_id,
+							display_name: best.display_name,
+							avatar_url: best.avatar_url,
+						}
+					: null,
 				count: max,
 			});
 		}
@@ -270,18 +318,8 @@
 	const leaderTerm = $derived(
 		data.board === "all" ? "All-time leader" : "Season leader",
 	);
-	// The holders a crown card names, capped so one card can't outgrow its
-	// neighbours; anyone past the cap is counted on a last line.
-	const crownShown = (holders: Holder[]): Holder[] =>
-		holders.slice(0, CROWN_HOLDERS_SHOWN);
-	// The co-holders the card didn't draw, for that line's tooltip.
-	const crownRestNames = (holders: Holder[]): string =>
-		holders
-			.slice(CROWN_HOLDERS_SHOWN)
-			.map((h) => h.display_name)
-			.join(", ");
 	const hasCrown = (u: Row, key: FormatKey): boolean =>
-		(crowns.get(key)?.count ?? 0) > 0 && u[key] === crowns.get(key)!.count;
+		crowns.get(key)?.holder?.user_id === u.user_id;
 
 	// The signed-in viewer's arc, ahead of anyone else's: their epithet, a
 	// count, and a progress bar to the next rung — their own climb, never
@@ -451,7 +489,7 @@
 						     clears it. -->
 						<div
 							class="min-w-0 rounded-lg bg-surface-raised p-3 text-xs"
-							class:opacity-70={k.holders.length === 0}
+							class:opacity-70={k.holder === null}
 						>
 							<!-- Header: the crown, and what it is the crown of — ranged left
 							     under the panel title, which is the line it answers to. -->
@@ -464,40 +502,28 @@
 								/>
 								<span class="text-sm font-bold text-tan">{f.label}</span>
 							</div>
-							<!-- Who holds it, centred under the header: one line per holder,
-							     so a tie reads as the players sharing the crown rather than as
-							     a stack of faces, each carrying the count it is held at. A name
-							     too long for the card wraps rather than truncating — a crown
-							     holder is the last name to abbreviate. A tie deeper than the
-							     cap counts the names it didn't draw, and spells them out in
-							     that line's tooltip. -->
-							<div class="flex flex-col items-center gap-1 text-center">
-								{#if k.holders.length === 0}
+							<!-- Who holds it, centred under the header: face, name, and the
+							     count it is held at. A name too long for the card wraps rather
+							     than truncating — a crown holder is the last name to
+							     abbreviate. -->
+							<div
+								class="flex min-w-0 items-center justify-center gap-1.5 text-center"
+							>
+								{#if k.holder === null}
 									<span class="text-tan">Unclaimed</span>
 								{:else}
-									{#each crownShown(k.holders) as h (h.user_id)}
-										<span
-											class="flex min-w-0 max-w-full items-center justify-center gap-1.5"
-										>
-											<img
-												src={h.avatar_url}
-												alt=""
-												class="h-4 w-4 shrink-0 rounded-full"
-												width="16"
-												height="16"
-												loading="lazy"
-											/>
-											<span class="break-words font-semibold text-gray-200"
-												>{h.display_name}</span
-											>
-											<span class="shrink-0 text-tan">({k.count})</span>
-										</span>
-									{/each}
-									{#if k.holders.length > CROWN_HOLDERS_SHOWN}
-										<span class="text-tan" title={crownRestNames(k.holders)}
-											>+{k.holders.length - CROWN_HOLDERS_SHOWN} more</span
-										>
-									{/if}
+									<img
+										src={k.holder.avatar_url}
+										alt=""
+										class="h-4 w-4 shrink-0 rounded-full"
+										width="16"
+										height="16"
+										loading="lazy"
+									/>
+									<span class="break-words font-semibold text-gray-200"
+										>{k.holder.display_name}</span
+									>
+									<span class="shrink-0 text-tan">({k.count})</span>
 								{/if}
 							</div>
 						</div>

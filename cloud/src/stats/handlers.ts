@@ -361,6 +361,13 @@ const SEASON_BUDGET: ReadBudget = {
 // derived from the display name the row already carries, so it publishes
 // nothing the board doesn't, and it lets a row link straight to /u/<slug>
 // instead of bouncing every profile link through the id permalink's 307.
+// The three `*_reach` columns are the crown tiebreak, packed one string per
+// format: the match time the player reached their count at, with their result
+// in that match as a trailing '1'/'0'. Packed rather than emitted as six
+// columns because both halves come from one MAX() — the aggregate has to pick
+// a match before either value means anything — and splitting a pair the
+// database computed together into two aggregates invites them to disagree.
+// `reachOf` below unpacks them into the two fields the board actually reads.
 interface PlayedGamesQueryRow {
 	user_id: string;
 	display_name: string;
@@ -371,6 +378,28 @@ interface PlayedGamesQueryRow {
 	duels_cloud: number;
 	ffas: number;
 	total: number;
+	duels_network_reach: string | null;
+	duels_cloud_reach: string | null;
+	ffas_reach: string | null;
+	// Ordered by, never serialized — the same select-use-don't-serialize
+	// shape as discord_id above. The board's rank is the row's position in
+	// this order, so the client reads it off the array and needs no field.
+	// Never null: a row exists only because it has at least one match.
+	total_reach: string;
+}
+
+// One packed `*_reach` column as the board reads it: when the player reached
+// that format's count, and whether they won the match that got them there.
+// Null for a format they have no games in, which is every format at count 0.
+function reachOf(packed: string | null): {
+	at: string | null;
+	won: boolean;
+} {
+	if (packed == null) return { at: null, won: false };
+	// Split off the trailing flag rather than slicing at a fixed offset:
+	// created_at's width is a convention of how rows were written, not a
+	// guarantee this function gets to make.
+	return { at: packed.slice(0, -1), won: packed.endsWith("1") };
 }
 
 export async function handlePlayerLeaderboard(
@@ -473,6 +502,45 @@ export async function handlePlayerLeaderboard(
 	// (match-metadata.ts), which is a promise about the data we don't get to
 	// make here.
 	//
+	// The crown a format's leader wears goes to exactly one player, so the
+	// board needs a tiebreak for the field tied at the top — which at a
+	// season's start is most of it. The rule is: whoever reached that number
+	// first, and a head-to-head decides itself.
+	//
+	// "Reached it first" needs no ranking pass. Everyone tied is tied at the
+	// same count C, so each of them has exactly C matches in that format, and
+	// the moment they reached C is the timestamp of their C-th — which, having
+	// exactly C, is their most recent. So `MAX(match time)` per player is the
+	// whole of it, and the earliest such time takes the crown.
+	//
+	// A match's time is `MIN(created_at)` across its uploads, not any one
+	// upload's: a match uploaded by both players has two rows minutes or days
+	// apart, and the match happened when it first landed. That also makes the
+	// head-to-head case exact rather than approximate — both players read the
+	// same instant off the same match, so their reach times are equal to the
+	// character, and `p.won` (the seat's is_winner, carried through the same
+	// credit arms the count uses) is what separates them.
+	//
+	// `played` therefore wraps its UNION in a GROUP BY rather than selecting
+	// is_winner alongside the pair: the UNION dedupes (user, match), and two
+	// uploads of one match that disagree on the winner — one saved before the
+	// end, one after — would otherwise dedupe to two rows and count the match
+	// twice. Grouping collapses them back to one and takes MAX(won), so a
+	// player who won on any upload of a match won it.
+	//
+	// The same rule orders the board itself, through `total_reach` — the
+	// player's newest match in the window, whatever format. Ordering ties on
+	// display_name alone made the board's #1 an alphabetical accident: a
+	// season opens with its whole field on one game, and the client numbers
+	// rows by their position here, so every tie the ORDER BY leaves unbroken
+	// is a rank the board can't justify. `total_reach` is never null — a row
+	// exists only because the player has a match — so it can't push a row to
+	// either end by being missing.
+	//
+	// The timestamps this publishes are the public games' own created_at,
+	// already served per-game by the discovery feed and game detail, so the
+	// board exposes no clock it didn't already.
+	//
 	// `humans` carries the same public + window predicate as the two arms
 	// below rather than grouping the whole table: it only ever reaches
 	// match_class through an inner join that applies those anyway, so the
@@ -490,30 +558,35 @@ export async function handlePlayerLeaderboard(
 		   GROUP BY ps.game_id
 		 ),
 		 played AS (
-		   SELECT g.user_id, g.xml_game_id
-		   FROM games g
-		   JOIN player_summaries ps
-		     ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
-		   WHERE g.is_public = 1
-		     AND (?1 IS NULL OR g.created_at >= ?1)
-		     AND (?2 IS NULL OR g.created_at < ?2)
-		   UNION
-		   SELECT uo.user_id, g.xml_game_id
-		   FROM games g
-		   JOIN player_summaries ps
-		     ON ps.game_id = g.game_id AND ps.is_human = 1
-		        AND ps.online_id IS NOT NULL
-		   JOIN user_online_ids uo ON uo.online_id = ps.online_id
-		     AND NOT EXISTS (
-		       SELECT 1 FROM user_online_ids amb
-		       WHERE amb.online_id = ps.online_id AND amb.user_id <> uo.user_id
-		     )
-		   WHERE g.is_public = 1
-		     AND (?1 IS NULL OR g.created_at >= ?1)
-		     AND (?2 IS NULL OR g.created_at < ?2)
+		   SELECT user_id, xml_game_id, MAX(won) AS won
+		   FROM (
+		     SELECT g.user_id, g.xml_game_id, ps.is_winner AS won
+		     FROM games g
+		     JOIN player_summaries ps
+		       ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
+		     WHERE g.is_public = 1
+		       AND (?1 IS NULL OR g.created_at >= ?1)
+		       AND (?2 IS NULL OR g.created_at < ?2)
+		     UNION
+		     SELECT uo.user_id, g.xml_game_id, ps.is_winner AS won
+		     FROM games g
+		     JOIN player_summaries ps
+		       ON ps.game_id = g.game_id AND ps.is_human = 1
+		          AND ps.online_id IS NOT NULL
+		     JOIN user_online_ids uo ON uo.online_id = ps.online_id
+		       AND NOT EXISTS (
+		         SELECT 1 FROM user_online_ids amb
+		         WHERE amb.online_id = ps.online_id AND amb.user_id <> uo.user_id
+		       )
+		     WHERE g.is_public = 1
+		       AND (?1 IS NULL OR g.created_at >= ?1)
+		       AND (?2 IS NULL OR g.created_at < ?2)
+		   ) credited
+		   GROUP BY user_id, xml_game_id
 		 ),
 		 match_class AS (
 		   SELECT g.xml_game_id,
+		          MIN(g.created_at) AS first_at,
 		          MAX(h.n) AS n_humans,
 		          MAX(CASE WHEN g.game_mode = 'NETWORK'
 		                   THEN 1 ELSE 0 END) AS any_network,
@@ -537,26 +610,47 @@ export async function handlePlayerLeaderboard(
 		   SUM(CASE WHEN mc.n_humans = 2 AND mc.any_network = 0 AND mc.any_cloud = 1
 		            THEN 1 ELSE 0 END) AS duels_cloud,
 		   SUM(CASE WHEN mc.n_humans >= 3 THEN 1 ELSE 0 END) AS ffas,
-		   COUNT(*) AS total
+		   COUNT(*) AS total,
+		   MAX(CASE WHEN mc.n_humans = 2 AND mc.any_network = 1
+		            THEN mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END
+		            END) AS duels_network_reach,
+		   MAX(CASE WHEN mc.n_humans = 2 AND mc.any_network = 0 AND mc.any_cloud = 1
+		            THEN mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END
+		            END) AS duels_cloud_reach,
+		   MAX(CASE WHEN mc.n_humans >= 3
+		            THEN mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END
+		            END) AS ffas_reach,
+		   MAX(mc.first_at) AS total_reach
 		 FROM played p
 		 JOIN match_class mc ON mc.xml_game_id = p.xml_game_id
 		 JOIN users u ON u.user_id = p.user_id
 		 GROUP BY u.user_id
-		 ORDER BY total DESC, display_name ASC`,
+		 ORDER BY total DESC, total_reach ASC, display_name ASC`,
 	)
 		.bind(sinceRaw, untilRaw)
 		.all<PlayedGamesQueryRow>();
 
-	const players = (rows.results ?? []).map((r) => ({
-		user_id: r.user_id,
-		display_name: r.display_name,
-		slug: r.slug,
-		avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
-		duels_network: r.duels_network,
-		duels_cloud: r.duels_cloud,
-		ffas: r.ffas,
-		total: r.total,
-	}));
+	const players = (rows.results ?? []).map((r) => {
+		const network = reachOf(r.duels_network_reach);
+		const cloud = reachOf(r.duels_cloud_reach);
+		const ffa = reachOf(r.ffas_reach);
+		return {
+			user_id: r.user_id,
+			display_name: r.display_name,
+			slug: r.slug,
+			avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
+			duels_network: r.duels_network,
+			duels_cloud: r.duels_cloud,
+			ffas: r.ffas,
+			total: r.total,
+			duels_network_at: network.at,
+			duels_network_won: network.won,
+			duels_cloud_at: cloud.at,
+			duels_cloud_won: cloud.won,
+			ffas_at: ffa.at,
+			ffas_won: ffa.won,
+		};
+	});
 
 	// Every window caches like public-recent (5min browser, 60s edge),
 	// closed seasons included. A finished season's board is not immutable:

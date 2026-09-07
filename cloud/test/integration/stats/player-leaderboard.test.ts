@@ -30,6 +30,10 @@ interface Seat {
 	online_id?: string;
 	is_human?: boolean;
 	is_uploader?: boolean;
+	// Defaults to false, matching the column's own default — a save uploaded
+	// before the game ended has no winning seat at all, and five public cloud
+	// duels in the corpus look like that.
+	is_winner?: boolean;
 }
 
 // Direct INSERT, same rationale as helpers/games.ts seedGame: the endpoint
@@ -67,8 +71,9 @@ async function seedPlayedGame(opts: {
 	for (const [i, seat] of opts.seats.entries()) {
 		await env.SHARE_DB.prepare(
 			`INSERT INTO player_summaries (
-				game_id, player_index, player_name, is_human, is_uploader, online_id
-			) VALUES (?, ?, ?, ?, ?, ?)`,
+				game_id, player_index, player_name, is_human, is_uploader, online_id,
+				is_winner
+			) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		)
 			.bind(
 				gameId,
@@ -77,6 +82,7 @@ async function seedPlayedGame(opts: {
 				(seat.is_human ?? true) ? 1 : 0,
 				(seat.is_uploader ?? false) ? 1 : 0,
 				seat.online_id ?? null,
+				(seat.is_winner ?? false) ? 1 : 0,
 			)
 			.run();
 	}
@@ -116,6 +122,12 @@ interface LeaderboardBody {
 		duels_cloud: number;
 		ffas: number;
 		total: number;
+		duels_network_at: string | null;
+		duels_network_won: boolean;
+		duels_cloud_at: string | null;
+		duels_cloud_won: boolean;
+		ffas_at: string | null;
+		ffas_won: boolean;
 	}[];
 }
 
@@ -280,6 +292,178 @@ describe("GET /v1/stats/players", () => {
 		expect(row.duels_cloud).toBe(0);
 		expect(row.ffas).toBe(0);
 		expect(row.total).toBe(1);
+	});
+
+	// ── The crown tiebreak ──────────────────────────────────────────────
+	//
+	// /players crowns one player per format, so the field tied at the top —
+	// most of the board at a season's start — has to be separated. These pin
+	// the two values that do it: when a player reached their count, and how
+	// the match that got them there went.
+
+	it("reaches a count at its newest match, and reports that match's result", async () => {
+		const user = await makeUser();
+		// Won first, lost second: the count was reached at the loss, so the
+		// row must carry the later timestamp and won=false. Reading the
+		// player's *best* match instead of their latest would flip both.
+		await seedPlayedGame({
+			uploader: user,
+			gameMode: "NETWORK",
+			createdAt: "2026-09-02 10:00:00",
+			seats: [{ is_uploader: true, is_winner: true }, {}],
+		});
+		await seedPlayedGame({
+			uploader: user,
+			gameMode: "NETWORK",
+			createdAt: "2026-09-05 10:00:00",
+			seats: [{ is_uploader: true }, { is_winner: true }],
+		});
+
+		const row = rowFor(
+			(await (await get("")).json()) as LeaderboardBody,
+			user,
+		)!;
+		expect(row.duels_network).toBe(2);
+		expect(row.duels_network_at).toBe("2026-09-05 10:00:00");
+		expect(row.duels_network_won).toBe(false);
+		// A format with no games has nothing to break a tie with, and must
+		// not borrow another format's match to do it.
+		expect(row.duels_cloud_at).toBeNull();
+		expect(row.duels_cloud_won).toBe(false);
+		expect(row.ffas_at).toBeNull();
+	});
+
+	it("gives both sides of a head-to-head one timestamp and opposite results", async () => {
+		// The tie the timestamp cannot break: two players reach the same
+		// count in the same match, so only the result separates them.
+		const winner = await makeUser();
+		const loser = await makeUser();
+		const onlineId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(loser, onlineId);
+
+		await seedPlayedGame({
+			uploader: winner,
+			gameMode: "NETWORK",
+			createdAt: "2026-09-04 12:00:00",
+			seats: [
+				{ is_uploader: true, is_winner: true },
+				{ online_id: onlineId },
+			],
+		});
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		for (const user of [winner, loser]) {
+			// Same match, so the same instant to the character — anything
+			// else and the head-to-head rule would never come into play.
+			expect(rowFor(body, user)!.duels_network_at).toBe(
+				"2026-09-04 12:00:00",
+			);
+		}
+		expect(rowFor(body, winner)!.duels_network_won).toBe(true);
+		expect(rowFor(body, loser)!.duels_network_won).toBe(false);
+	});
+
+	it("times a double-uploaded match from the first upload, and still counts it once", async () => {
+		// Both players upload the same match, days apart. The match happened
+		// when it first landed, so both reach their count then — taking each
+		// upload's own created_at would put the second player's crown claim
+		// behind the first's by however long they took to upload.
+		const uploader = await makeUser();
+		const opponent = await makeUser();
+		const onlineId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(opponent, onlineId);
+
+		const xmlGameId = nanoid(36);
+		for (const [user, at] of [
+			[uploader, "2026-09-03 08:00:00"],
+			[opponent, "2026-09-09 08:00:00"],
+		] as const) {
+			await seedPlayedGame({
+				uploader: user,
+				xmlGameId,
+				gameMode: "NETWORK",
+				createdAt: at,
+				seats: [
+					{ is_uploader: user === uploader, is_winner: user === uploader },
+					{
+						online_id: onlineId,
+						is_uploader: user === opponent,
+						is_winner: user === opponent,
+					},
+				],
+			});
+		}
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		for (const user of [uploader, opponent]) {
+			const row = rowFor(body, user)!;
+			expect(row.duels_network_at).toBe("2026-09-03 08:00:00");
+			// The win flag rides the same dedupe as the count: carrying
+			// is_winner through the UNION un-grouped would make the two
+			// uploads two rows and count one match twice.
+			expect(row.duels_network).toBe(1);
+			expect(row.total).toBe(1);
+		}
+		expect(rowFor(body, uploader)!.duels_network_won).toBe(true);
+		expect(rowFor(body, opponent)!.duels_network_won).toBe(true);
+	});
+
+	it("wins a match on any upload that records the win", async () => {
+		// One save taken before the end and one after: the pre-end upload has
+		// no winning seat, and reading it alone would say nobody won a match
+		// somebody did.
+		const user = await makeUser();
+		const xmlGameId = nanoid(36);
+		await seedPlayedGame({
+			uploader: user,
+			xmlGameId,
+			gameMode: "NETWORK",
+			createdAt: "2026-09-06 09:00:00",
+			seats: [{ is_uploader: true }, {}],
+		});
+		await seedPlayedGame({
+			uploader: user,
+			xmlGameId,
+			gameMode: "NETWORK",
+			createdAt: "2026-09-06 11:00:00",
+			seats: [{ is_uploader: true, is_winner: true }, {}],
+		});
+
+		const row = rowFor(
+			(await (await get("")).json()) as LeaderboardBody,
+			user,
+		)!;
+		expect(row.duels_network).toBe(1);
+		expect(row.duels_network_won).toBe(true);
+		expect(row.duels_network_at).toBe("2026-09-06 09:00:00");
+	});
+
+	it("orders a tied total on who reached it first, not alphabetically", async () => {
+		// The board's rank is the row's position in this order, and the page
+		// numbers rows 1, 2, 3 with nothing shared — so a tie the ORDER BY
+		// leaves unbroken is a #1 nobody earned. Names are seeded in the
+		// reverse of the expected order: alphabetical alone would invert it.
+		const early = await makeUser({ displayName: "Zoe" });
+		const late = await makeUser({ displayName: "Abe" });
+		// A window of its own: every test in this file shares one database,
+		// and the rest of them seed into today or the season around it.
+		for (const [user, at] of [
+			[early, "2027-03-02 09:00:00"],
+			[late, "2027-03-08 09:00:00"],
+		] as const) {
+			await seedPlayedGame({
+				uploader: user,
+				gameMode: "NETWORK",
+				createdAt: at,
+				seats: [{ is_uploader: true }, {}],
+			});
+		}
+
+		const body = (await (
+			await get("?since=2027-03-01&until=2027-04-01")
+		).json()) as LeaderboardBody;
+		expect(body.players.map((p) => p.display_name)).toEqual(["Zoe", "Abe"]);
+		expect(body.players[0].total).toBe(body.players[1].total);
 	});
 
 	it("ignores unregistered online ids and AI seats", async () => {

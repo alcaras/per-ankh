@@ -307,6 +307,21 @@ export interface PlayedGamesRow {
 	duels_cloud: number;
 	ffas: number;
 	total: number;
+	// The crown tiebreak, per counted format: when the player reached that
+	// format's count — the upload time of the match that got them there — and
+	// whether they won it. Null/false for a format they have no games in.
+	//
+	// The board's crown goes to one player, and the field tied at the top is
+	// most of the board at a season's start. `_at` settles it (earliest to
+	// reach the number keeps it); `_won` settles the case `_at` can't, where
+	// the two tied players got there by playing *each other* and so share one
+	// match and one timestamp to the character.
+	duels_network_at: string | null;
+	duels_network_won: boolean;
+	duels_cloud_at: string | null;
+	duels_cloud_won: boolean;
+	ffas_at: string | null;
+	ffas_won: boolean;
 }
 export interface PlayerLeaderboardResponse {
 	players: PlayedGamesRow[];
@@ -329,6 +344,7 @@ const PLAYERS_SHAPE_CHANGELOG: Record<number, string> = {
 	1: "user_id, display_name, and the per-format played counts",
 	2: "avatar_url — the player's Discord avatar",
 	3: "slug — the profile slug, so a row links straight to /u/<slug>",
+	4: "duels_network_at/_won, duels_cloud_at/_won, ffas_at/_won — the crown tiebreak",
 };
 const PLAYERS_SHAPE_VERSION = Math.max(
 	...Object.keys(PLAYERS_SHAPE_CHANGELOG).map(Number),
