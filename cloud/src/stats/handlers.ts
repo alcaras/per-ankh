@@ -13,6 +13,7 @@ import { CURRENT_PARSER_VERSION } from "../schemas/game";
 import { sessionFromRequest } from "../session";
 import type { SessionEnv } from "../session";
 import { cloudCorsHeaders, errorResponse, jsonResponse } from "../util";
+import { buildAvatarUrl } from "../auth";
 import { displayNameSql } from "../identity";
 import {
 	parseNationParam,
@@ -295,8 +296,8 @@ export async function handleGlobalStats(
 //   seat in it — the uploader via their claimed seat, everyone else by
 //   matching the seat's online id against user_online_ids. The same match
 //   uploaded by both players (separate game rows, same save GameId)
-//   counts once per player, deduped on xml_game_id. Only display names
-//   and counts are exposed.
+//   counts once per player, deduped on xml_game_id. Only display names,
+//   Discord avatars, and counts are exposed.
 
 export interface PlayerLeaderboardEnv {
 	SHARE_DB: QueryableD1;
@@ -352,9 +353,15 @@ const SEASON_BUDGET: ReadBudget = {
 	code: "RATE_LIMIT_SEASON",
 };
 
-interface PlayedGamesRow {
+// The D1 row. discord_id and avatar_hash are SELECTed to address the Discord
+// CDN and are folded into avatar_url below rather than emitted as fields of
+// their own — the same select-use-don't-serialize shape handlePublicUserSearch
+// and the featured-video attribution use.
+interface PlayedGamesQueryRow {
 	user_id: string;
 	display_name: string;
+	discord_id: string;
+	avatar_hash: string | null;
 	duels_network: number;
 	duels_cloud: number;
 	ffas: number;
@@ -381,6 +388,12 @@ export async function handlePlayerLeaderboard(
 	// server-authoritative, unlike the save's own dates. Invalid values are
 	// rejected rather than silently ignored so a malformed season picker
 	// can't masquerade as all-time.
+	//
+	// The frontend also sends `v`, its PLAYERS_SHAPE_VERSION (api-cloud.ts).
+	// Nothing here reads it and nothing should: it exists to key the caches a
+	// closed window's day-long max-age fills, and a response that varied on it
+	// would defeat that. It is named here so a later tightening of this
+	// validation doesn't 400 the board's own requests.
 	const url = new URL(request.url);
 	const sinceRaw = url.searchParams.get("since");
 	const untilRaw = url.searchParams.get("until");
@@ -448,6 +461,8 @@ export async function handlePlayerLeaderboard(
 		 SELECT
 		   u.user_id,
 		   ${displayNameSql("u")} AS display_name,
+		   u.discord_id,
+		   u.avatar_hash,
 		   SUM(mc.n_humans = 2 AND mc.game_mode = 'NETWORK') AS duels_network,
 		   SUM(mc.n_humans = 2 AND mc.game_mode = 'PLAY_BY_CLOUD') AS duels_cloud,
 		   SUM(mc.n_humans >= 3) AS ffas,
@@ -459,14 +474,24 @@ export async function handlePlayerLeaderboard(
 		 ORDER BY total DESC, display_name ASC`,
 	)
 		.bind(sinceRaw, untilRaw)
-		.all<PlayedGamesRow>();
+		.all<PlayedGamesQueryRow>();
+
+	const players = (rows.results ?? []).map((r) => ({
+		user_id: r.user_id,
+		display_name: r.display_name,
+		avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
+		duels_network: r.duels_network,
+		duels_cloud: r.duels_cloud,
+		ffas: r.ffas,
+		total: r.total,
+	}));
 
 	// A CLOSED window is immutable — created_at can't be backdated, so a
 	// finished season's board never changes — and caches for a day; open
 	// windows keep the public-recent shape (60s edge, 5min browser).
 	const closed =
 		untilRaw != null && untilRaw <= new Date().toISOString().slice(0, 10);
-	return new Response(JSON.stringify({ players: rows.results ?? [] }), {
+	return new Response(JSON.stringify({ players }), {
 		status: 200,
 		headers: {
 			"Content-Type": "application/json",

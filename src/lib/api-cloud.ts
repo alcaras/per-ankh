@@ -296,6 +296,10 @@ export interface AdminGameListOpts extends CallOpts {
 export interface PlayedGamesRow {
 	user_id: string;
 	display_name: string;
+	// The player's Discord avatar (cdn.discordapp.com), resolved server-side
+	// from their stored hash — always present, since Discord's default avatar
+	// stands in for a user who never set one.
+	avatar_url: string;
 	duels_network: number;
 	duels_cloud: number;
 	ffas: number;
@@ -304,6 +308,28 @@ export interface PlayedGamesRow {
 export interface PlayerLeaderboardResponse {
 	players: PlayedGamesRow[];
 }
+
+// What each version of the row shape changed. This table *is* the version:
+// PLAYERS_SHAPE_VERSION below is its highest key, so a bump can't happen
+// without saying what changed, and the two can't drift apart. Bump when a
+// field is added to or dropped from PlayedGamesRow.
+//
+// The version rides along as `v` on every board request (the Worker reads
+// since/until and ignores it) because a board's cache key is its URL, and a
+// CLOSED season answers `max-age=86400, s-maxage=86400`: a browser or edge
+// that fetched a season before a field existed would keep replaying the older
+// shape for a day, so an archive board renders behind a deploy that added one
+// — avatarless rows for everyone who had already walked the archive. Bumping
+// drifts the URL and orphans every stale entry at once, the same
+// expiry-by-drift the stats bundles get from BUNDLE_SCHEMA_VERSION in their
+// KV key.
+const PLAYERS_SHAPE_CHANGELOG: Record<number, string> = {
+	1: "user_id, display_name, and the per-format played counts",
+	2: "avatar_url — the player's Discord avatar",
+};
+const PLAYERS_SHAPE_VERSION = Math.max(
+	...Object.keys(PLAYERS_SHAPE_CHANGELOG).map(Number),
+);
 
 // Wire shape for GET /v1/games/public-recent — the marketing home's
 // discovery feed. Includes the uploader's display name + a sparkline-ready
@@ -1090,8 +1116,8 @@ export const cloudApi = {
 		const params = new URLSearchParams();
 		if (opts?.since) params.set("since", opts.since);
 		if (opts?.until) params.set("until", opts.until);
-		const qs = params.toString() ? `?${params}` : "";
-		const res = await request(`/stats/players${qs}`, opts);
+		params.set("v", String(PLAYERS_SHAPE_VERSION));
+		const res = await request(`/stats/players?${params}`, opts);
 		return res.json() as Promise<PlayerLeaderboardResponse>;
 	},
 

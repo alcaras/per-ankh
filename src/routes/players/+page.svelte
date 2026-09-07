@@ -51,22 +51,78 @@
 			// single-player and hotseat/LAN games.
 			other: u.total - u.duels_network - u.duels_cloud - u.ffas,
 		}));
-	const rows = $derived(
-		withOther(data.board === "season" ? data.season : data.allTime),
-	);
 
+	// The board in the server's own order, each row carrying its rank.
+	//
 	// Standard competition ranking: equal totals share a rank and the next
 	// rank skips the tie (1, 1, 3). A positional ordinal would hand out a
 	// different number to players the board itself can't tell apart, which
 	// at a season's start — where most of the field sits on one game — is
 	// nearly the whole board. The server orders by total DESC, so tied rows
 	// are always adjacent and one backward look is enough.
-	const ranks = $derived.by(() => {
-		const out: number[] = [];
-		rows.forEach((r, i) => {
-			out.push(i > 0 && r.total === rows[i - 1].total ? out[i - 1] : i + 1);
+	//
+	// The rank is computed here, before any sort, and travels on the row: it
+	// is the player's standing on this board, not their position in whatever
+	// column the table is currently sorted by. Sorting by FFAs and reading
+	// 1, 4, 2 down the # column is the point — it says who those players are
+	// on the board you are looking at.
+	type Ranked = Row & { rank: number };
+	const ranked = $derived.by(() => {
+		const base = withOther(
+			data.board === "season" ? data.season : data.allTime,
+		);
+		const out: Ranked[] = [];
+		base.forEach((r, i) => {
+			out.push({
+				...r,
+				rank: i > 0 && r.total === base[i - 1].total ? out[i - 1].rank : i + 1,
+			});
 		});
 		return out;
+	});
+
+	// Column sorting. Local state rather than a URL param: this page's load
+	// re-fetches both boards on any URL change — two D1 reads and a
+	// season_view budget slot, which is why `select` guards a no-op
+	// navigation — and a sort only rearranges rows already on screen. Board
+	// and season stay in the URL because they change *which* rows those are.
+	//
+	// Same state shape and toggle rule as the app's other sortable tables
+	// (the game-detail tabs' toggleSort, the tournament matches table's
+	// toggleMatchSort): the sorted column flips, a new column opens in its
+	// own natural direction. Neither of those helpers takes this page's
+	// state — both are typed to their own domain's table object, which
+	// carries search and filters this board has no equivalent of — so the
+	// rule is spelled here as it is there.
+	type SortKey = "rank" | "display_name" | FormatKey | "other" | "total";
+	// Which way a column reads when you first click it. A count column opens
+	// descending — every one of them is an achievement, and the question a
+	// board answers is who has the most. Rank and name open ascending, where
+	// first and A are the top of the column.
+	const OPENS_ASCENDING: SortKey[] = ["rank", "display_name"];
+	// The board opens on the order the server sent it in.
+	let sortColumn = $state<SortKey>("total");
+	let sortDirection = $state<"asc" | "desc">("desc");
+	function toggleSort(key: SortKey): void {
+		if (sortColumn === key) {
+			sortDirection = sortDirection === "asc" ? "desc" : "asc";
+		} else {
+			sortColumn = key;
+			sortDirection = OPENS_ASCENDING.includes(key) ? "asc" : "desc";
+		}
+	}
+	const rows = $derived.by(() => {
+		const key = sortColumn;
+		const dir = sortDirection === "asc" ? 1 : -1;
+		// Array.prototype.sort is stable and `ranked` arrives in board order,
+		// so players who tie on the sorted column keep their standing between
+		// them — sorting by FFAs puts the higher total first within a tie —
+		// and no secondary comparator is needed to make the order definite.
+		return [...ranked].sort((a, b) =>
+			key === "display_name"
+				? dir * a.display_name.localeCompare(b.display_name)
+				: dir * (a[key] - b[key]),
+		);
 	});
 
 	// Board navigation: the stepper walks the archive (every season since
@@ -161,9 +217,12 @@
 	// longest exactly when the strip matters most.
 	const CROWN_NAMES_SHOWN = 3;
 	const seasonRows = $derived(withOther(data.season));
+	// A crown holder as the strip renders them — avatar and name travel
+	// together, so the cap below slices holders and not names.
+	type Holder = Pick<Row, "user_id" | "display_name" | "avatar_url">;
 	const crowns = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived, not mutated after
-		const out = new Map<FormatKey, { names: string[]; count: number }>();
+		const out = new Map<FormatKey, { holders: Holder[]; count: number }>();
 		for (const f of CROWN_FORMATS) {
 			const max = Math.max(0, ...seasonRows.map((r) => r[f.key]));
 			// Every format gets an entry, claimed or not: a crown nobody holds
@@ -171,21 +230,28 @@
 			// than omitted. `count: 0` is what `hasCrown` already reads as
 			// unclaimed, so no row wears a crown for an empty format.
 			out.set(f.key, {
-				names:
+				holders:
 					max > 0
 						? seasonRows
 								.filter((r) => r[f.key] === max)
-								.map((r) => r.display_name)
+								.map(({ user_id, display_name, avatar_url }) => ({
+									user_id,
+									display_name,
+									avatar_url,
+								}))
 						: [],
 				count: max,
 			});
 		}
 		return out;
 	});
-	const crownHolders = (names: string[]): string =>
-		names.length <= CROWN_NAMES_SHOWN
-			? names.join(" & ")
-			: `${names.slice(0, CROWN_NAMES_SHOWN).join(" & ")} +${names.length - CROWN_NAMES_SHOWN} more`;
+	// The holders the strip names, and the tail it summarizes instead.
+	const crownHolders = (
+		holders: Holder[],
+	): { shown: Holder[]; more: number } => ({
+		shown: holders.slice(0, CROWN_NAMES_SHOWN),
+		more: Math.max(0, holders.length - CROWN_NAMES_SHOWN),
+	});
 	const hasCrown = (u: Row, key: FormatKey): boolean =>
 		data.board === "season" &&
 		(crowns.get(key)?.count ?? 0) > 0 &&
@@ -349,6 +415,7 @@
 						{#each CROWN_FORMATS as f (f.key)}
 							{@const k = crowns.get(f.key)!}
 							{#if k.count > 0}
+								{@const held = crownHolders(k.holders)}
 								<span class="inline-flex items-center gap-1 text-tan">
 									<SpriteIcon
 										category="yields"
@@ -356,9 +423,23 @@
 										size={12}
 										alt=""
 									/>
-									<span class="font-semibold text-gray-200"
-										>{crownHolders(k.names)}</span
-									>
+									{#each held.shown as h, i (h.user_id)}
+										{#if i > 0}<span>&</span>{/if}
+										<span
+											class="inline-flex items-center gap-1 font-semibold text-gray-200"
+										>
+											<img
+												src={h.avatar_url}
+												alt=""
+												class="h-4 w-4 shrink-0 rounded-full"
+												width="16"
+												height="16"
+												loading="lazy"
+											/>
+											{h.display_name}
+										</span>
+									{/each}
+									{#if held.more > 0}<span>+{held.more} more</span>{/if}
 									<span>· {f.label} ({k.count})</span>
 								</span>
 							{:else}
@@ -384,9 +465,16 @@
 					class="mb-4 rounded-lg border border-border-subtle bg-surface p-3 text-sm"
 				>
 					<div
-						class="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1"
+						class="flex flex-wrap items-center justify-between gap-x-5 gap-y-1"
 					>
-						<span class="font-bold text-gray-200">
+						<span class="flex items-center gap-1.5 font-bold text-gray-200">
+							<img
+								src={data.user.avatar_url}
+								alt=""
+								class="h-5 w-5 shrink-0 rounded-full"
+								width="20"
+								height="20"
+							/>
 							{viewerName}
 							{#if viewerEpithet}
 								<span class="font-semibold italic text-orange"
@@ -447,41 +535,52 @@
 					<table class="w-full border-separate border-spacing-y-1.5 text-sm">
 						<thead>
 							<tr>
-								<th class="{HEADER_CELL} text-left">#</th>
-								<th class="{HEADER_CELL} text-left">Player</th>
-								<th class={HEADER_CELL}>Duels (Network)</th>
-								<th class={HEADER_CELL}>Duels (Cloud)</th>
-								<th class={HEADER_CELL}>FFAs</th>
-								<th
-									class={HEADER_CELL}
-									title="Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA"
-									>Other</th
-								>
-								<th class={HEADER_CELL}>Total</th>
+								{@render sortHeader("rank", "#", "text-left")}
+								{@render sortHeader("display_name", "Player", "text-left")}
+								{@render sortHeader("duels_network", "Duels (Network)")}
+								{@render sortHeader("duels_cloud", "Duels (Cloud)")}
+								{@render sortHeader("ffas", "FFAs")}
+								{@render sortHeader(
+									"other",
+									"Other",
+									"",
+									"Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA",
+								)}
+								{@render sortHeader("total", "Total")}
 							</tr>
 						</thead>
 						<tbody>
-							{#each rows as u, i (u.user_id)}
+							{#each rows as u (u.user_id)}
 								{@const epithet = epithetOf(u.total)}
 								{@const you = u.user_id === viewerId}
 								<tr class="group">
 									<td
 										class="{CELL} {ROW_BG} rounded-l-lg border-l-2 text-left {you
 											? 'border-orange'
-											: 'border-transparent'}">{ranks[i]}</td
+											: 'border-transparent'}">{u.rank}</td
 									>
 									<td class="{ROW_BG} px-3 py-2 text-left">
-										<ProfileLink
-											userId={u.user_id}
-											class="font-semibold {you
-												? 'text-orange'
-												: 'text-gray-200'} transition-colors hover:text-orange"
-										>
-											{u.display_name}
-										</ProfileLink>
-										{#if epithet}
-											<span class="text-xs italic text-tan">{epithet}</span>
-										{/if}
+										<span class="flex items-center gap-1.5">
+											<ProfileLink
+												userId={u.user_id}
+												class="flex items-center gap-1.5 font-semibold {you
+													? 'text-orange'
+													: 'text-gray-200'} transition-colors hover:text-orange"
+											>
+												<img
+													src={u.avatar_url}
+													alt=""
+													class="h-5 w-5 shrink-0 rounded-full"
+													width="20"
+													height="20"
+													loading="lazy"
+												/>
+												{u.display_name}
+											</ProfileLink>
+											{#if epithet}
+												<span class="text-xs italic text-tan">{epithet}</span>
+											{/if}
+										</span>
 									</td>
 									{#each CROWN_FORMATS as f (f.key)}
 										{@render countCell(u, f.key, f.label)}
@@ -500,6 +599,25 @@
 		</div>
 	</div>
 </main>
+
+{#snippet sortHeader(
+	key: SortKey,
+	label: string,
+	align: string = "",
+	title: string = "",
+)}
+	<th
+		class="{HEADER_CELL} cursor-pointer transition-colors hover:text-orange {align}"
+		title={title || undefined}
+		onclick={() => toggleSort(key)}
+	>
+		<span class="inline-flex items-center gap-1"
+			>{label}{#if sortColumn === key}<span class="text-orange"
+					>{sortDirection === "asc" ? "↑" : "↓"}</span
+				>{/if}</span
+		>
+	</th>
+{/snippet}
 
 <!-- A counted format's cell. The crown gets a fixed slot ahead of the number,
      reserved crowned or not: in the left gutter of a right-aligned column it
