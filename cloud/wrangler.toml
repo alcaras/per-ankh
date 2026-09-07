@@ -228,10 +228,11 @@ GLOBAL_STATS_VIEW_PER_HOUR = "600"
 # session-gated, so pooling would let a crawl of the public board decide when
 # signed-in visitors stop getting charts.
 #
-# Two reads per page load (all-time plus the selected season), so 1200 is ~600
-# page loads an hour: the same headroom the ceilings above buy, converted
-# through this page's fan-out rather than copied across from them.
-SEASON_VIEW_PER_HOUR = "1200"
+# One read per page load — the board in the URL, and only that board — so 600
+# is 600 page loads an hour: the same headroom the ceilings above buy, arrived
+# at through this page's fan-out rather than copied across from them. It sat at
+# 1200 while the page fetched both boards and spent two slots a load.
+SEASON_VIEW_PER_HOUR = "600"
 
 # === Cloud rewrite (/v1/auth/*, /v1/games/*) ===
 # CORS allowlist for new routes — comma-separated origins. Cookie-based
@@ -340,7 +341,7 @@ TOURNAMENT_VIEW_PER_HOUR = "2400"
 TOURNAMENT_LIST_VIEW_PER_HOUR = "600"
 TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 GLOBAL_STATS_VIEW_PER_HOUR = "600"
-SEASON_VIEW_PER_HOUR = "1200"
+SEASON_VIEW_PER_HOUR = "600"
 ALLOWED_ORIGINS = "https://staging.per-ankh.app"
 # Separate staging Discord OAuth app — paste its client ID:
 DISCORD_CLIENT_ID = "1512545079493922927"

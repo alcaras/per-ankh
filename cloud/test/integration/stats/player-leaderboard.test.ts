@@ -111,6 +111,7 @@ interface LeaderboardBody {
 	players: {
 		user_id: string;
 		display_name: string;
+		slug: string | null;
 		duels_network: number;
 		duels_cloud: number;
 		ffas: number;
@@ -183,6 +184,83 @@ describe("GET /v1/stats/players", () => {
 		expect(row.ffas).toBe(1);
 		expect(row.duels_network).toBe(0);
 		expect(row.total).toBe(3);
+	});
+
+	it("classifies a match by its non-local mode when two uploads disagree", async () => {
+		const uploader = await makeUser();
+		const opponent = await makeUser();
+		const onlineId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(opponent, onlineId);
+
+		// One match, two uploads, two modes: each client reports the mode it
+		// ran in, and seven public matches in the corpus look like this. The
+		// network seat's reading wins — a match somebody played over the
+		// network is a network match however the other seat sat down at it.
+		const xmlGameId = nanoid(36);
+		for (const [user, mode] of [
+			[uploader, "HOTSEAT"],
+			[opponent, "NETWORK"],
+		] as const) {
+			await seedPlayedGame({
+				uploader: user,
+				xmlGameId,
+				gameMode: mode,
+				seats: [
+					{ is_uploader: user === uploader },
+					{ online_id: onlineId, is_uploader: user === opponent },
+				],
+			});
+		}
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		for (const user of [uploader, opponent]) {
+			const row = rowFor(body, user)!;
+			expect(row.duels_network).toBe(1);
+			// Not also counted as a local game: `other` is derived client-side
+			// as total minus the counted categories, so a match that landed in
+			// neither column would silently reappear there.
+			expect(row.total).toBe(1);
+		}
+	});
+
+	it("resolves two non-local modes network-first", async () => {
+		const user = await makeUser();
+		const xmlGameId = nanoid(36);
+		// No match in the corpus reports both yet; the rule is pinned so the
+		// first one that does is not settled by whichever row D1 returns.
+		for (const mode of ["PLAY_BY_CLOUD", "NETWORK"]) {
+			await seedPlayedGame({
+				uploader: user,
+				xmlGameId,
+				gameMode: mode,
+				seats: [{ is_uploader: true }, {}],
+			});
+		}
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		const row = rowFor(body, user)!;
+		expect(row.duels_network).toBe(1);
+		expect(row.duels_cloud).toBe(0);
+		expect(row.total).toBe(1);
+	});
+
+	it("returns the profile slug, and null for a user without one", async () => {
+		// The board's rows link to /u/<slug>; without the field every link
+		// would take the id permalink's 307 (profileHref, src/lib/utils).
+		const slug = `player-${nanoid(8).toLowerCase()}`;
+		const slugged = await makeUser({ slug });
+		const unslugged = await makeUser();
+		for (const uploader of [slugged, unslugged]) {
+			await seedPlayedGame({
+				uploader,
+				gameMode: "NETWORK",
+				seats: [{ is_uploader: true }, {}],
+			});
+		}
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		expect(rowFor(body, slugged)!.slug).toBe(slug);
+		expect(rowFor(body, unslugged)!.slug).toBeNull();
 	});
 
 	it("counts zero, not null, when no match has a recorded game mode", async () => {

@@ -238,7 +238,10 @@
 	): string {
 		const name = rulerName(c) ?? "New ruler";
 		const cognomen = rulerCognomen(c);
-		const cog = cognomen ? ` ‘${cognomen}’` : "";
+		// Unquoted, as LeaderCard and the Orders breakdown render it:
+		// rulerCognomen carries the game's own article ("the Wise"), so the
+		// name reads straight through as the game writes it.
+		const cog = cognomen ? ` ${cognomen}` : "";
 		const arch = c.archetype ? formatArchetype(c.archetype) : null;
 		return (
 			`<div style="font-size:12px;line-height:1.5">` +

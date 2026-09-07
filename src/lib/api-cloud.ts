@@ -296,6 +296,9 @@ export interface AdminGameListOpts extends CallOpts {
 export interface PlayedGamesRow {
 	user_id: string;
 	display_name: string;
+	// The player's profile slug, for `/u/<slug>` — null for a user who has
+	// none, whose links fall back to the id permalink (profileHref decides).
+	slug: string | null;
 	// The player's Discord avatar (cdn.discordapp.com), resolved server-side
 	// from their stored hash — always present, since Discord's default avatar
 	// stands in for a user who never set one.
@@ -325,6 +328,7 @@ export interface PlayerLeaderboardResponse {
 const PLAYERS_SHAPE_CHANGELOG: Record<number, string> = {
 	1: "user_id, display_name, and the per-format played counts",
 	2: "avatar_url — the player's Discord avatar",
+	3: "slug — the profile slug, so a row links straight to /u/<slug>",
 };
 const PLAYERS_SHAPE_VERSION = Math.max(
 	...Object.keys(PLAYERS_SHAPE_CHANGELOG).map(Number),

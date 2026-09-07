@@ -335,7 +335,7 @@ export interface PlayerLeaderboardEnv {
 // TOURNAMENT_VIEW_PER_HOUR at 2400 on four to six.
 //
 // The default only — read the effective ceiling with seasonViewPerHour().
-export const SEASON_VIEW_PER_HOUR = 1200;
+export const SEASON_VIEW_PER_HOUR = 600;
 
 export function seasonViewPerHour(env: {
 	SEASON_VIEW_PER_HOUR?: string;
@@ -356,10 +356,15 @@ const SEASON_BUDGET: ReadBudget = {
 // The D1 row. discord_id and avatar_hash are SELECTed to address the Discord
 // CDN and are folded into avatar_url below rather than emitted as fields of
 // their own — the same select-use-don't-serialize shape handlePublicUserSearch
-// and the featured-video attribution use.
+// and the featured-video attribution use. `slug` is the exception: it IS
+// emitted, for the same reason handlePublicUserSearch emits it — it is
+// derived from the display name the row already carries, so it publishes
+// nothing the board doesn't, and it lets a row link straight to /u/<slug>
+// instead of bouncing every profile link through the id permalink's 307.
 interface PlayedGamesQueryRow {
 	user_id: string;
 	display_name: string;
+	slug: string | null;
 	discord_id: string;
 	avatar_hash: string | null;
 	duels_network: number;
@@ -407,10 +412,28 @@ export async function handlePlayerLeaderboard(
 	// `played` is (user, match) pairs — the uploader's claimed seat, plus
 	// every seat whose online id belongs to a registered user; UNION dedupes
 	// both the two credit paths and double-uploaded matches (same
-	// xml_game_id). `match_class` classifies each match from any in-window
-	// upload of it (all uploads of a match carry the same save, so humans
-	// and game_mode agree). Duel = exactly two humans, split by game mode;
-	// two-human hotseat/LAN lands in `other` (derived client-side).
+	// xml_game_id). `match_class` classifies each match from its in-window
+	// uploads. Duel = exactly two humans, split by game mode; two-human
+	// hotseat/LAN lands in `other` (derived client-side).
+	//
+	// Two uploads of one match agree on the human count — the roster is the
+	// same roster — so `n_humans` can take any of them. They do NOT always
+	// agree on game_mode: seven public xml_game_ids in the corpus carry two
+	// modes, every one of them a local mode against a non-local one
+	// (HOTSEAT/NETWORK, HOTSEAT/PLAY_BY_CLOUD, LAN/PLAY_BY_CLOUD). Each
+	// upload reports the mode its own client ran in, and a match somebody
+	// played over the network is a network match however the other seat sat
+	// down at it — so the non-local mode wins, and `any_network`/`any_cloud`
+	// carry that as two flags rather than a single winning mode. Picking one
+	// mode with MAX() would decide it alphabetically, which lands on the
+	// non-local value in all seven of today's conflicts by coincidence and
+	// would stop doing so the first time the pair is NETWORK/PLAY_BY_CLOUD.
+	// That pair — two non-local modes, which no match in the corpus has yet
+	// — resolves network-first, by testing `any_network` before `any_cloud`.
+	// Promoting the two known non-local modes rather than demoting a list of
+	// local ones is deliberate: game_mode is the save's `@_GameMode` read
+	// verbatim (match-metadata.ts) and nothing validates it against an enum,
+	// so a mode the game adds later must not be able to outrank a duel.
 	//
 	// Every arm carries is_public = 1 — the same visibility rule the profile
 	// card (users.ts) and the global corpus (stats/resolve.ts) enforce. A
@@ -438,19 +461,33 @@ export async function handlePlayerLeaderboard(
 	// still get their own uploads through the uploader arm above, and the
 	// credit returns on its own once the link is disambiguated.
 	//
-	// The category counts are SUM(CASE ...), not SUM(<predicate>), because
-	// game_mode is nullable and `x AND NULL` is NULL, not false: a user whose
-	// every match is a two-human game with no recorded mode would sum only
-	// NULLs and get NULL back for both duel columns. The response types them
-	// as numbers and the board renders them with toLocaleString, so the null
-	// wouldn't survive the trip. No save in the corpus is missing a mode
-	// today — the column is nullable because the parser reads it from an
-	// optional attribute (match-metadata.ts), which is a promise about the
-	// data we don't get to make here.
+	// The category counts and the mode flags are CASE-wrapped, not bare
+	// predicates, because game_mode is nullable and `x AND NULL` is NULL, not
+	// false: a user whose every match is a two-human game with no recorded
+	// mode would sum only NULLs and get NULL back for both duel columns, and
+	// a MAX over bare predicates would return NULL for a match whose every
+	// upload is missing a mode. The response types them as numbers and the
+	// board renders them with toLocaleString, so the null wouldn't survive
+	// the trip. No save in the corpus is missing a mode today — the column is
+	// nullable because the parser reads it from an optional attribute
+	// (match-metadata.ts), which is a promise about the data we don't get to
+	// make here.
+	//
+	// `humans` carries the same public + window predicate as the two arms
+	// below rather than grouping the whole table: it only ever reaches
+	// match_class through an inner join that applies those anyway, so the
+	// rows it drops are rows nothing downstream can use — and without the
+	// predicate a one-week board pays for a full scan of every roster ever
+	// uploaded, since since/until reduce nothing there.
 	const rows = await env.SHARE_DB.prepare(
 		`WITH humans AS (
-		   SELECT game_id, SUM(is_human) AS n
-		   FROM player_summaries GROUP BY game_id
+		   SELECT ps.game_id, SUM(ps.is_human) AS n
+		   FROM player_summaries ps
+		   JOIN games g ON g.game_id = ps.game_id
+		   WHERE g.is_public = 1
+		     AND (?1 IS NULL OR g.created_at >= ?1)
+		     AND (?2 IS NULL OR g.created_at < ?2)
+		   GROUP BY ps.game_id
 		 ),
 		 played AS (
 		   SELECT g.user_id, g.xml_game_id
@@ -476,7 +513,12 @@ export async function handlePlayerLeaderboard(
 		     AND (?2 IS NULL OR g.created_at < ?2)
 		 ),
 		 match_class AS (
-		   SELECT g.xml_game_id, MAX(h.n) AS n_humans, MAX(g.game_mode) AS game_mode
+		   SELECT g.xml_game_id,
+		          MAX(h.n) AS n_humans,
+		          MAX(CASE WHEN g.game_mode = 'NETWORK'
+		                   THEN 1 ELSE 0 END) AS any_network,
+		          MAX(CASE WHEN g.game_mode = 'PLAY_BY_CLOUD'
+		                   THEN 1 ELSE 0 END) AS any_cloud
 		   FROM games g
 		   JOIN humans h ON h.game_id = g.game_id
 		   WHERE g.is_public = 1
@@ -487,11 +529,12 @@ export async function handlePlayerLeaderboard(
 		 SELECT
 		   u.user_id,
 		   ${displayNameSql("u")} AS display_name,
+		   u.slug,
 		   u.discord_id,
 		   u.avatar_hash,
-		   SUM(CASE WHEN mc.n_humans = 2 AND mc.game_mode = 'NETWORK'
+		   SUM(CASE WHEN mc.n_humans = 2 AND mc.any_network = 1
 		            THEN 1 ELSE 0 END) AS duels_network,
-		   SUM(CASE WHEN mc.n_humans = 2 AND mc.game_mode = 'PLAY_BY_CLOUD'
+		   SUM(CASE WHEN mc.n_humans = 2 AND mc.any_network = 0 AND mc.any_cloud = 1
 		            THEN 1 ELSE 0 END) AS duels_cloud,
 		   SUM(CASE WHEN mc.n_humans >= 3 THEN 1 ELSE 0 END) AS ffas,
 		   COUNT(*) AS total
@@ -507,6 +550,7 @@ export async function handlePlayerLeaderboard(
 	const players = (rows.results ?? []).map((r) => ({
 		user_id: r.user_id,
 		display_name: r.display_name,
+		slug: r.slug,
 		avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
 		duels_network: r.duels_network,
 		duels_cloud: r.duels_cloud,

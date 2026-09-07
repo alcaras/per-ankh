@@ -7,14 +7,11 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { cognomenName } from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
+	import { ALL_BOARD, resolveSelection, selectionKey } from "./seasons";
+	import type { Board } from "./seasons";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
-
-	// Named off the load's return rather than re-declared, so the two boards
-	// stay one decision — +page.ts can't export the type (SvelteKit rejects
-	// runtime exports from a +page.ts) but PageData carries it.
-	type Board = PageData["board"];
 
 	// Activity epithets from the game's cognomen ladder — and the set is
 	// exactly Old World's own difficulty ladder, every level of which is
@@ -43,7 +40,7 @@
 		{ games: 36, type: "COGNOMEN_MAGNIFICENT" },
 	];
 	const epithetOf = (total: number): string | null => {
-		const rung = [...RUNGS].reverse().find((r) => total >= r.games);
+		const rung = RUNGS.findLast((r) => total >= r.games);
 		return rung ? cognomenName(rung.type) : null;
 	};
 
@@ -72,9 +69,7 @@
 	// on the board you are looking at.
 	type Ranked = Row & { rank: number };
 	const ranked = $derived.by(() => {
-		const base = withOther(
-			data.board === "season" ? data.season : data.allTime,
-		);
+		const base = withOther(data.players);
 		const out: Ranked[] = [];
 		base.forEach((r, i) => {
 			out.push({
@@ -86,10 +81,10 @@
 	});
 
 	// Column sorting. Local state rather than a URL param: this page's load
-	// re-fetches both boards on any URL change — two D1 reads and a
-	// season_view budget slot, which is why `select` guards a no-op
-	// navigation — and a sort only rearranges rows already on screen. Board
-	// and season stay in the URL because they change *which* rows those are.
+	// re-fetches the board on any URL change — a D1 read and a season_view
+	// budget slot, which is why `select` guards a no-op navigation — and a
+	// sort only rearranges rows already on screen. Board and season stay in
+	// the URL because they change *which* rows those are.
 	//
 	// Same state shape and toggle rule as the app's other sortable tables
 	// (the game-detail tabs' toggleSort, the tournament matches table's
@@ -138,43 +133,45 @@
 	// forever. Season is the default: the board that resets, so being behind
 	// is never more than a few months deep. All-time is the career monument.
 	//
-	// The value naming the career board. +page.ts owns the same constant but
-	// can't export it (SvelteKit rejects any runtime export from a +page.ts
-	// but its own), so it is spelled again here.
-	const ALL_BOARD = "all";
+	// The vocabulary the URL is written in — ALL_BOARD, and the normalizer
+	// both the load and this file read a URL through — lives in ./seasons.
 	const currentSlug = $derived(data.seasons[data.seasons.length - 1].slug);
-	const selectedIndex = $derived(
-		data.seasons.findIndex((s) => s.slug === data.selected.slug),
+	// The selection a URL names, normalized exactly as the load normalizes it
+	// — one shared function (./seasons) rather than a second copy of the
+	// rules, so the write guard, the swap check and the load cannot drift.
+	const keyOf = (url: URL): string =>
+		selectionKey(resolveSelection(url, data.seasons));
+
+	// `data` describes the board on screen, which during a swap is the one
+	// being replaced: a navigation is already in flight and `page.url` does
+	// not advance until it lands. The controls therefore steer by the URL the
+	// page is *heading to*, so a second click while the first is still
+	// loading steps a second season rather than recomputing the first — the
+	// stepper sits outside the dimmed `.board` and stays clickable throughout,
+	// which is the point of leaving it live.
+	const liveUrl = $derived(navigating.to?.url ?? page.url);
+	const live = $derived(resolveSelection(liveUrl, data.seasons));
+	const liveIndex = $derived(
+		data.seasons.findIndex((s) => s.slug === live.selected.slug),
 	);
-	const isCurrentSeason = $derived(selectedIndex === data.seasons.length - 1);
-	// The view a URL actually names, normalized the way the load normalizes
-	// it: an absent `?season=`, an unknown slug and the current season's own
-	// slug are three spellings of one season, and anything but `?board=all`
-	// is the season board. Both the write guard and the swap dimming compare
-	// through this rather than through the raw params, so neither can mistake
-	// a respelling for a change.
-	const selectionOf = (url: URL): string => {
-		const slug = url.searchParams.get("season");
-		const season =
-			data.seasons.find((s) => s.slug === slug)?.slug ?? currentSlug;
-		const board =
-			url.searchParams.get("board") === ALL_BOARD ? "all" : "season";
-		return `${board}:${season}`;
-	};
+	const liveIsCurrent = $derived(liveIndex === data.seasons.length - 1);
+	// Whether the season on screen is the current one — the empty state's
+	// wording, which describes what is rendered rather than what is coming.
+	const isCurrentSeason = $derived(data.selected.slug === currentSlug);
 	// One writer for both controls, so neither can drop the other's selection
 	// on its way past. Defaults drop their param rather than spelling them
 	// out, keeping one canonical URL — and one edge-cache entry — for the
 	// default view, as GlobalFacetRow and ScopeRow do.
 	function select(board: Board, slug: string): void {
-		const url = new URL(page.url);
+		const url = new URL(liveUrl);
 		if (slug === currentSlug) url.searchParams.delete("season");
 		else url.searchParams.set("season", slug);
 		if (board === "all") url.searchParams.set("board", ALL_BOARD);
 		else url.searchParams.delete("board");
-		// Re-selecting the view already on screen would spend two D1 reads
-		// and a per-IP budget slot to fetch back what is already rendered —
-		// the same guard GlobalFacetRow puts in front of its facet writes.
-		if (selectionOf(url) === selectionOf(page.url)) return;
+		// Re-selecting the view already asked for would spend a D1 read and a
+		// per-IP budget slot to fetch back what is already coming — the same
+		// guard GlobalFacetRow puts in front of its facet writes.
+		if (keyOf(url) === keyOf(liveUrl)) return;
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- search-param-only update on the current route; URL objects are SvelteKit's documented dynamic-nav API
 		void goto(url, { noScroll: true });
 	}
@@ -195,16 +192,15 @@
 	const triggerClass =
 		"relative z-10 cursor-pointer whitespace-nowrap px-3 py-1.5 text-center text-xs font-bold text-tan transition-colors disabled:cursor-default disabled:opacity-50";
 
-	// Every board change re-runs the load (two fetches, one per board), so
-	// the page keeps showing the outgoing board until the new one lands.
-	// Dimming for the duration is the /stats treatment: it says the numbers
-	// still on screen belong to the board you just left, and it covers the
-	// wait that stepping through the archive would otherwise spend looking
-	// unresponsive.
+	// Every board change re-runs the load, so the page keeps showing the
+	// outgoing board until the new one lands. Dimming for the duration is the
+	// /stats treatment: it says the numbers still on screen belong to the
+	// board you just left, and it covers the wait that stepping through the
+	// archive would otherwise spend looking unresponsive.
 	const isSwapping = $derived.by(() => {
 		const to = navigating.to;
 		if (!to) return false;
-		return selectionOf(to.url) !== selectionOf(page.url);
+		return keyOf(to.url) !== keyOf(page.url);
 	});
 
 	// Crowns of the board — most games played in each format, foursquare-
@@ -215,10 +211,16 @@
 	// panel crowns careers rather than the season, the way the viewer's tally
 	// switches under it. A season panel over career numbers would be naming a
 	// season the disabled stepper can't even move off.
+	//
+	// One entry per counted format, and the table's columns are drawn from it
+	// too — header and body cell alike — so a format cannot exist in one and
+	// not the other. `header` names the column, where `label` names the crown
+	// and its tooltip: the column has room to say which of the two duel modes
+	// it counts, and the crown card, already titled "Crowns of …", does not.
 	const CROWN_FORMATS = [
-		{ key: "duels_network", label: "Network" },
-		{ key: "duels_cloud", label: "Cloud" },
-		{ key: "ffas", label: "FFA" },
+		{ key: "duels_network", label: "Network", header: "Network (Duel)" },
+		{ key: "duels_cloud", label: "Cloud", header: "Cloud (Duel)" },
+		{ key: "ffas", label: "FFA", header: "FFA" },
 	] as const;
 	type FormatKey = (typeof CROWN_FORMATS)[number]["key"];
 	// How many holders a shared crown names before it counts the rest instead.
@@ -233,7 +235,10 @@
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived, not mutated after
 		const out = new Map<FormatKey, { holders: Holder[]; count: number }>();
 		for (const f of CROWN_FORMATS) {
-			const max = Math.max(0, ...ranked.map((r) => r[f.key]));
+			// Reduced rather than spread into Math.max: the board is unbounded
+			// (every player with a public game is on it), and a spread passes
+			// one argument per row.
+			const max = ranked.reduce((m, r) => (r[f.key] > m ? r[f.key] : m), 0);
 			// Every format gets an entry, claimed or not: a crown nobody holds
 			// yet is the season's standing invitation, so it is named rather
 			// than omitted. `count: 0` is what `hasCrown` already reads as
@@ -304,9 +309,7 @@
 		}`,
 	);
 	const viewerEpithet = $derived(epithetOf(viewerTotal));
-	const currentRung = $derived(
-		[...RUNGS].reverse().find((r) => viewerTotal >= r.games),
-	);
+	const currentRung = $derived(RUNGS.findLast((r) => viewerTotal >= r.games));
 	const nextRung = $derived(RUNGS.find((r) => r.games > viewerTotal));
 	// Progress within the current rung's span, for the bar — every game
 	// played visibly moves it. At zero the bar is empty and the first rung
@@ -324,13 +327,13 @@
 	// A plain left click only: a modified click is the browser's to handle
 	// (new tab, new window, a selection drag), and it still has the name
 	// cell's real anchor to handle it with — which is also what keyboard
-	// activation follows, so the row needs no key handler of its own. The
-	// payload carries no slug, so this builds the same permalink the anchor
-	// does (profileHref redirects it to /u/<slug> for a slug-holder).
+	// activation follows, so the row needs no key handler of its own. The row
+	// carries the same slug the anchor does, so both land on one URL rather
+	// than the row taking the permalink's redirect.
 	function openProfile(u: Row, e: MouseEvent): void {
 		if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- profileHref() returns a resolve() result; lint can't see through the call
-		void goto(profileHref({ user_id: u.user_id }));
+		void goto(profileHref(u));
 	}
 
 	const num = (n: number) => (n === 0 ? "—" : n.toLocaleString());
@@ -363,12 +366,11 @@
 					<button
 						type="button"
 						class={triggerClass}
-						aria-label="Previous season{selectedIndex > 0
-							? `: ${data.seasons[selectedIndex - 1].label}`
+						aria-label="Previous season{liveIndex > 0
+							? `: ${data.seasons[liveIndex - 1].label}`
 							: ''}"
-						disabled={data.board === "all" || selectedIndex <= 0}
-						onclick={() =>
-							select(data.board, data.seasons[selectedIndex - 1].slug)}
+						disabled={live.board === "all" || liveIndex <= 0}
+						onclick={() => select(live.board, data.seasons[liveIndex - 1].slug)}
 						>‹</button
 					>
 					<span
@@ -392,12 +394,11 @@
 					<button
 						type="button"
 						class={triggerClass}
-						aria-label="Next season{!isCurrentSeason
-							? `: ${data.seasons[selectedIndex + 1].label}`
+						aria-label="Next season{!liveIsCurrent
+							? `: ${data.seasons[liveIndex + 1].label}`
 							: ''}"
-						disabled={data.board === "all" || isCurrentSeason}
-						onclick={() =>
-							select(data.board, data.seasons[selectedIndex + 1].slug)}
+						disabled={live.board === "all" || liveIsCurrent}
+						onclick={() => select(live.board, data.seasons[liveIndex + 1].slug)}
 						>›</button
 					>
 				</div>
@@ -421,7 +422,7 @@
 							type="button"
 							class={triggerClass}
 							aria-pressed={data.board === b.key}
-							onclick={() => select(b.key, data.selected.slug)}
+							onclick={() => select(b.key, live.selected.slug)}
 						>
 							{b.label}
 						</button>
@@ -581,9 +582,9 @@
 							<tr>
 								{@render sortHeader("rank", "#", "text-left")}
 								{@render sortHeader("display_name", "Player", "text-left")}
-								{@render sortHeader("duels_network", "Network (Duel)")}
-								{@render sortHeader("duels_cloud", "Cloud (Duel)")}
-								{@render sortHeader("ffas", "FFA")}
+								{#each CROWN_FORMATS as f (f.key)}
+									{@render sortHeader(f.key, f.header)}
+								{/each}
 								{@render sortHeader(
 									"other",
 									"Other",
@@ -612,6 +613,7 @@
 											     anchor and navigate to the same profile twice. -->
 											<ProfileLink
 												userId={u.user_id}
+												slug={u.slug}
 												class="flex items-center gap-1.5 font-semibold {you
 													? 'text-orange'
 													: 'text-gray-200'} transition-colors hover:text-orange"
