@@ -257,9 +257,7 @@
 	const crownsHeading = $derived(
 		data.board === "all"
 			? "Crowns of all time"
-			: `Crowns of ${data.selected.name} ${
-					isCurrentSeason ? "(so far)" : data.selected.year
-				}`,
+			: `Crowns of ${data.selected.label}`,
 	);
 	const leaderTerm = $derived(
 		data.board === "all" ? "All-time leader" : "Season leader",
