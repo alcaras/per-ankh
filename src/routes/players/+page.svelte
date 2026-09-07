@@ -6,6 +6,7 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { COGNOMEN_LADDER } from "$lib/generated/cognomens";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import { profileHref } from "$lib/utils/profile-href";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -217,13 +218,13 @@
 		{ key: "ffas", label: "FFAs" },
 	] as const;
 	type FormatKey = (typeof CROWN_FORMATS)[number]["key"];
-	// How many faces a shared crown draws before it counts the rest instead.
+	// How many holders a shared crown names before it counts the rest instead.
 	// A fresh season ties its whole field on one game, so the co-holder list
-	// is longest exactly when the strip matters most — past the cap it is a
-	// +N, and the tooltip still names everyone.
-	const CROWN_AVATARS_SHOWN = 3;
-	// A crown holder as the strip renders them — one holder is named, and a
-	// tie is a stack of their faces.
+	// is longest exactly when the card matters most — past the cap it is a
+	// +N, and its tooltip still names everyone it didn't draw.
+	const CROWN_HOLDERS_SHOWN = 3;
+	// A crown holder as the card names them — one line per holder, face and
+	// name, so a tie reads as the players sharing it rather than a face stack.
 	type Holder = Pick<Row, "user_id" | "display_name" | "avatar_url">;
 	const crowns = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived, not mutated after
@@ -263,13 +264,16 @@
 	const leaderTerm = $derived(
 		data.board === "all" ? "All-time leader" : "Season leader",
 	);
-	// The faces a shared crown shows, capped so one cell can't outgrow its
-	// column; anyone past the cap is counted beside them.
-	const crownFaces = (holders: Holder[]): Holder[] =>
-		holders.slice(0, CROWN_AVATARS_SHOWN);
-	// Every co-holder, for the tooltip — the names the stack doesn't spell out.
-	const crownNames = (holders: Holder[]): string =>
-		holders.map((h) => h.display_name).join(", ");
+	// The holders a crown card names, capped so one card can't outgrow its
+	// neighbours; anyone past the cap is counted on a last line.
+	const crownShown = (holders: Holder[]): Holder[] =>
+		holders.slice(0, CROWN_HOLDERS_SHOWN);
+	// The co-holders the card didn't draw, for that line's tooltip.
+	const crownRestNames = (holders: Holder[]): string =>
+		holders
+			.slice(CROWN_HOLDERS_SHOWN)
+			.map((h) => h.display_name)
+			.join(", ");
 	const hasCrown = (u: Row, key: FormatKey): boolean =>
 		(crowns.get(key)?.count ?? 0) > 0 && u[key] === crowns.get(key)!.count;
 
@@ -311,6 +315,22 @@
 		const floor = currentRung?.games ?? 0;
 		return (viewerTotal - floor) / (nextRung.games - floor);
 	});
+
+	// The whole row opens the player's profile, not just their name — every
+	// cell in it describes that one player, so the name cell was a small
+	// target for the only destination the row has.
+	//
+	// A plain left click only: a modified click is the browser's to handle
+	// (new tab, new window, a selection drag), and it still has the name
+	// cell's real anchor to handle it with — which is also what keyboard
+	// activation follows, so the row needs no key handler of its own. The
+	// payload carries no slug, so this builds the same permalink the anchor
+	// does (profileHref redirects it to /u/<slug> for a slug-holder).
+	function openProfile(u: Row, e: MouseEvent): void {
+		if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- profileHref() returns a resolve() result; lint can't see through the call
+		void goto(profileHref({ user_id: u.user_id }));
+	}
 
 	const num = (n: number) => (n === 0 ? "—" : n.toLocaleString());
 
@@ -410,64 +430,51 @@
 		</div>
 
 		<div class="board" class:swapping={isSwapping} aria-busy={isSwapping}>
-			<!-- The board's format crowns: most games played in each format.
-			     Shown whether or not anyone holds them — a fresh season's board is
-			     three open crowns, which is the whole point of the reset. -->
-			<div
-				class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg bg-surface p-3 text-xs"
-			>
-				<span class="font-bold uppercase tracking-wide text-tan"
-					>{crownsHeading}</span
-				>
-				<!-- One fixed cell per format, so the strip keeps its shape
-				     whether a crown is unheld, held by one player, or tied five
-				     ways: a caption naming the format and what the crown stands at,
-				     and beside it whoever holds it. Equal columns rather than a
-				     centred run — a long holder list used to shove its neighbours
-				     along the row and orphan the third crown on a line of its own. -->
-				<div class="grid flex-1 grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">
+			<!-- The board's format crowns: most games played in each format, one
+			     card per crown in the shape the game page's Nations panel uses —
+			     a titled panel over raised subpanels. Shown whether or not anyone
+			     holds them; a fresh season's board is three open crowns, which is
+			     the whole point of the reset. -->
+			<div class="mb-4 rounded-lg bg-surface p-4">
+				<h3 class="mb-3 text-base font-bold text-tan">{crownsHeading}</h3>
+				<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 					{#each CROWN_FORMATS as f (f.key)}
 						{@const k = crowns.get(f.key)!}
+						<!-- Three across starts at md rather than sm because that is where
+						     a card is wide enough for the longest name on the board: at sm
+						     the card holds ~160px of line and the widest holder line needs
+						     ~180px, where md's ~203px (and ~213px at the page's max width)
+						     clears it. -->
 						<div
-							class="flex min-w-0 items-center gap-1.5"
+							class="min-w-0 rounded-lg bg-surface-raised p-3 text-xs"
 							class:opacity-70={k.holders.length === 0}
 						>
-							<SpriteIcon
-								category="yields"
-								value="YIELD_LEGITIMACY"
-								size={12}
-								alt=""
-							/>
-							{#if k.holders.length === 0}
-								<span class="whitespace-nowrap text-tan"
-									>{f.label} unclaimed</span
-								>
-							{:else}
-								{#if k.holders.length === 1}
-									<span
-										class="flex min-w-0 items-center gap-1 font-semibold text-gray-200"
-									>
-										<img
-											src={k.holders[0].avatar_url}
-											alt=""
-											class="h-4 w-4 shrink-0 rounded-full"
-											width="16"
-											height="16"
-											loading="lazy"
-										/>
-										<span class="truncate">{k.holders[0].display_name}</span>
-									</span>
+							<!-- Header: the crown, and what it is the crown of — ranged left
+							     under the panel title, which is the line it answers to. -->
+							<div class="mb-2 flex items-center gap-1.5">
+								<SpriteIcon
+									category="yields"
+									value="YIELD_LEGITIMACY"
+									size={16}
+									alt=""
+								/>
+								<span class="text-sm font-bold text-tan">{f.label}</span>
+							</div>
+							<!-- Who holds it, centred under the header: one line per holder,
+							     so a tie reads as the players sharing the crown rather than as
+							     a stack of faces, each carrying the count it is held at. A name
+							     too long for the card wraps rather than truncating — a crown
+							     holder is the last name to abbreviate. A tie deeper than the
+							     cap counts the names it didn't draw, and spells them out in
+							     that line's tooltip. -->
+							<div class="flex flex-col items-center gap-1 text-center">
+								{#if k.holders.length === 0}
+									<span class="text-tan">Unclaimed</span>
 								{:else}
-									<!-- A shared crown reads as the faces sharing it. Naming
-									     one of them would put a holder first where the tie
-									     says nobody is, so the row is faces alone — the
-									     tooltip spells out every name, and a tie deeper than
-									     the cap counts the faces it didn't draw. -->
-									<span
-										class="flex min-w-0 items-center gap-1"
-										title={crownNames(k.holders)}
-									>
-										{#each crownFaces(k.holders) as h (h.user_id)}
+									{#each crownShown(k.holders) as h (h.user_id)}
+										<span
+											class="flex min-w-0 max-w-full items-center justify-center gap-1.5"
+										>
 											<img
 												src={h.avatar_url}
 												alt=""
@@ -476,21 +483,19 @@
 												height="16"
 												loading="lazy"
 											/>
-										{/each}
-										{#if k.holders.length > CROWN_AVATARS_SHOWN}
-											<span
-												class="whitespace-nowrap font-semibold text-gray-200"
-												>+{k.holders.length - CROWN_AVATARS_SHOWN}</span
+											<span class="break-words font-semibold text-gray-200"
+												>{h.display_name}</span
 											>
-										{/if}
-									</span>
+											<span class="shrink-0 text-tan">({k.count})</span>
+										</span>
+									{/each}
+									{#if k.holders.length > CROWN_HOLDERS_SHOWN}
+										<span class="text-tan" title={crownRestNames(k.holders)}
+											>+{k.holders.length - CROWN_HOLDERS_SHOWN} more</span
+										>
+									{/if}
 								{/if}
-								<!-- The crown the holders above are holding, and what it
-								     stands at — after them, so the eye lands on who first. -->
-								<span class="whitespace-nowrap text-tan"
-									>· {f.label} ({k.count})</span
-								>
-							{/if}
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -589,7 +594,10 @@
 							{#each rows as u (u.user_id)}
 								{@const epithet = epithetOf(u.total)}
 								{@const you = u.user_id === viewerId}
-								<tr class="group">
+								<tr
+									class="group cursor-pointer"
+									onclick={(e) => openProfile(u, e)}
+								>
 									<td
 										class="{CELL} {ROW_BG} rounded-l-lg border-l-2 text-left {you
 											? 'border-orange'
@@ -597,11 +605,14 @@
 									>
 									<td class="{ROW_BG} px-3 py-2 text-left">
 										<span class="flex items-center gap-1.5">
+											<!-- The row handler would otherwise fire behind the
+											     anchor and navigate to the same profile twice. -->
 											<ProfileLink
 												userId={u.user_id}
 												class="flex items-center gap-1.5 font-semibold {you
 													? 'text-orange'
 													: 'text-gray-200'} transition-colors hover:text-orange"
+												onclick={(e) => e.stopPropagation()}
 											>
 												<img
 													src={u.avatar_url}
