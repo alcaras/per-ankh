@@ -1,10 +1,8 @@
 // Public /players page — the games-played leaderboard. Anonymous endpoint,
 // same audience as the home discovery feed. Which board is shown lives
-// entirely in `?season=`, so a view is linkable and the browser's back
-// button walks the boards: a season slug (e.g. ?season=summer-2026) picks
-// that season, `all-time` picks the career board, and an absent or unknown
-// value falls through to the current season. Past seasons are closed
-// windows the archive keeps forever.
+// entirely in the query string, so a view is linkable and the browser's
+// back button walks the boards. Past seasons are closed windows the archive
+// keeps forever.
 import { cloudApi } from "$lib/api-cloud";
 import { rethrowRateLimit } from "$lib/utils/load-errors";
 import type { PageLoad } from "./$types";
@@ -19,12 +17,22 @@ export interface Season {
 	until: string; // exclusive YYYY-MM-DD
 }
 
-// The two boards. `?season=all-time` names the career board; every other
-// value names a season, and season slugs are `<name>-<year>`, so the two
-// vocabularies can never collide. Not exported — SvelteKit rejects any
-// runtime export from a `+page.ts` but its own, so the toggle in
-// +page.svelte writes the slug literally.
-const ALL_TIME = "all-time";
+// The board and the season are two independent selections, so they get two
+// params: `?board=all` names the career board, `?season=<slug>` names the
+// season. They cannot share one slot. Folding the career board into the
+// season param (`?season=all-time`, as this page first did) meant switching
+// boards *overwrote* the season — `all-time` matches no season, so the
+// selection fell back to the current one and coming back landed you
+// somewhere you had never been.
+//
+// Each default is spelled by absence — the season board and the current
+// season each drop their param — so the default view has one canonical URL,
+// and so one edge-cache entry rather than several spellings of it. Same rule
+// GlobalFacetRow and ScopeRow follow.
+//
+// Not exported — SvelteKit rejects any runtime export from a `+page.ts` but
+// its own, so +page.svelte spells the same value literally.
+const ALL_BOARD = "all";
 type Board = "season" | "all";
 
 // Seasons follow the meteorological quarters the community actually says
@@ -82,10 +90,12 @@ export const load: PageLoad = async ({ fetch, url }) => {
 	const seasons = allSeasons();
 	// Parsed here rather than read raw in the component, so the board the
 	// page renders and the board the <title> claims are the one decision.
-	// All-time still selects a season: the picker keeps its label, and the
-	// crowns the board hides are the selected season's when you come back.
+	// The career board still carries a season — the stepper keeps its label,
+	// and the crowns the board hides are that season's when you come back —
+	// which is what reading the two from separate params buys.
+	const board: Board =
+		url.searchParams.get("board") === ALL_BOARD ? "all" : "season";
 	const slug = url.searchParams.get("season");
-	const board: Board = slug === ALL_TIME ? "all" : "season";
 	const selected =
 		seasons.find((s) => s.slug === slug) ?? seasons[seasons.length - 1];
 	try {
