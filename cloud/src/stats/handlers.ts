@@ -425,6 +425,17 @@ export async function handlePlayerLeaderboard(
 	// semantics. A match uploaded publicly by one player and privately by
 	// another stays public — the public upload classifies it, and both
 	// players are credited once.
+	//
+	// The online-id arm credits an id only while it resolves to exactly one
+	// user. `user_online_ids` is many-to-many by design (0003: shared
+	// account, Discord-account rebuild) and links are captured implicitly
+	// from whichever seat an uploader claimed, so an id can name two people
+	// without either of them doing anything wrong. Crediting both hands one
+	// player the other's entire history, and nothing here distinguishes the
+	// real owner — the earliest claimant is not the likelier one. An
+	// ambiguous id therefore credits nobody through this arm; both users
+	// still get their own uploads through the uploader arm above, and the
+	// credit returns on its own once the link is disambiguated.
 	const rows = await env.SHARE_DB.prepare(
 		`WITH humans AS (
 		   SELECT game_id, SUM(is_human) AS n
@@ -445,6 +456,10 @@ export async function handlePlayerLeaderboard(
 		     ON ps.game_id = g.game_id AND ps.is_human = 1
 		        AND ps.online_id IS NOT NULL
 		   JOIN user_online_ids uo ON uo.online_id = ps.online_id
+		     AND NOT EXISTS (
+		       SELECT 1 FROM user_online_ids amb
+		       WHERE amb.online_id = ps.online_id AND amb.user_id <> uo.user_id
+		     )
 		   WHERE g.is_public = 1
 		     AND (?1 IS NULL OR g.created_at >= ?1)
 		     AND (?2 IS NULL OR g.created_at < ?2)

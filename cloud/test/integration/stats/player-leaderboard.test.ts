@@ -201,6 +201,36 @@ describe("GET /v1/stats/players", () => {
 		expect(rowFor(body, uploader)!.total).toBe(1);
 	});
 
+	it("credits nobody through an online id two users have linked", async () => {
+		const host = await makeUser();
+		const first = await makeUser();
+		const second = await makeUser();
+		// user_online_ids is many-to-many (0003) and links are captured from
+		// whichever seat an uploader claimed, so one id can name two people
+		// without either of them doing anything wrong.
+		const sharedId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(first, sharedId);
+		await linkOnlineId(second, sharedId);
+
+		await seedPlayedGame({
+			uploader: host,
+			gameMode: "NETWORK",
+			seats: [{ is_uploader: true }, { online_id: sharedId }],
+		});
+		// The ambiguity costs neither of them their own upload — that credit
+		// comes from the claimed seat, not from the contested id.
+		await seedPlayedGame({
+			uploader: second,
+			gameMode: "NETWORK",
+			seats: [{ is_uploader: true }, { online_id: sharedId }],
+		});
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		expect(rowFor(body, first)).toBeUndefined();
+		expect(rowFor(body, second)!.total).toBe(1);
+		expect(rowFor(body, host)!.total).toBe(1);
+	});
+
 	it("credits nobody for a private game, on either path", async () => {
 		const uploader = await makeUser();
 		const opponent = await makeUser();
