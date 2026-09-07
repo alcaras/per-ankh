@@ -1,3 +1,4 @@
+import { COGNOMENS } from "$lib/generated/cognomens";
 import { NAME_TEXT } from "$lib/generated/name-text";
 import { NATION_NAMES } from "$lib/generated/nation-names";
 
@@ -48,6 +49,24 @@ export function formatEnum(
 export function nationName(nation: string | null | undefined): string {
 	return (
 		(nation ? NATION_NAMES[nation] : undefined) ?? formatEnum(nation, "NATION_")
+	);
+}
+
+/**
+ * The epithet Old World gives a ruler, from its `COGNOMEN_*` token — with the
+ * article, as the game writes it ("the Wise", "alcaras the Wise").
+ *
+ * The token is an internal id, not the label: `COGNOMEN_BRAVE` displays as
+ * **the Drillmaster**. The English string was rewritten and the id kept its
+ * original word — the same split the difficulty levels show, where
+ * `DIFFICULTY_GREAT` is "Fragile". It is the only one of the 63 where the two
+ * disagree, so the baked table settles it and `formatEnum` covers a cognomen
+ * from game content newer than the baked reference snapshot, as `nationName`
+ * does for a nation.
+ */
+export function cognomenName(cognomen: string): string {
+	return (
+		COGNOMENS[cognomen]?.name ?? `the ${formatEnum(cognomen, "COGNOMEN_")}`
 	);
 }
 

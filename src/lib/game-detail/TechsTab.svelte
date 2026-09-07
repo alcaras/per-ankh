@@ -366,7 +366,10 @@
 		eventLine: string,
 	): string {
 		const cognomen = rulerCognomen(c);
-		const cog = cognomen ? ` ‘${cognomen}’` : "";
+		// Unquoted, as LeaderCard and the Orders breakdown render it:
+		// rulerCognomen carries the game's own article ("the Wise"), so the
+		// name reads straight through as the game writes it.
+		const cog = cognomen ? ` ${cognomen}` : "";
 		const arch = c.archetype ? formatArchetype(c.archetype) : null;
 		// "Unknown" for a character the save left unnamed, as LeaderCard does —
 		// this header names a ruler who existed, not a vacant seat.

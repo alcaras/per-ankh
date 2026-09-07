@@ -2,13 +2,19 @@
 //
 //   GET /v1/users/:user_id/stats           — user corpus
 //   GET /v1/stats                          — global (public) corpus
+//   GET /v1/stats/players                  — played-games leaderboard
 //
-// Resolve corpus → check cache → compute on miss → return bundle.
+// The first two resolve corpus → check cache → compute on miss → return
+// bundle. The third is not a bundle at all — it counts games played per user
+// straight out of D1, uncached — and shares this file for the corpus it reads
+// rather than for the shape it returns.
 
 import { CURRENT_PARSER_VERSION } from "../schemas/game";
 import { sessionFromRequest } from "../session";
 import type { SessionEnv } from "../session";
 import { cloudCorsHeaders, errorResponse, jsonResponse } from "../util";
+import { buildAvatarUrl } from "../auth";
+import { displayNameSql } from "../identity";
 import {
 	parseNationParam,
 	parseScopeParam,
@@ -279,4 +285,411 @@ export async function handleGlobalStats(
 	}
 
 	return globalStatsResponse(await build(), cors);
+}
+
+// ─── Played-games leaderboard ────────────────────────────────────────
+//
+//   GET /v1/stats/players — public site-wide leaderboard of games PLAYED
+//   per user, split by category: network duels, cloud duels, FFAs (3+
+//   humans, any mode), and other (single-player, hotseat/LAN). Playing is
+//   what's counted, not uploading: anyone's upload credits every human
+//   seat in it — the uploader via their claimed seat, everyone else by
+//   matching the seat's online id against user_online_ids. The same match
+//   uploaded by both players (separate game rows, same save GameId)
+//   counts once per player, deduped on xml_game_id. Only display names,
+//   Discord avatars, and counts are exposed.
+
+export interface PlayerLeaderboardEnv {
+	SHARE_DB: QueryableD1;
+	EVENTS_DB: D1Database;
+	ALLOWED_ORIGINS: string;
+	// Per-IP hourly ceiling on the /players read budget. Optional: unset falls
+	// back to the constant below. A var rather than a bare const for the same
+	// reason the other read ceilings are — retunable without a redeploy.
+	SEASON_VIEW_PER_HOUR?: string;
+}
+
+// Per-IP budget for the public /players reads, spent one slot per board.
+//
+// Its own budget, deliberately not a share of anon_read. /players and /games/*
+// are different populations, and a shared budget lets whichever is busier
+// decide when the other starts refusing — the coupling that took the
+// tournament pages down on 2026-08-05, and the reason tournament/limits.ts
+// says to give a public read the budget of the page that fetches it rather
+// than of the feature it belongs to. anon_read is also the wrong size and the
+// wrong shape for this page: its 200/hr is already shared with the home feed
+// and every game-detail view, and it is a bare constant, so the season read
+// would be the only budgeted public read an operator can't retune without a
+// redeploy.
+//
+// Not a share of global_stats_view either, close as the two surfaces sound:
+// /players is anonymous where /stats is session-gated, so pooling them would
+// let a crawl of the public board decide when signed-in visitors stop getting
+// charts.
+//
+// 1200 arrived through the fan-out, not by copying a number across: the
+// /players page fetches two boards per load — all-time plus the selected
+// season (src/routes/players/+page.ts) — and each step through the archive
+// costs another two. So 1200 is ~600 page loads an hour, the same headroom
+// GLOBAL_STATS_VIEW_PER_HOUR buys at 600 on one read a load and
+// TOURNAMENT_VIEW_PER_HOUR at 2400 on four to six.
+//
+// The default only — read the effective ceiling with seasonViewPerHour().
+export const SEASON_VIEW_PER_HOUR = 600;
+
+export function seasonViewPerHour(env: {
+	SEASON_VIEW_PER_HOUR?: string;
+}): number {
+	return ceilingFrom(
+		env.SEASON_VIEW_PER_HOUR,
+		SEASON_VIEW_PER_HOUR,
+		"SEASON_VIEW_PER_HOUR",
+	);
+}
+
+const SEASON_BUDGET: ReadBudget = {
+	eventType: "season_view",
+	message: "Season view rate limit exceeded",
+	code: "RATE_LIMIT_SEASON",
+};
+
+// The D1 row. discord_id and avatar_hash are SELECTed to address the Discord
+// CDN and are folded into avatar_url below rather than emitted as fields of
+// their own — the same select-use-don't-serialize shape handlePublicUserSearch
+// and the featured-video attribution use. `slug` is the exception: it IS
+// emitted, for the same reason handlePublicUserSearch emits it — it is
+// derived from the display name the row already carries, so it publishes
+// nothing the board doesn't, and it lets a row link straight to /u/<slug>
+// instead of bouncing every profile link through the id permalink's 307.
+// The three `*_reach` columns are the crown tiebreak, packed one string per
+// format: the match time the player reached their count at, with their result
+// in that match as a trailing '1'/'0'. Packed rather than emitted as six
+// columns because both halves come from one MAX() — the aggregate has to pick
+// a match before either value means anything — and splitting a pair the
+// database computed together into two aggregates invites them to disagree.
+// `reachOf` below unpacks them into the two fields the board actually reads.
+interface PlayedGamesQueryRow {
+	user_id: string;
+	display_name: string;
+	slug: string | null;
+	discord_id: string;
+	avatar_hash: string | null;
+	duels_network: number;
+	duels_cloud: number;
+	ffas: number;
+	total: number;
+	duels_network_reach: string | null;
+	duels_cloud_reach: string | null;
+	ffas_reach: string | null;
+	// Packed like the three `*_reach` columns above, and ordered by rather
+	// than serialized — the same select-use-don't-serialize shape as
+	// discord_id. The board's rank is the row's position in this order, so
+	// the client reads it off the array and needs no field. Never null: a row
+	// exists only because it has at least one match.
+	total_reach: string;
+}
+
+// One packed `*_reach` column as the board reads it: when the player reached
+// that format's count, and whether they won the match that got them there.
+// Null for a format they have no games in, which is every format at count 0.
+function reachOf(packed: string | null): {
+	at: string | null;
+	won: boolean;
+} {
+	if (packed == null) return { at: null, won: false };
+	// Split off the trailing flag rather than slicing at a fixed offset:
+	// created_at's width is a convention of how rows were written, not a
+	// guarantee this function gets to make.
+	return { at: packed.slice(0, -1), won: packed.endsWith("1") };
+}
+
+export async function handlePlayerLeaderboard(
+	request: Request,
+	env: PlayerLeaderboardEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+
+	const limited = await enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		SEASON_BUDGET,
+		seasonViewPerHour(env),
+	);
+	if (limited) return limited;
+
+	// Optional season window: `since`/`until` (YYYY-MM-DD, until exclusive)
+	// count only games UPLOADED in the window — created_at is
+	// server-authoritative, unlike the save's own dates. Invalid values are
+	// rejected rather than silently ignored so a malformed season picker
+	// can't masquerade as all-time.
+	//
+	// The frontend also sends `v`, its PLAYERS_SHAPE_VERSION (api-cloud.ts).
+	// Nothing here reads it and nothing should: it exists to key the browser
+	// caches this endpoint's max-age fills, so a shape change doesn't meet a
+	// stale-shaped body, and a response that varied on it would defeat that.
+	// It is named here so a later tightening of this validation doesn't 400
+	// the board's own requests.
+	const url = new URL(request.url);
+	const sinceRaw = url.searchParams.get("since");
+	const untilRaw = url.searchParams.get("until");
+	for (const v of [sinceRaw, untilRaw]) {
+		if (v != null && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+			return errorResponse("Invalid window date", 400, cors, "INVALID_QUERY");
+		}
+	}
+
+	// `played` is (user, match) pairs — the uploader's claimed seat, plus
+	// every seat whose online id belongs to a registered user; UNION dedupes
+	// both the two credit paths and double-uploaded matches (same
+	// xml_game_id). `match_class` classifies each match from its in-window
+	// uploads. Duel = exactly two humans, split by game mode; two-human
+	// hotseat/LAN lands in `other` (derived client-side).
+	//
+	// Two uploads of one match agree on the human count — the roster is the
+	// same roster — so `n_humans` can take any of them. They do NOT always
+	// agree on game_mode: seven public xml_game_ids in the corpus carry two
+	// modes, every one of them a local mode against a non-local one
+	// (HOTSEAT/NETWORK, HOTSEAT/PLAY_BY_CLOUD, LAN/PLAY_BY_CLOUD). Each
+	// upload reports the mode its own client ran in, and a match somebody
+	// played over the network is a network match however the other seat sat
+	// down at it — so the non-local mode wins, and `any_network`/`any_cloud`
+	// carry that as two flags rather than a single winning mode. Picking one
+	// mode with MAX() would decide it alphabetically, which lands on the
+	// non-local value in all seven of today's conflicts by coincidence and
+	// would stop doing so the first time the pair is NETWORK/PLAY_BY_CLOUD.
+	// That pair — two non-local modes, which no match in the corpus has yet
+	// — resolves network-first, by testing `any_network` before `any_cloud`.
+	// Promoting the two known non-local modes rather than demoting a list of
+	// local ones is deliberate: game_mode is the save's `@_GameMode` read
+	// verbatim (match-metadata.ts) and nothing validates it against an enum,
+	// so a mode the game adds later must not be able to outrank a duel.
+	//
+	// Every arm carries is_public = 1 — the same visibility rule the profile
+	// card (users.ts) and the global corpus (stats/resolve.ts) enforce. A
+	// private game must not reach a public counter: the increment alone
+	// publishes that the game happened, how many humans were in it and its
+	// game mode, and — through the online-id arm — that a second player was
+	// there, which is a visibility decision that player never made. Windows
+	// are caller-supplied down to a single day, so the counters are fine
+	// enough to read as an activity log rather than as a season total.
+	// `match_class` is the load-bearing arm (the final JOIN is inner, so a
+	// match missing from it drops out entirely), but all three carry the
+	// predicate rather than resting a visibility guarantee on join
+	// semantics. A match uploaded publicly by one player and privately by
+	// another stays public — the public upload classifies it, and both
+	// players are credited once.
+	//
+	// The online-id arm credits an id only while it resolves to exactly one
+	// user. `user_online_ids` is many-to-many by design (0003: shared
+	// account, Discord-account rebuild) and links are captured implicitly
+	// from whichever seat an uploader claimed, so an id can name two people
+	// without either of them doing anything wrong. Crediting both hands one
+	// player the other's entire history, and nothing here distinguishes the
+	// real owner — the earliest claimant is not the likelier one. An
+	// ambiguous id therefore credits nobody through this arm; both users
+	// still get their own uploads through the uploader arm above, and the
+	// credit returns on its own once the link is disambiguated.
+	//
+	// The category counts and the mode flags are CASE-wrapped, not bare
+	// predicates, because game_mode is nullable and `x AND NULL` is NULL, not
+	// false: a user whose every match is a two-human game with no recorded
+	// mode would sum only NULLs and get NULL back for both duel columns, and
+	// a MAX over bare predicates would return NULL for a match whose every
+	// upload is missing a mode. The response types them as numbers and the
+	// board renders them with toLocaleString, so the null wouldn't survive
+	// the trip. No save in the corpus is missing a mode today — the column is
+	// nullable because the parser reads it from an optional attribute
+	// (match-metadata.ts), which is a promise about the data we don't get to
+	// make here.
+	//
+	// The crown a format's leader wears goes to exactly one player, so the
+	// board needs a tiebreak for the field tied at the top — which at a
+	// season's start is most of it. The rule is: whoever reached that number
+	// first, and a head-to-head decides itself.
+	//
+	// "Reached it first" needs no ranking pass. Everyone tied is tied at the
+	// same count C, so each of them has exactly C matches in that format, and
+	// the moment they reached C is the timestamp of their C-th — which, having
+	// exactly C, is their most recent. So `MAX(match time)` per player is the
+	// whole of it, and the earliest such time takes the crown.
+	//
+	// A match's time is `MIN(created_at)` across its uploads, not any one
+	// upload's: a match uploaded by both players has two rows minutes or days
+	// apart, and the match happened when it first landed. That also makes the
+	// head-to-head case exact rather than approximate — both players read the
+	// same instant off the same match, so their reach times are equal to the
+	// character, and `p.won` (the seat's is_winner, carried through the same
+	// credit arms the count uses) is what separates them.
+	//
+	// `played` therefore wraps its UNION in a GROUP BY rather than selecting
+	// is_winner alongside the pair: the UNION dedupes (user, match), and two
+	// uploads of one match that disagree on the winner — one saved before the
+	// end, one after — would otherwise dedupe to two rows and count the match
+	// twice. Grouping collapses them back to one and takes MAX(won), so a
+	// player who won on any upload of a match won it.
+	//
+	// The same rule orders the board itself, through `total_reach` — the
+	// player's newest match in the window, whatever format, packed with that
+	// match's result exactly as a format's reach is. Ordering ties on
+	// display_name alone made the board's #1 an alphabetical accident: a
+	// season opens with its whole field on one game, and the client numbers
+	// rows by their position here, so every tie the ORDER BY leaves unbroken
+	// is a rank the board can't justify. `total_reach` is never null — a row
+	// exists only because the player has a match — so it can't push a row to
+	// either end by being missing.
+	//
+	// The board runs all three steps, not two: whoever reached the total
+	// first, then — for the players a timestamp cannot separate, who reached
+	// it by playing each other — whoever won that match. A crown settled a
+	// head-to-head on the result while the rank beside it fell through to
+	// alphabetical, so one board could seat the same two players in two
+	// different orders and call both of them earned. The ORDER BY therefore
+	// splits the packed pair rather than sorting the string whole: the
+	// timestamp ascends and the flag descends, and a single ASC over the
+	// concatenation would rank the loser of a head-to-head above the winner.
+	//
+	// The timestamps this publishes are the public games' own created_at,
+	// already served per-game by the discovery feed and game detail, so the
+	// board exposes no clock it didn't already.
+	//
+	// `humans` carries the same public + window predicate as the two arms
+	// below rather than grouping the whole table: it only ever reaches
+	// match_class through an inner join that applies those anyway, so the
+	// rows it drops are rows nothing downstream can use — and without the
+	// predicate a one-week board pays for a full scan of every roster ever
+	// uploaded, since since/until reduce nothing there.
+
+	// A match packed as both tiebreaks read it: when it landed, and whether
+	// this player won it, split back apart by `reachOf`. MAX() over the packed
+	// string picks the player's newest match and carries that match's result
+	// along with it, which is the pair every `*_reach` column below needs.
+	const reach = `mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END`;
+	// The two halves of a packed reach, for ordering by them separately —
+	// earliest first, then the winner. Sliced by length rather than at a fixed
+	// offset for `reachOf`'s reason: created_at's width is a convention of how
+	// rows were written, not a guarantee this query gets to make.
+	const reachAt = `substr(total_reach, 1, length(total_reach) - 1)`;
+	const reachWon = `substr(total_reach, -1)`;
+	const rows = await env.SHARE_DB.prepare(
+		`WITH humans AS (
+		   SELECT ps.game_id, SUM(ps.is_human) AS n
+		   FROM player_summaries ps
+		   JOIN games g ON g.game_id = ps.game_id
+		   WHERE g.is_public = 1
+		     AND (?1 IS NULL OR g.created_at >= ?1)
+		     AND (?2 IS NULL OR g.created_at < ?2)
+		   GROUP BY ps.game_id
+		 ),
+		 played AS (
+		   SELECT user_id, xml_game_id, MAX(won) AS won
+		   FROM (
+		     SELECT g.user_id, g.xml_game_id, ps.is_winner AS won
+		     FROM games g
+		     JOIN player_summaries ps
+		       ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
+		     WHERE g.is_public = 1
+		       AND (?1 IS NULL OR g.created_at >= ?1)
+		       AND (?2 IS NULL OR g.created_at < ?2)
+		     UNION
+		     SELECT uo.user_id, g.xml_game_id, ps.is_winner AS won
+		     FROM games g
+		     JOIN player_summaries ps
+		       ON ps.game_id = g.game_id AND ps.is_human = 1
+		          AND ps.online_id IS NOT NULL
+		     JOIN user_online_ids uo ON uo.online_id = ps.online_id
+		       AND NOT EXISTS (
+		         SELECT 1 FROM user_online_ids amb
+		         WHERE amb.online_id = ps.online_id AND amb.user_id <> uo.user_id
+		       )
+		     WHERE g.is_public = 1
+		       AND (?1 IS NULL OR g.created_at >= ?1)
+		       AND (?2 IS NULL OR g.created_at < ?2)
+		   ) credited
+		   GROUP BY user_id, xml_game_id
+		 ),
+		 match_class AS (
+		   SELECT g.xml_game_id,
+		          MIN(g.created_at) AS first_at,
+		          MAX(h.n) AS n_humans,
+		          MAX(CASE WHEN g.game_mode = 'NETWORK'
+		                   THEN 1 ELSE 0 END) AS any_network,
+		          MAX(CASE WHEN g.game_mode = 'PLAY_BY_CLOUD'
+		                   THEN 1 ELSE 0 END) AS any_cloud
+		   FROM games g
+		   JOIN humans h ON h.game_id = g.game_id
+		   WHERE g.is_public = 1
+		     AND (?1 IS NULL OR g.created_at >= ?1)
+		     AND (?2 IS NULL OR g.created_at < ?2)
+		   GROUP BY g.xml_game_id
+		 )
+		 SELECT
+		   u.user_id,
+		   ${displayNameSql("u")} AS display_name,
+		   u.slug,
+		   u.discord_id,
+		   u.avatar_hash,
+		   SUM(CASE WHEN mc.n_humans = 2 AND mc.any_network = 1
+		            THEN 1 ELSE 0 END) AS duels_network,
+		   SUM(CASE WHEN mc.n_humans = 2 AND mc.any_network = 0 AND mc.any_cloud = 1
+		            THEN 1 ELSE 0 END) AS duels_cloud,
+		   SUM(CASE WHEN mc.n_humans >= 3 THEN 1 ELSE 0 END) AS ffas,
+		   COUNT(*) AS total,
+		   MAX(CASE WHEN mc.n_humans = 2 AND mc.any_network = 1
+		            THEN ${reach} END) AS duels_network_reach,
+		   MAX(CASE WHEN mc.n_humans = 2 AND mc.any_network = 0 AND mc.any_cloud = 1
+		            THEN ${reach} END) AS duels_cloud_reach,
+		   MAX(CASE WHEN mc.n_humans >= 3
+		            THEN ${reach} END) AS ffas_reach,
+		   MAX(${reach}) AS total_reach
+		 FROM played p
+		 JOIN match_class mc ON mc.xml_game_id = p.xml_game_id
+		 JOIN users u ON u.user_id = p.user_id
+		 GROUP BY u.user_id
+		 ORDER BY total DESC, ${reachAt} ASC, ${reachWon} DESC, display_name ASC`,
+	)
+		.bind(sinceRaw, untilRaw)
+		.all<PlayedGamesQueryRow>();
+
+	const players = (rows.results ?? []).map((r) => {
+		const network = reachOf(r.duels_network_reach);
+		const cloud = reachOf(r.duels_cloud_reach);
+		const ffa = reachOf(r.ffas_reach);
+		return {
+			user_id: r.user_id,
+			display_name: r.display_name,
+			slug: r.slug,
+			avatar_url: buildAvatarUrl(r.discord_id, r.avatar_hash),
+			duels_network: r.duels_network,
+			duels_cloud: r.duels_cloud,
+			ffas: r.ffas,
+			total: r.total,
+			duels_network_at: network.at,
+			duels_network_won: network.won,
+			duels_cloud_at: cloud.at,
+			duels_cloud_won: cloud.won,
+			ffas_at: ffa.at,
+			ffas_won: ffa.won,
+		};
+	});
+
+	// Every window caches like public-recent (5min browser, 60s edge),
+	// closed seasons included. A finished season's board is not immutable:
+	// created_at can't be backdated, but a visibility toggle, a newly linked
+	// online id, the reindex sweep that backfills player_summaries.online_id,
+	// and a deleted game all move a past window's counters — and toggles alone
+	// run every other day. Nothing can recall a response once served, either:
+	// unlike the bundle handlers above, this endpoint keeps no KV entry, so
+	// neither invalidateStatsCache nor `admin cache clear stats` reaches it.
+	// games.ts holds public game detail to the same 60s at the edge for the
+	// same reason — a Make Private toggle has to propagate in a minute.
+	return new Response(JSON.stringify({ players }), {
+		status: 200,
+		headers: {
+			"Content-Type": "application/json",
+			"Cache-Control": "public, max-age=300, s-maxage=60",
+			...cors,
+			Vary: "Origin",
+		},
+	});
 }

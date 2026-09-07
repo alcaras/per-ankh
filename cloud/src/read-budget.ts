@@ -28,14 +28,15 @@ import { errorResponse, getClientIp } from "./util";
 // sit in retention.ts's 90-day general_audit bucket rather than the 24h
 // rate_limit_counters one, so it would also write an unbounded audit row per
 // read. This is the shape the interface had before it was lifted out of
-// tournament/public.ts (one shape, three instances); global_stats_view is the
-// fourth read to want it.
+// tournament/public.ts (one shape, three instances); global_stats_view was the
+// fourth read to want it and season_view is the fifth.
 export type ReadEventType = Extract<
 	RateLimitedEventType,
 	| "tournament_view"
 	| "tournament_list_view"
 	| "tournament_link_view"
 	| "global_stats_view"
+	| "season_view"
 >;
 
 // A per-IP read budget: which events rows count toward it, and how it answers

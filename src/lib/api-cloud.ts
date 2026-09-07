@@ -290,6 +290,66 @@ export interface AdminGameListOpts extends CallOpts {
 	filter?: AdminGameFilterParams;
 }
 
+// Wire shape for GET /v1/stats/players — the public /players page's
+// games-played leaderboard. `other` is derived client-side (total minus
+// the three counted categories: single-player, hotseat/LAN).
+export interface PlayedGamesRow {
+	user_id: string;
+	display_name: string;
+	// The player's profile slug, for `/u/<slug>` — null for a user who has
+	// none, whose links fall back to the id permalink (profileHref decides).
+	slug: string | null;
+	// The player's Discord avatar (cdn.discordapp.com), resolved server-side
+	// from their stored hash — always present, since Discord's default avatar
+	// stands in for a user who never set one.
+	avatar_url: string;
+	duels_network: number;
+	duels_cloud: number;
+	ffas: number;
+	total: number;
+	// The crown tiebreak, per counted format: when the player reached that
+	// format's count — the upload time of the match that got them there — and
+	// whether they won it. Null/false for a format they have no games in.
+	//
+	// The board's crown goes to one player, and the field tied at the top is
+	// most of the board at a season's start. `_at` settles it (earliest to
+	// reach the number keeps it); `_won` settles the case `_at` can't, where
+	// the two tied players got there by playing *each other* and so share one
+	// match and one timestamp to the character.
+	duels_network_at: string | null;
+	duels_network_won: boolean;
+	duels_cloud_at: string | null;
+	duels_cloud_won: boolean;
+	ffas_at: string | null;
+	ffas_won: boolean;
+}
+export interface PlayerLeaderboardResponse {
+	players: PlayedGamesRow[];
+}
+
+// What each version of the row shape changed. This table *is* the version:
+// PLAYERS_SHAPE_VERSION below is its highest key, so a bump can't happen
+// without saying what changed, and the two can't drift apart. Bump when a
+// field is added to or dropped from PlayedGamesRow.
+//
+// The version rides along as `v` on every board request (the Worker reads
+// since/until and ignores it) because a board's cache key is its URL, and
+// every window answers `max-age=300`: a browser that fetched a season before
+// a field existed would keep replaying the older shape until that expires, so
+// a board renders behind a deploy that added one — avatarless rows for anyone
+// who had just walked the archive. Bumping drifts the URL and orphans every
+// stale entry at once, the same expiry-by-drift the stats bundles get from
+// BUNDLE_SCHEMA_VERSION in their KV key.
+const PLAYERS_SHAPE_CHANGELOG: Record<number, string> = {
+	1: "user_id, display_name, and the per-format played counts",
+	2: "avatar_url — the player's Discord avatar",
+	3: "slug — the profile slug, so a row links straight to /u/<slug>",
+	4: "duels_network_at/_won, duels_cloud_at/_won, ffas_at/_won — the crown tiebreak",
+};
+const PLAYERS_SHAPE_VERSION = Math.max(
+	...Object.keys(PLAYERS_SHAPE_CHANGELOG).map(Number),
+);
+
 // Wire shape for GET /v1/games/public-recent — the marketing home's
 // discovery feed. Includes the uploader's display name + a sparkline-ready
 // per-turn victory-points series (`vp_series`) for each player.
@@ -1062,6 +1122,22 @@ export const cloudApi = {
 	): Promise<PublicRecentGamesResponse> => {
 		const res = await request("/games/public-recent", opts);
 		return res.json() as Promise<PublicRecentGamesResponse>;
+	},
+
+	// Public site-wide leaderboard of games PLAYED per user, by category —
+	// anyone's upload credits every human seat in it. `since`/`until`
+	// (YYYY-MM-DD, until exclusive) narrow to games uploaded in a window —
+	// the /players page's season boards, past ones included; omitted =
+	// all-time.
+	getPlayerLeaderboard: async (
+		opts?: CallOpts & { since?: string; until?: string },
+	): Promise<PlayerLeaderboardResponse> => {
+		const params = new URLSearchParams();
+		if (opts?.since) params.set("since", opts.since);
+		if (opts?.until) params.set("until", opts.until);
+		params.set("v", String(PLAYERS_SHAPE_VERSION));
+		const res = await request(`/stats/players?${params}`, opts);
+		return res.json() as Promise<PlayerLeaderboardResponse>;
 	},
 
 	// --- Collections ---

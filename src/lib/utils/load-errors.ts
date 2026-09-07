@@ -10,9 +10,12 @@ import { ApiError } from "$lib/api-cloud";
 
 // Re-throw a spent per-IP read budget as a SvelteKit 429.
 //
-// Every Worker read limiter (anon_read, tournament_view, tournament_list_view,
-// tournament_link_view) answers 429 once an IP's hourly bucket is full. A
-// loader with no branch for it lets the ApiError fall through unhandled, and
+// Every Worker per-IP read budget answers 429 once an IP's hourly bucket is
+// full — the ReadEventType ones in cloud/src/read-budget.ts, plus anon_read on
+// the public game reads, which predates that gate. Deliberately not enumerated
+// here: the list is now five long and went stale twice while it was, and a
+// loader needs to know the shape of the failure, not which bucket produced it.
+// A loader with no branch for it lets the ApiError fall through unhandled, and
 // SvelteKit renders that as a 500 — "Something went wrong", which is both
 // untrue and unactionable. Waiting out the rolling hour is the whole remedy,
 // so the status and the copy have to say that; a 500 tells the visitor to

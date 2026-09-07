@@ -89,8 +89,12 @@ import {
 	handleTournamentWithdraw,
 	handleUncastMatchPart,
 } from "./tournament/player";
-import { handleGlobalStats, handleUserStats } from "./stats/handlers";
-import type { GlobalStatsEnv } from "./stats/handlers";
+import {
+	handleGlobalStats,
+	handleUserStats,
+	handlePlayerLeaderboard,
+} from "./stats/handlers";
+import type { GlobalStatsEnv, PlayerLeaderboardEnv } from "./stats/handlers";
 import {
 	STATS_PRECOMPUTE_CRONS,
 	STATS_WARM_CRON,
@@ -160,6 +164,7 @@ interface Env
 		ChannelsEnv,
 		FeaturedVideosEnv,
 		GlobalStatsEnv,
+		PlayerLeaderboardEnv,
 		SecurityEventsEnv,
 		TrustedFrontendEnv {
 	SHARE_BUCKET: R2Bucket;
@@ -307,6 +312,17 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "path", path: "/v1/games/public-recent" },
 		route: "GET /v1/games/public-recent",
 		handler: (r, e) => handlePublicRecentGames(r, e),
+	},
+	// The played-games leaderboard — what /players reads, all-time and per-season
+	// windows alike. Anonymous, and on its own per-IP budget
+	// (SEASON_VIEW_PER_HOUR): not a share of anon_read, whose /games/* traffic
+	// is a different population, and not a share of the session-gated /stats
+	// budget either.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/stats/players" },
+		route: "GET /v1/stats/players",
+		handler: (r, e) => handlePlayerLeaderboard(r, e),
 	},
 	{
 		method: "GET",
