@@ -21,13 +21,14 @@
 //   ambition awards Globals.FINISHED_AMBITION_BONUS's <iLegitimacy> (legacy
 //   ambitions the smaller FINISHED_LEGACY_BONUS, which the blob can't tell
 //   apart from a normal ambition, so it isn't baked; events/bonuses this bake
-//   can't price) — plus every past-and-present leader's cognomen worth,
-//   cognomen.xml <iLegitimacy> divided by reign recency
-//   (Character.getLegitimacy: miLegitimacy / (numLeaders − leaderIndex)).
+//   can't price) — plus every past-and-present leader's cognomen worth
+//   divided by reign recency (Character.getLegitimacy: miLegitimacy /
+//   (numLeaders − leaderIndex)). That worth is COGNOMENS' legitimacy:
+//   cognomen.xml has one bake, and it is bake-cognomens.
 //
 // SOURCES (local-only, via the Reference/ symlink resolved by paths.ts):
 //   Reference/XML/Infos/{yield,effectPlayer,law,trait,globalsType,bonus,
-//   cognomen,difficulty}.xml
+//   difficulty}.xml
 //
 // OUTPUT: src/lib/generated/orders-sources.ts (checked in, self-contained).
 //
@@ -89,25 +90,16 @@ function yieldRate(entry: Entry, yieldType: string): number {
 async function main(): Promise<void> {
 	const infosDir = resolve(resolveReferenceXml(), "Infos");
 	const load = (f: string) => loadEntries(resolve(infosDir, f));
-	const [
-		yields,
-		effects,
-		laws,
-		traits,
-		globalsType,
-		bonuses,
-		cognomens,
-		difficulties,
-	] = await Promise.all([
-		load("yield.xml"),
-		load("effectPlayer.xml"),
-		load("law.xml"),
-		load("trait.xml"),
-		load("globalsType.xml"),
-		load("bonus.xml"),
-		load("cognomen.xml"),
-		load("difficulty.xml"),
-	]);
+	const [yields, effects, laws, traits, globalsType, bonuses, difficulties] =
+		await Promise.all([
+			load("yield.xml"),
+			load("effectPlayer.xml"),
+			load("law.xml"),
+			load("trait.xml"),
+			load("globalsType.xml"),
+			load("bonus.xml"),
+			load("difficulty.xml"),
+		]);
 
 	const ordersYield = yields.find((y) => y.zType === "YIELD_ORDERS");
 	if (!ordersYield)
@@ -165,15 +157,6 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// Cognomen worth — each ruler's cognomen contributes this, divided by
-	// reign recency, to the dynasty's legitimacy.
-	const cognomenLegitimacy: Record<string, number> = {};
-	for (const c of cognomens) {
-		if (!c.zType) continue;
-		const v = Number(c.iLegitimacy ?? 0);
-		if (v !== 0) cognomenLegitimacy[c.zType] = v;
-	}
-
 	if (Object.keys(sourceOrders).length < 5) {
 		throw new Error(
 			`bake-orders-sources: only ${Object.keys(sourceOrders).length} orders sources parsed`,
@@ -214,16 +197,6 @@ async function main(): Promise<void> {
 	lines.push("// (Globals.FINISHED_AMBITION_BONUS).");
 	lines.push(`export const AMBITION_LEGITIMACY = ${ambitionLegitimacy};`);
 	lines.push("");
-	lines.push(
-		"// Each ruler's cognomen contributes this much legitimacy, divided by",
-	);
-	lines.push(
-		"// reign recency (Character.getLegitimacy: value / (numLeaders − index)).",
-	);
-	lines.push(
-		`export const COGNOMEN_LEGITIMACY: Readonly<Record<string, number>> = ${JSON.stringify(sorted(cognomenLegitimacy))};`,
-	);
-	lines.push("");
 
 	const config = await resolveConfig(OUTPUT_TS);
 	const formatted = await prettierFormat(lines.join("\n"), {
@@ -242,8 +215,7 @@ async function main(): Promise<void> {
 	await writeFile(OUTPUT_TS, formatted);
 	console.log(
 		`bake-orders-sources: ${Object.keys(sourceOrders).length} orders sources, ` +
-			`ambition +${ambitionLegitimacy}, ` +
-			`${Object.keys(cognomenLegitimacy).length} cognomen legitimacy entries → ` +
+			`ambition +${ambitionLegitimacy} → ` +
 			OUTPUT_TS.replace(REPO_ROOT + "/", ""),
 	);
 }

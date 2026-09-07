@@ -21,10 +21,10 @@
 
 import {
 	AMBITION_LEGITIMACY,
-	COGNOMEN_LEGITIMACY,
 	ORDERS_PER_LEGITIMACY,
 	ORDERS_SOURCES,
 } from "$lib/generated/orders-sources";
+import { COGNOMENS } from "$lib/generated/cognomens";
 import { DIFFICULTY_NAMES } from "$lib/generated/difficulty-names";
 import { GOAL_NAMES } from "$lib/generated/goal-names";
 import { rulerCognomen, rulerName, storyEventType } from "./helpers";
@@ -58,7 +58,7 @@ export interface EndBreakdown {
 const characterLabel = (c: CharacterInfo): string => {
 	const name = rulerName(c) ?? `#${c.xml_id}`;
 	const cognomen = rulerCognomen(c);
-	return cognomen ? `${name} the ${cognomen}` : name;
+	return cognomen ? `${name} ${cognomen}` : name;
 };
 
 // ─── Orders at end of game ────────────────────────────────────────────
@@ -152,7 +152,7 @@ export function legitimacyEndBreakdown(opts: {
 	const n = opts.leaders.length;
 	opts.leaders.forEach((c, i) => {
 		if (!c.cognomen) return;
-		const worth = COGNOMEN_LEGITIMACY[c.cognomen];
+		const worth = COGNOMENS[c.cognomen]?.legitimacy;
 		if (worth == null) return;
 		const divisor = Math.max(1, n - i);
 		const value = Math.trunc(worth / divisor);

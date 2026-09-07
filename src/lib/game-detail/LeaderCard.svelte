@@ -124,7 +124,7 @@
 					{/if}
 					<span>{name}</span>
 					{#if cognomen}
-						<span class="font-normal text-gray-400">the {cognomen}</span>
+						<span class="font-normal text-gray-400">{cognomen}</span>
 					{/if}
 				</div>
 				<div
@@ -178,7 +178,7 @@
 					<span>
 						{name}
 						{#if cognomen}
-							<span class="font-normal text-gray-400">the {cognomen}</span>
+							<span class="font-normal text-gray-400">{cognomen}</span>
 						{/if}
 					</span>
 				</div>

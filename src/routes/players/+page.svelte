@@ -4,9 +4,8 @@
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import type { PlayedGamesRow } from "$lib/api-cloud";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
-	import { COGNOMEN_LADDER } from "$lib/generated/cognomens";
 	import ProfileLink from "$lib/ProfileLink.svelte";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { cognomenName } from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
 	import type { PageData } from "./$types";
 
@@ -43,14 +42,6 @@
 		{ games: 28, type: "COGNOMEN_GLORIOUS" },
 		{ games: 36, type: "COGNOMEN_MAGNIFICENT" },
 	];
-	// A rung's display string. A rung the bake no longer carries — a rename
-	// in a later reference drop — falls back to its token rather than
-	// rendering an empty name into "N games to reach ___", the same shape
-	// `nationName` uses for a nation the baked table doesn't name. The baked
-	// strings carry the article ("the Able"), so the fallback does too.
-	const cognomenName = (type: string): string =>
-		COGNOMEN_LADDER.find((c) => c.type === type)?.name ??
-		`the ${formatEnum(type, "COGNOMEN_")}`;
 	const epithetOf = (total: number): string | null => {
 		const rung = [...RUNGS].reverse().find((r) => total >= r.games);
 		return rung ? cognomenName(rung.type) : null;

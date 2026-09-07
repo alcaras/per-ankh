@@ -13,6 +13,7 @@ import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
 import {
+	cognomenName,
 	formatEnum,
 	toRomanNumeral,
 	characterName,
@@ -1101,9 +1102,12 @@ export function rulerName(c: CharacterInfo): string | null {
 	return c.suffix > 1 ? `${name} ${toRomanNumeral(c.suffix)}` : name;
 }
 
-/** A ruler's cognomen, rendered; null until they've earned one. */
+/**
+ * A ruler's cognomen as the game writes it, article included ("the Wise");
+ * null until they've earned one.
+ */
 export function rulerCognomen(c: CharacterInfo): string | null {
-	return c.cognomen ? formatEnum(c.cognomen, "COGNOMEN_") : null;
+	return c.cognomen ? cognomenName(c.cognomen) : null;
 }
 
 // ─── Build Comparison Panels ─────────────────────────────────────────
