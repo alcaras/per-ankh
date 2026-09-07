@@ -302,15 +302,15 @@ export interface PlayerLeaderboardEnv {
 	SHARE_DB: QueryableD1;
 	EVENTS_DB: D1Database;
 	ALLOWED_ORIGINS: string;
-	// Per-IP hourly ceiling on the /season read budget. Optional: unset falls
+	// Per-IP hourly ceiling on the /players read budget. Optional: unset falls
 	// back to the constant below. A var rather than a bare const for the same
 	// reason the other read ceilings are — retunable without a redeploy.
 	SEASON_VIEW_PER_HOUR?: string;
 }
 
-// Per-IP budget for the public /season reads, spent one slot per board.
+// Per-IP budget for the public /players reads, spent one slot per board.
 //
-// Its own budget, deliberately not a share of anon_read. /season and /games/*
+// Its own budget, deliberately not a share of anon_read. /players and /games/*
 // are different populations, and a shared budget lets whichever is busier
 // decide when the other starts refusing — the coupling that took the
 // tournament pages down on 2026-08-05, and the reason tournament/limits.ts
@@ -322,13 +322,13 @@ export interface PlayerLeaderboardEnv {
 // redeploy.
 //
 // Not a share of global_stats_view either, close as the two surfaces sound:
-// /season is anonymous where /stats is session-gated, so pooling them would
+// /players is anonymous where /stats is session-gated, so pooling them would
 // let a crawl of the public board decide when signed-in visitors stop getting
 // charts.
 //
-// 1200 arrived through the fan-out, not by copying a number across: the Season
-// page fetches two boards per load — all-time plus the selected season
-// (src/routes/season/+page.ts) — and each step through the season archive
+// 1200 arrived through the fan-out, not by copying a number across: the
+// /players page fetches two boards per load — all-time plus the selected
+// season (src/routes/players/+page.ts) — and each step through the archive
 // costs another two. So 1200 is ~600 page loads an hour, the same headroom
 // GLOBAL_STATS_VIEW_PER_HOUR buys at 600 on one read a load and
 // TOURNAMENT_VIEW_PER_HOUR at 2400 on four to six.

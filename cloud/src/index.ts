@@ -313,7 +313,7 @@ const ROUTES: RouteSpec[] = [
 		route: "GET /v1/games/public-recent",
 		handler: (r, e) => handlePublicRecentGames(r, e),
 	},
-	// The played-games leaderboard — what /season reads, all-time and per-season
+	// The played-games leaderboard — what /players reads, all-time and per-season
 	// windows alike. Anonymous, and on its own per-IP budget
 	// (SEASON_VIEW_PER_HOUR): not a share of anon_read, whose /games/* traffic
 	// is a different population, and not a share of the session-gated /stats

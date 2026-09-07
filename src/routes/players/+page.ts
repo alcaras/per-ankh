@@ -1,7 +1,10 @@
-// Public Season page — the games-played leaderboard. Anonymous endpoint,
-// same audience as the home discovery feed. The season is picked via the
-// `?s=` slug (shareable, e.g. ?s=summer-2026), defaulting to the current
-// one; past seasons are closed windows the archive keeps forever.
+// Public /players page — the games-played leaderboard. Anonymous endpoint,
+// same audience as the home discovery feed. Which board is shown lives
+// entirely in `?season=`, so a view is linkable and the browser's back
+// button walks the boards: a season slug (e.g. ?season=summer-2026) picks
+// that season, `all-time` picks the career board, and an absent or unknown
+// value falls through to the current season. Past seasons are closed
+// windows the archive keeps forever.
 import { cloudApi } from "$lib/api-cloud";
 import { rethrowRateLimit } from "$lib/utils/load-errors";
 import type { PageLoad } from "./$types";
@@ -15,6 +18,14 @@ export interface Season {
 	since: string; // inclusive YYYY-MM-DD
 	until: string; // exclusive YYYY-MM-DD
 }
+
+// The two boards. `?season=all-time` names the career board; every other
+// value names a season, and season slugs are `<name>-<year>`, so the two
+// vocabularies can never collide. Not exported — SvelteKit rejects any
+// runtime export from a `+page.ts` but its own, so the toggle in
+// +page.svelte writes the slug literally.
+const ALL_TIME = "all-time";
+type Board = "season" | "all";
 
 // Seasons follow the meteorological quarters the community actually says
 // out loud: Spring Mar–May, Summer Jun–Aug, Fall Sep–Nov, Winter Dec–Feb
@@ -69,7 +80,12 @@ function allSeasons(now = new Date()): Season[] {
 
 export const load: PageLoad = async ({ fetch, url }) => {
 	const seasons = allSeasons();
-	const slug = url.searchParams.get("s");
+	// Parsed here rather than read raw in the component, so the board the
+	// page renders and the board the <title> claims are the one decision.
+	// All-time still selects a season: the picker keeps its label, and the
+	// crowns the board hides are the selected season's when you come back.
+	const slug = url.searchParams.get("season");
+	const board: Board = slug === ALL_TIME ? "all" : "season";
 	const selected =
 		seasons.find((s) => s.slug === slug) ?? seasons[seasons.length - 1];
 	try {
@@ -86,13 +102,24 @@ export const load: PageLoad = async ({ fetch, url }) => {
 			season: seasonBoard.players,
 			seasons,
 			selected,
+			board,
+			meta: {
+				// The board is addressable, so the title has to name the one
+				// that is addressed — an all-time link that unfurls as a
+				// season is a link to the wrong page.
+				title: `Players · ${board === "all" ? "All time" : selected.label} - Per-Ankh`,
+				description:
+					board === "all"
+						? "Games played by player across every public game on Per-Ankh, all time."
+						: `Games played by player across every public game on Per-Ankh: ${selected.label} (${selected.range}).`,
+			},
 		};
 	} catch (err) {
-		// /season spends its own per-IP budget (season_view, not anon_read), so
-		// a 429 here means this surface alone was hammered — and it costs two
-		// slots a load, so an archive walk is what reaches the ceiling. Same
-		// remedy as everywhere else: wait out the rolling hour. Without this the
-		// ApiError falls through and SvelteKit renders a 500.
+		// /players spends its own per-IP budget (season_view, not anon_read),
+		// so a 429 here means this surface alone was hammered — and it costs
+		// two slots a load, so an archive walk is what reaches the ceiling.
+		// Same remedy as everywhere else: wait out the rolling hour. Without
+		// this the ApiError falls through and SvelteKit renders a 500.
 		rethrowRateLimit(err);
 		throw err;
 	}

@@ -8,10 +8,6 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Season is the default — the board that resets, so being behind is
-	// never more than a few months deep. All-time is the career monument.
-	let view = $state<"season" | "all">("season");
-
 	// Activity epithets from the game's cognomen ladder, one per legitimacy
 	// decade in the game's own ascending order (the New is the fresh-ruler
 	// epithet at the floor; Able 30 … Magnificent 90). Thresholds are games
@@ -49,19 +45,22 @@
 			other: u.total - u.duels_network - u.duels_cloud - u.ffas,
 		}));
 	const rows = $derived(
-		withOther(view === "season" ? data.season : data.allTime),
+		withOther(data.board === "season" ? data.season : data.allTime),
 	);
 
-	// Season navigation: the picker walks the archive (every season since
-	// per-ankh's first), and the slug lives in the URL so a past board —
-	// its crowns included — is linkable forever.
+	// Board navigation: the picker walks the archive (every season since
+	// per-ankh's first) and the toggle reaches the career board, and both
+	// write the same `?season=` slug — so every board this page can show,
+	// a past season's crowns included, is linkable forever. Season is the
+	// default: the board that resets, so being behind is never more than a
+	// few months deep. All-time is the career monument.
 	const selectedIndex = $derived(
 		data.seasons.findIndex((s) => s.slug === data.selected.slug),
 	);
 	const isCurrentSeason = $derived(selectedIndex === data.seasons.length - 1);
 	function gotoSeason(slug: string): void {
 		const url = new URL(page.url);
-		url.searchParams.set("s", slug);
+		url.searchParams.set("season", slug);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- search-param-only update on the current route; URL objects are SvelteKit's documented dynamic-nav API
 		void goto(url, { noScroll: true });
 	}
@@ -93,7 +92,7 @@
 		return out;
 	});
 	const hasCrown = (u: Row, key: FormatKey): boolean =>
-		view === "season" &&
+		data.board === "season" &&
 		(crowns.get(key)?.count ?? 0) > 0 &&
 		u[key] === crowns.get(key)!.count;
 
@@ -130,13 +129,9 @@
 	const CELL = "px-3 py-2 text-right tabular-nums text-tan";
 </script>
 
-<svelte:head>
-	<title>{data.selected.label} — Per Ankh</title>
-</svelte:head>
-
 <main class="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-10 pt-6">
 	<div class="mb-1 flex flex-wrap items-baseline justify-between gap-3">
-		<h1 class="text-2xl font-bold text-gray-200">Season</h1>
+		<h1 class="text-2xl font-bold text-gray-200">Players</h1>
 		<div class="flex items-center gap-2">
 			<!-- Season picker: chevrons walk the archive; the label names the
 			     selected season. Disabled ends rather than hidden, so the
@@ -154,10 +149,10 @@
 				>
 				<button
 					type="button"
-					class="{TOGGLE_BASE} {view === 'season'
+					class="{TOGGLE_BASE} {data.board === 'season'
 						? 'bg-surface text-orange'
 						: 'text-tan hover:text-orange'}"
-					onclick={() => (view = "season")}
+					onclick={() => gotoSeason(data.selected.slug)}
 				>
 					{data.selected.label} · {data.selected.range}
 				</button>
@@ -175,10 +170,10 @@
 			<div class="flex rounded-lg bg-surface-sunken p-1">
 				<button
 					type="button"
-					class="{TOGGLE_BASE} {view === 'all'
+					class="{TOGGLE_BASE} {data.board === 'all'
 						? 'bg-surface text-orange'
 						: 'text-tan hover:text-orange'}"
-					onclick={() => (view = "all")}
+					onclick={() => gotoSeason("all-time")}
 				>
 					All time
 				</button>
@@ -190,7 +185,7 @@
 		any player's upload counts for everyone who played in it.
 	</p>
 
-	{#if crowns.size > 0 && view === "season"}
+	{#if crowns.size > 0 && data.board === "season"}
 		<!-- The season's format crowns: most games played in each format. -->
 		<div
 			class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-lg bg-surface p-3 text-sm"
@@ -223,7 +218,7 @@
 					<span class="font-semibold italic text-orange">{viewerEpithet}</span>
 					— {viewer.total}
 					{viewer.total === 1 ? "game" : "games"}
-					{view === "season" ? `this ${data.selected.name}` : "all time"}
+					{data.board === "season" ? `this ${data.selected.name}` : "all time"}
 				</span>
 				{#if rival}
 					<span class="text-tan"
@@ -273,7 +268,9 @@
 					<th class={HEADER_CELL}>Duels (Network)</th>
 					<th class={HEADER_CELL}>Duels (Cloud)</th>
 					<th class={HEADER_CELL}>FFAs</th>
-					<th class={HEADER_CELL} title="Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA"
+					<th
+						class={HEADER_CELL}
+						title="Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA"
 						>Other</th
 					>
 					<th class={HEADER_CELL}>Total</th>

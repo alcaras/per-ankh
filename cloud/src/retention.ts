@@ -47,7 +47,7 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			// counter role, metadata-free.
 			"global_stats_view",
 			// Season leaderboard reads (stats/handlers.ts): its own budget for the
-			// same reason, and not a share of global_stats_view's either — /season
+			// same reason, and not a share of global_stats_view's either — /players
 			// is anonymous where /stats is session-gated, so pooling them would
 			// let a crawl of the public board decide when signed-in visitors stop
 			// getting charts. Same 1h counter role, metadata-free.
