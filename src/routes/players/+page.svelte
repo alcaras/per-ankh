@@ -203,28 +203,33 @@
 		return selectionOf(to.url) !== selectionOf(page.url);
 	});
 
-	// Crowns of the season — most games played in each format, foursquare-
+	// Crowns of the board — most games played in each format, foursquare-
 	// mayor style. Ties share a crown. A past season's crowns are settled;
-	// the current season's are up for grabs.
+	// the current season's and the career board's are up for grabs.
+	//
+	// They describe whichever board is on screen: switch to All time and the
+	// panel crowns careers rather than the season, the way the viewer's tally
+	// switches under it. A season panel over career numbers would be naming a
+	// season the disabled stepper can't even move off.
 	const CROWN_FORMATS = [
 		{ key: "duels_network", label: "Network" },
 		{ key: "duels_cloud", label: "Cloud" },
 		{ key: "ffas", label: "FFAs" },
 	] as const;
 	type FormatKey = (typeof CROWN_FORMATS)[number]["key"];
-	// How many co-holders the strip names before it summarizes the rest. A
-	// fresh season ties its whole field on one game, so an uncapped list is
-	// longest exactly when the strip matters most.
-	const CROWN_NAMES_SHOWN = 3;
-	const seasonRows = $derived(withOther(data.season));
-	// A crown holder as the strip renders them — avatar and name travel
-	// together, so the cap below slices holders and not names.
+	// How many faces a shared crown draws before it counts the rest instead.
+	// A fresh season ties its whole field on one game, so the co-holder list
+	// is longest exactly when the strip matters most — past the cap it is a
+	// +N, and the tooltip still names everyone.
+	const CROWN_AVATARS_SHOWN = 3;
+	// A crown holder as the strip renders them — one holder is named, and a
+	// tie is a stack of their faces.
 	type Holder = Pick<Row, "user_id" | "display_name" | "avatar_url">;
 	const crowns = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived, not mutated after
 		const out = new Map<FormatKey, { holders: Holder[]; count: number }>();
 		for (const f of CROWN_FORMATS) {
-			const max = Math.max(0, ...seasonRows.map((r) => r[f.key]));
+			const max = Math.max(0, ...ranked.map((r) => r[f.key]));
 			// Every format gets an entry, claimed or not: a crown nobody holds
 			// yet is the season's standing invitation, so it is named rather
 			// than omitted. `count: 0` is what `hasCrown` already reads as
@@ -232,7 +237,7 @@
 			out.set(f.key, {
 				holders:
 					max > 0
-						? seasonRows
+						? ranked
 								.filter((r) => r[f.key] === max)
 								.map(({ user_id, display_name, avatar_url }) => ({
 									user_id,
@@ -245,17 +250,28 @@
 		}
 		return out;
 	});
-	// The holders the strip names, and the tail it summarizes instead.
-	const crownHolders = (
-		holders: Holder[],
-	): { shown: Holder[]; more: number } => ({
-		shown: holders.slice(0, CROWN_NAMES_SHOWN),
-		more: Math.max(0, holders.length - CROWN_NAMES_SHOWN),
-	});
+	// The panel's heading and the per-row leader tooltip both name the board
+	// being crowned, so a career crown and a season's can't be read for each
+	// other — the rule the viewer's tally already follows.
+	const crownsHeading = $derived(
+		data.board === "all"
+			? "Crowns of all time"
+			: `Crowns of ${data.selected.name} ${
+					isCurrentSeason ? "(so far)" : data.selected.year
+				}`,
+	);
+	const leaderTerm = $derived(
+		data.board === "all" ? "All-time leader" : "Season leader",
+	);
+	// The faces a shared crown shows, capped so one cell can't outgrow its
+	// column; anyone past the cap is counted beside them.
+	const crownFaces = (holders: Holder[]): Holder[] =>
+		holders.slice(0, CROWN_AVATARS_SHOWN);
+	// Every co-holder, for the tooltip — the names the stack doesn't spell out.
+	const crownNames = (holders: Holder[]): string =>
+		holders.map((h) => h.display_name).join(", ");
 	const hasCrown = (u: Row, key: FormatKey): boolean =>
-		data.board === "season" &&
-		(crowns.get(key)?.count ?? 0) > 0 &&
-		u[key] === crowns.get(key)!.count;
+		(crowns.get(key)?.count ?? 0) > 0 && u[key] === crowns.get(key)!.count;
 
 	// The signed-in viewer's arc, ahead of anyone else's: their epithet, a
 	// count, and a progress bar to the next rung — their own climb, never
@@ -394,40 +410,64 @@
 		</div>
 
 		<div class="board" class:swapping={isSwapping} aria-busy={isSwapping}>
-			{#if data.board === "season"}
-				<!-- The season's format crowns: most games played in each format.
-				     Shown whether or not anyone holds them — a fresh season's board is
-				     three open crowns, which is the whole point of the reset. -->
-				<div
-					class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg bg-surface p-3 text-xs"
+			<!-- The board's format crowns: most games played in each format.
+			     Shown whether or not anyone holds them — a fresh season's board is
+			     three open crowns, which is the whole point of the reset. -->
+			<div
+				class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg bg-surface p-3 text-xs"
+			>
+				<span class="font-bold uppercase tracking-wide text-tan"
+					>{crownsHeading}</span
 				>
-					<span class="font-bold uppercase tracking-wide text-tan"
-						>Crowns of {data.selected.name}
-						{isCurrentSeason ? "(so far)" : data.selected.year}</span
-					>
-					<!-- The three crowns take the rest of the strip and centre in it,
-					     so the run of them sits balanced between the label and the
-					     panel's right edge rather than trailing off to the left. Their
-					     own wrap keeps that true once they stack. -->
-					<div
-						class="flex flex-1 flex-wrap items-center justify-center gap-x-6 gap-y-1"
-					>
-						{#each CROWN_FORMATS as f (f.key)}
-							{@const k = crowns.get(f.key)!}
-							{#if k.count > 0}
-								{@const held = crownHolders(k.holders)}
-								<span class="inline-flex items-center gap-1 text-tan">
-									<SpriteIcon
-										category="yields"
-										value="YIELD_LEGITIMACY"
-										size={12}
-										alt=""
-									/>
-									{#each held.shown as h, i (h.user_id)}
-										{#if i > 0}<span>&</span>{/if}
-										<span
-											class="inline-flex items-center gap-1 font-semibold text-gray-200"
-										>
+				<!-- One fixed cell per format, so the strip keeps its shape
+				     whether a crown is unheld, held by one player, or tied five
+				     ways: a caption naming the format and what the crown stands at,
+				     and beside it whoever holds it. Equal columns rather than a
+				     centred run — a long holder list used to shove its neighbours
+				     along the row and orphan the third crown on a line of its own. -->
+				<div class="grid flex-1 grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">
+					{#each CROWN_FORMATS as f (f.key)}
+						{@const k = crowns.get(f.key)!}
+						<div
+							class="flex min-w-0 items-center gap-1.5"
+							class:opacity-70={k.holders.length === 0}
+						>
+							<SpriteIcon
+								category="yields"
+								value="YIELD_LEGITIMACY"
+								size={12}
+								alt=""
+							/>
+							{#if k.holders.length === 0}
+								<span class="whitespace-nowrap text-tan"
+									>{f.label} unclaimed</span
+								>
+							{:else}
+								{#if k.holders.length === 1}
+									<span
+										class="flex min-w-0 items-center gap-1 font-semibold text-gray-200"
+									>
+										<img
+											src={k.holders[0].avatar_url}
+											alt=""
+											class="h-4 w-4 shrink-0 rounded-full"
+											width="16"
+											height="16"
+											loading="lazy"
+										/>
+										<span class="truncate">{k.holders[0].display_name}</span>
+									</span>
+								{:else}
+									<!-- A shared crown reads as the faces sharing it. Naming
+									     one of them would put a holder first where the tie
+									     says nobody is, so the row is faces alone — the
+									     tooltip spells out every name, and a tie deeper than
+									     the cap counts the faces it didn't draw. -->
+									<span
+										class="flex min-w-0 items-center gap-1"
+										title={crownNames(k.holders)}
+									>
+										{#each crownFaces(k.holders) as h (h.user_id)}
 											<img
 												src={h.avatar_url}
 												alt=""
@@ -436,29 +476,25 @@
 												height="16"
 												loading="lazy"
 											/>
-											{h.display_name}
-										</span>
-									{/each}
-									{#if held.more > 0}<span>+{held.more} more</span>{/if}
-									<span>· {f.label} ({k.count})</span>
-								</span>
-							{:else}
-								<span
-									class="inline-flex items-center gap-1 text-tan opacity-70"
+										{/each}
+										{#if k.holders.length > CROWN_AVATARS_SHOWN}
+											<span
+												class="whitespace-nowrap font-semibold text-gray-200"
+												>+{k.holders.length - CROWN_AVATARS_SHOWN}</span
+											>
+										{/if}
+									</span>
+								{/if}
+								<!-- The crown the holders above are holding, and what it
+								     stands at — after them, so the eye lands on who first. -->
+								<span class="whitespace-nowrap text-tan"
+									>· {f.label} ({k.count})</span
 								>
-									<SpriteIcon
-										category="yields"
-										value="YIELD_LEGITIMACY"
-										size={12}
-										alt=""
-									/>
-									<span>{f.label} unclaimed</span>
-								</span>
 							{/if}
-						{/each}
-					</div>
+						</div>
+					{/each}
 				</div>
-			{/if}
+			</div>
 
 			{#if data.user}
 				<div
@@ -628,12 +664,12 @@
 	<td class="{CELL} {ROW_BG}"
 		><span
 			class="mr-1 inline-flex w-5 items-center align-middle"
-			title={hasCrown(u, key) ? `Season leader — ${label}` : undefined}
+			title={hasCrown(u, key) ? `${leaderTerm} — ${label}` : undefined}
 			>{#if hasCrown(u, key)}<SpriteIcon
 					category="yields"
 					value="YIELD_LEGITIMACY"
 					size={14}
-					alt="Season leader"
+					alt={leaderTerm}
 				/>{/if}</span
 		>{num(u[key])}</td
 	>

@@ -91,8 +91,8 @@ export const load: PageLoad = async ({ fetch, url }) => {
 	// Parsed here rather than read raw in the component, so the board the
 	// page renders and the board the <title> claims are the one decision.
 	// The career board still carries a season — the stepper keeps its label,
-	// and the crowns the board hides are that season's when you come back —
-	// which is what reading the two from separate params buys.
+	// and Season comes back to it rather than to today's — which is what
+	// reading the two from separate params buys.
 	const board: Board =
 		url.searchParams.get("board") === ALL_BOARD ? "all" : "season";
 	const slug = url.searchParams.get("season");
