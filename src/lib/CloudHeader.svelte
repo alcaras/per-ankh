@@ -113,14 +113,6 @@
 		far right. Upload shows only for signed-in users.
 	-->
 	<div class="flex flex-shrink-0 items-center gap-2">
-		<!-- The players leaderboard (games played) — shown to everyone, styled
-		     to match the Upload shortcut beside it. -->
-		<a
-			href={resolve("/players")}
-			class="inline-flex flex-shrink-0 items-center rounded border border-tan px-2 py-1 text-xs font-semibold text-tan transition-colors hover:border-orange hover:text-orange"
-		>
-			Players
-		</a>
 		{#if user}
 			<!-- uploadHref is built from resolve("/upload") with a sanitized ?from=
 			     query that resolve()'s branded types can't express. -->
@@ -204,12 +196,21 @@
 				>
 					{#if user}
 						<!--
-							Global stats leads the signed-in branch: it's a destination rather
-							than an account action, and the divider keeps it read that way. It
-							sits inside the gate because /stats requires a session — the route
-							bounces an anonymous visitor to login, so offering the link to one
-							would be an invitation to a redirect.
+							Two destinations lead the signed-in branch rather than an account
+							action, and the divider below keeps them read that way. They are
+							ordered as the home page's action cluster orders them: the roster
+							of players, then the corpus they played. Both sit inside the gate
+							even though only /stats needs a session — the anonymous menu is
+							the About-only branch, and /players reaches signed-out viewers
+							through the home page's own button.
 						-->
+						<a
+							href={resolve("/players")}
+							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
+							onclick={closeMenu}
+						>
+							Players
+						</a>
 						<a
 							href={resolve("/stats")}
 							class="block w-full px-3 py-1.5 text-left text-xs text-tan transition-colors hover:bg-surface-raised"
