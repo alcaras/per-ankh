@@ -6,6 +6,7 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { COGNOMEN_LADDER } from "$lib/generated/cognomens";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import { formatEnum } from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
 	import type { PageData } from "./$types";
 
@@ -16,9 +17,14 @@
 	// runtime exports from a +page.ts) but PageData carries it.
 	type Board = PageData["board"];
 
-	// Activity epithets from the game's cognomen ladder, one per legitimacy
-	// decade in the game's own ascending order (the New is the fresh-ruler
-	// epithet at the floor; Able 30 … Magnificent 90). Thresholds are games
+	// Activity epithets from the game's cognomen ladder — and the set is
+	// exactly Old World's own difficulty ladder, every level of which is
+	// also a cognomen: the New, the Able, the Just, the Good, the Strong,
+	// the Noble, the Glorious, the Magnificent, the Great, in that order
+	// (achievement.xml's ACHIEVEMENT_DIFFICULTY_*). They land one to a
+	// legitimacy decade from the Able (30) up, which is why the decades
+	// below have no rung — the Founder and the Mason sit at 10, and the
+	// game gives ten more cognomens at 20. Thresholds are games
 	// played in the selected season, on the triangular numbers: each rung
 	// costs exactly one game more than the last, so the next epithet always
 	// feels one push away. The ladder deliberately stops at the Magnificent
@@ -37,8 +43,14 @@
 		{ games: 28, type: "COGNOMEN_GLORIOUS" },
 		{ games: 36, type: "COGNOMEN_MAGNIFICENT" },
 	];
+	// A rung's display string. A rung the bake no longer carries — a rename
+	// in a later reference drop — falls back to its token rather than
+	// rendering an empty name into "N games to reach ___", the same shape
+	// `nationName` uses for a nation the baked table doesn't name. The baked
+	// strings carry the article ("the Able"), so the fallback does too.
 	const cognomenName = (type: string): string =>
-		COGNOMEN_LADDER.find((c) => c.type === type)?.name ?? "";
+		COGNOMEN_LADDER.find((c) => c.type === type)?.name ??
+		`the ${formatEnum(type, "COGNOMEN_")}`;
 	const epithetOf = (total: number): string | null => {
 		const rung = [...RUNGS].reverse().find((r) => total >= r.games);
 		return rung ? cognomenName(rung.type) : null;
@@ -215,7 +227,7 @@
 	const CROWN_FORMATS = [
 		{ key: "duels_network", label: "Network" },
 		{ key: "duels_cloud", label: "Cloud" },
-		{ key: "ffas", label: "FFAs" },
+		{ key: "ffas", label: "FFA" },
 	] as const;
 	type FormatKey = (typeof CROWN_FORMATS)[number]["key"];
 	// How many holders a shared crown names before it counts the rest instead.
@@ -434,7 +446,9 @@
 			     holds them; a fresh season's board is three open crowns, which is
 			     the whole point of the reset. -->
 			<div class="mb-4 rounded-lg bg-surface p-4">
-				<h3 class="mb-3 text-base font-bold text-tan">{crownsHeading}</h3>
+				<h3 class="mb-3 text-xs font-bold uppercase tracking-wide text-tan">
+					{crownsHeading}
+				</h3>
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 					{#each CROWN_FORMATS as f (f.key)}
 						{@const k = crowns.get(f.key)!}
@@ -576,9 +590,9 @@
 							<tr>
 								{@render sortHeader("rank", "#", "text-left")}
 								{@render sortHeader("display_name", "Player", "text-left")}
-								{@render sortHeader("duels_network", "Duels (Network)")}
-								{@render sortHeader("duels_cloud", "Duels (Cloud)")}
-								{@render sortHeader("ffas", "FFAs")}
+								{@render sortHeader("duels_network", "Network (Duel)")}
+								{@render sortHeader("duels_cloud", "Cloud (Duel)")}
+								{@render sortHeader("ffas", "FFA")}
 								{@render sortHeader(
 									"other",
 									"Other",
