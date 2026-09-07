@@ -315,14 +315,13 @@ export interface PlayerLeaderboardResponse {
 // field is added to or dropped from PlayedGamesRow.
 //
 // The version rides along as `v` on every board request (the Worker reads
-// since/until and ignores it) because a board's cache key is its URL, and a
-// CLOSED season answers `max-age=86400, s-maxage=86400`: a browser or edge
-// that fetched a season before a field existed would keep replaying the older
-// shape for a day, so an archive board renders behind a deploy that added one
-// — avatarless rows for everyone who had already walked the archive. Bumping
-// drifts the URL and orphans every stale entry at once, the same
-// expiry-by-drift the stats bundles get from BUNDLE_SCHEMA_VERSION in their
-// KV key.
+// since/until and ignores it) because a board's cache key is its URL, and
+// every window answers `max-age=300`: a browser that fetched a season before
+// a field existed would keep replaying the older shape until that expires, so
+// a board renders behind a deploy that added one — avatarless rows for anyone
+// who had just walked the archive. Bumping drifts the URL and orphans every
+// stale entry at once, the same expiry-by-drift the stats bundles get from
+// BUNDLE_SCHEMA_VERSION in their KV key.
 const PLAYERS_SHAPE_CHANGELOG: Record<number, string> = {
 	1: "user_id, display_name, and the per-format played counts",
 	2: "avatar_url — the player's Discord avatar",

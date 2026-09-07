@@ -390,10 +390,11 @@ export async function handlePlayerLeaderboard(
 	// can't masquerade as all-time.
 	//
 	// The frontend also sends `v`, its PLAYERS_SHAPE_VERSION (api-cloud.ts).
-	// Nothing here reads it and nothing should: it exists to key the caches a
-	// closed window's day-long max-age fills, and a response that varied on it
-	// would defeat that. It is named here so a later tightening of this
-	// validation doesn't 400 the board's own requests.
+	// Nothing here reads it and nothing should: it exists to key the browser
+	// caches this endpoint's max-age fills, so a shape change doesn't meet a
+	// stale-shaped body, and a response that varied on it would defeat that.
+	// It is named here so a later tightening of this validation doesn't 400
+	// the board's own requests.
 	const url = new URL(request.url);
 	const sinceRaw = url.searchParams.get("since");
 	const untilRaw = url.searchParams.get("until");
@@ -436,6 +437,16 @@ export async function handlePlayerLeaderboard(
 	// ambiguous id therefore credits nobody through this arm; both users
 	// still get their own uploads through the uploader arm above, and the
 	// credit returns on its own once the link is disambiguated.
+	//
+	// The category counts are SUM(CASE ...), not SUM(<predicate>), because
+	// game_mode is nullable and `x AND NULL` is NULL, not false: a user whose
+	// every match is a two-human game with no recorded mode would sum only
+	// NULLs and get NULL back for both duel columns. The response types them
+	// as numbers and the board renders them with toLocaleString, so the null
+	// wouldn't survive the trip. No save in the corpus is missing a mode
+	// today — the column is nullable because the parser reads it from an
+	// optional attribute (match-metadata.ts), which is a promise about the
+	// data we don't get to make here.
 	const rows = await env.SHARE_DB.prepare(
 		`WITH humans AS (
 		   SELECT game_id, SUM(is_human) AS n
@@ -478,9 +489,11 @@ export async function handlePlayerLeaderboard(
 		   ${displayNameSql("u")} AS display_name,
 		   u.discord_id,
 		   u.avatar_hash,
-		   SUM(mc.n_humans = 2 AND mc.game_mode = 'NETWORK') AS duels_network,
-		   SUM(mc.n_humans = 2 AND mc.game_mode = 'PLAY_BY_CLOUD') AS duels_cloud,
-		   SUM(mc.n_humans >= 3) AS ffas,
+		   SUM(CASE WHEN mc.n_humans = 2 AND mc.game_mode = 'NETWORK'
+		            THEN 1 ELSE 0 END) AS duels_network,
+		   SUM(CASE WHEN mc.n_humans = 2 AND mc.game_mode = 'PLAY_BY_CLOUD'
+		            THEN 1 ELSE 0 END) AS duels_cloud,
+		   SUM(CASE WHEN mc.n_humans >= 3 THEN 1 ELSE 0 END) AS ffas,
 		   COUNT(*) AS total
 		 FROM played p
 		 JOIN match_class mc ON mc.xml_game_id = p.xml_game_id
@@ -501,18 +514,21 @@ export async function handlePlayerLeaderboard(
 		total: r.total,
 	}));
 
-	// A CLOSED window is immutable — created_at can't be backdated, so a
-	// finished season's board never changes — and caches for a day; open
-	// windows keep the public-recent shape (60s edge, 5min browser).
-	const closed =
-		untilRaw != null && untilRaw <= new Date().toISOString().slice(0, 10);
+	// Every window caches like public-recent (5min browser, 60s edge),
+	// closed seasons included. A finished season's board is not immutable:
+	// created_at can't be backdated, but a visibility toggle, a newly linked
+	// online id, the reindex sweep that backfills player_summaries.online_id,
+	// and a deleted game all move a past window's counters — and toggles alone
+	// run every other day. Nothing can recall a response once served, either:
+	// unlike the bundle handlers above, this endpoint keeps no KV entry, so
+	// neither invalidateStatsCache nor `admin cache clear stats` reaches it.
+	// games.ts holds public game detail to the same 60s at the edge for the
+	// same reason — a Make Private toggle has to propagate in a minute.
 	return new Response(JSON.stringify({ players }), {
 		status: 200,
 		headers: {
 			"Content-Type": "application/json",
-			"Cache-Control": closed
-				? "public, max-age=86400, s-maxage=86400"
-				: "public, max-age=300, s-maxage=60",
+			"Cache-Control": "public, max-age=300, s-maxage=60",
 			...cors,
 			Vary: "Origin",
 		},

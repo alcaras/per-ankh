@@ -5,9 +5,9 @@
 // is_uploader seat, everyone else via player_summaries.online_id matched
 // against user_online_ids), with double-uploaded matches deduped on
 // xml_game_id. These tests pin that attribution, the category split, the
-// since/until window (until exclusive; closed windows cache for a day), the
-// season_view gate, and the PII stance: linking online ids must never appear
-// in the response.
+// since/until window (until exclusive), the short cache TTL every window
+// shares, the season_view gate, and the PII stance: linking online ids must
+// never appear in the response.
 //
 // They also pin the visibility rule the board shares with every other public
 // reader (users.ts, stats/resolve.ts): a save its owner kept private reaches
@@ -185,6 +185,25 @@ describe("GET /v1/stats/players", () => {
 		expect(row.total).toBe(3);
 	});
 
+	it("counts zero, not null, when no match has a recorded game mode", async () => {
+		const user = await makeUser();
+		// game_mode is nullable and `x AND NULL` is NULL, so a bare
+		// SUM(<predicate>) over only these rows returns NULL for both duel
+		// columns — a null where the response promises a number.
+		await seedPlayedGame({
+			uploader: user,
+			gameMode: null,
+			seats: [{ is_uploader: true }, {}],
+		});
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		const row = rowFor(body, user)!;
+		expect(row.duels_network).toBe(0);
+		expect(row.duels_cloud).toBe(0);
+		expect(row.ffas).toBe(0);
+		expect(row.total).toBe(1);
+	});
+
 	it("ignores unregistered online ids and AI seats", async () => {
 		const uploader = await makeUser();
 		await seedPlayedGame({
@@ -309,15 +328,17 @@ describe("GET /v1/stats/players", () => {
 		await expectErrorCode(bad, { status: 400, code: "INVALID_QUERY" });
 	});
 
-	it("caches a closed window for a day and an open one briefly", async () => {
-		const closed = await get("?since=2020-06-01&until=2020-09-01");
-		expect(closed.headers.get("Cache-Control")).toBe(
-			"public, max-age=86400, s-maxage=86400",
-		);
-		const open = await get("");
-		expect(open.headers.get("Cache-Control")).toBe(
-			"public, max-age=300, s-maxage=60",
-		);
+	it("caches every window briefly, a closed season included", async () => {
+		// A finished season's board still moves — a visibility toggle, a newly
+		// linked online id, the reindex backfill, a deleted game — and nothing
+		// can recall a response once served, so a closed window gets the same
+		// short TTL an open one does rather than a day-long promise.
+		for (const window of ["?since=2020-06-01&until=2020-09-01", ""]) {
+			const res = await get(window);
+			expect(res.headers.get("Cache-Control")).toBe(
+				"public, max-age=300, s-maxage=60",
+			);
+		}
 	});
 
 	it("429s a read once the per-IP season_view cap is reached", async () => {
