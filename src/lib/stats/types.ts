@@ -254,7 +254,8 @@ export type StatsCategory =
 	| "yields"
 	| "laws"
 	| "cities"
-	| "tech";
+	| "tech"
+	| "records";
 
 // A chart in the catalog. Its predicates take ChartBundleCore, not
 // ChartBundle: none of them reads an Overview field, so one registry serves
