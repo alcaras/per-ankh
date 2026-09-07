@@ -381,10 +381,11 @@ interface PlayedGamesQueryRow {
 	duels_network_reach: string | null;
 	duels_cloud_reach: string | null;
 	ffas_reach: string | null;
-	// Ordered by, never serialized — the same select-use-don't-serialize
-	// shape as discord_id above. The board's rank is the row's position in
-	// this order, so the client reads it off the array and needs no field.
-	// Never null: a row exists only because it has at least one match.
+	// Packed like the three `*_reach` columns above, and ordered by rather
+	// than serialized — the same select-use-don't-serialize shape as
+	// discord_id. The board's rank is the row's position in this order, so
+	// the client reads it off the array and needs no field. Never null: a row
+	// exists only because it has at least one match.
 	total_reach: string;
 }
 
@@ -529,13 +530,24 @@ export async function handlePlayerLeaderboard(
 	// player who won on any upload of a match won it.
 	//
 	// The same rule orders the board itself, through `total_reach` — the
-	// player's newest match in the window, whatever format. Ordering ties on
+	// player's newest match in the window, whatever format, packed with that
+	// match's result exactly as a format's reach is. Ordering ties on
 	// display_name alone made the board's #1 an alphabetical accident: a
 	// season opens with its whole field on one game, and the client numbers
 	// rows by their position here, so every tie the ORDER BY leaves unbroken
 	// is a rank the board can't justify. `total_reach` is never null — a row
 	// exists only because the player has a match — so it can't push a row to
 	// either end by being missing.
+	//
+	// The board runs all three steps, not two: whoever reached the total
+	// first, then — for the players a timestamp cannot separate, who reached
+	// it by playing each other — whoever won that match. A crown settled a
+	// head-to-head on the result while the rank beside it fell through to
+	// alphabetical, so one board could seat the same two players in two
+	// different orders and call both of them earned. The ORDER BY therefore
+	// splits the packed pair rather than sorting the string whole: the
+	// timestamp ascends and the flag descends, and a single ASC over the
+	// concatenation would rank the loser of a head-to-head above the winner.
 	//
 	// The timestamps this publishes are the public games' own created_at,
 	// already served per-game by the discovery feed and game detail, so the
@@ -547,6 +559,18 @@ export async function handlePlayerLeaderboard(
 	// rows it drops are rows nothing downstream can use — and without the
 	// predicate a one-week board pays for a full scan of every roster ever
 	// uploaded, since since/until reduce nothing there.
+
+	// A match packed as both tiebreaks read it: when it landed, and whether
+	// this player won it, split back apart by `reachOf`. MAX() over the packed
+	// string picks the player's newest match and carries that match's result
+	// along with it, which is the pair every `*_reach` column below needs.
+	const reach = `mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END`;
+	// The two halves of a packed reach, for ordering by them separately —
+	// earliest first, then the winner. Sliced by length rather than at a fixed
+	// offset for `reachOf`'s reason: created_at's width is a convention of how
+	// rows were written, not a guarantee this query gets to make.
+	const reachAt = `substr(total_reach, 1, length(total_reach) - 1)`;
+	const reachWon = `substr(total_reach, -1)`;
 	const rows = await env.SHARE_DB.prepare(
 		`WITH humans AS (
 		   SELECT ps.game_id, SUM(ps.is_human) AS n
@@ -612,20 +636,17 @@ export async function handlePlayerLeaderboard(
 		   SUM(CASE WHEN mc.n_humans >= 3 THEN 1 ELSE 0 END) AS ffas,
 		   COUNT(*) AS total,
 		   MAX(CASE WHEN mc.n_humans = 2 AND mc.any_network = 1
-		            THEN mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END
-		            END) AS duels_network_reach,
+		            THEN ${reach} END) AS duels_network_reach,
 		   MAX(CASE WHEN mc.n_humans = 2 AND mc.any_network = 0 AND mc.any_cloud = 1
-		            THEN mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END
-		            END) AS duels_cloud_reach,
+		            THEN ${reach} END) AS duels_cloud_reach,
 		   MAX(CASE WHEN mc.n_humans >= 3
-		            THEN mc.first_at || CASE WHEN p.won = 1 THEN '1' ELSE '0' END
-		            END) AS ffas_reach,
-		   MAX(mc.first_at) AS total_reach
+		            THEN ${reach} END) AS ffas_reach,
+		   MAX(${reach}) AS total_reach
 		 FROM played p
 		 JOIN match_class mc ON mc.xml_game_id = p.xml_game_id
 		 JOIN users u ON u.user_id = p.user_id
 		 GROUP BY u.user_id
-		 ORDER BY total DESC, total_reach ASC, display_name ASC`,
+		 ORDER BY total DESC, ${reachAt} ASC, ${reachWon} DESC, display_name ASC`,
 	)
 		.bind(sinceRaw, untilRaw)
 		.all<PlayedGamesQueryRow>();

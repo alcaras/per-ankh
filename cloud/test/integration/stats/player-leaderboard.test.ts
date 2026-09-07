@@ -345,19 +345,14 @@ describe("GET /v1/stats/players", () => {
 			uploader: winner,
 			gameMode: "NETWORK",
 			createdAt: "2026-09-04 12:00:00",
-			seats: [
-				{ is_uploader: true, is_winner: true },
-				{ online_id: onlineId },
-			],
+			seats: [{ is_uploader: true, is_winner: true }, { online_id: onlineId }],
 		});
 
 		const body = (await (await get("")).json()) as LeaderboardBody;
 		for (const user of [winner, loser]) {
 			// Same match, so the same instant to the character — anything
 			// else and the head-to-head rule would never come into play.
-			expect(rowFor(body, user)!.duels_network_at).toBe(
-				"2026-09-04 12:00:00",
-			);
+			expect(rowFor(body, user)!.duels_network_at).toBe("2026-09-04 12:00:00");
 		}
 		expect(rowFor(body, winner)!.duels_network_won).toBe(true);
 		expect(rowFor(body, loser)!.duels_network_won).toBe(false);
@@ -464,6 +459,38 @@ describe("GET /v1/stats/players", () => {
 		).json()) as LeaderboardBody;
 		expect(body.players.map((p) => p.display_name)).toEqual(["Zoe", "Abe"]);
 		expect(body.players[0].total).toBe(body.players[1].total);
+	});
+
+	it("orders a head-to-head tie on the winner, as a crown does", async () => {
+		// Reaching the total in the same match gives both players the same
+		// instant to the character, so only the result can separate them —
+		// the step a crown has always had and the rank used to fall through,
+		// which let one board seat the same two players in two orders. Names
+		// are seeded in the reverse of the expected order: alphabetical alone
+		// would invert it.
+		const winner = await makeUser({ displayName: "Zeno" });
+		const loser = await makeUser({ displayName: "Ajax" });
+		const onlineId = `STEAM_${nanoid(12)}`;
+		await linkOnlineId(loser, onlineId);
+
+		// A window of its own, for the reason the test above seeds one.
+		await seedPlayedGame({
+			uploader: winner,
+			gameMode: "NETWORK",
+			createdAt: "2027-05-04 12:00:00",
+			seats: [{ is_uploader: true, is_winner: true }, { online_id: onlineId }],
+		});
+
+		const body = (await (
+			await get("?since=2027-05-01&until=2027-06-01")
+		).json()) as LeaderboardBody;
+		expect(body.players.map((p) => p.display_name)).toEqual(["Zeno", "Ajax"]);
+		expect(body.players[0].total).toBe(body.players[1].total);
+		// The same pair the crown reads, so the two cannot disagree.
+		expect(body.players[0].duels_network_at).toBe(
+			body.players[1].duels_network_at,
+		);
+		expect(body.players[0].duels_network_won).toBe(true);
 	});
 
 	it("ignores unregistered online ids and AI seats", async () => {
