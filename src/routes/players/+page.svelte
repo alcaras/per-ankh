@@ -80,14 +80,19 @@
 		const out = new Map<FormatKey, { names: string[]; count: number }>();
 		for (const f of CROWN_FORMATS) {
 			const max = Math.max(0, ...seasonRows.map((r) => r[f.key]));
-			if (max > 0) {
-				out.set(f.key, {
-					names: seasonRows
-						.filter((r) => r[f.key] === max)
-						.map((r) => r.display_name),
-					count: max,
-				});
-			}
+			// Every format gets an entry, claimed or not: a crown nobody holds
+			// yet is the season's standing invitation, so it is named rather
+			// than omitted. `count: 0` is what `hasCrown` already reads as
+			// unclaimed, so no row wears a crown for an empty format.
+			out.set(f.key, {
+				names:
+					max > 0
+						? seasonRows
+								.filter((r) => r[f.key] === max)
+								.map((r) => r.display_name)
+						: [],
+				count: max,
+			});
 		}
 		return out;
 	});
@@ -97,28 +102,39 @@
 		u[key] === crowns.get(key)!.count;
 
 	// The signed-in viewer's arc, ahead of anyone else's: their epithet, a
-	// progress bar to the next one, and the player immediately ahead — the
-	// rivalry framing, never the summit.
+	// count, and a progress bar to the next rung — their own climb, never
+	// the summit or the gap to it. A viewer with no games on this board is
+	// absent from `rows` — at a season's start that is everyone — so the
+	// card is built from a zero total rather than from a row: the arc
+	// begins before the first game instead of at it.
 	const viewerId = $derived(data.user?.user_id ?? null);
 	const viewerIndex = $derived(
 		viewerId == null ? -1 : rows.findIndex((r) => r.user_id === viewerId),
 	);
-	const viewer = $derived(viewerIndex >= 0 ? rows[viewerIndex] : null);
-	const viewerEpithet = $derived(viewer ? epithetOf(viewer.total) : null);
+	const viewerTotal = $derived(viewerIndex >= 0 ? rows[viewerIndex].total : 0);
+	// The board's own rendering of the name once they're on it, so the card
+	// and their row never disagree.
+	const viewerName = $derived(
+		viewerIndex >= 0
+			? rows[viewerIndex].display_name
+			: (data.user?.display_name ?? ""),
+	);
+	const viewerTally = $derived(
+		`${viewerTotal} ${viewerTotal === 1 ? "game" : "games"}`,
+	);
+	const viewerEpithet = $derived(epithetOf(viewerTotal));
 	const currentRung = $derived(
-		viewer ? [...RUNGS].reverse().find((r) => viewer.total >= r.games) : null,
+		[...RUNGS].reverse().find((r) => viewerTotal >= r.games),
 	);
-	const nextRung = $derived(
-		viewer ? RUNGS.find((r) => r.games > viewer.total) : null,
-	);
+	const nextRung = $derived(RUNGS.find((r) => r.games > viewerTotal));
 	// Progress within the current rung's span, for the bar — every game
-	// played visibly moves it.
+	// played visibly moves it. At zero the bar is empty and the first rung
+	// is the whole span.
 	const rungProgress = $derived.by(() => {
-		if (!viewer || !nextRung) return 1;
+		if (!nextRung) return 1;
 		const floor = currentRung?.games ?? 0;
-		return (viewer.total - floor) / (nextRung.games - floor);
+		return (viewerTotal - floor) / (nextRung.games - floor);
 	});
-	const rival = $derived(viewerIndex > 0 ? rows[viewerIndex - 1] : null);
 
 	const num = (n: number) => (n === 0 ? "—" : n.toLocaleString());
 
@@ -130,7 +146,7 @@
 </script>
 
 <main class="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-10 pt-6">
-	<div class="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+	<div class="mb-5 flex flex-wrap items-baseline justify-between gap-3">
 		<h1 class="text-2xl font-bold text-gray-200">Players</h1>
 		<div class="flex items-center gap-2">
 			<!-- Season picker: chevrons walk the archive; the label names the
@@ -180,13 +196,10 @@
 			</div>
 		</div>
 	</div>
-	<p class="mb-5 text-sm text-tan">
-		Games played, by player and category. Wins and losses count the same, and
-		any player's upload counts for everyone who played in it.
-	</p>
-
-	{#if crowns.size > 0 && data.board === "season"}
-		<!-- The season's format crowns: most games played in each format. -->
+	{#if data.board === "season"}
+		<!-- The season's format crowns: most games played in each format.
+		     Shown whether or not anyone holds them — a fresh season's board is
+		     three open crowns, which is the whole point of the reset. -->
 		<div
 			class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-lg bg-surface p-3 text-sm"
 		>
@@ -195,37 +208,37 @@
 				{isCurrentSeason ? "(so far)" : data.selected.year}</span
 			>
 			{#each CROWN_FORMATS as f (f.key)}
-				{@const k = crowns.get(f.key)}
-				{#if k}
+				{@const k = crowns.get(f.key)!}
+				{#if k.count > 0}
 					<span class="text-tan">
 						👑 <span class="font-semibold text-gray-200"
 							>{k.names.join(" & ")}</span
 						>
 						— {f.label} ({k.count})
 					</span>
+				{:else}
+					<span class="text-tan opacity-60">👑 {f.label} unclaimed</span>
 				{/if}
 			{/each}
 		</div>
 	{/if}
 
-	{#if viewer && viewerEpithet}
+	{#if data.user}
 		<div
 			class="mb-4 rounded-lg border border-border-subtle bg-surface p-3 text-sm"
 		>
-			<div class="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+			<div
+				class="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1"
+			>
 				<span class="font-bold text-gray-200">
-					{viewer.display_name}
-					<span class="font-semibold italic text-orange">{viewerEpithet}</span>
-					— {viewer.total}
-					{viewer.total === 1 ? "game" : "games"}
-					{data.board === "season" ? `this ${data.selected.name}` : "all time"}
+					{viewerName}
+					{#if viewerEpithet}
+						<span class="font-semibold italic text-orange">{viewerEpithet}</span
+						>
+					{/if}
 				</span>
-				{#if rival}
-					<span class="text-tan"
-						>{rival.total - viewer.total === 0
-							? `tied with ${rival.display_name}`
-							: `${rival.total - viewer.total} behind ${rival.display_name}`}</span
-					>
+				{#if viewerTotal > 0}
+					<span class="text-tan">{viewerTally}</span>
 				{/if}
 			</div>
 			{#if nextRung}
@@ -242,8 +255,8 @@
 						></div>
 					</div>
 					<span class="whitespace-nowrap text-xs text-tan">
-						{nextRung.games - viewer.total}
-						{nextRung.games - viewer.total === 1 ? "game" : "games"} to become
+						{nextRung.games - viewerTotal}
+						{nextRung.games - viewerTotal === 1 ? "game" : "games"} to become
 						<span class="font-semibold italic text-gray-200"
 							>{cognomenName(nextRung.type)}</span
 						>
@@ -259,63 +272,77 @@
 		</div>
 	{/if}
 
-	<div class="overflow-x-auto rounded-lg bg-blue-gray p-3">
-		<table class="w-full border-separate border-spacing-y-1.5">
-			<thead>
-				<tr>
-					<th class="{HEADER_CELL} text-left">#</th>
-					<th class="{HEADER_CELL} text-left">Player</th>
-					<th class={HEADER_CELL}>Duels (Network)</th>
-					<th class={HEADER_CELL}>Duels (Cloud)</th>
-					<th class={HEADER_CELL}>FFAs</th>
-					<th
-						class={HEADER_CELL}
-						title="Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA"
-						>Other</th
-					>
-					<th class={HEADER_CELL}>Total</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each rows as u, i (u.user_id)}
-					{@const epithet = epithetOf(u.total)}
-					{@const you = u.user_id === viewerId}
-					<tr class="group">
-						<td
-							class="{CELL} rounded-l-lg bg-surface text-left {you
-								? 'border-l-2 border-orange'
-								: ''}">{i + 1}</td
+	{#if rows.length === 0}
+		<div class="rounded-lg bg-surface p-3 text-sm text-tan">
+			{#if data.board === "all"}
+				No public games yet. Upload a save and set it public to open the board.
+			{:else if isCurrentSeason}
+				No games yet this season.
+			{:else}
+				No games were played this {data.selected.label}.
+			{/if}
+		</div>
+	{:else}
+		<div class="overflow-x-auto rounded-lg bg-blue-gray p-3">
+			<table class="w-full border-separate border-spacing-y-1.5">
+				<thead>
+					<tr>
+						<th class="{HEADER_CELL} text-left">#</th>
+						<th class="{HEADER_CELL} text-left">Player</th>
+						<th class={HEADER_CELL}>Duels (Network)</th>
+						<th class={HEADER_CELL}>Duels (Cloud)</th>
+						<th class={HEADER_CELL}>FFAs</th>
+						<th
+							class={HEADER_CELL}
+							title="Single-player and local (hotseat/LAN) games — a local game with 3+ humans counts as an FFA"
+							>Other</th
 						>
-						<td class="bg-surface px-3 py-2 text-left">
-							<a
-								href={resolve(`/users/${u.user_id}`)}
-								class="font-semibold {you
-									? 'text-orange'
-									: 'text-gray-200'} transition-colors hover:text-orange"
-								>{u.display_name}</a
-							>
-							{#if epithet}
-								<span class="text-xs italic text-tan">{epithet}</span>
-							{/if}
-						</td>
-						<td class="{CELL} bg-surface"
-							>{num(u.duels_network)}{hasCrown(u, "duels_network")
-								? " 👑"
-								: ""}</td
-						>
-						<td class="{CELL} bg-surface"
-							>{num(u.duels_cloud)}{hasCrown(u, "duels_cloud") ? " 👑" : ""}</td
-						>
-						<td class="{CELL} bg-surface"
-							>{num(u.ffas)}{hasCrown(u, "ffas") ? " 👑" : ""}</td
-						>
-						<td class="{CELL} bg-surface">{num(u.other)}</td>
-						<td class="{CELL} rounded-r-lg bg-surface font-bold text-gray-200"
-							>{u.total}</td
-						>
+						<th class={HEADER_CELL}>Total</th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
+				</thead>
+				<tbody>
+					{#each rows as u, i (u.user_id)}
+						{@const epithet = epithetOf(u.total)}
+						{@const you = u.user_id === viewerId}
+						<tr class="group">
+							<td
+								class="{CELL} rounded-l-lg bg-surface text-left {you
+									? 'border-l-2 border-orange'
+									: ''}">{i + 1}</td
+							>
+							<td class="bg-surface px-3 py-2 text-left">
+								<a
+									href={resolve(`/users/${u.user_id}`)}
+									class="font-semibold {you
+										? 'text-orange'
+										: 'text-gray-200'} transition-colors hover:text-orange"
+									>{u.display_name}</a
+								>
+								{#if epithet}
+									<span class="text-xs italic text-tan">{epithet}</span>
+								{/if}
+							</td>
+							<td class="{CELL} bg-surface"
+								>{num(u.duels_network)}{hasCrown(u, "duels_network")
+									? " 👑"
+									: ""}</td
+							>
+							<td class="{CELL} bg-surface"
+								>{num(u.duels_cloud)}{hasCrown(u, "duels_cloud")
+									? " 👑"
+									: ""}</td
+							>
+							<td class="{CELL} bg-surface"
+								>{num(u.ffas)}{hasCrown(u, "ffas") ? " 👑" : ""}</td
+							>
+							<td class="{CELL} bg-surface">{num(u.other)}</td>
+							<td class="{CELL} rounded-r-lg bg-surface font-bold text-gray-200"
+								>{u.total}</td
+							>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 </main>
