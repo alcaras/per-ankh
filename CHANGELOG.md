@@ -1,5 +1,47 @@
 # Changelog
 
+## [2026-09-07-ade2721] - 2026-09-07
+
+### Features
+
+- (stats) public uploads leaderboard at /stats, linked from the header — [91e35c2](https://github.com/becked/per-ankh/commit/91e35c2a98e34ad7e603b00bc4c75fdd6d793db3)
+- (stats) season view, culture-level tiers, and the viewer's own card — [c7c7e34](https://github.com/becked/per-ankh/commit/c7c7e34d095e1d803144de2a739ba96ab6317c1d)
+- (stats) games PLAYED, cognomen epithets, dynasty seasons — [e225407](https://github.com/becked/per-ankh/commit/e2254075ff762d897648ab75e2bdeb0354596967)
+- (season) the page becomes Season — real seasons, the user's ladder, format kings — [23b1d13](https://github.com/becked/per-ankh/commit/23b1d139e3c33dc80af1647cff50216d57d86802)
+- (season) season archive, until-window API, prod-calibrated ladder, Crowns — [68a4936](https://github.com/becked/per-ankh/commit/68a4936a27e6e0c1beaec9df0fffaf06e6bb7af8)
+- (season) triangular ladder — each epithet costs one game more than the last — [615009b](https://github.com/becked/per-ankh/commit/615009b482648dcdc4127c3f5512d2699e7b695c)
+- (season) cap the ladder at the Magnificent — the Great stays unclaimed — [b45a252](https://github.com/becked/per-ankh/commit/b45a25215bb181e756e605250de6e52ea4d6ae6a)
+- (season) give the season read its own per-IP budget — [4b79cf9](https://github.com/becked/per-ankh/commit/4b79cf922e739872c9060547a2f6829bb5e92eba)
+- (players) move the season board to /players, board in the URL — [e44f078](https://github.com/becked/per-ankh/commit/e44f0780285cf56dc1e770544e7c44b1dcb0d0ec)
+- (players) route into /players from the home page and the menu — [0f5122e](https://github.com/becked/per-ankh/commit/0f5122e84e12b30a09ddc70f5ceb25678de814aa)
+- (players) Discord avatars on the board, and sortable columns — [082a820](https://github.com/becked/per-ankh/commit/082a82008f5e81ea9be8a6952b92e28240562685)
+- (players) crowns in fixed cells, and on both boards — [3270d0d](https://github.com/becked/per-ankh/commit/3270d0d5d5122eb59cd548cf5a02d9bbea417833)
+- (players) crowns as a titled panel, and rows link to the profile — [160dc80](https://github.com/becked/per-ankh/commit/160dc807cb9a9cbf4980cd02f6731eac9b74444c)
+- (players) the crowns title reads as a label, and the columns lead with the format — [24ed365](https://github.com/becked/per-ankh/commit/24ed3658ba05912b8a42f6e21fa85bb045ae47e0)
+- (players) one player wears each crown, and the board ranks by who got there first — [dca45cc](https://github.com/becked/per-ankh/commit/dca45ccbff3ba849dc3f237c15b02f0451d0f6b2)
+- (players) the crowns panel explains the rules it ranks by — [fba026f](https://github.com/becked/per-ankh/commit/fba026f4091b559dc44284c5732c31f131a5f40d)
+
+### Fixes
+
+- (deps) lift undici to 7.29.0 and retire the audit exception — [c2bef7d](https://github.com/becked/per-ankh/commit/c2bef7d396785f204fbf729454d0eeb364e35bd9)
+- (stats) the played-games board counts public games only — [0a27609](https://github.com/becked/per-ankh/commit/0a276090f47f7d4a4d2a0a74064d8f515d4d9f9d)
+- (players) a season with no games still has a page — [d03d9b6](https://github.com/becked/per-ankh/commit/d03d9b686cf023a5c050a5957c9414a13094b20e)
+- (players) keep the season when the board switches, and fit the page to the app — [18b79d3](https://github.com/becked/per-ankh/commit/18b79d34ed57c107498324cab4ddb5e475140b70)
+- (header) the menu offers Players to signed-out viewers — [0141a32](https://github.com/becked/per-ankh/commit/0141a32a146a137194f1dfbf5671f89147b60866)
+- (players) the current season's crowns are titled like any other — [6da4f43](https://github.com/becked/per-ankh/commit/6da4f43bbedfe0ad0eb78a4c5ad6e788149c40c2)
+- (players) an online id two people have linked credits neither — [9ddf87a](https://github.com/becked/per-ankh/commit/9ddf87a5685d58fc339b32b04b92c0cf672adabf)
+- (players) counts that can't come back null, and a board that can change — [fce10df](https://github.com/becked/per-ankh/commit/fce10dfb00eeac206b7ab119e0204720b1422c9f)
+- (players) the twelve the review found — [16e6517](https://github.com/becked/per-ankh/commit/16e651730e7456f4bc351035f66d9d272b936a16)
+- (players) the rank breaks a head-to-head the way the crown does — [db15910](https://github.com/becked/per-ankh/commit/db1591029ef14930ee1a6480ee2e9836d9aeb867)
+- (deps) clear the browserslist advisories blocking preflight — [ade2721](https://github.com/becked/per-ankh/commit/ade2721c7719611349310009b61fabdf00bf78d5)
+
+### Other
+
+- (stats) cover /v1/stats/players; adopt displayNameSql and sibling idioms — [614bc3e](https://github.com/becked/per-ankh/commit/614bc3e19c07047ff38c54a9f7cf4acb542b4e8d)
+- (stats) renumber the online_id migration to 0044 — [06b235b](https://github.com/becked/per-ankh/commit/06b235b881e7eff5817197f0df91e6c457cc7633)
+- (cognomens) one bake owns cognomen.xml, and rulers get the game's epithet — [d364322](https://github.com/becked/per-ankh/commit/d364322022776c3770078738f3a36eaf9b41481b)
+- the momentum model, as built — [e1284eb](https://github.com/becked/per-ankh/commit/e1284eb50910e81c910dcbf1d3bb0fa496c1110c)
+
 ## [2026-08-31-5edcf08] - 2026-08-31
 
 ### Features
