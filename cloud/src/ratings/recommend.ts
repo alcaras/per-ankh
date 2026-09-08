@@ -31,7 +31,7 @@
 //
 // Nothing numeric survives this file. What gets written down is a name, how
 // many times the pair has already played, and badges the viewer could have
-// worked out for themselves. See migration 0045.
+// worked out for themselves. See migration 0046.
 
 import { g, expectedScore, SCALE, type Duel } from "./glicko2";
 // Deliberately the tournament engine's RNG rather than a second one: it is a

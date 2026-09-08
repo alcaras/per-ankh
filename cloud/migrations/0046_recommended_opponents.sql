@@ -1,6 +1,6 @@
 -- Recommended opponents: the ten players each user is shown on /opponents.
 --
--- Rebuilt nightly, right after user_ratings (0044), by
+-- Rebuilt nightly, right after user_ratings (0045), by
 -- cloud/src/ratings/recommend.ts. Nightly rather than per request for three
 -- reasons: the balancing term needs a global view (how many *other* lists a
 -- candidate already appears on, so the same settled mid-ladder player isn't

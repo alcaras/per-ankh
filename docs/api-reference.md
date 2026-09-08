@@ -765,7 +765,7 @@ Your ten suggested opponents — players you should get a close game against.
 - **Auth:** Session.
 - **Response 200:** `{ opponents: [{ user_id, display_name, slug, avatar_url, discord_url, meetings, badges }], rated }`. `discord_url` is their Discord profile, built from the snowflake `avatar_url` already carries — no `discord_*` field is serialized, and the handle never is. `meetings` is how many rated games the pair has already played; `badges` is a subset of `active_this_week` / `new_here` / `bridges_circles`; `rated` is whether the viewer has any rated multiplayer game at all, which is what separates "nothing yet" from "nothing this week".
 - **Errors:** `401 UNAUTHORIZED`.
-- **Notes:** There is no by-user-id form of this route, by design — a player sees only their own list. The response carries no rating, win probability or score, and neither does the table behind it (migration 0045); the model runs entirely inside the Worker. The list is rebuilt by the nightly cron and shuffled, so its order is not a ranking. An empty list is a normal answer.
+- **Notes:** There is no by-user-id form of this route, by design — a player sees only their own list. The response carries no rating, win probability or score, and neither does the table behind it (migration 0046); the model runs entirely inside the Worker. The list is rebuilt by the nightly cron and shuffled, so its order is not a ranking. An empty list is a normal answer.
 
 ### `POST /v1/users/me/tournaments/:id/dismiss-banner`
 Dismiss the "claim your slot" banner.

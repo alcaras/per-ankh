@@ -5,7 +5,7 @@
 //      snapshotted on tournament_matches, so these are exact.
 //   2. Casual games — a two-human, single-winner game whose roster slots both
 //      resolve to a registered user, by looking each slot's online_id up in
-//      user_online_ids (player_summaries.online_id, migration 0043).
+//      user_online_ids (player_summaries.online_id, migration 0044).
 //
 // Resolution is by online_id and user_id only. Nothing here matches on a
 // player's name: an Old World save's display name is whatever the player typed
