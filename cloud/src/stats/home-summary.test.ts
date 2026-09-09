@@ -89,21 +89,17 @@ function bundle(over: Partial<ChartBundleCore> = {}): ChartBundleCore {
 }
 
 describe("the home summary trim", () => {
-	it("carries exactly the fields home reads, plus the game count", () => {
+	it("carries exactly the fields home reads and nothing else", () => {
 		// The point of a dedicated endpoint rather than opening /v1/stats: home
 		// is the page most likely to be a visitor's first byte, and the full
 		// bundle's bulk is fields it never renders. Asserted as the whole key
-		// set, so a field home stops drawing has to leave the payload too.
+		// set, so a field home stops drawing has to leave the payload too — and
+		// so `meta` can't drift back in without a consumer asking for it.
 		expect(Object.keys(homeSummaryFrom(bundle())).sort()).toEqual([
 			"capitalFamilyWinRate",
-			"meta",
 			"nationWinRate",
 			"startingArchetypeWinRate",
 		]);
-	});
-
-	it("keeps meta to the game count", () => {
-		expect(homeSummaryFrom(bundle()).meta).toEqual({ game_count: 603 });
 	});
 
 	it("passes the unfloored fields through whole", () => {

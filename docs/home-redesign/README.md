@@ -17,7 +17,9 @@ They live in the UX-review bundle rather than beside this README, so there is on
 
 Breakpoints are desktop 1440×900, tablet 768×1024, mobile 390×844.
 
-The `anon` and `auth` pairs differ in one place only — the action in the call-to-action band (Discord sign-in vs. the "Global Stats" + "Your Games" pair). Home reads `user` nowhere else, so the two passes are otherwise identical by construction, not by coincidence.
+The `anon` and `auth` pairs differ in one place only — the action in the call-to-action band (Discord sign-in vs. the "Global Stats" + "Your Games" pair). Home read `user` nowhere else, so the two passes were otherwise identical by construction, not by coincidence.
+
+**These shots predate the redesign this package briefed.** They are the `main` of 2026-08-30, kept because the brief is written against it. The page they show no longer exists: the hero row's Featured Video tile is now the Community Tools panel, the tournament still is the backdrop of a live standings/schedule panel, a row of stats and season-standings panels sits between the hero row and the discovery grid, and `user` is read in a second place — the "Your season" panel, which is absent for an anonymous visitor. Re-run `./per-ankh ux-review` for shots of the current page.
 
 **Every shot is above the fold.** The capture asks for a full-page screenshot, but the app scrolls in an inner container rather than the document, so the image never grows past the viewport — 1440×900 on desktop regardless of how much page there is. The Recent Games feed carries up to 20 cards and only the first one or two are visible here. Read `brief.md` for what the feed actually holds; do not size the games column from these images.
 

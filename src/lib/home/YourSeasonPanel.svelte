@@ -26,7 +26,6 @@
 		winRate,
 		cognomen,
 		seasonUntil,
-		class: className = "",
 	}: {
 		displayName: string;
 		avatarUrl: string;
@@ -47,7 +46,6 @@
 		// The season window's exclusive end (YYYY-MM-DD). The day before it is
 		// the last day the board counts.
 		seasonUntil: string;
-		class?: string;
 	} = $props();
 
 	// `seasonUntil` is always a YYYY-MM-01, so it parses as UTC midnight; one day
@@ -85,7 +83,7 @@
 	]);
 </script>
 
-<Panel title="Your season" class="flex h-full flex-col {className}">
+<Panel title="Your season" class="flex h-full flex-col">
 	<div class="rounded-lg bg-surface-raised p-3">
 		<div class="flex items-center gap-3">
 			<div class="min-w-0 flex-1">

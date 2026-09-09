@@ -15,14 +15,12 @@
 		title,
 		titleIcon,
 		rows,
-		class: className = "",
 	}: {
 		title: string;
 		// The panel heading's icon — the game's own glyph for what the list
 		// ranks, in the same descriptor shape the rows carry.
 		titleIcon: { category: SpriteCategory; value: string };
 		rows: StatListRow[];
-		class?: string;
 	} = $props();
 
 	// The icon box is sized here rather than by the sprite, so a row whose art
@@ -35,7 +33,7 @@
 	const TITLE_ICON_SIZE = 20;
 </script>
 
-<Panel {title} class={className}>
+<Panel {title}>
 	{#snippet icon()}
 		<SpriteIcon
 			category={titleIcon.category}

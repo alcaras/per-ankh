@@ -43,12 +43,21 @@ export interface FeaturedTournament {
 	matches: TournamentMatch[];
 }
 
-// The featured tournament, its standings and its whole match schedule.
+// The featured tournament, its standings and the still-unplayed half of its
+// match schedule.
 //
 // Sequential then parallel, the same shape /tournaments/[slug]'s layout load
 // uses: the slug buys the id, and the id buys the other two. Three reads, all
 // on the tournament_view budget — home is a spender of it now, which is the
 // exception cloud/src/tournament/limits.ts names.
+//
+// `status: "pending"` is the whole schedule the Upcoming panel can ever draw:
+// partitionSchedule keeps pending matches and nothing else, so this is that
+// filter moved to the Worker rather than a second, looser definition of what
+// counts. It is the difference between the landing page carrying an event's
+// whole record and carrying what is still to come — mid-Swiss, most of a
+// tournament is decided matches, and a decided match hauls the heaviest
+// `parts` of all.
 //
 // Best-effort as a unit. A tournament that 404s (renamed, deleted, not yet
 // created) and a worker hiccup are the same answer here — the panel is absent
@@ -62,7 +71,11 @@ async function loadFeaturedTournament(
 		});
 		const [standings, matches] = await Promise.all([
 			cloudApi.getTournamentStandings(tournament.tournament_id, { fetch }),
-			cloudApi.getTournamentMatches(tournament.tournament_id, {}, { fetch }),
+			cloudApi.getTournamentMatches(
+				tournament.tournament_id,
+				{ status: "pending" },
+				{ fetch },
+			),
 		]);
 		return { tournament, standings, matches: matches.matches };
 	} catch {

@@ -39,6 +39,12 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 // carries its rate anyway for the reader who came for it. The known cost is
 // that a high-rate thin-sample category doesn't reach the home page; /stats is
 // where the whole distribution lives.
+//
+// It is also what every panel puts in its headline column, so the three read
+// as one board: the games count is the bold number the list is ordered by, and
+// the percentage beside it — a share of the slice for nations, a win rate for
+// the other two — is the dim one. A panel whose bold column was a rate would be
+// a numbered list counting down by something the reader can't see.
 function topByGames<R extends { games: number }>(rows: readonly R[]): R[] {
 	return [...rows].sort((a, b) => b.games - a.games).slice(0, HOME_STAT_ROWS);
 }
@@ -80,8 +86,8 @@ export function homeCapitalFamilyRows(
 			key: r.family_class,
 			label: fmtClass(r.family_class),
 			...(crest ? { icon: { category: "crests" as const, value: crest } } : {}),
-			value: pct(r.rate),
-			sub: `${r.games} games`,
+			value: `${r.games}`,
+			sub: pct(r.rate),
 		};
 	});
 }
@@ -94,7 +100,7 @@ export function homeArchetypeRows(summary: HomeStatsSummary): StatListRow[] {
 		key: r.archetype,
 		label: formatArchetype(r.archetype),
 		icon: { category: "traits", value: archetypeSpriteKey(r.archetype) },
-		value: pct(r.rate),
-		sub: `${r.games} games`,
+		value: `${r.games}`,
+		sub: pct(r.rate),
 	}));
 }

@@ -422,6 +422,51 @@ describe("public read handlers", () => {
 		}
 	});
 
+	it("narrows the matches list to one status on ?status=", async () => {
+		// The schedule read. A tournament mid-Swiss is mostly decided matches,
+		// and a decided match carries the heaviest `parts` of all — so the home
+		// page's Featured Tournament panel asks for `pending` rather than
+		// shipping the whole record to a landing page to throw most of it away.
+		//
+		// It is the same cut partitionSchedule makes on the frontend, moved to
+		// the Worker: the panel's own definition of what it can draw, not a
+		// second looser one that could drift from it.
+		const t = await makeTournament({ advanceTo: "swiss-round-1-generated" });
+
+		// 4 matches, all pending. Decide exactly one, so each filter below has
+		// something to keep and something to drop.
+		const [decided, ...stillPending] = await t.matches();
+		await expectOk(
+			await request.patch({
+				path: `/v1/tournaments/${t.tournamentId}/matches/${decided.match_id}`,
+				as: t.admin,
+				body: { winner_slot_id: decided.slot_a_id, status: "complete" },
+			}),
+		);
+
+		const idsFor = async (query: string): Promise<string[]> => {
+			const body = await expectOk<{
+				matches: Array<{ match_id: string; status: string }>;
+			}>(
+				await request.get({
+					path: `/v1/tournaments/${t.tournamentId}/matches${query}`,
+					as: t.admin,
+				}),
+			);
+			return body.matches.map((m) => m.match_id).sort();
+		};
+
+		expect((await idsFor("")).length).toBe(4);
+		expect(await idsFor("?status=pending")).toEqual(
+			stillPending.map((m) => m.match_id).sort(),
+		);
+		expect(await idsFor("?status=complete")).toEqual([decided.match_id]);
+		// Unvalidated, like the four filters beside it: an unknown value keeps
+		// nothing rather than 400ing, so a stale bookmark degrades to an empty
+		// list instead of an error page.
+		expect(await idsFor("?status=nonsense")).toEqual([]);
+	});
+
 	it("exposes a claimed slot's numeric Discord id to admins only", async () => {
 		// A claimed slot pins the owner's discord_id; the sesh export mentions it.
 		const player = await makeUser();

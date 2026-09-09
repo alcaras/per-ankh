@@ -933,7 +933,7 @@ const ROUTES: RouteSpec[] = [
 		route: "GET /v1/stats",
 		handler: (r, e, _m, c) => handleGlobalStats(r, e, c),
 	},
-	// The home page's stats panels — the five bundle fields they draw, over the
+	// The home page's stats panels — the three bundle fields they draw, over the
 	// unfaceted `duel` slice. Public where /v1/stats is session-gated, because
 	// it can only *read* the precomputed entry: a miss answers
 	// `{ summary: null }` and the page drops the region, so an anonymous caller

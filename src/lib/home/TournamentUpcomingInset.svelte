@@ -5,7 +5,14 @@
 	// Live-first, matching the tournament overview's own Live & Upcoming panel —
 	// and through the same definition (liveAndUpcoming), so what counts as live
 	// can't drift between the two. A match split across days contributes one row
-	// per sitting. No horizon: the next few by time, however far out they are,
+	// per sitting.
+	//
+	// `matches` arrives already narrowed to pending (+page.ts asks the Worker
+	// for that status), which is a no-op for liveAndUpcoming — partitionSchedule
+	// drops every other status itself — and is why the landing page doesn't
+	// carry the tournament's decided matches across to throw them away here.
+	//
+	// No horizon: the next few by time, however far out they are,
 	// because "nothing scheduled" and "nothing scheduled this week" are different
 	// claims and only the first is worth a panel's silence.
 	//

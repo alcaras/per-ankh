@@ -1422,6 +1422,12 @@ export async function handleTournamentMatches(
 	const phase = url.searchParams.get("phase");
 	const division = url.searchParams.get("division");
 	const slotId = url.searchParams.get("slot_id");
+	// Match status, for a caller that wants the schedule rather than the record.
+	// `?status=pending` is the one that pays: a tournament mid-Swiss is mostly
+	// decided matches, and a decided match carries the heaviest `parts` of all
+	// (every sitting it took, plus its casters and streams). Unvalidated like
+	// the four above — an unknown value filters to nothing rather than 400s.
+	const status = url.searchParams.get("status");
 
 	const matchesWithRound = await loadMatchesWithRound(
 		env,
@@ -1433,6 +1439,7 @@ export async function handleTournamentMatches(
 		if (division && round.division !== division) return false;
 		if (slotId && match.slot_a_id !== slotId && match.slot_b_id !== slotId)
 			return false;
+		if (status && match.status !== status) return false;
 		return true;
 	});
 

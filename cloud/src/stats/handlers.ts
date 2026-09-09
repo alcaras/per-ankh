@@ -699,8 +699,8 @@ export async function handlePlayerLeaderboard(
 
 // ─── GET /v1/home-summary — the home page's stats panels ─────────────
 //
-// A small public projection of the precomputed global `duel` bundle: the five
-// fields the home page's six stats panels draw, plus the corpus size.
+// A small public projection of the precomputed global `duel` bundle: the three
+// fields the home page's three stats panels draw.
 //
 // Its own endpoint rather than an anonymous door onto /v1/stats. The session
 // gate above is not about what the bytes contain — it is about who may spend a
@@ -724,19 +724,17 @@ export async function handlePlayerLeaderboard(
 // included, and startingArchetypeWinLossOption stays unchanged for it.
 export const HOME_ARCHETYPE_MIN_GAMES = 50;
 
-// The wire shape. An envelope with the pieces inside rather than a handful of
-// nullable fields: they are present together or not at all — one KV entry
-// answers for all of them — and the envelope makes any other combination
-// unrepresentable.
-export interface HomeStatsSummary extends Pick<
+// The wire shape: the bundle's own three fields and nothing beside them. Not
+// even meta — the corpus size and the parser version are things the full
+// bundle carries for a consumer that branches on them, and no home panel does.
+//
+// The envelope below is what makes the set atomic. One KV entry answers for
+// all three, so they are present together or not at all, and a single nullable
+// `summary` makes any other combination unrepresentable.
+export type HomeStatsSummary = Pick<
 	ChartBundleCore,
 	"nationWinRate" | "capitalFamilyWinRate" | "startingArchetypeWinRate"
-> {
-	// game_count only. parser_version rides along on the full bundle so a
-	// consumer can check what it is rendering against; nothing on home
-	// branches on it.
-	meta: { game_count: number };
-}
+>;
 
 export interface HomeSummaryResponse {
 	summary: HomeStatsSummary | null;
@@ -749,7 +747,6 @@ export interface HomeSummaryResponse {
 // keeping it client-side moves the number without a Worker deploy.
 export function homeSummaryFrom(bundle: ChartBundleCore): HomeStatsSummary {
 	return {
-		meta: { game_count: bundle.meta.game_count },
 		nationWinRate: bundle.nationWinRate,
 		capitalFamilyWinRate: bundle.capitalFamilyWinRate,
 		startingArchetypeWinRate: bundle.startingArchetypeWinRate.filter(
@@ -798,6 +795,10 @@ const HOME_SUMMARY_BUDGET: ReadBudget = {
 // buildChartBundle and resolveGlobalCorpus both need SHARE_DB, so this handler
 // structurally cannot reach them. A future edit that tries has to widen this
 // interface first, which is the review this decision wants.
+//
+// Serving stale doesn't touch that property: getStaleGlobalCached reads KV and
+// takes StatsCacheEnv, so reaching for last night's entry is still only ever a
+// read of something a cron built.
 export interface HomeSummaryEnv extends StatsCacheEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 	// Per-IP hourly ceiling on the home-summary read. Optional: unset falls
@@ -806,16 +807,35 @@ export interface HomeSummaryEnv extends StatsCacheEnv, EventsEnv {
 	HOME_SUMMARY_VIEW_PER_HOUR?: string;
 }
 
-// GET /v1/home-summary — the five bundle fields the home page's stats panels
+// GET /v1/home-summary — the three bundle fields the home page's stats panels
 // draw, over the unfaceted `duel` slice (the /stats default, and ~94% of the
 // corpus).
 //
-// A miss answers `{ summary: null }` and the page drops the whole stats region
-// rather than rendering six empty boxes. What keeps that rare is the same pair
-// that keeps /v1/stats warm: the nightly precompute writes one entry per slice,
-// and the hourly warm (STATS_WARM_CRON) rebuilds the four unfaceted bundles a
-// version bump orphaned — this reads the same entry the signed-in /stats page's
-// default view does, so it is the last of them to be cold.
+// Three ways to answer, and only the first two exist here — /v1/stats' step 3,
+// computing the bundle in the request, is the one this endpoint refuses:
+//
+//   1. The current entry. The steady state, and a single KV read. The nightly
+//      precompute writes one per slice and the hourly warm (STATS_WARM_CRON)
+//      rebuilds the four unfaceted bundles a version bump orphaned — and this
+//      reads the same entry the signed-in /stats default view does, so it is
+//      the last of them to be cold.
+//   2. Last night's entry under a superseded parser_version. A Worker deploy
+//      that bumps CURRENT_PARSER_VERSION orphans the key at once, and the warm
+//      that fixes it runs at :37 — so without this, home loses its whole stats
+//      region for up to an hour while /v1/stats, which does reach across, keeps
+//      serving. Same asymmetry the two pages had no reason to have.
+//   3. Absent both, `{ summary: null }` and the page drops the stats region
+//      rather than rendering three empty boxes.
+//
+// Unlike /v1/stats, nothing is kicked off behind the stale answer: rebuilding
+// is what this handler structurally cannot do (see the env type above), so the
+// warm cron is what ends the stale window. That is also what makes the reach
+// safe to take unguarded — /v1/stats guards it because a *faceted* selection
+// resolving to no games is never written under any parser version and would
+// walk the keyspace forever. This key is the unfaceted `duel` slice, which is
+// written by two crons and a request path; the only corpus where it is
+// permanently absent is one with no public duel in it, and that namespace is
+// small enough to walk.
 //
 // Edge-cached like globalStatsResponse, and for the same reasons: the payload
 // is byte-identical for every viewer and changes at most nightly, and the edge
@@ -836,15 +856,18 @@ export async function handleHomeSummary(
 	);
 	if (limited) return limited;
 
-	const cached = await getCached<ChartBundleCore>(env, {
-		kind: "global",
-		slice: "duel",
+	const cacheKey = {
+		kind: "global" as const,
+		slice: "duel" as const,
 		nations: [],
 		parser_version: CURRENT_PARSER_VERSION,
-	});
+	};
+	const bundle =
+		(await getCached<ChartBundleCore>(env, cacheKey)) ??
+		(await getStaleGlobalCached<ChartBundleCore>(env, cacheKey));
 
 	const body: HomeSummaryResponse = {
-		summary: cached ? homeSummaryFrom(cached) : null,
+		summary: bundle ? homeSummaryFrom(bundle) : null,
 	};
 	return new Response(JSON.stringify(body), {
 		status: 200,

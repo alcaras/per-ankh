@@ -9,8 +9,6 @@
 	import { ATLAS_BASE_URL } from "$lib/tournament/map-script-options";
 	import Panel from "$lib/ui/Panel.svelte";
 
-	let { class: className = "" }: { class?: string } = $props();
-
 	// Duel Maps is the atlas the tournament map links already deep-link into, so
 	// its base URL comes from there rather than being written down a second time.
 	const APPS: { label: string; href: string }[] = [
@@ -22,7 +20,7 @@
 	];
 </script>
 
-<Panel title="Community Tools" class={className}>
+<Panel title="Community Tools">
 	{#snippet icon()}
 		<SpriteIcon category="units" value="UNIT_WORKER" glyph size={20} />
 	{/snippet}
