@@ -1,4 +1,4 @@
-// The /players epithet ladder: the rungs, and the epithet a game count earns.
+// The /players cognomen ladder: the rungs, and the cognomen a game count earns.
 //
 // Beside the route for the reason `./seasons` is: the ladder is /players'
 // definition, and its second reader — the home page's "Your season" panel,
@@ -14,7 +14,7 @@ export interface Rung {
 	type: string;
 }
 
-// Activity epithets from the game's cognomen ladder — and the set is
+// Activity cognomens from the game's own ladder — and the set is
 // exactly Old World's own difficulty ladder, every level of which is
 // also a cognomen: the New, the Able, the Just, the Good, the Strong,
 // the Noble, the Glorious, the Magnificent, the Great, in that order
@@ -23,12 +23,12 @@ export interface Rung {
 // below have no rung — the Founder and the Mason sit at 10, and the
 // game gives ten more cognomens at 20. Thresholds are games
 // played in the selected season, on the triangular numbers: each rung
-// costs exactly one game more than the last, so the next epithet always
+// costs exactly one game more than the last, so the next cognomen always
 // feels one push away. The ladder deliberately stops at the Magnificent
 // (36, ~3 games/week — reached by a handful of real quarters); the Great
 // stays unclaimed, reserved for whatever earns it later (tournaments,
 // ratings), and a weekly player lands the Strong. Absolute thresholds —
-// an epithet can't be lost to someone else's grinding, and any number
+// a cognomen can't be lost to someone else's grinding, and any number
 // of players can share one.
 export const RUNGS: Rung[] = [
 	{ games: 1, type: "COGNOMEN_NEW" },
@@ -41,7 +41,7 @@ export const RUNGS: Rung[] = [
 	{ games: 36, type: "COGNOMEN_MAGNIFICENT" },
 ];
 
-export function epithetOf(total: number): string | null {
+export function cognomenOf(total: number): string | null {
 	const rung = RUNGS.findLast((r) => total >= r.games);
 	return rung ? cognomenName(rung.type) : null;
 }

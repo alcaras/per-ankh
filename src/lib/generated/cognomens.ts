@@ -3,8 +3,8 @@
 
 export interface CognomenInfo {
 	/** cognomen.xml iLegitimacy: negative for the insults, 0
-	 * for the New — the fresh-ruler epithet, which is a starting
-	 * state rather than an award. */
+	 * for the New, which a fresh ruler starts with rather than
+	 * earns. */
 	readonly legitimacy: number;
 	/** The string the game displays, e.g. "the Great". */
 	readonly name: string;

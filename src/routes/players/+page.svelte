@@ -7,7 +7,7 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import { cognomenName } from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
-	import { epithetOf, RUNGS } from "./ladder";
+	import { cognomenOf, RUNGS } from "./ladder";
 	import PlayersGuide from "./PlayersGuide.svelte";
 	import { ALL_BOARD, resolveSelection, selectionKey } from "./seasons";
 	import type { Board } from "./seasons";
@@ -292,7 +292,7 @@
 	const hasCrown = (u: Row, key: FormatKey): boolean =>
 		crowns.get(key)?.holder?.user_id === u.user_id;
 
-	// The signed-in viewer's arc, ahead of anyone else's: their epithet, a
+	// The signed-in viewer's arc, ahead of anyone else's: their cognomen, a
 	// count, and a progress bar to the next rung — their own climb, never
 	// the summit or the gap to it. A viewer with no games on this board is
 	// absent from `rows` — at a season's start that is everyone — so the
@@ -317,7 +317,7 @@
 			data.board === "all" ? "All time" : data.selected.label
 		}`,
 	);
-	const viewerEpithet = $derived(epithetOf(viewerTotal));
+	const viewerCognomen = $derived(cognomenOf(viewerTotal));
 	const currentRung = $derived(RUNGS.findLast((r) => viewerTotal >= r.games));
 	const nextRung = $derived(RUNGS.find((r) => r.games > viewerTotal));
 	// Progress within the current rung's span, for the bar — every game
@@ -521,9 +521,9 @@
 								height="20"
 							/>
 							{viewerName}
-							{#if viewerEpithet}
+							{#if viewerCognomen}
 								<span class="font-semibold italic text-orange"
-									>{viewerEpithet}</span
+									>{viewerCognomen}</span
 								>
 							{/if}
 						</span>
@@ -532,7 +532,7 @@
 						{/if}
 					</div>
 					{#if nextRung}
-						<!-- Progress to the next epithet: the bar spans the current
+						<!-- Progress to the next cognomen: the bar spans the current
 						     rung's range, so every game played visibly moves it. The
 						     sentence beside it carries the same reading, so the bar
 						     itself is decorative. -->
@@ -596,7 +596,7 @@
 						</thead>
 						<tbody>
 							{#each rows as u (u.user_id)}
-								{@const epithet = epithetOf(u.total)}
+								{@const cognomen = cognomenOf(u.total)}
 								{@const you = u.user_id === viewerId}
 								<tr
 									class="group cursor-pointer"
@@ -629,8 +629,8 @@
 												/>
 												{u.display_name}
 											</ProfileLink>
-											{#if epithet}
-												<span class="text-xs italic text-tan">{epithet}</span>
+											{#if cognomen}
+												<span class="text-xs italic text-tan">{cognomen}</span>
 											{/if}
 										</span>
 									</td>

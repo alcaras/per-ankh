@@ -53,7 +53,7 @@ export function nationName(nation: string | null | undefined): string {
 }
 
 /**
- * The epithet Old World gives a ruler, from its `COGNOMEN_*` token — with the
+ * The cognomen Old World gives a ruler, from its `COGNOMEN_*` token — with the
  * article, as the game writes it ("the Wise", "alcaras the Wise").
  *
  * The token is an internal id, not the label: `COGNOMEN_BRAVE` displays as

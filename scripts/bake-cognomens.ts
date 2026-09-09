@@ -1,9 +1,9 @@
-// Bake every cognomen from the OW reference XML — the epithets the game
+// Bake every cognomen from the OW reference XML — the names the game
 // gives its rulers, each with the legitimacy it is worth ("the Founder" at
 // 10 … "the Great" at 100) and the string the game displays for it.
 //
 // This is the only bake that reads cognomen.xml. Two surfaces share the
-// table: the players board names its activity epithets from it, and the
+// table: the players board names its activity rungs from it, and the
 // Orders tab prices each ruler's cognomen into dynasty legitimacy — which
 // is why the insults (the Bloody at −100) are here too, and why the table
 // is keyed rather than filtered down to a ladder of honours.
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
 	const textByType = new Map(texts.map((t) => [t.zType, t["en-US"]]));
 
 	// The file's blank template Entry has no zType; everything else is a
-	// real cognomen. COGNOMEN_NEW — the game's epithet for a fresh ruler —
+	// real cognomen. COGNOMEN_NEW — what the game calls a fresh ruler —
 	// carries no iLegitimacy because it is the starting state rather than an
 	// award, so it prices at 0.
 	const all = cognomens
@@ -110,8 +110,8 @@ async function main(): Promise<void> {
 	lines.push("");
 	lines.push("export interface CognomenInfo {");
 	lines.push("\t/** cognomen.xml iLegitimacy: negative for the insults, 0");
-	lines.push("\t * for the New — the fresh-ruler epithet, which is a starting");
-	lines.push("\t * state rather than an award. */");
+	lines.push("\t * for the New, which a fresh ruler starts with rather than");
+	lines.push("\t * earns. */");
 	lines.push("\treadonly legitimacy: number;");
 	lines.push('\t/** The string the game displays, e.g. "the Great". */');
 	lines.push("\treadonly name: string;");
