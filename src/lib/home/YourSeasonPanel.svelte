@@ -124,8 +124,8 @@
 		<p class="mt-2 text-sm text-tan">
 			{#if cognomen.next}
 				{cognomen.next.remaining}
-				{cognomen.next.remaining === 1 ? "game" : "games"} to reach {cognomen
-					.next.name}
+				{cognomen.next.remaining === 1 ? "game" : "games"} to reach
+				<span class="italic">{cognomen.next.name}</span>
 			{:else}
 				You hold {cognomen.current}, the top of the ladder.
 			{/if}
