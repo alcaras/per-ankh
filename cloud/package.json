@@ -28,6 +28,7 @@
 		"wrangler": "^4.0.0"
 	},
 	"overrides": {
-		"esbuild": "0.28.1"
+		"esbuild": "0.28.1",
+		"sharp": "^0.35.4"
 	}
 }
