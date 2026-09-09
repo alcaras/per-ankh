@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The featured tournament's next sittings, as an inset of the home hero
-	// panel: the ones live right now, then the next few still ahead.
+	// panel: the ones live right now, then the next still ahead — two rows in
+	// all, which is what the inset's fixed height holds.
 	//
 	// Live-first, matching the tournament overview's own Live & Upcoming panel —
 	// and through the same definition (liveAndUpcoming), so what counts as live
@@ -35,18 +36,25 @@
 	let { matches, slots }: { matches: TournamentMatch[]; slots: SlotMaps } =
 		$props();
 
-	// Upcoming sittings previewed here — one, because the inset is sized to give
-	// the tile back to the art. Live ones are still never capped: a match being
+	// Sittings previewed here, live first. The cap is on the pair rather than on
+	// the upcoming half alone because the inset's box is a fixed height (the
+	// panel sizes it, to stop the tile reshaping as the clock moves sittings
+	// between the two lists) and two rows are what fits. So live ones are capped
+	// too now, where they never were: a third concurrent sitting would paint
+	// past the box rather than into it, and a row clipped in half is worse than
+	// a row that isn't there. Live still wins the slots it wants — a match being
 	// played right now is the most time-sensitive thing this panel has.
-	const MAX_UPCOMING = 1;
+	const MAX_ROWS = 2;
 
 	// Reactive via nowMs(): a sitting crosses upcoming → live → gone as the
 	// clock advances, without a refetch.
 	const split = $derived(liveAndUpcoming(matches, nowMs()));
-	const rows = $derived([
-		...split.live.map((np) => ({ np, live: true })),
-		...split.upcoming.slice(0, MAX_UPCOMING).map((np) => ({ np, live: false })),
-	]);
+	const rows = $derived(
+		[
+			...split.live.map((np) => ({ np, live: true })),
+			...split.upcoming.map((np) => ({ np, live: false })),
+		].slice(0, MAX_ROWS),
+	);
 
 	// The viewer's own clock only, unlike the tournament pages' UTC-primary
 	// rendering: this is a glance surface, and the zone a reader can act on
@@ -61,16 +69,14 @@
 </script>
 
 {#if rows.length > 0}
-	<ul class="flex flex-col gap-1">
+	<!-- Indented to the standings inset's text column: its rows open with a `w-4`
+	     rank and a `gap-1.5`, and these have no rank of their own, so the 22px is
+	     spelled out here to keep the two lists' avatars on one line. The empty
+	     state below stays flush, as the standings' does. -->
+	<ul class="flex flex-col gap-1 pl-[22px]">
 		{#each rows as { np, live } (np.match.match_id + ":" + np.partNumber)}
 			<li class="text-[11px]">
 				<div class="flex items-center gap-1">
-					{#if live}
-						<span
-							class="shrink-0 rounded bg-orange px-1 text-[9px] font-bold text-black"
-							>LIVE</span
-						>
-					{/if}
 					<PlayerAvatar
 						avatarUrl={matchSlotAvatarUrl(np.match, "a", slots.avatars)}
 						size={14}
@@ -83,8 +89,17 @@
 					/>
 					<span class="min-w-0 truncate text-tan">{side(np.match, "b")}</span>
 				</div>
+				<!-- LIVE leads the time line rather than the names line, where it used
+				     to sit. There it was one more item in a flex row, so it moved the
+				     avatars and names every time it appeared — at hydration, and again
+				     whenever the 30s tick carried a sitting over its start. Here
+				     nothing sits beside it, so it can come and go without shifting
+				     anything, and both of the row's lines start on the same indent. -->
 				<p class="text-[10px] text-gray-400">
-					{formatScheduledInZone(
+					{#if live}<span
+							class="mr-1 rounded bg-orange px-1 text-[9px] font-bold text-black"
+							>LIVE</span
+						>{/if}{formatScheduledInZone(
 						np.part.scheduled_at,
 						"local",
 						use12Hour,

@@ -82,15 +82,27 @@
 		     them, not what bleeds through them. The grid is deliberately not
 		     stretched to the panel: the tile keeps the season
 		     boards' height, `mt-auto` drops the insets to its foot, and what they
-		     leave over is the art. -->
+		     leave over is the art.
+
+		     Both boxes are a FIXED height rather than content-height, which is what
+		     stops the tile reshaping itself under the reader. Upcoming's row count
+		     is a function of the clock — the SSR paint splits live from upcoming
+		     against a `now` captured when the Worker isolate loaded now.svelte.ts,
+		     hydration re-splits against the browser's, and the 30s tick moves a
+		     sitting across the boundary after that — so a content-sized box grew
+		     and shrank on its own. 102px is two Upcoming rows exactly: `p-2` (16)
+		     + the label (15 + `mb-1`) + two two-line rows (31.5 each) + their
+		     `gap-1`. Standings' three rows sit inside the same box with room over,
+		     and `overflow-hidden` is the partner to the fixed height — nothing can
+		     spill past it if a time string wraps at the narrowest column. -->
 		<div class="mt-auto grid gap-2 sm:grid-cols-2">
-			<div class="rounded-lg bg-surface-deep/90 p-2">
+			<div class="h-[102px] overflow-hidden rounded-lg bg-surface-deep/90 p-2">
 				<h4 class="mb-1 text-[10px] font-bold uppercase text-gray-400">
 					Standings
 				</h4>
 				<TournamentStandingsInset rows={leaders} />
 			</div>
-			<div class="rounded-lg bg-surface-deep/90 p-2">
+			<div class="h-[102px] overflow-hidden rounded-lg bg-surface-deep/90 p-2">
 				<h4 class="mb-1 text-[10px] font-bold uppercase text-gray-400">
 					Upcoming
 				</h4>

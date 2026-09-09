@@ -156,13 +156,16 @@ export function partToIso(
 export const CAST_GRACE_MS = 2 * 60 * 60 * 1000;
 
 // How long after a sitting's scheduled start it still counts as "live" for the
-// viewer-facing Live & Upcoming panel — roughly the length of a streamed Old
-// World game. A sitting whose start is inside this window is plausibly still
-// being broadcast, so it reads as live; once the window closes the game has
-// almost certainly finished (and its ephemeral youtube/twitch `…/live` link has
-// gone dead), so it ages out of the panel even if nobody has reported the result
-// yet. Bounds how long a finished-but-unreported match can linger as "live".
-export const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
+// viewer-facing Live & Upcoming panel. A sitting whose start is inside this
+// window is plausibly still being broadcast, so it reads as live; once the
+// window closes the game has almost certainly finished (and its ephemeral
+// youtube/twitch `…/live` link has gone dead), so it ages out of the panel even
+// if nobody has reported the result yet. Nothing signals the end of a sitting
+// until a result is reported, so this is the only thing bounding how long a
+// finished-but-unreported match lingers as "live" — which is why it is set
+// shorter than the longest game rather than longer, and why it coincides with
+// CAST_GRACE_MS above without being the same rule.
+export const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 // True once a sitting has aged out of LIVE_WINDOW_MS — its broadcast window
 // has closed, so the part was plausibly played to completion. The complement
