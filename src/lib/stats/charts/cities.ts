@@ -14,14 +14,7 @@ import {
 // Win rate vs. expansion speed: win rate per 5th-city-founding-turn bucket,
 // ordered fastest → slowest (with "never" — fewer than 5 cities — last).
 // Empty buckets are dropped so a sparse corpus doesn't show gaps.
-//
-// Typed to the one field it reads rather than the whole bundle, so the home
-// page's trimmed payload (which carries five of the core's twenty-odd fields)
-// satisfies it as-is. A ChartBundleCore still does — it has the field — so
-// /stats and the profile call it unchanged.
-export function expansionWinRateOption(
-	bundle: Pick<ChartBundleCore, "expansionWinRate">,
-): ChartOption {
+export function expansionWinRateOption(bundle: ChartBundleCore): ChartOption {
 	const order = ["≤25", "26–50", "51–75", "76–100", "101–150", "151+", "never"];
 	const rows = order
 		.map((b) => bundle.expansionWinRate.find((x) => x.bucket === b))

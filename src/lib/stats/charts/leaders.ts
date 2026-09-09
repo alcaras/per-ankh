@@ -18,9 +18,7 @@ import { fmtTrait, winLossStackedOption } from "./helpers";
 export const ARCHETYPE_EMPTY_MESSAGE = "No leader archetype data available.";
 export const TRAIT_EMPTY_MESSAGE = "No leader trait data available.";
 
-// Exported for the home page's archetype panel, for the reason the nation and
-// family crest lookups are — one sprite key per category, spelled once.
-export function archetypeIconUrl(archetype: string): string | undefined {
+function archetypeIconUrl(archetype: string): string | undefined {
 	return SPRITE_MANIFEST[`traits/${archetypeSpriteKey(archetype)}`];
 }
 

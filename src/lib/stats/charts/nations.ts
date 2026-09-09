@@ -13,9 +13,7 @@ import {
 	winLossStackedOption,
 } from "./helpers";
 
-// Exported so the home page's nation panels label their axes with the same
-// crests this tab does, rather than re-deriving the sprite key.
-export function nationCrestUrl(nation: string): string | undefined {
+function nationCrestUrl(nation: string): string | undefined {
 	return SPRITE_MANIFEST[`crests/CREST_${nation}`];
 }
 

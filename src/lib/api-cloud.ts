@@ -350,10 +350,10 @@ const PLAYERS_SHAPE_VERSION = Math.max(
 	...Object.keys(PLAYERS_SHAPE_CHANGELOG).map(Number),
 );
 
-// Wire shape for GET /v1/home-summary — the five bundle fields the home page's
-// six stats panels draw, plus the corpus size. A projection of ChartBundleCore
-// rather than a shape of its own, so a field can't drift from the bundle it is
-// cut out of.
+// Wire shape for GET /v1/home-summary — the bundle fields the home page's stats
+// panels draw, plus the corpus size. A projection of ChartBundleCore rather
+// than a shape of its own, so a field can't drift from the bundle it is cut
+// out of.
 //
 // `startingArchetypeWinRate` is the one field that is not the bundle's own: the
 // Worker floors it at HOME_ARCHETYPE_MIN_GAMES before serving, because an
@@ -361,16 +361,12 @@ const PLAYERS_SHAPE_VERSION = Math.max(
 // So this field and /stats' differ for the same corpus, deliberately.
 export interface HomeStatsSummary extends Pick<
 	ChartBundleCore,
-	| "nationWinRate"
-	| "expansionWinRate"
-	| "capitalFamilyWinRate"
-	| "startingArchetypeWinRate"
-	| "techFirst"
+	"nationWinRate" | "capitalFamilyWinRate" | "startingArchetypeWinRate"
 > {
 	meta: { game_count: number };
 }
 
-// An envelope rather than six independently nullable fields: one KV entry
+// An envelope rather than a set of independently nullable fields: one KV entry
 // answers for all of them, so they are present together or not at all, and the
 // envelope makes any other combination unrepresentable. `summary` is null on a
 // cache miss — the home page drops the whole stats region then.

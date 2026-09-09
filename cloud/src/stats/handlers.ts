@@ -724,17 +724,13 @@ export async function handlePlayerLeaderboard(
 // included, and startingArchetypeWinLossOption stays unchanged for it.
 export const HOME_ARCHETYPE_MIN_GAMES = 50;
 
-// The wire shape. An envelope with the six pieces inside rather than six
+// The wire shape. An envelope with the pieces inside rather than a handful of
 // nullable fields: they are present together or not at all — one KV entry
 // answers for all of them — and the envelope makes any other combination
 // unrepresentable.
 export interface HomeStatsSummary extends Pick<
 	ChartBundleCore,
-	| "nationWinRate"
-	| "expansionWinRate"
-	| "capitalFamilyWinRate"
-	| "startingArchetypeWinRate"
-	| "techFirst"
+	"nationWinRate" | "capitalFamilyWinRate" | "startingArchetypeWinRate"
 > {
 	// game_count only. parser_version rides along on the full bundle so a
 	// consumer can check what it is rendering against; nothing on home
@@ -749,18 +745,16 @@ export interface HomeSummaryResponse {
 // Each field ships whole apart from the archetype floor. The row caps the
 // panels apply (top 7, by games played) are the frontend's: the floor is a
 // correctness filter and belongs with the data, where the cap is a decision
-// about how much fits in a half-width panel — and keeping it client-side moves
-// the number without a Worker deploy.
+// about how many rows fit in a panel the width of the season standings — and
+// keeping it client-side moves the number without a Worker deploy.
 export function homeSummaryFrom(bundle: ChartBundleCore): HomeStatsSummary {
 	return {
 		meta: { game_count: bundle.meta.game_count },
 		nationWinRate: bundle.nationWinRate,
-		expansionWinRate: bundle.expansionWinRate,
 		capitalFamilyWinRate: bundle.capitalFamilyWinRate,
 		startingArchetypeWinRate: bundle.startingArchetypeWinRate.filter(
 			(r) => r.games >= HOME_ARCHETYPE_MIN_GAMES,
 		),
-		techFirst: bundle.techFirst,
 	};
 }
 

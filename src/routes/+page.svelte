@@ -9,16 +9,12 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import FeaturedTournamentPanel from "$lib/home/FeaturedTournamentPanel.svelte";
 	import SeasonStandingsPanel from "$lib/home/SeasonStandingsPanel.svelte";
-	import StatChartPanel from "$lib/home/StatChartPanel.svelte";
+	import StatListPanel from "$lib/home/StatListPanel.svelte";
 	import YourSeasonPanel from "$lib/home/YourSeasonPanel.svelte";
 	import {
-		homeArchetypeOption,
-		homeCapitalFamilyOption,
-		homeExpansionWinRateOption,
-		homeNationPickRateOption,
-		homeNationWinRateOption,
-		homeStatRowCounts,
-		homeTechFirstOption,
+		homeArchetypeRows,
+		homeCapitalFamilyRows,
+		homeNationPickRateRows,
 	} from "$lib/home/home-stats";
 	import Panel from "$lib/ui/Panel.svelte";
 	import VideoCard from "$lib/VideoCard.svelte";
@@ -28,22 +24,18 @@
 
 	const user = $derived(page.data.user);
 
-	// The six stats panels, built together or not at all — the payload is one
-	// envelope, so there is no state where three of them have data. A cache miss
+	// The three stats panels, built together or not at all — the payload is one
+	// envelope, so there is no state where one of them has data. A cache miss
 	// (or a failed fetch) is `null`, and the page drops the whole stats region
-	// rather than laying out six empty boxes; the video panel below takes the
-	// width back, the same way the discovery grid closes up on an empty feed.
+	// rather than laying out three empty boxes; the video panel beside them takes
+	// the width back, the same way the discovery grid closes up on an empty feed.
 	const stats = $derived.by(() => {
 		const summary = data.homeSummary;
 		if (!summary) return null;
 		return {
-			rows: homeStatRowCounts(summary),
-			nationWinRate: homeNationWinRateOption(summary),
-			nationPickRate: homeNationPickRateOption(summary),
-			expansion: homeExpansionWinRateOption(summary),
-			capitalFamily: homeCapitalFamilyOption(summary),
-			archetype: homeArchetypeOption(summary),
-			techFirst: homeTechFirstOption(summary),
+			nationPickRate: homeNationPickRateRows(summary),
+			capitalFamily: homeCapitalFamilyRows(summary),
+			archetype: homeArchetypeRows(summary),
 		};
 	});
 
@@ -266,86 +258,38 @@
 			</div>
 
 			<!--
-			Row 2 — two stats panels stacked against the featured video. Every chart
-			here is half-width: a horizontal bar spends 140px on its label gutter,
-			and a quarter-width panel would leave ~230px of plot, which is why the
-			stats panels never go four across.
+			Row 2 — the three stats lists, then the featured video. Four across, and
+			breaking at the same widths the season pair above does, so a list is always
+			the standings panel's width and reads the same way: a rank, a crest, a name
+			and two numbers. That is also why these are lists at all — a horizontal bar
+			spends 140px on its label gutter before the first pixel of plot, which is
+			most of a panel this wide.
 
-			With no summary the charts are absent and the video takes the row, and
-			with no video the charts take it — each side widens into whatever the
-			other didn't use.
+			Either side can be absent — with no summary the video takes the row, and
+			with no video the lists close up around the gap.
 			-->
-			<div class="mb-4 grid gap-4 lg:grid-cols-2">
+			<div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				{#if stats}
-					<!--
-					Stacked beside the video, side by side without it — either way each
-					chart keeps its half-width, which is the width these bars are drawn
-					for.
-					-->
-					<div
-						class={data.heroVideo
-							? "flex flex-col gap-4"
-							: "grid gap-4 lg:col-span-2 lg:grid-cols-2"}
-					>
-						<StatChartPanel
-							title="Expansion speed → win rate"
-							option={stats.expansion}
-							rows={stats.rows.expansion}
-						/>
-						<StatChartPanel
-							title="First tech"
-							option={stats.techFirst}
-							rows={stats.rows.techFirst}
-						/>
-					</div>
+					<StatListPanel title="Nations" rows={stats.nationPickRate} />
+					<StatListPanel title="Starting Family" rows={stats.capitalFamily} />
+					<StatListPanel title="Starting Leader" rows={stats.archetype} />
 				{/if}
 
 				<!--
-				The newest featured video — the same VideoCard the strip below and
-				every other video surface renders, so the hero can't drift into a
-				second video card style. Absent only when nothing is featured AND both
-				video feeds came back empty (see heroVideo in +page.ts).
+				The newest featured video — the same VideoCard the strip below and every
+				other video surface renders, so the hero can't drift into a second video
+				card style. Absent only when nothing is featured AND both video feeds came
+				back empty (see heroVideo in +page.ts).
 				-->
 				{#if data.heroVideo}
 					<Panel
 						title="Featured Video"
-						class={stats ? "self-start" : "lg:col-span-2"}
+						class={stats ? "self-start" : "sm:col-span-2 lg:col-span-4"}
 					>
 						<VideoCard video={data.heroVideo} />
 					</Panel>
 				{/if}
 			</div>
-
-			<!--
-			Row 3 — the remaining four panels, 2×2. The nation pair shares a line
-			deliberately: same seven nations in both, one asking how often they are
-			picked and the other how they fare, so they read as one story rather
-			than two charts that happen to be adjacent.
-			-->
-			{#if stats}
-				<div class="mb-4 grid gap-4 lg:grid-cols-2">
-					<StatChartPanel
-						title="By nation (win rate)"
-						option={stats.nationWinRate}
-						rows={stats.rows.nationWinRate}
-					/>
-					<StatChartPanel
-						title="Games by nation (pick rate)"
-						option={stats.nationPickRate}
-						rows={stats.rows.nationPickRate}
-					/>
-					<StatChartPanel
-						title="Capital family class"
-						option={stats.capitalFamily}
-						rows={stats.rows.capitalFamily}
-					/>
-					<StatChartPanel
-						title="Starting leader archetype"
-						option={stats.archetype}
-						rows={stats.rows.archetype}
-					/>
-				</div>
-			{/if}
 
 			<!--
 			Discovery grid (desktop): recent saves (left) → videos (right). A column
