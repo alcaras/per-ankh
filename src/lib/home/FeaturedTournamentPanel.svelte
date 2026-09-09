@@ -3,12 +3,15 @@
 	//
 	// The banner was the whole panel until now, with the event's name baked into
 	// the still (the animation's opening title card) and the image re-cut every
-	// season. The name is text over the band instead, so a new event needs no new
-	// art — and the band gives up the height the two insets below it need.
+	// season. The art is the tile's backdrop instead, and the event's name is the
+	// panel's own heading, so a new event needs no new art — and the still gives
+	// up the height the two insets need by sitting behind them rather than above
+	// them.
 	//
 	// The insets answer the two questions a visitor has about a running event:
-	// who is winning, and when is the next game. Both are read-only previews;
-	// the whole panel's links go to the tournament for anything further.
+	// who is winning, and when is the next game. Both are read-only previews —
+	// nothing in them is separately clickable, which is what lets the whole tile
+	// be one link to the tournament.
 	import { resolve } from "$app/paths";
 	import type {
 		StandingsResponse,
@@ -30,9 +33,10 @@
 		matches: TournamentMatch[];
 	} = $props();
 
-	// Leaders shown in the standings inset — enough to read the top of the field
-	// in a half-tile.
-	const STANDINGS_ROWS = 5;
+	// Leaders shown in the standings inset. Three, not the top five: the insets
+	// are sized to leave the lower half of the tile as picture, and the podium is
+	// the part of a standings a glance is actually after.
+	const STANDINGS_ROWS = 3;
 
 	const href = $derived(
 		resolve("/tournaments/[slug]", { slug: tournament.slug }),
@@ -49,48 +53,50 @@
 	const slots = $derived(slotMapsFromStandings(standings));
 </script>
 
-<Panel title="Featured Tournament">
-	<!-- eslint-disable svelte/no-navigation-without-resolve -- href is a resolve() result; not traceable through the local var -->
-	<a
-		{href}
-		class="group relative block h-28 overflow-hidden rounded-lg bg-black sm:h-32"
+<!-- eslint-disable svelte/no-navigation-without-resolve -- href is a resolve() result; not traceable through the local var -->
+<a {href} class="group block h-full">
+	<!-- `isolate` plus `-z-10` on the art is what lets the still sit behind the
+	     panel's own heading as well as the insets: negative-z children paint
+	     above the section's background but below its in-flow content, and the
+	     isolation keeps them from escaping behind the page. The scrim, not the
+	     art, is what guarantees contrast — every cut of the still is re-lit
+	     differently and the text can't depend on which one is in place. -->
+	<Panel
+		title={tournament.name}
+		class="relative isolate flex h-full flex-col overflow-hidden"
 	>
 		<img
 			src="/tournament-hero.webp"
 			alt=""
 			width="654"
 			height="345"
-			class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+			class="absolute inset-0 -z-10 h-full w-full object-cover"
 		/>
-		<!-- The name reads over the art's lower third, which is dark in every cut
-		     of the still; the gradient is what guarantees the contrast rather than
-		     the art doing it by luck. -->
 		<div
-			class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-2 pt-8"
-		>
-			<h3
-				class="truncate text-base font-bold text-white transition-colors group-hover:text-orange sm:text-lg"
-			>
-				{tournament.name}
-			</h3>
-		</div>
-	</a>
-	<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			class="absolute inset-0 -z-10 bg-black/70 transition-colors group-hover:bg-black/60"
+		></div>
 
-	<div class="mt-3 grid gap-3 sm:grid-cols-2">
-		<div
-			class="rounded-lg p-3"
-			style="background-color: rgb(var(--color-surface-raised));"
-		>
-			<h4 class="mb-2 text-xs font-bold uppercase text-gray-400">Standings</h4>
-			<TournamentStandingsInset rows={leaders} />
+		<!-- The insets are nearly opaque: the art is the tile's backdrop, not a
+		     texture behind their rows, and at any less the still's lit half fights
+		     the names in front of it. What shows the picture is the space around
+		     them, not what bleeds through them. The grid is deliberately not
+		     stretched to the panel: the tile keeps the season
+		     boards' height, `mt-auto` drops the insets to its foot, and what they
+		     leave over is the art. -->
+		<div class="mt-auto grid gap-2 sm:grid-cols-2">
+			<div class="rounded-lg bg-surface-deep/90 p-2">
+				<h4 class="mb-1 text-[10px] font-bold uppercase text-gray-400">
+					Standings
+				</h4>
+				<TournamentStandingsInset rows={leaders} />
+			</div>
+			<div class="rounded-lg bg-surface-deep/90 p-2">
+				<h4 class="mb-1 text-[10px] font-bold uppercase text-gray-400">
+					Upcoming
+				</h4>
+				<TournamentUpcomingInset {matches} {slots} />
+			</div>
 		</div>
-		<div
-			class="rounded-lg p-3"
-			style="background-color: rgb(var(--color-surface-raised));"
-		>
-			<h4 class="mb-2 text-xs font-bold uppercase text-gray-400">Upcoming</h4>
-			<TournamentUpcomingInset {matches} {slots} />
-		</div>
-	</div>
-</Panel>
+	</Panel>
+</a>
+<!-- eslint-enable svelte/no-navigation-without-resolve -->

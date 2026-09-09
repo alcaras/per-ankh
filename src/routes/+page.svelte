@@ -8,6 +8,7 @@
 	import RecentSaveCard from "$lib/RecentSaveCard.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import FeaturedTournamentPanel from "$lib/home/FeaturedTournamentPanel.svelte";
+	import CommunityToolsPanel from "$lib/home/CommunityToolsPanel.svelte";
 	import SeasonStandingsPanel from "$lib/home/SeasonStandingsPanel.svelte";
 	import StatListPanel from "$lib/home/StatListPanel.svelte";
 	import YourSeasonPanel from "$lib/home/YourSeasonPanel.svelte";
@@ -17,7 +18,6 @@
 		homeNationPickRateRows,
 	} from "$lib/home/home-stats";
 	import Panel from "$lib/ui/Panel.svelte";
-	import VideoCard from "$lib/VideoCard.svelte";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -27,8 +27,8 @@
 	// The three stats panels, built together or not at all — the payload is one
 	// envelope, so there is no state where one of them has data. A cache miss
 	// (or a failed fetch) is `null`, and the page drops the whole stats region
-	// rather than laying out three empty boxes; the video panel beside them takes
-	// the width back, the same way the discovery grid closes up on an empty feed.
+	// rather than laying out three empty boxes; the tools panel beside them keeps
+	// its column, the same way the discovery grid closes up on an empty feed.
 	const stats = $derived.by(() => {
 		const summary = data.homeSummary;
 		if (!summary) return null;
@@ -154,25 +154,16 @@
 				</div>
 
 				<!--
-					The action, widening left to right from everyone's page to yours. The
-					players roster leads in both states — it is the one destination in this
-					cluster an anonymous visitor can actually open, where /stats bounces
-					them to login — so it sits outside the gate and only what follows it
-					differs. Signed in that is the whole public corpus then your own games,
-					the profile link carrying the same avatar the header shows so it reads
-					as "you"; signed out it is the same button the header's Login is, sized
-					as a call to action.
+					The action, widening left to right from the whole public corpus to your
+					own games, the profile link carrying the same avatar the header shows so
+					it reads as "you". Signed out none of that is openable — /stats bounces
+					an anonymous visitor to login — so the cluster is the same button the
+					header's Login is, sized as a call to action. The players roster is not
+					here: the season standings panel below is the link to it.
 					-->
 				<div
 					class="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto"
 				>
-					<a
-						href={resolve("/players")}
-						class="inline-flex items-center gap-2 rounded-md bg-[#292623] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:text-orange"
-					>
-						<SpriteIcon category="icons" value="MULTIPLAYER" size={24} alt="" />
-						Players
-					</a>
 					{#if user}
 						<a
 							href={resolve("/stats")}
@@ -258,15 +249,15 @@
 			</div>
 
 			<!--
-			Row 2 — the three stats lists, then the featured video. Four across, and
+			Row 2 — the three stats lists, then the community tools. Four across, and
 			breaking at the same widths the season pair above does, so a list is always
 			the standings panel's width and reads the same way: a rank, a crest, a name
 			and two numbers. That is also why these are lists at all — a horizontal bar
 			spends 140px on its label gutter before the first pixel of plot, which is
 			most of a panel this wide.
 
-			Either side can be absent — with no summary the video takes the row, and
-			with no video the lists close up around the gap.
+			The stats can be absent — with no summary the tools list is the row's only
+			panel, at the width it would have had beside them.
 			-->
 			<div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				{#if stats}
@@ -276,19 +267,11 @@
 				{/if}
 
 				<!--
-				The newest featured video — the same VideoCard the strip below and every
-				other video surface renders, so the hero can't drift into a second video
-				card style. Absent only when nothing is featured AND both video feeds came
-				back empty (see heroVideo in +page.ts).
+				The outbound tools, in the slot the featured video tile held: featuring a
+				video now promotes it to the front of the Recent Videos strip below
+				instead of giving it a card of its own up here.
 				-->
-				{#if data.heroVideo}
-					<Panel
-						title="Featured Video"
-						class={stats ? "self-start" : "sm:col-span-2 lg:col-span-4"}
-					>
-						<VideoCard video={data.heroVideo} />
-					</Panel>
-				{/if}
+				<CommunityToolsPanel />
 			</div>
 
 			<!--

@@ -6,6 +6,7 @@ import { redirect } from "@sveltejs/kit";
 import { cloudApi } from "$lib/api-cloud";
 import type {
 	CreatorVideo,
+	FeaturedVideo,
 	PlayedGamesRow,
 	StandingsResponse,
 	TournamentDetail,
@@ -129,8 +130,8 @@ function yourSeason(
 // Cards in the home video strip. Each feed already arrives capped at this size
 // from the Worker (MAX_CREATOR_FEED_VIDEOS / MAX_TOURNAMENT_FEED_VIDEOS), so
 // the newest twelve of the two merged are always among them — and all three
-// caps move together. Applied after the hero video is pulled out (see below),
-// so promoting one to the hero shortens the strip by nothing.
+// caps move together. Applied after the featured ones are moved to the front,
+// so a star costs the strip nothing but reorders it.
 const VIDEO_STRIP_SIZE = 12;
 
 // One list, two sources: creator uploads (every user's linked channels, which
@@ -144,6 +145,12 @@ const VIDEO_STRIP_SIZE = 12;
 // first occurrence wins. Creators lead the concat because their entries always
 // carry Per-Ankh identity, where a playlist entry only does when its uploader
 // linked that channel.
+// Newest first. The platforms hand us ISO-8601 instants, whose lexicographic
+// order is chronological, so the strings compare directly.
+function byNewest(a: TournamentVideo, b: TournamentVideo): number {
+	return a.published_at < b.published_at ? 1 : -1;
+}
+
 function mergeVideoFeeds(
 	creatorVideos: CreatorVideo[],
 	tournamentVideos: TournamentVideo[],
@@ -156,7 +163,27 @@ function mergeVideoFeeds(
 			seen.add(key);
 			return true;
 		})
-		.sort((a, b) => (a.published_at < b.published_at ? 1 : -1));
+		.sort(byNewest);
+}
+
+// The strip, featured first: a star promotes a video to the front of the feed
+// rather than into a tile of its own, which is what it bought until now (the
+// hero beside the stats lists). Newest-first still holds within each half.
+//
+// The featured snapshots are what render, not the feeds' own copies of them. A
+// featured video outlives the feed it came from — a channel's RSS returns ~15
+// entries — so the snapshot is the entry that is always there, and dropping the
+// feed copy is also what keeps one video from rendering twice and crashing the
+// keyed {#each} with each_key_duplicate.
+function featuredFirst(
+	merged: TournamentVideo[],
+	featured: FeaturedVideo[],
+): TournamentVideo[] {
+	const keys = new Set(featured.map(videoKey));
+	return [
+		...[...featured].sort(byNewest),
+		...merged.filter((v) => !keys.has(videoKey(v))),
+	];
 }
 
 export const load: PageLoad = async ({ fetch, parent, url }) => {
@@ -234,12 +261,6 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 
 	const merged = mergeVideoFeeds(creatorVideos, tournamentVideos);
 
-	// The hero's video tile: the newest featured video, or — with nothing
-	// featured (or the feed down) — the newest video the feeds have, so the tile
-	// is never an empty box. Null only when there is no video anywhere.
-	const heroVideo = featuredVideos[0] ?? merged[0] ?? null;
-	const heroKey = heroVideo ? videoKey(heroVideo) : null;
-
 	return {
 		recentGames: recentRes.games,
 		featured,
@@ -252,14 +273,8 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			? yourSeason(seasonBoard.players, user.user_id, profile?.summary ?? null)
 			: null,
 		homeSummary: homeSummary.summary,
-		// The strip is everything the hero isn't. The hero is usually in these
-		// feeds too — the fallback takes their newest outright, and an admin
-		// normally stars something recent — so without this the same card would
-		// render twice on one page. Capped after the exclusion, so the strip still
-		// carries a full twelve.
-		videos: merged
-			.filter((v) => videoKey(v) !== heroKey)
-			.slice(0, VIDEO_STRIP_SIZE),
-		heroVideo,
+		// Featured videos lead the strip; the rest follow newest-first. Capped
+		// after the promotion, so the strip still carries a full twelve.
+		videos: featuredFirst(merged, featuredVideos).slice(0, VIDEO_STRIP_SIZE),
 	};
 };

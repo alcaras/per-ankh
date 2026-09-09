@@ -17,13 +17,13 @@
 </script>
 
 {#if rows.length > 0}
-	<ol class="flex flex-col gap-1">
+	<ol class="flex flex-col gap-0.5">
 		{#each rows as row (row.slot_id)}
-			<li class="flex items-center gap-2 text-xs">
+			<li class="flex items-center gap-1.5 text-[11px]">
 				<span class="w-4 shrink-0 text-right font-bold text-gray-400"
 					>{row.rank}</span
 				>
-				<PlayerAvatar avatarUrl={row.avatar_url} size={18} />
+				<PlayerAvatar avatarUrl={row.avatar_url} size={16} />
 				<span class="min-w-0 flex-1 truncate text-tan"
 					>{row.display_name || "Unclaimed"}</span
 				>
@@ -34,5 +34,7 @@
 		{/each}
 	</ol>
 {:else}
-	<p class="text-xs text-tan opacity-70">Standings open when play begins.</p>
+	<p class="text-[11px] text-tan opacity-70">
+		Standings open when play begins.
+	</p>
 {/if}
