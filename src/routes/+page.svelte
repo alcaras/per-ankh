@@ -236,12 +236,13 @@
 					/>
 					{#if data.yourSeason}
 						<YourSeasonPanel
+							displayName={data.yourSeason.displayName}
+							avatarUrl={data.yourSeason.avatarUrl}
 							rank={data.yourSeason.rank}
 							games={data.yourSeason.games}
 							allTimeGames={data.yourSeason.allTimeGames}
 							winRate={data.yourSeason.winRate}
 							cognomen={data.yourSeason.cognomen}
-							seasonLabel={data.season.label}
 							seasonUntil={data.season.until}
 						/>
 					{/if}

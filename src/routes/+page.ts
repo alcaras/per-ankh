@@ -12,6 +12,7 @@ import type {
 	TournamentDetail,
 	TournamentMatch,
 	TournamentVideo,
+	UserMe,
 } from "$lib/api-cloud";
 import { videoKey } from "$lib/featured-videos.svelte";
 import { cognomenName } from "$lib/utils/formatting";
@@ -98,6 +99,11 @@ function cognomenProgress(games: number): CognomenProgress {
 // The signed-in viewer's own season, read off the board the panel beside it
 // renders — one fetch, two panels.
 export interface YourSeason {
+	// The viewer's own name and avatar, carried across so the panel can lead
+	// with them. Read from the session rather than the board row, which a
+	// player with no games this season doesn't have.
+	displayName: string;
+	avatarUrl: string;
 	// Position in the server's order, +1 — the same rank /players shows, which
 	// is the board's own ordering (total, then who reached it first) rather
 	// than anything recomputed here. Null for a player with no games this
@@ -113,12 +119,14 @@ export interface YourSeason {
 
 function yourSeason(
 	players: PlayedGamesRow[],
-	userId: string,
+	user: UserMe,
 	allTime: { total_games: number; win_rate: number | null } | null,
 ): YourSeason {
-	const index = players.findIndex((p) => p.user_id === userId);
+	const index = players.findIndex((p) => p.user_id === user.user_id);
 	const games = index === -1 ? 0 : players[index].total;
 	return {
+		displayName: user.display_name,
+		avatarUrl: user.avatar_url,
 		rank: index === -1 ? null : index + 1,
 		games,
 		cognomen: cognomenProgress(games),
@@ -270,7 +278,7 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 		season,
 		seasonPlayers: seasonBoard.players.slice(0, SEASON_STANDINGS_ROWS),
 		yourSeason: user
-			? yourSeason(seasonBoard.players, user.user_id, profile?.summary ?? null)
+			? yourSeason(seasonBoard.players, user, profile?.summary ?? null)
 			: null,
 		homeSummary: homeSummary.summary,
 		// Featured videos lead the strip; the rest follow newest-first. Capped
