@@ -74,7 +74,6 @@ export const GOAL_NAMES: Readonly<Record<string, string>> = {
 	GOAL_EIGHT_LUXURIES: "Control Eight Luxury",
 	GOAL_EIGHT_RELIGION_SPREAD: "Spread Religion Religion (x8)",
 	GOAL_EIGHT_RELIGION_SPREAD_SPECIFIC: "Spread Religion Religion (x8)",
-	GOAL_EIGHT_REPAIRED: "Repair Eight Improvements",
 	GOAL_EIGHT_RESOURCE_IMPROVEMENTS:
 		"Control Eight Pastures, Camps, Groves, or Nets",
 	GOAL_EIGHT_SHRINES: "Control Eight Shrines",
@@ -149,7 +148,6 @@ export const GOAL_NAMES: Readonly<Record<string, string>> = {
 	GOAL_FOUR_PLAYER_LUXURIES: "Send Four Luxury to Foreign Nations",
 	GOAL_FOUR_RELIGION_SPREAD: "Spread Religion Religion (x4)",
 	GOAL_FOUR_RELIGION_SPREAD_SPECIFIC: "Spread Religion Religion (x4)",
-	GOAL_FOUR_REPAIRED: "Repair Four Improvements",
 	GOAL_FOUR_SHRINES: "Control Four Shrines",
 	GOAL_FOUR_STONECUTTERS: "Control Four Stonecutter Specialists",
 	GOAL_FOUR_STRONG: "Control Four Strong Cities",
