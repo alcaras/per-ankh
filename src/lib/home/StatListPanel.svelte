@@ -63,8 +63,20 @@
 						{/if}
 					</span>
 					<span class="min-w-0 flex-1 truncate text-tan">{row.label}</span>
-					<span class="shrink-0 text-xs text-tan opacity-70">{row.sub}</span>
-					<span class="shrink-0 font-bold text-bright">{row.value}</span>
+					<!-- Both numbers ride fixed-width tabular columns rather than sizing
+					     to their own text. Shrink-wrapped, a three-digit count pushed the
+					     percentage beside it a digit further left than a two-digit one
+					     did, so the dim column zig-zagged down a list whose counts fall
+					     through 100. The widths hold four digits and "100%", which is
+					     every value either column can reach. -->
+					<span
+						class="w-9 shrink-0 text-right text-xs tabular-nums text-tan opacity-70"
+						>{row.sub}</span
+					>
+					<span
+						class="w-10 shrink-0 text-right font-bold tabular-nums text-bright"
+						>{row.value}</span
+					>
 				</li>
 			{/each}
 		</ol>
