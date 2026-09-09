@@ -262,9 +262,21 @@
 			-->
 			<div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				{#if stats}
-					<StatListPanel title="Nations" rows={stats.nationPickRate} />
-					<StatListPanel title="Starting Family" rows={stats.capitalFamily} />
-					<StatListPanel title="Starting Leader" rows={stats.archetype} />
+					<StatListPanel
+						title="Nations"
+						titleIcon={{ category: "icons", value: "TRIBES" }}
+						rows={stats.nationPickRate}
+					/>
+					<StatListPanel
+						title="Starting Family"
+						titleIcon={{ category: "icons", value: "RELATIONSHIPS" }}
+						rows={stats.capitalFamily}
+					/>
+					<StatListPanel
+						title="Starting Leader"
+						titleIcon={{ category: "icons", value: "CHARACTERS" }}
+						rows={stats.archetype}
+					/>
 				{/if}
 
 				<!--

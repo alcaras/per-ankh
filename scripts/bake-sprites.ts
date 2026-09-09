@@ -33,6 +33,9 @@
 //   other/GOAL_FAILED.png                        → icons/GOAL_FAILED.png
 //   mods/dynamic-unit/sprites/EFFECTUNIT_ENLIST_ICON.png → icons/EFFECTUNIT_ENLIST_ICON.png
 //   events_images/UI_HUD_Icon_Replay.png         → icons/REPLAY.png
+//   events_images/tab-tribes_normal.png          → icons/TRIBES.png
+//   events_images/tab-relationships-normal.png   → icons/RELATIONSHIPS.png
+//   events_images/tab-characters_normal.png      → icons/CHARACTERS.png
 //
 // PORTRAITS also read the OW Reference XML (Reference/XML/Infos/
 // characterPortrait*.xml) — like bake-improvements, this baker needs BOTH a
@@ -138,6 +141,10 @@ interface IconMapping {
 	// treatment as traits-trimmed) — for sources whose glyph floats small
 	// inside a padded canvas and would be illegible at chip size.
 	readonly trim?: number; // sharp trim threshold
+	// Pad out to a centered square (the traits-trimmed treatment) — for sources
+	// whose art is markedly non-square and would be stretched by SpriteIcon's
+	// square render box.
+	readonly square?: boolean;
 }
 const ICON_MAPPINGS: readonly IconMapping[] = [
 	{
@@ -240,6 +247,25 @@ const ICON_MAPPINGS: readonly IconMapping[] = [
 	// The game's replay glyph — marks the link from a tournament match to the
 	// uploaded save's game page (see MatchTable.svelte's game column).
 	{ source: "events_images/UI_HUD_Icon_Replay.png", target: "REPLAY.png" },
+	// Home-page panel headers: the game's own tab glyphs, in the Normal (unselected)
+	// state, for the nations, families and characters panels of the stats row. The
+	// sources are cropped to their content at differing aspect ratios, so each is
+	// squared to render at one size beside the others.
+	{
+		source: "events_images/tab-tribes_normal.png",
+		target: "TRIBES.png",
+		square: true,
+	},
+	{
+		source: "events_images/tab-relationships-normal.png",
+		target: "RELATIONSHIPS.png",
+		square: true,
+	},
+	{
+		source: "events_images/tab-characters_normal.png",
+		target: "CHARACTERS.png",
+		square: true,
+	},
 ];
 
 function contentHash(buf: Buffer): string {
@@ -285,6 +311,30 @@ async function copyMirrorCategory(
 	return pngs.length;
 }
 
+// Pad an image out to a centered square (side = its longer edge), so
+// SpriteIcon's square render box can't stretch a non-square glyph. A source
+// that is already square comes back re-encoded and unchanged.
+async function padToSquare(input: Buffer): Promise<Buffer> {
+	const image = sharp(input);
+	const { width = 0, height = 0 } = await image.metadata();
+	const side = Math.max(width, height);
+	const padX = side - width;
+	const padY = side - height;
+	if (padX === 0 && padY === 0) return image.png().toBuffer();
+	const left = Math.floor(padX / 2);
+	const top = Math.floor(padY / 2);
+	return image
+		.extend({
+			left,
+			right: padX - left,
+			top,
+			bottom: padY - top,
+			background: { r: 0, g: 0, b: 0, alpha: 0 },
+		})
+		.png()
+		.toBuffer();
+}
+
 // The archetype (trait) glyphs are bare line-art on a transparent field with
 // inconsistent padding — e.g. TRAIT_SCHOLAR fills 96% of a 28² box, TRAIT_SCHEMER
 // only 75% of a 64² box — so at a fixed render size they read smaller than the
@@ -303,28 +353,10 @@ async function copyTrimmedTraits(sidecar: SpriteSidecar): Promise<number> {
 	for (const filename of pngs) {
 		const basename = filename.slice(0, -".png".length);
 		const input = await readFile(resolve(src, filename));
-		// Trim the transparent border down to the glyph's content bounds.
-		const { data, info } = await sharp(input)
-			.trim({ threshold: 10 })
-			.toBuffer({ resolveWithObject: true });
-		// Pad back to a centered square (side = the longer content edge) so the
-		// square render box never distorts a non-square glyph.
-		const side = Math.max(info.width, info.height);
-		const padX = side - info.width;
-		const padY = side - info.height;
-		const left = Math.floor(padX / 2);
-		const top = Math.floor(padY / 2);
-		let pipeline = sharp(data);
-		if (padX > 0 || padY > 0) {
-			pipeline = pipeline.extend({
-				left,
-				right: padX - left,
-				top,
-				bottom: padY - top,
-				background: { r: 0, g: 0, b: 0, alpha: 0 },
-			});
-		}
-		const buf = await pipeline.png().toBuffer();
+		// Trim the transparent border down to the glyph's content bounds, then
+		// pad back to a centered square.
+		const trimmed = await sharp(input).trim({ threshold: 10 }).png().toBuffer();
+		const buf = await padToSquare(trimmed);
 		const hash = contentHash(buf);
 		const outName = `${basename}.${hash}.png`;
 		await writeFile(resolve(dst, outName), buf);
@@ -386,12 +418,15 @@ async function copyUnits(sidecar: SpriteSidecar): Promise<number> {
 async function copyIcons(sidecar: SpriteSidecar): Promise<number> {
 	const dst = resolve(SPRITES_OUT, "icons");
 	await wipeAndRecreate(dst);
-	for (const { source, target, trim } of ICON_MAPPINGS) {
+	for (const { source, target, trim, square } of ICON_MAPPINGS) {
 		const basename = target.slice(0, -".png".length);
 		const srcPath = resolve(PINACOTHECA_SPRITES, source);
-		if (trim) {
+		if (trim || square) {
 			const input = await readFile(srcPath);
-			const buf = await sharp(input).trim({ threshold: trim }).png().toBuffer();
+			let buf = trim
+				? await sharp(input).trim({ threshold: trim }).png().toBuffer()
+				: input;
+			if (square) buf = await padToSquare(buf);
 			const hash = contentHash(buf);
 			const outName = `${basename}.${hash}.png`;
 			await writeFile(resolve(dst, outName), buf);

@@ -9,12 +9,23 @@
 
 	let {
 		title,
+		icon,
 		class: className = "",
 		children,
-	}: { title: string; class?: string; children: Snippet } = $props();
+	}: {
+		title: string;
+		// Optional leading icon (typically a <SpriteIcon size={20} />), rendered
+		// in the heading before the title.
+		icon?: Snippet;
+		class?: string;
+		children: Snippet;
+	} = $props();
 </script>
 
 <section class="rounded-lg bg-surface p-3 {className}">
-	<h2 class="mb-3 text-base font-bold text-tan">{title}</h2>
+	<h2 class="mb-3 flex items-center gap-2 text-base font-bold text-tan">
+		{@render icon?.()}
+		{title}
+	</h2>
 	{@render children()}
 </section>

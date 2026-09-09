@@ -5,6 +5,7 @@
 	// All of them are other people's sites rather than app routes, so every row
 	// leaves per-ankh.app in a new tab — the same treatment VideoCard gives an
 	// outbound watch URL.
+	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { ATLAS_BASE_URL } from "$lib/tournament/map-script-options";
 	import Panel from "$lib/ui/Panel.svelte";
 
@@ -26,6 +27,9 @@
 </script>
 
 <Panel title="Community Tools" class={className}>
+	{#snippet icon()}
+		<SpriteIcon category="units" value="UNIT_WORKER" glyph size={20} />
+	{/snippet}
 	<!-- eslint-disable svelte/no-navigation-without-resolve -- external sites, not app routes; rel guards tabnabbing + referrer leakage -->
 	<ul class="list-disc pl-4 text-[13px] text-tan">
 		{#each APPS as app (app.href)}
