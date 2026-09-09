@@ -1,4 +1,4 @@
-// Bake every cognomen from the OW reference XML — the names the game
+// Bake every cognomen from the OW reference XML — the cognomens the game
 // gives its rulers, each with the legitimacy it is worth ("the Founder" at
 // 10 … "the Great" at 100) and the string the game displays for it.
 //

@@ -14,14 +14,14 @@ export interface Rung {
 	type: string;
 }
 
-// Activity cognomens from the game's own ladder — and the set is
+// Activity cognomens drawn from cognomen.xml — and the set is
 // exactly Old World's own difficulty ladder, every level of which is
 // also a cognomen: the New, the Able, the Just, the Good, the Strong,
 // the Noble, the Glorious, the Magnificent, the Great, in that order
 // (achievement.xml's ACHIEVEMENT_DIFFICULTY_*). They land one to a
 // legitimacy decade from the Able (30) up, which is why the decades
-// below have no rung — the Founder and the Mason sit at 10, and the
-// game gives ten more cognomens at 20. Thresholds are games
+// below have no rung — the Founder, the Mason and the Warrior sit at
+// 10, and the game gives eleven more at 20. Thresholds are games
 // played in the selected season, on the triangular numbers: each rung
 // costs exactly one game more than the last, so the next cognomen always
 // feels one push away. The ladder deliberately stops at the Magnificent
