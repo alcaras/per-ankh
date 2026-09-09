@@ -1,5 +1,30 @@
 # Changelog
 
+## [2026-09-09-dbea57c] - 2026-09-09
+
+### Features
+
+- (home) live tournament, season and stats panels — [4dbbe20](https://github.com/becked/per-ankh/commit/4dbbe2096f8828427eeb10252f44d0e9dbf1f452)
+- (home) stats panels as ranked lists — [2dbe275](https://github.com/becked/per-ankh/commit/2dbe27573a03c7446d0d1b9aae71ef0a9cd7271c)
+- (home) tournament art as panel backdrop, community tools panel — [a92ce01](https://github.com/becked/per-ankh/commit/a92ce01418f4f2c931f0dc330f8ed574bce1a540)
+- (home) identity card in the Your season panel — [337391b](https://github.com/becked/per-ankh/commit/337391b7cbc2687507c10f8ad650596910d2b363)
+- (home) panel header icons on the stats and tools panels — [9e72bfd](https://github.com/becked/per-ankh/commit/9e72bfd4d2d39d7e308a15ec700122cf98718a6f)
+- (home) drop the Manual link from the community tools panel — [864ab5d](https://github.com/becked/per-ankh/commit/864ab5d71a2f61c1bb75dbebcf114c6922bb3085)
+
+### Fixes
+
+- (home) consistent stat columns, stale-tolerant summary, narrower schedule read — [50ef773](https://github.com/becked/per-ankh/commit/50ef773e5aaf73463402d243324f5a194ed7817a)
+- (home) pinned tournament insets, server-fresh clock, 2h live window — [8f5fad3](https://github.com/becked/per-ankh/commit/8f5fad3fd6980b0b4b6221192f6646444e76d267)
+- (deps) override sharp to 0.35.4 to clear the libheif advisory — [dbea57c](https://github.com/becked/per-ankh/commit/dbea57c679a45a0747c33730336f5dd49d3460b4)
+
+### Other
+
+- (home) italicise the cognomen in the Your season progress line — [59b2724](https://github.com/becked/per-ankh/commit/59b272419f96ae509059261a8afc186eef36a268)
+- refresh drifted goal names table — [0ad5056](https://github.com/becked/per-ankh/commit/0ad505689c26f5f742ba13b075b55358e8ed64bf)
+- (home) fixed-width tabular number columns in the stats panels — [80fb325](https://github.com/becked/per-ankh/commit/80fb3258a3a9b3d28424028ece711005c78691ee)
+- (players) the game says cognomen, so we do too — [e560329](https://github.com/becked/per-ankh/commit/e560329ff2f48f913ad5de5f184f4530480bb2e5)
+- (cognomens) rebake to today's patch, and the comments with it — [599b0e7](https://github.com/becked/per-ankh/commit/599b0e7ea281691e2372e6d39fc03303b6d345fa)
+
 ## [2026-09-07-ade2721] - 2026-09-07
 
 ### Features
