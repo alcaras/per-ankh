@@ -52,6 +52,12 @@ export const RETENTION_BUCKETS: readonly RetentionBucket[] = [
 			// let a crawl of the public board decide when signed-in visitors stop
 			// getting charts. Same 1h counter role, metadata-free.
 			"season_view",
+			// Home-page stats-summary reads (stats/handlers.ts): its own budget
+			// again, and not a share of anon_read's even though the same page load
+			// spends both — anon_read is home's tightest ceiling already, so
+			// pooling would halve the page's headroom against itself. Same 1h
+			// counter role, metadata-free.
+			"home_summary_view",
 			"user_search",
 			// Header people search (users.ts): same counter role as
 			// user_search, its own budget. Metadata is q_length only.

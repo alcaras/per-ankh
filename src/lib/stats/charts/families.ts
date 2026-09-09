@@ -17,7 +17,9 @@ const SLOT_LABELS = ["1st family", "2nd", "3rd"] as const;
 
 // Family classes reuse the ARCHETYPE crest art (FAMILYCLASS_CHAMPIONS →
 // crests/CREST_ARCHETYPE_CHAMPIONS).
-function classCrestUrl(familyClass: string): string | undefined {
+// Exported for the home page's capital-family panel, which slices its own
+// rows and so calls winLossStackedOption directly — same label art either way.
+export function classCrestUrl(familyClass: string): string | undefined {
 	const name = familyClass.replace(/^FAMILYCLASS_/, "");
 	return SPRITE_MANIFEST[`crests/CREST_ARCHETYPE_${name}`];
 }

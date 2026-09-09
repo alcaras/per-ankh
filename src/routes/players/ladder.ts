@@ -1,9 +1,11 @@
 // The /players epithet ladder: the rungs, and the epithet a game count earns.
 //
-// Beside the route for the reason `./seasons` is — nothing outside /players
-// reads it — and a plain module rather than part of `+page.ts` because the
-// board and its guide both need the rungs, and SvelteKit rejects any runtime
-// export from a `+page.ts` but its own.
+// Beside the route for the reason `./seasons` is: the ladder is /players'
+// definition, and its second reader — the home page's "Your season" panel,
+// through `src/routes/+page.ts` — reads the same rungs rather than restating
+// them. A plain module rather than part of `+page.ts` because the board and its
+// guide both need the rungs, and SvelteKit rejects any runtime export from a
+// `+page.ts` but its own.
 
 import { cognomenName } from "$lib/utils/formatting";
 

@@ -91,10 +91,15 @@ import {
 } from "./tournament/player";
 import {
 	handleGlobalStats,
+	handleHomeSummary,
 	handleUserStats,
 	handlePlayerLeaderboard,
 } from "./stats/handlers";
-import type { GlobalStatsEnv, PlayerLeaderboardEnv } from "./stats/handlers";
+import type {
+	GlobalStatsEnv,
+	HomeSummaryEnv,
+	PlayerLeaderboardEnv,
+} from "./stats/handlers";
 import {
 	STATS_PRECOMPUTE_CRONS,
 	STATS_WARM_CRON,
@@ -164,6 +169,7 @@ interface Env
 		ChannelsEnv,
 		FeaturedVideosEnv,
 		GlobalStatsEnv,
+		HomeSummaryEnv,
 		PlayerLeaderboardEnv,
 		SecurityEventsEnv,
 		TrustedFrontendEnv {
@@ -926,6 +932,19 @@ const ROUTES: RouteSpec[] = [
 		match: { kind: "path", path: "/v1/stats" },
 		route: "GET /v1/stats",
 		handler: (r, e, _m, c) => handleGlobalStats(r, e, c),
+	},
+	// The home page's stats panels — the five bundle fields they draw, over the
+	// unfaceted `duel` slice. Public where /v1/stats is session-gated, because
+	// it can only *read* the precomputed entry: a miss answers
+	// `{ summary: null }` and the page drops the region, so an anonymous caller
+	// never gets to trigger a whole-corpus build. Its own per-IP budget
+	// (HOME_SUMMARY_VIEW_PER_HOUR), not a share of the anon_read the same page
+	// load already spends on the discovery feed.
+	{
+		method: "GET",
+		match: { kind: "path", path: "/v1/home-summary" },
+		route: "GET /v1/home-summary",
+		handler: (r, e) => handleHomeSummary(r, e),
 	},
 	// Cross-creator home feed — newest uploads across all users' linked
 	// channels, merged newest-first for the home page's "Latest from creators"

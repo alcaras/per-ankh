@@ -7,6 +7,19 @@
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import RecentSaveCard from "$lib/RecentSaveCard.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
+	import FeaturedTournamentPanel from "$lib/home/FeaturedTournamentPanel.svelte";
+	import SeasonStandingsPanel from "$lib/home/SeasonStandingsPanel.svelte";
+	import StatChartPanel from "$lib/home/StatChartPanel.svelte";
+	import YourSeasonPanel from "$lib/home/YourSeasonPanel.svelte";
+	import {
+		homeArchetypeOption,
+		homeCapitalFamilyOption,
+		homeExpansionWinRateOption,
+		homeNationPickRateOption,
+		homeNationWinRateOption,
+		homeStatRowCounts,
+		homeTechFirstOption,
+	} from "$lib/home/home-stats";
 	import Panel from "$lib/ui/Panel.svelte";
 	import VideoCard from "$lib/VideoCard.svelte";
 	import type { PageData } from "./$types";
@@ -14,6 +27,25 @@
 	let { data }: { data: PageData } = $props();
 
 	const user = $derived(page.data.user);
+
+	// The six stats panels, built together or not at all — the payload is one
+	// envelope, so there is no state where three of them have data. A cache miss
+	// (or a failed fetch) is `null`, and the page drops the whole stats region
+	// rather than laying out six empty boxes; the video panel below takes the
+	// width back, the same way the discovery grid closes up on an empty feed.
+	const stats = $derived.by(() => {
+		const summary = data.homeSummary;
+		if (!summary) return null;
+		return {
+			rows: homeStatRowCounts(summary),
+			nationWinRate: homeNationWinRateOption(summary),
+			nationPickRate: homeNationPickRateOption(summary),
+			expansion: homeExpansionWinRateOption(summary),
+			capitalFamily: homeCapitalFamilyOption(summary),
+			archetype: homeArchetypeOption(summary),
+			techFirst: homeTechFirstOption(summary),
+		};
+	});
 
 	// The videos column only exists when a creator or a tournament playlist has
 	// recent uploads (empty on a cold feed cache). It's the only thing that
@@ -192,49 +224,128 @@
 			</section>
 
 			<!--
-			The two hero tiles, side by side on desktop and stacked on mobile: the
-			current major tournament, then the newest featured video. Shown to every
-			viewer — they are how the home page surfaces the tournament now that the
-			signed-in rail is gone. 16:9 stacked, and on desktop the grid stretches
-			both panels to the row height, with the banner filling whatever its panel
-			gets (`lg:flex-1`) so it ends level with the video panel however the video
-			title wraps, cropping via object-cover.
+			Row 1 — the live half of the page: the featured tournament on the left,
+			the season boards on the right. Both halves are about people playing
+			right now, which is what the page leads with once a visitor knows what
+			the site is (the call to action above answers that).
 			-->
 			<div class="mb-4 grid gap-4 lg:grid-cols-2">
-				<!--
-				Tournament highlight: the whole tile links to the current major
-				tournament. The event name is baked into the still (the animation's
-				opening title card), so no text overlay is needed — the panel header
-				names the section.
-				-->
-				<Panel title="Featured Tournament" class="flex flex-col">
-					<a
-						href={resolve("/tournaments/2026-community-tournament")}
-						class="group block aspect-video overflow-hidden rounded-lg bg-black lg:aspect-auto lg:flex-1"
-					>
-						<img
-							src="/tournament-hero.webp"
-							alt="2026 Community Tournament"
-							width="654"
-							height="345"
-							class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-						/>
-					</a>
-				</Panel>
+				{#if data.featured}
+					<FeaturedTournamentPanel
+						tournament={data.featured.tournament}
+						standings={data.featured.standings}
+						matches={data.featured.matches}
+					/>
+				{/if}
 
 				<!--
-				The newest featured video — the same VideoCard the strip below and every
-				other video surface renders, so the hero can't drift into a second video
-				card style. Absent only when nothing is featured AND both video feeds
-				came back empty (see heroVideo in +page.ts), which leaves the tournament
-				panel alone in its column.
+				The season pair. Signed out there is no "Your season" to show, so the
+				standings panel spans the half on its own — the same drop-a-region
+				rule the video column follows, rather than a signed-out placeholder.
+				-->
+				<div
+					class={`grid gap-4 sm:grid-cols-2 ${data.featured ? "" : "lg:col-span-2"}`}
+				>
+					<SeasonStandingsPanel
+						players={data.seasonPlayers}
+						seasonLabel={data.season.label}
+						class={data.yourSeason ? "" : "sm:col-span-2"}
+					/>
+					{#if data.yourSeason}
+						<YourSeasonPanel
+							rank={data.yourSeason.rank}
+							games={data.yourSeason.games}
+							allTimeGames={data.yourSeason.allTimeGames}
+							winRate={data.yourSeason.winRate}
+							cognomen={data.yourSeason.cognomen}
+							seasonLabel={data.season.label}
+							seasonUntil={data.season.until}
+						/>
+					{/if}
+				</div>
+			</div>
+
+			<!--
+			Row 2 — two stats panels stacked against the featured video. Every chart
+			here is half-width: a horizontal bar spends 140px on its label gutter,
+			and a quarter-width panel would leave ~230px of plot, which is why the
+			stats panels never go four across.
+
+			With no summary the charts are absent and the video takes the row, and
+			with no video the charts take it — each side widens into whatever the
+			other didn't use.
+			-->
+			<div class="mb-4 grid gap-4 lg:grid-cols-2">
+				{#if stats}
+					<!--
+					Stacked beside the video, side by side without it — either way each
+					chart keeps its half-width, which is the width these bars are drawn
+					for.
+					-->
+					<div
+						class={data.heroVideo
+							? "flex flex-col gap-4"
+							: "grid gap-4 lg:col-span-2 lg:grid-cols-2"}
+					>
+						<StatChartPanel
+							title="Expansion speed → win rate"
+							option={stats.expansion}
+							rows={stats.rows.expansion}
+						/>
+						<StatChartPanel
+							title="First tech"
+							option={stats.techFirst}
+							rows={stats.rows.techFirst}
+						/>
+					</div>
+				{/if}
+
+				<!--
+				The newest featured video — the same VideoCard the strip below and
+				every other video surface renders, so the hero can't drift into a
+				second video card style. Absent only when nothing is featured AND both
+				video feeds came back empty (see heroVideo in +page.ts).
 				-->
 				{#if data.heroVideo}
-					<Panel title="Featured Video">
+					<Panel
+						title="Featured Video"
+						class={stats ? "self-start" : "lg:col-span-2"}
+					>
 						<VideoCard video={data.heroVideo} />
 					</Panel>
 				{/if}
 			</div>
+
+			<!--
+			Row 3 — the remaining four panels, 2×2. The nation pair shares a line
+			deliberately: same seven nations in both, one asking how often they are
+			picked and the other how they fare, so they read as one story rather
+			than two charts that happen to be adjacent.
+			-->
+			{#if stats}
+				<div class="mb-4 grid gap-4 lg:grid-cols-2">
+					<StatChartPanel
+						title="By nation (win rate)"
+						option={stats.nationWinRate}
+						rows={stats.rows.nationWinRate}
+					/>
+					<StatChartPanel
+						title="Games by nation (pick rate)"
+						option={stats.nationPickRate}
+						rows={stats.rows.nationPickRate}
+					/>
+					<StatChartPanel
+						title="Capital family class"
+						option={stats.capitalFamily}
+						rows={stats.rows.capitalFamily}
+					/>
+					<StatChartPanel
+						title="Starting leader archetype"
+						option={stats.archetype}
+						rows={stats.rows.archetype}
+					/>
+				</div>
+			{/if}
 
 			<!--
 			Discovery grid (desktop): recent saves (left) → videos (right). A column

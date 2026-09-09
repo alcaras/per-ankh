@@ -3,11 +3,13 @@
 //   GET /v1/users/:user_id/stats           — user corpus
 //   GET /v1/stats                          — global (public) corpus
 //   GET /v1/stats/players                  — played-games leaderboard
+//   GET /v1/home-summary                   — the home page's slice of the above
 //
 // The first two resolve corpus → check cache → compute on miss → return
 // bundle. The third is not a bundle at all — it counts games played per user
 // straight out of D1, uncached — and shares this file for the corpus it reads
-// rather than for the shape it returns.
+// rather than for the shape it returns. The fourth is a trimmed, public
+// projection of the second's cached entry that never computes one.
 
 import { CURRENT_PARSER_VERSION } from "../schemas/game";
 import { sessionFromRequest } from "../session";
@@ -25,6 +27,7 @@ import type { ReadBudget } from "../read-budget";
 import { logError } from "../log";
 import { buildChartBundle } from "./aggregate";
 import { getCached, getStaleGlobalCached, putCached } from "./cache";
+import type { StatsCacheEnv } from "./cache";
 import { buildGlobalSelection } from "./precompute";
 import type { PrecomputeEnv } from "./precompute";
 import { resolveGlobalCorpus, resolveUserCorpus } from "./resolve";
@@ -690,6 +693,171 @@ export async function handlePlayerLeaderboard(
 			"Cache-Control": "public, max-age=300, s-maxage=60",
 			...cors,
 			Vary: "Origin",
+		},
+	});
+}
+
+// ─── GET /v1/home-summary — the home page's stats panels ─────────────
+//
+// A small public projection of the precomputed global `duel` bundle: the five
+// fields the home page's six stats panels draw, plus the corpus size.
+//
+// Its own endpoint rather than an anonymous door onto /v1/stats. The session
+// gate above is not about what the bytes contain — it is about who may spend a
+// whole-corpus aggregation — and home is anonymous, so opening that gate would
+// hand every crawler the right to trigger a 96-query build. This handler cannot
+// build one: see the env type below.
+//
+// The trim is the other half of the difference. The full bundle's bulk is
+// wonderStats / yieldCurves / lawTiming, none of which home reads, and home is
+// the page most likely to be a visitor's first byte of the site.
+
+// The archetype floor, server-side, because it is a correctness filter rather
+// than a presentation choice: without it the headline reads "Diplomat 73%" off
+// eleven games. It ships with the data so the number the panel shows is the
+// number the corpus supports, and so the frontend can't quietly render an
+// unfloored row by slicing differently.
+//
+// The consequence is accepted knowingly: home's archetype panel and /stats'
+// show different rows for the same corpus, with no caveat text saying so.
+// /stats is the surface for reading the whole distribution, thin samples
+// included, and startingArchetypeWinLossOption stays unchanged for it.
+export const HOME_ARCHETYPE_MIN_GAMES = 50;
+
+// The wire shape. An envelope with the six pieces inside rather than six
+// nullable fields: they are present together or not at all — one KV entry
+// answers for all of them — and the envelope makes any other combination
+// unrepresentable.
+export interface HomeStatsSummary extends Pick<
+	ChartBundleCore,
+	| "nationWinRate"
+	| "expansionWinRate"
+	| "capitalFamilyWinRate"
+	| "startingArchetypeWinRate"
+	| "techFirst"
+> {
+	// game_count only. parser_version rides along on the full bundle so a
+	// consumer can check what it is rendering against; nothing on home
+	// branches on it.
+	meta: { game_count: number };
+}
+
+export interface HomeSummaryResponse {
+	summary: HomeStatsSummary | null;
+}
+
+// Each field ships whole apart from the archetype floor. The row caps the
+// panels apply (top 7, by games played) are the frontend's: the floor is a
+// correctness filter and belongs with the data, where the cap is a decision
+// about how much fits in a half-width panel — and keeping it client-side moves
+// the number without a Worker deploy.
+export function homeSummaryFrom(bundle: ChartBundleCore): HomeStatsSummary {
+	return {
+		meta: { game_count: bundle.meta.game_count },
+		nationWinRate: bundle.nationWinRate,
+		expansionWinRate: bundle.expansionWinRate,
+		capitalFamilyWinRate: bundle.capitalFamilyWinRate,
+		startingArchetypeWinRate: bundle.startingArchetypeWinRate.filter(
+			(r) => r.games >= HOME_ARCHETYPE_MIN_GAMES,
+		),
+		techFirst: bundle.techFirst,
+	};
+}
+
+// Per-IP budget for the public home-summary read, one slot per home page load.
+//
+// Its own budget, not a share of anon_read's or global_stats_view's. anon_read
+// is the home page's own tightest ceiling already (the discovery feed spends
+// it), so pooling would halve the page's headroom against itself; and
+// global_stats_view belongs to a session-gated surface, where this one is
+// anonymous — pooling those would let a crawl of the home page decide when
+// signed-in visitors stop getting charts. The rule and the outage behind it are
+// in tournament/limits.ts.
+//
+// 600 arrived through the fan-out: one read per home page load, so 600 is 600
+// loads an hour — the same headroom SEASON_VIEW_PER_HOUR and
+// GLOBAL_STATS_VIEW_PER_HOUR buy at the same number on the same one-read
+// arithmetic, not a number copied across from them.
+//
+// The default only — read the effective ceiling with homeSummaryViewPerHour().
+export const HOME_SUMMARY_VIEW_PER_HOUR = 600;
+
+export function homeSummaryViewPerHour(env: {
+	HOME_SUMMARY_VIEW_PER_HOUR?: string;
+}): number {
+	return ceilingFrom(
+		env.HOME_SUMMARY_VIEW_PER_HOUR,
+		HOME_SUMMARY_VIEW_PER_HOUR,
+		"HOME_SUMMARY_VIEW_PER_HOUR",
+	);
+}
+
+const HOME_SUMMARY_BUDGET: ReadBudget = {
+	eventType: "home_summary_view",
+	message: "Home summary rate limit exceeded",
+	code: "RATE_LIMIT_HOME_SUMMARY",
+};
+
+// Deliberately no SHARE_DB. "Never computes on a cache miss" is the whole
+// reason this endpoint exists rather than an anonymous /v1/stats, and typing
+// the env without the games database makes it a property the compiler holds:
+// buildChartBundle and resolveGlobalCorpus both need SHARE_DB, so this handler
+// structurally cannot reach them. A future edit that tries has to widen this
+// interface first, which is the review this decision wants.
+export interface HomeSummaryEnv extends StatsCacheEnv, EventsEnv {
+	ALLOWED_ORIGINS: string;
+	// Per-IP hourly ceiling on the home-summary read. Optional: unset falls
+	// back to the constant above. A var rather than a bare const for the same
+	// reason the other read ceilings are — retunable without a redeploy.
+	HOME_SUMMARY_VIEW_PER_HOUR?: string;
+}
+
+// GET /v1/home-summary — the five bundle fields the home page's stats panels
+// draw, over the unfaceted `duel` slice (the /stats default, and ~94% of the
+// corpus).
+//
+// A miss answers `{ summary: null }` and the page drops the whole stats region
+// rather than rendering six empty boxes. What keeps that rare is the same pair
+// that keeps /v1/stats warm: the nightly precompute writes one entry per slice,
+// and the hourly warm (STATS_WARM_CRON) rebuilds the four unfaceted bundles a
+// version bump orphaned — this reads the same entry the signed-in /stats page's
+// default view does, so it is the last of them to be cold.
+//
+// Edge-cached like globalStatsResponse, and for the same reasons: the payload
+// is byte-identical for every viewer and changes at most nightly, and the edge
+// is what keeps a cold key from being one miss per request per colo. No browser
+// cache, so a reload after the nightly precompute shows the new numbers.
+export async function handleHomeSummary(
+	request: Request,
+	env: HomeSummaryEnv,
+): Promise<Response> {
+	const cors = cloudCorsHeaders(env, request);
+
+	const limited = await enforceReadRateLimit(
+		env,
+		request,
+		cors,
+		HOME_SUMMARY_BUDGET,
+		homeSummaryViewPerHour(env),
+	);
+	if (limited) return limited;
+
+	const cached = await getCached<ChartBundleCore>(env, {
+		kind: "global",
+		slice: "duel",
+		nations: [],
+		parser_version: CURRENT_PARSER_VERSION,
+	});
+
+	const body: HomeSummaryResponse = {
+		summary: cached ? homeSummaryFrom(cached) : null,
+	};
+	return new Response(JSON.stringify(body), {
+		status: 200,
+		headers: {
+			"Content-Type": "application/json",
+			"Cache-Control": "public, max-age=0, s-maxage=60",
+			...cors,
 		},
 	});
 }

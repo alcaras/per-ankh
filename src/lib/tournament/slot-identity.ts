@@ -20,14 +20,18 @@ export interface SlotMaps {
 	signupAnswers: Record<string, string | null>;
 }
 
-// Builds the slot identity maps consumed by the match detail popover and the
-// schedule rows. Union of per-division Swiss standings and bracket slots; only
-// real display names land in `labels` (callers fall back to a truncated slot
-// id).
-export function buildSlotMaps(
-	standings: StandingsResponse,
-	bracket: BracketResponse,
-): SlotMaps {
+// The standings half of the maps, on its own — everything the Swiss standings
+// know about who holds each slot.
+//
+// Separate from buildSlotMaps because a caller that has no bracket to overlay
+// still needs the names: a pending match comes back from
+// GET /tournaments/:id/matches with slot_a_display_name / slot_b_display_name
+// NULL (the payload snapshots those at report time), so any surface listing
+// upcoming sittings has to look the occupants up. The home page's Upcoming
+// panel is one, and it reads this rather than passing an empty bracket in —
+// a synthetic `{ slots: [] }` would be a shape the API never returns, and
+// re-walking the divisions locally would be the same loop twice.
+export function slotMapsFromStandings(standings: StandingsResponse): SlotMaps {
 	const labels: Record<string, string> = {};
 	const userIds: Record<string, string | null> = {};
 	const slugs: Record<string, string | null> = {};
@@ -43,6 +47,24 @@ export function buildSlotMaps(
 			signupAnswers[s.slot_id] = s.signup_answer;
 		}
 	}
+
+	return { labels, userIds, slugs, avatars, signupAnswers };
+}
+
+// Builds the slot identity maps consumed by the match detail popover and the
+// schedule rows. Union of per-division Swiss standings and bracket slots; only
+// real display names land in `labels` (callers fall back to a truncated slot
+// id).
+export function buildSlotMaps(
+	standings: StandingsResponse,
+	bracket: BracketResponse,
+): SlotMaps {
+	const { labels, userIds, slugs, avatars, signupAnswers } =
+		slotMapsFromStandings(standings);
+
+	// The bracket wins on overlap — it's the later, more authoritative
+	// snapshot — which is why the overlay runs second rather than the two
+	// sources merging. signupAnswers is untouched: the bracket doesn't carry it.
 	for (const s of bracket.slots) {
 		if (s.display_name) labels[s.slot_id] = s.display_name;
 		userIds[s.slot_id] = s.user_id;

@@ -1,7 +1,9 @@
 // The /players page's season arithmetic and its URL vocabulary, in one place.
 //
-// It lives beside the route rather than in `$lib` because nothing outside
-// /players has a season, and it is a plain module rather than part of
+// It lives beside the route rather than in `$lib` because a season is still
+// /players' idea of one — the home page's `+page.ts` imports it for the season
+// its two right-hand panels cover, which is the same board this page renders
+// and not a second definition. It is a plain module rather than part of
 // `+page.ts` because SvelteKit rejects any runtime export from a `+page.ts`
 // but its own — which is what previously forced the load and the component to
 // spell `ALL_BOARD` twice and normalize a URL twice, with the component's

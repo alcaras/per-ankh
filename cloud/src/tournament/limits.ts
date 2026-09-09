@@ -70,16 +70,25 @@ export function tournamentViewPerHour(env: {
 }
 
 // Per-IP budget for the tournament list read (GET /v1/tournaments). Its own
-// budget, deliberately not the tournament pages' one: the list is fetched by
-// the home page on every render (src/routes/+page.ts) as well as by
-// /tournaments, and the home page is the busiest surface on the site. Sharing
-// means ordinary landing-page traffic decides when /tournaments/[slug] starts
-// refusing — the same coupling that took the tournament pages down on
-// 2026-08-05 with /games/* as the busy surface instead.
+// budget, deliberately not the tournament pages' one: an index page's list read
+// must not decide when the pages it links to start refusing — the same coupling
+// that took the tournament pages down on 2026-08-05 with /games/* as the busy
+// surface instead.
 //
-// Not folded into anon_read either, for the reason the link read isn't: the
-// home page calls both, so sharing would spend one visitor's landing-page
-// budget twice over.
+// Its callers are /tournaments and the admin dashboard. Home is NOT one of
+// them, and never was in the shape this comment used to claim: src/routes/
+// +page.ts spends anon_read on the discovery feed, three tournament_view slots
+// on the Featured Tournament panel (detail + standings + matches), one
+// season_view on the leaderboard and one home_summary_view on the stats panels
+// — and the video feeds, which are outside the read budgets entirely.
+//
+// Those three tournament_view slots are the exception this file's rule warns
+// about, taken with its eyes open: home now rides the tournament pages' budget,
+// which is exactly the coupling the paragraph above argues against. What makes
+// it acceptable is the arithmetic rather than a change of principle — 2400 / 3
+// is 800 home loads an hour per IP, more headroom than anon_read's 200 leaves
+// the same page — and naming the exception here is cheaper than leaving the
+// doctrine claiming something untrue.
 //
 // Stays at 600 where the view ceiling is 2400, because the arithmetic differs,
 // not the generosity: this is one read per page load, so 600 is 600 loads —

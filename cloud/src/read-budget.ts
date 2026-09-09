@@ -29,7 +29,8 @@ import { errorResponse, getClientIp } from "./util";
 // rate_limit_counters one, so it would also write an unbounded audit row per
 // read. This is the shape the interface had before it was lifted out of
 // tournament/public.ts (one shape, three instances); global_stats_view was the
-// fourth read to want it and season_view is the fifth.
+// fourth read to want it, season_view the fifth and home_summary_view the
+// sixth.
 export type ReadEventType = Extract<
 	RateLimitedEventType,
 	| "tournament_view"
@@ -37,6 +38,7 @@ export type ReadEventType = Extract<
 	| "tournament_link_view"
 	| "global_stats_view"
 	| "season_view"
+	| "home_summary_view"
 >;
 
 // A per-IP read budget: which events rows count toward it, and how it answers

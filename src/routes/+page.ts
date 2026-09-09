@@ -4,11 +4,127 @@
 // call to action.
 import { redirect } from "@sveltejs/kit";
 import { cloudApi } from "$lib/api-cloud";
-import type { CreatorVideo, TournamentVideo } from "$lib/api-cloud";
+import type {
+	CreatorVideo,
+	PlayedGamesRow,
+	StandingsResponse,
+	TournamentDetail,
+	TournamentMatch,
+	TournamentVideo,
+} from "$lib/api-cloud";
 import { videoKey } from "$lib/featured-videos.svelte";
+import { cognomenName } from "$lib/utils/formatting";
 import { rethrowRateLimit } from "$lib/utils/load-errors";
 import { safeNext } from "$lib/utils/safe-next";
+// Route → route, and the only such import in the repo: the season window and
+// the cognomen ladder are /players' definitions, and home now reads the same
+// two boards /players does. Imported rather than moved to $lib because nothing
+// about them has stopped being /players' — and it introduces no
+// $lib → src/routes edge, of which there are none: what crosses into
+// $lib/home is plain props derived here.
+import { RUNGS } from "./players/ladder";
+import { allSeasons } from "./players/seasons";
 import type { PageLoad } from "./$types";
+
+// The tournament the home hero features. Hardcoded, as it has been since the
+// panel was a still image — the site runs one major event at a time, and
+// picking "the current one" from the list is a guess the list can't make.
+const FEATURED_TOURNAMENT_SLUG = "2026-community-tournament";
+
+// Players shown in the season standings panel. Enough to see the shape of the
+// board without turning a home panel into /players.
+const SEASON_STANDINGS_ROWS = 8;
+
+export interface FeaturedTournament {
+	tournament: TournamentDetail;
+	standings: StandingsResponse;
+	matches: TournamentMatch[];
+}
+
+// The featured tournament, its standings and its whole match schedule.
+//
+// Sequential then parallel, the same shape /tournaments/[slug]'s layout load
+// uses: the slug buys the id, and the id buys the other two. Three reads, all
+// on the tournament_view budget — home is a spender of it now, which is the
+// exception cloud/src/tournament/limits.ts names.
+//
+// Best-effort as a unit. A tournament that 404s (renamed, deleted, not yet
+// created) and a worker hiccup are the same answer here — the panel is absent
+// and the row closes up — so nothing is gained by distinguishing them.
+async function loadFeaturedTournament(
+	fetch: typeof globalThis.fetch,
+): Promise<FeaturedTournament | null> {
+	try {
+		const tournament = await cloudApi.getTournament(FEATURED_TOURNAMENT_SLUG, {
+			fetch,
+		});
+		const [standings, matches] = await Promise.all([
+			cloudApi.getTournamentStandings(tournament.tournament_id, { fetch }),
+			cloudApi.getTournamentMatches(tournament.tournament_id, {}, { fetch }),
+		]);
+		return { tournament, standings, matches: matches.matches };
+	} catch {
+		return null;
+	}
+}
+
+// Where a player stands on the cognomen ladder, and what the next rung costs.
+//
+// Derived here rather than in the panel because RUNGS lives beside /players and
+// $lib/home does not reach into routes. `next` is null at the top of the
+// ladder; `current` is null below the first rung, which is where most signed-in
+// visitors are early in a season — the panel's primary state, not its edge case.
+export interface CognomenProgress {
+	current: string | null;
+	next: { name: string; games: number; remaining: number } | null;
+}
+
+function cognomenProgress(games: number): CognomenProgress {
+	const reached = RUNGS.findLast((r) => games >= r.games);
+	const next = RUNGS.find((r) => games < r.games);
+	return {
+		current: reached ? cognomenName(reached.type) : null,
+		next: next
+			? {
+					name: cognomenName(next.type),
+					games: next.games,
+					remaining: next.games - games,
+				}
+			: null,
+	};
+}
+
+// The signed-in viewer's own season, read off the board the panel beside it
+// renders — one fetch, two panels.
+export interface YourSeason {
+	// Position in the server's order, +1 — the same rank /players shows, which
+	// is the board's own ordering (total, then who reached it first) rather
+	// than anything recomputed here. Null for a player with no games this
+	// season: they are not on the board, so they have no rank on it.
+	rank: number | null;
+	games: number;
+	cognomen: CognomenProgress;
+	// All-time totals, which the board's season window can't answer. Null when
+	// the profile read failed or the account has no profile.
+	allTimeGames: number | null;
+	winRate: number | null;
+}
+
+function yourSeason(
+	players: PlayedGamesRow[],
+	userId: string,
+	allTime: { total_games: number; win_rate: number | null } | null,
+): YourSeason {
+	const index = players.findIndex((p) => p.user_id === userId);
+	const games = index === -1 ? 0 : players[index].total;
+	return {
+		rank: index === -1 ? null : index + 1,
+		games,
+		cognomen: cognomenProgress(games),
+		allTimeGames: allTime?.total_games ?? null,
+		winRate: allTime?.win_rate ?? null,
+	};
+}
 
 // Cards in the home video strip. Each feed already arrives capped at this size
 // from the Worker (MAX_CREATOR_FEED_VIDEOS / MAX_TOURNAMENT_FEED_VIDEOS), so
@@ -74,16 +190,47 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 	// The three video feeds are deliberately outside the read budgets and answer
 	// 200 by construction — each handler swallows its own upstream failures to
 	// an empty list — so there is no 429 for them to re-throw.
-	const [recentRes, creatorVideos, tournamentVideos, featuredVideos] =
-		await Promise.all([
-			cloudApi.listPublicRecent({ fetch }).catch((err: unknown) => {
-				rethrowRateLimit(err);
-				return { games: [] };
-			}),
-			cloudApi.getCreatorVideos({ fetch }).catch(() => []),
-			cloudApi.getTournamentVideos({ fetch }).catch(() => []),
-			cloudApi.getFeaturedVideos({ fetch }).catch(() => []),
-		]);
+	//
+	// The season board is the asymmetry worth naming: /players re-throws its own
+	// 429 because a spent budget there means the archive walk that spent it, and
+	// the page has nothing else to show. Here it is one panel of eight, and
+	// blanking the landing page over it would be the wrong trade — home swallows
+	// it and drops the panel, like every other feed on the page bar the one
+	// above.
+	// The season in progress — allSeasons() grows by itself as time passes, so
+	// the last entry is today's and no deploy rolls a season over.
+	const seasons = allSeasons();
+	const season = seasons[seasons.length - 1];
+	const [
+		recentRes,
+		creatorVideos,
+		tournamentVideos,
+		featuredVideos,
+		featured,
+		seasonBoard,
+		homeSummary,
+		profile,
+	] = await Promise.all([
+		cloudApi.listPublicRecent({ fetch }).catch((err: unknown) => {
+			rethrowRateLimit(err);
+			return { games: [] };
+		}),
+		cloudApi.getCreatorVideos({ fetch }).catch(() => []),
+		cloudApi.getTournamentVideos({ fetch }).catch(() => []),
+		cloudApi.getFeaturedVideos({ fetch }).catch(() => []),
+		loadFeaturedTournament(fetch),
+		cloudApi
+			.getPlayerLeaderboard({ fetch, since: season.since, until: season.until })
+			.catch(() => ({ players: [] })),
+		cloudApi.getHomeSummary({ fetch }).catch(() => ({ summary: null })),
+		// All-time games and win rate, which the season board can't answer — and
+		// the one read on this page that spends no budget at all
+		// (GET /v1/users/:user_id neither gates nor counts). Skipped for an
+		// anonymous visitor, who has no panel to feed.
+		user
+			? cloudApi.getUserProfile(user.user_id, { fetch }).catch(() => null)
+			: null,
+	]);
 
 	const merged = mergeVideoFeeds(creatorVideos, tournamentVideos);
 
@@ -95,6 +242,16 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 
 	return {
 		recentGames: recentRes.games,
+		featured,
+		// The season standings panel and "Your season" read the same board: the
+		// panel takes the top rows, the viewer's own line is looked up across the
+		// whole of it, so a player ranked 40th still sees their number.
+		season,
+		seasonPlayers: seasonBoard.players.slice(0, SEASON_STANDINGS_ROWS),
+		yourSeason: user
+			? yourSeason(seasonBoard.players, user.user_id, profile?.summary ?? null)
+			: null,
+		homeSummary: homeSummary.summary,
 		// The strip is everything the hero isn't. The hero is usually in these
 		// feeds too — the fallback takes their newest outright, and an admin
 		// normally stars something recent — so without this the same card would

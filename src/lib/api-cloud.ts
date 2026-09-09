@@ -350,6 +350,34 @@ const PLAYERS_SHAPE_VERSION = Math.max(
 	...Object.keys(PLAYERS_SHAPE_CHANGELOG).map(Number),
 );
 
+// Wire shape for GET /v1/home-summary — the five bundle fields the home page's
+// six stats panels draw, plus the corpus size. A projection of ChartBundleCore
+// rather than a shape of its own, so a field can't drift from the bundle it is
+// cut out of.
+//
+// `startingArchetypeWinRate` is the one field that is not the bundle's own: the
+// Worker floors it at HOME_ARCHETYPE_MIN_GAMES before serving, because an
+// archetype's rate IS the row and a rate off eleven games reads as a finding.
+// So this field and /stats' differ for the same corpus, deliberately.
+export interface HomeStatsSummary extends Pick<
+	ChartBundleCore,
+	| "nationWinRate"
+	| "expansionWinRate"
+	| "capitalFamilyWinRate"
+	| "startingArchetypeWinRate"
+	| "techFirst"
+> {
+	meta: { game_count: number };
+}
+
+// An envelope rather than six independently nullable fields: one KV entry
+// answers for all of them, so they are present together or not at all, and the
+// envelope makes any other combination unrepresentable. `summary` is null on a
+// cache miss — the home page drops the whole stats region then.
+export interface HomeSummaryResponse {
+	summary: HomeStatsSummary | null;
+}
+
 // Wire shape for GET /v1/games/public-recent — the marketing home's
 // discovery feed. Includes the uploader's display name + a sparkline-ready
 // per-turn victory-points series (`vp_series`) for each player.
@@ -1112,6 +1140,19 @@ export const cloudApi = {
 		const qs = params.toString();
 		const res = await request(`/stats${qs ? `?${qs}` : ""}`, opts);
 		return res.json() as Promise<ChartBundleCore>;
+	},
+
+	// The home page's stats panels, over the unfaceted `duel` slice — a public,
+	// trimmed projection of the same precomputed bundle getGlobalStats reads.
+	//
+	// Its own endpoint because /v1/stats is session-gated on who may spend a
+	// whole-corpus aggregation and home is anonymous; this one can only read the
+	// precomputed entry, and answers `{ summary: null }` when there isn't one.
+	// Each field arrives whole (bar the server's archetype floor) — the top-7
+	// row caps the panels draw are applied client-side, in $lib/home/home-stats.
+	getHomeSummary: async (opts?: CallOpts): Promise<HomeSummaryResponse> => {
+		const res = await request("/home-summary", opts);
+		return res.json() as Promise<HomeSummaryResponse>;
 	},
 
 	// Anonymous discovery feed for the marketing home (/). Returns the 20
