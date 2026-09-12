@@ -4,9 +4,11 @@ import {
 	editDistance,
 	groupIntoParts,
 	playersInTitle,
+	prepareRoster,
 	resolveName,
 	attributeVideos,
 	union,
+	versusInTitle,
 	videoIdsInUrl,
 	type ArchiveMatchInput,
 	type TimedVideo,
@@ -26,9 +28,10 @@ const video = (id: string, title: string): Video => ({
 	duration_seconds: null,
 });
 
+/** `hours: null` is a broadcast still running — no runtime known yet. */
 const at = (
 	aired: string,
-	hours: number,
+	hours: number | null,
 	channel: string,
 	title = channel,
 	uploaderUserId: string | null = null,
@@ -37,10 +40,10 @@ const at = (
 	channel,
 	uploaderUserId,
 	aired,
-	seconds: Math.round(hours * 3600),
+	seconds: hours === null ? null : Math.round(hours * 3600),
 });
 
-const ROSTER = [
+const ROSTER = prepareRoster([
 	"alcaras",
 	"CLIFF123",
 	"NestorLN",
@@ -51,7 +54,7 @@ const ROSTER = [
 	"watchtheturd",
 	"A_Modern_Major_General",
 	"phielp",
-];
+]);
 
 describe("union", () => {
 	it("counts overlap once", () => {
@@ -101,8 +104,10 @@ describe("union", () => {
 });
 
 describe("editDistance", () => {
-	it("measures a single substitution", () => {
-		expect(editDistance("quetzal", "queztal", 2)).toBeLessThanOrEqual(2);
+	it("counts a transposition as one edit, not two", () => {
+		// Plain Levenshtein scores this 2; the whole reason for the variant is
+		// that it scores 1, so the assertion must be exact and the cap tight.
+		expect(editDistance("quetzal", "queztal", 1)).toBe(1);
 	});
 	it("bails out past the cap instead of computing the true distance", () => {
 		expect(editDistance("alcaras", "watchtheturd", 1)).toBe(2);
@@ -126,14 +131,14 @@ describe("resolveName", () => {
 	});
 
 	it("refuses a prefix that fits more than one player", () => {
-		expect(resolveName("ma", ["Magnus", "Marauder"])).toBeNull();
+		expect(resolveName("ma", prepareRoster(["Magnus", "Marauder"]))).toBeNull();
 	});
 
 	// This tournament has a player called "PS". Exact equality is safe at any
 	// length a real handle reaches; it is prefix and fuzzy matching that need
 	// characters to be distinctive.
 	it("matches a two-character handle exactly", () => {
-		expect(resolveName("ps", [...ROSTER, "PS"])).toBe("PS");
+		expect(resolveName("ps", [...ROSTER, ...prepareRoster(["PS"])])).toBe("PS");
 	});
 
 	it("matches a three-character prefix when only one player fits", () => {
@@ -178,6 +183,45 @@ describe("playersInTitle", () => {
 		expect(
 			playersInTitle("Magnus v watchtheturd, Part 7 [Match 089]", ROSTER),
 		).toEqual(["watchtheturd"]);
+	});
+
+	// "alcarasv" is one edit from alcaras. Letting a 2-gram straddle the "v"
+	// still resolved the name, but swallowed the token that says who played.
+	it("does not let a name swallow the versus token beside it", () => {
+		expect(versusInTitle("alcaras v phielp", ROSTER)).toEqual([
+			"alcaras",
+			"phielp",
+		]);
+	});
+
+	it("does not read a bracket word as a player", () => {
+		const roster = prepareRoster([
+			"Divine",
+			"Swiss_Cheese",
+			"alcaras",
+			"phielp",
+		]);
+		expect(playersInTitle("Div 2 Match 5: alcaras vs phielp", roster)).toEqual([
+			"alcaras",
+			"phielp",
+		]);
+		expect(playersInTitle("Swiss Round 3 alcaras v phielp", roster)).toEqual([
+			"alcaras",
+			"phielp",
+		]);
+	});
+});
+
+describe("versusInTitle", () => {
+	it("returns the names on either side of the versus token", () => {
+		expect(
+			versusInTitle("Konstant casts: Cliff vs NestorLN [Cast]", ROSTER),
+		).toEqual(["CLIFF123", "NestorLN"]);
+	});
+
+	it("is null when a side of the versus is not a roster name", () => {
+		expect(versusInTitle("Frederik vs phielp", ROSTER)).toBeNull();
+		expect(versusInTitle("alcaras and phielp", ROSTER)).toBeNull();
 	});
 });
 
@@ -361,6 +405,36 @@ describe("groupIntoParts", () => {
 	it("returns nothing for a match with no footage", () => {
 		expect(groupIntoParts([], P, U).parts).toEqual([]);
 	});
+
+	// The video the tab exists for while a tournament is live. It has no runtime
+	// yet, so it cannot be priced — but dropping it made the match look unfilmed.
+	it("keeps a broadcast still running as an unpriced angle", () => {
+		const { parts } = groupIntoParts(
+			[
+				at("2026-08-27T01:57:00Z", 1.5, "Shaun McNamee"),
+				at("2026-08-27T02:10:00Z", null, "alcaras"),
+			],
+			P,
+			U,
+		);
+		expect(parts).toHaveLength(1);
+		expect(parts[0].angles.map((a) => [a.channel, a.seconds])).toEqual([
+			["Shaun McNamee", 1.5 * 3600],
+			["alcaras", null],
+		]);
+		// Priced from the one camera that has a runtime.
+		expect(parts[0].seconds).toBeCloseTo(1.5 * 3600, 0);
+	});
+
+	it("lists a match whose only footage is still running", () => {
+		const { parts } = groupIntoParts(
+			[at("2026-08-27T01:57:00Z", null, "alcaras")],
+			P,
+			U,
+		);
+		expect(parts).toHaveLength(1);
+		expect(parts[0].seconds).toBe(0);
+	});
 });
 
 describe("attributeVideos", () => {
@@ -440,5 +514,50 @@ describe("attributeVideos", () => {
 		);
 		expect(byMatch.size).toBe(0);
 		expect(unattributed).toHaveLength(1);
+	});
+
+	// Casters here are often players too. Credited first, "ant" used to claim
+	// the game for ant-v-alcaras — silently, since that pairing exists.
+	it("believes the versus over the order names appear in", () => {
+		const { byMatch } = attributeVideos(
+			[at("2026-07-04T16:47:00Z", 3, "ant", "ant casts alcaras vs phielp")],
+			[
+				M("ant-alcaras", "ant", "alcaras"),
+				M("alcaras-phielp", "alcaras", "phielp"),
+			],
+		);
+		expect([...byMatch.keys()]).toEqual(["alcaras-phielp"]);
+	});
+
+	it("refuses a title whose names fit more than one pairing", () => {
+		// No versus to settle it, and both pairs played: a guess would be silent.
+		const { byMatch, unattributed } = attributeVideos(
+			[at("2026-07-04T16:47:00Z", 3, "ant", "ant, alcaras and phielp")],
+			[
+				M("ant-alcaras", "ant", "alcaras"),
+				M("alcaras-phielp", "alcaras", "phielp"),
+			],
+		);
+		expect(byMatch.size).toBe(0);
+		expect(unattributed).toHaveLength(1);
+	});
+
+	it("still places a title with a third name when only one pairing fits", () => {
+		const { byMatch } = attributeVideos(
+			[at("2026-07-04T16:47:00Z", 3, "ant", "ant, alcaras and phielp")],
+			[
+				M("alcaras-phielp", "alcaras", "phielp"),
+				M("ant-cliff", "ant", "CLIFF123"),
+			],
+		);
+		expect([...byMatch.keys()]).toEqual(["alcaras-phielp"]);
+	});
+
+	it("attributes a broadcast still running, so it is not lost", () => {
+		const { byMatch } = attributeVideos(
+			[at("2026-07-04T16:47:00Z", null, "Nestor", "alcaras v phielp")],
+			[M("m1", "alcaras", "phielp")],
+		);
+		expect(byMatch.get("m1")).toHaveLength(1);
 	});
 });
