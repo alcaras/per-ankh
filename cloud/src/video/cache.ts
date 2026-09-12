@@ -31,7 +31,10 @@ import {
 // v5: live content is dated by when the broadcast aired rather than when its
 //     VOD was published; orphan the v4 entries so a warmed feed doesn't keep
 //     serving dates that are hours-to-a-day too recent.
-const CACHE_VERSION = 5;
+// v6: every video carries duration_seconds; orphan the v5 entries so a warmed
+//     feed doesn't keep serving videos with the field absent entirely (not
+//     null), which a consumer reading it would see as undefined.
+const CACHE_VERSION = 6;
 // Serve a cached entry without refetching under this age.
 const SOFT_TTL_MS = 60 * 60 * 1000; // 1h
 // KV hard expiry — a safety net far past the soft TTL.
