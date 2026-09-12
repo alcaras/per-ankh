@@ -440,6 +440,24 @@ app. New surfaces in this branch warrant a fresh pass:
    via `sessionFromRequest`. Verify the field doesn't leak to
    anonymous readers (it shouldn't — `is_viewer_admin = false` for them).
 
+## Video archive — how a video finds its match
+
+The Videos tab renders **match → part → angle**: a match is one game, played across one or more parts (its `parts[]` sittings), each of which may have been filmed from several angles — a caster's broadcast, or a player's own point of view. All three levels already existed in the schema; what the stored data lacked was the link from a video to a match. The rules below are the non-obvious ones, recorded because each was arrived at by getting it wrong first. They live in `cloud/src/tournament/video-archive.ts`.
+
+**Parts come from broadcast windows, not titles.** A video occupies its air time plus its duration, and recordings within two hours of each other are one part. Titles cannot do this job: on the 2026 tournament one caster tagged two parts four days apart "Part 2", another tagged a continuation "Part 4b", and several videos carry a match number belonging to someone else's game — two different matches are both titled "Match 013". Grouping by calendar day fails too: match 3 played at 17:00 and again at 23:00 on 4 July.
+
+**The two-hour window is bounded from above, not just below.** Its lower bound is the longest real break inside one sitting. Its upper bound is the shortest real gap between two games played the same evening, which on this tournament is match 3 finishing at 20:23 and restarting at 23:01. Anything past roughly 2h35m merges two separate games into one, so raising it needs evidence from a tournament showing a longer mid-sitting break.
+
+**A part is priced at the union of its angles' windows.** Several cameras on the same hours collapse to those hours, and cameras that relayed one long session between them add up. Pricing a part at its longest single camera — the first rule tried, and it looks right — reported match 80 as five hours of a ten-hour game, because three channels had tiled it between them: 14:02→17:25, 17:25→22:24, 22:49→00:10.
+
+**Attribution prefers a stored link, then the roster.** A `parts[].streams[]` URL naming a video wins outright, because a human said so. Otherwise the title is matched against the tournament's own roster — never against the match number in that title. Three rules widen as they get less certain: exact equality at any length a real handle reaches (this tournament has a player called "PS"), unique prefix from three characters (uploaders write "Cliff" for CLIFF123, "Nestor" for NestorLN), and one edit from six, counting a transposition as one edit rather than two ("Queztal" for Quetzal). That resolves 185 of 196 videos with no ambiguous pairings. The eleven it misses are real-name aliases and an emoji handle, which no rule reaches — those need a stored link, and they are why the endpoint returns an `unattributed` bucket instead of dropping them.
+
+**The thresholds are fitted to one tournament's typos.** A roster that breaks them will do so silently, because the result is a boolean rather than a confidence the handler could refuse. Before a second tournament runs on this, make the matcher return a score and let anything uncertain fall into `unattributed`, where a human sees it.
+
+**Without a `YOUTUBE_API_KEY` the archive is empty.** Grouping needs each video's duration and air time, and only `videos.list` carries them; the keyless RSS fallback states no length, so no video can be placed in a part.
+
+**Known gaps, none of which this addresses.** 103 of 157 stored stream links are channel `/live` URLs that stop resolving once the broadcast ends; a scheduled job to rewrite them to the permanent VOD address is designed but not built. Eighteen recordings were never added to the playlist and are invisible to a playlist-based read. Two parts went out on Twitch only.
+
 ## Operational checklist for first tournament
 
 In rough order. Most are documented in [`cloud-deploy-plan.md`](./cloud-deploy-plan.md);
