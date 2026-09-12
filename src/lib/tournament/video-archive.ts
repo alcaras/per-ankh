@@ -1,5 +1,5 @@
-// The shape `GET /v1/tournaments/:id/videos` returns, and the one formatter the
-// Videos tab needs on top of it.
+// The shape `GET /v1/tournaments/:id/video-archive` returns, and the one
+// formatter the Videos tab needs on top of it.
 //
 // The logic that BUILDS this shape — clustering videos into parts by broadcast
 // window, pricing a part, attributing a video to a match, deciding whether a
@@ -17,7 +17,8 @@ export interface ArchiveAngle {
 	video: TournamentVideo;
 	channel: string;
 	angle: Angle;
-	seconds: number;
+	/** Runtime; null for a broadcast still running, and on the keyless path. */
+	seconds: number | null;
 	aired: string;
 }
 
@@ -52,6 +53,12 @@ export interface ArchiveMatch {
 }
 
 export interface VideoArchive {
+	/**
+	 * Where the videos came from: the keyed Data API read, the keyless RSS
+	 * fallback (recent entries only, no runtimes), or nothing because no
+	 * playlist is configured. The three empty states are otherwise identical.
+	 */
+	source: "api" | "feed" | "none";
 	matches: ArchiveMatch[];
 	/** Videos no match claimed, so the gaps stay visible rather than dropped. */
 	unattributed: TournamentVideo[];

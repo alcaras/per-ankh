@@ -6,6 +6,7 @@
 
 import type { FullGameData } from "$lib/parser/types";
 import { DEFAULT_GLOBAL_SLICE } from "$lib/stats/global-facets";
+import type { VideoArchive } from "$lib/tournament/video-archive";
 import type {
 	ChartBundle,
 	ChartBundleCore,
@@ -92,8 +93,9 @@ export interface YouTubeAttributedVideo extends RecentVideo {
 	uploader_url: string;
 }
 
-// One entry in a tournament's Videos tab (GET /v1/tournaments/:id/videos). The
-// uploader is attributed three ways: a linked Per-Ankh user arrives as a
+// One video in a tournament's archive (GET /v1/tournaments/:id/video-archive)
+// or the cross-tournament feed (GET /v1/tournament-videos). The uploader is
+// attributed three ways: a linked Per-Ankh user arrives as a
 // CreatorVideo (Discord identity, like the home feed); an unlinked YouTube
 // channel as a YouTubeAttributedVideo (raw channel name/link); a feed that
 // omitted the uploader as a plain RecentVideo.
@@ -193,8 +195,6 @@ export interface UserMe {
 	// offers a one-time input that remembers the link for later casts.
 	stream_url: string | null;
 }
-
-import type { VideoArchive } from "$lib/tournament/video-archive";
 
 export interface GameListItem {
 	game_id: string;
@@ -1310,19 +1310,19 @@ export const cloudApi = {
 		}>;
 	},
 
-	// The tournament's YouTube-playlist uploads (newest first), each with uploader
-	// attribution (Discord identity when the uploader is a linked Per-Ankh user,
-	// else the raw YouTube channel). Public read; feeds the tournament "Videos"
-	// tab. Empty when no playlist is configured.
-
-	// The tournament's recorded games, grouped match -> part -> angle. The
-	// Worker owns the grouping and the attribution; see
-	// cloud/src/tournament/video-archive.ts.
+	// The tournament's recorded games, grouped match -> part -> angle, with
+	// uploader attribution on every video (Discord identity when the uploader is
+	// a linked Per-Ankh user, else the raw YouTube channel). Public read; feeds
+	// the tournament "Videos" tab. The Worker owns the grouping and the
+	// attribution; see cloud/src/tournament/video-archive.ts.
 	getTournamentVideoArchive: async (
 		tournamentId: string,
 		opts?: CallOpts,
 	): Promise<VideoArchive> => {
-		const res = await request(`/tournaments/${tournamentId}/video-archive`, opts);
+		const res = await request(
+			`/tournaments/${tournamentId}/video-archive`,
+			opts,
+		);
 		return res.json() as Promise<VideoArchive>;
 	},
 

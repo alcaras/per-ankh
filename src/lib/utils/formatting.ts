@@ -606,17 +606,6 @@ export function formatGameTitle(game: {
 }
 
 /**
- * Relative "in X" / "X ago" string for a scheduled instant, matching Discord's
- * `<t:…:R>` style: "in 2 days", "in 5 hours", "in 30 minutes", "3 days ago".
- * Computed at render time from the current clock — not a live-ticking countdown
- * (it refreshes whenever the surface re-renders, e.g. reopening the popover).
- * The unit steps up as the gap widens (minutes → hours → days → months →
- * years), always picking the coarsest unit that still reads naturally.
- *
- * @param iso - ISO-8601 instant string, or null/undefined
- * @returns e.g. "in 2 days", or "" when the input is empty/invalid
- */
-/**
  * A day in the short "4 Sep" form, on the pinned locale so the month never
  * arrives translated and server and client agree across hydration.
  *
@@ -641,6 +630,17 @@ export function formatShortDate(
 	});
 }
 
+/**
+ * Relative "in X" / "X ago" string for a scheduled instant, matching Discord's
+ * `<t:…:R>` style: "in 2 days", "in 5 hours", "in 30 minutes", "3 days ago".
+ * Computed at render time from the current clock — not a live-ticking countdown
+ * (it refreshes whenever the surface re-renders, e.g. reopening the popover).
+ * The unit steps up as the gap widens (minutes → hours → days → months →
+ * years), always picking the coarsest unit that still reads naturally.
+ *
+ * @param iso - ISO-8601 instant string, or null/undefined
+ * @returns e.g. "in 2 days", or "" when the input is empty/invalid
+ */
 export function formatRelativeToNow(iso: string | null | undefined): string {
 	if (!iso) return "";
 	const d = new Date(iso);
