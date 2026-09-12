@@ -14,6 +14,7 @@
 	import { getCivilizationColor } from "$lib/config";
 	import { formatShortDate, nationName } from "$lib/utils/formatting";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
+	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import {
 		formatRuntime,
 		type ArchiveAngle,
@@ -29,18 +30,32 @@
 	const open = new SvelteSet<string>();
 
 	const rounds = $derived(
-		[...new Set(data.archive.matches.map((a) => a.round_number))]
-			.filter((r): r is number => r != null)
-			.sort((a, b) => a - b),
+		[...new Set(data.archive.matches.map((a) => a.round_number))].sort(
+			(a, b) => a - b,
+		),
 	);
 
+	// A pending match with footage has no nation yet; it must not put an
+	// "Unknown" option in the select that, chosen, silently clears the filter.
 	const nations = $derived(
 		[
 			...new Set(
 				data.archive.matches.flatMap((a) => [a.slot_a_nation, a.slot_b_nation]),
 			),
-		].sort((a, b) => nationName(a).localeCompare(nationName(b))),
+		]
+			.filter((n): n is string => n != null)
+			.sort((a, b) => nationName(a).localeCompare(nationName(b))),
 	);
+
+	// A runtime the Worker could not price: on the keyed read that is a
+	// broadcast still running; on the keyless feed it is every video, and
+	// saying "live" about all of them would be false.
+	const runtimeLabel = (seconds: number | null): string =>
+		seconds !== null
+			? formatRuntime(seconds)
+			: data.archive.source === "api"
+				? "live"
+				: "";
 
 	function haystack(a: ArchiveMatch): string {
 		return [
@@ -71,7 +86,9 @@
 	const totalSeconds = (a: ArchiveMatch) =>
 		a.parts.reduce((t, p) => t + p.seconds, 0);
 
-	const autoOpen = $derived(query.trim() !== "" || nation !== "");
+	const filtering = $derived(
+		query.trim() !== "" || nation !== "" || round !== "",
+	);
 
 	const totals = $derived({
 		matches: shown.length,
@@ -89,22 +106,29 @@
 	// what the old page's "Show more" existed to avoid.
 	const AUTO_OPEN_LIMIT = 8;
 
-	// `open` always means open. An earlier version flipped its sense while a
-	// filter was active, which made typing one character collapse the one match
-	// you had opened, and clearing the query leave open the one you had closed.
+	// `open` is the one source of truth and always means open. Auto-opening
+	// ADDS to it rather than overriding it, so a match the filter opened can be
+	// closed again, and its button's aria-expanded is never a lie. An earlier
+	// version flipped the set's sense while a filter was active, which made
+	// typing one character collapse the one match you had opened; the version
+	// after that OR'd the filter in at render time, which made the collapse
+	// button a no-op on every auto-opened match.
+	$effect(() => {
+		if (filtering && shown.length <= AUTO_OPEN_LIMIT)
+			for (const a of shown) open.add(a.match_id);
+	});
+
 	function toggle(id: string) {
 		if (open.has(id)) open.delete(id);
 		else open.add(id);
 	}
-	const isOpen = (a: ArchiveMatch) =>
-		open.has(a.match_id) || (autoOpen && shown.length <= AUTO_OPEN_LIMIT);
 </script>
 
 {#snippet tile(
 	video: ArchiveAngle["video"],
 	channel: string,
 	runtime: string,
-	badge: "pov" | "cast" | "post" | null,
+	badge: ArchiveAngle["angle"],
 )}
 	<!-- `group` is what reveals the admin star on hover, as on VideoCard. -->
 	<div
@@ -113,14 +137,17 @@
 	>
 		<!-- An external watch URL, not an app route, so resolve() doesn't apply;
 		     rel guards tabnabbing and referrer leakage. Scoped to this one
-		     element, as VideoCard scopes the same rule. -->
+		     element, as VideoCard scopes the same rule. Named by the video's
+		     title, as VideoCard names its link: the tile shows only channel and
+		     runtime, and two angles from one channel are otherwise the same link
+		     to a screen reader. -->
 		<!-- eslint-disable svelte/no-navigation-without-resolve -->
 		<a
 			href={video.url}
 			target="_blank"
 			rel="noopener noreferrer"
 			class="absolute inset-0 z-10 rounded-lg"
-			aria-label={`${channel} — ${runtime}`}
+			aria-label={[video.title, channel, runtime].filter(Boolean).join(" — ")}
 		></a>
 		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		{#if video.thumbnail_url}
@@ -147,23 +174,20 @@
 				style="color: rgb(var(--color-bright));"
 			>
 				{channel || "Unknown channel"}
-				{#if badge}
-					<span
-						class="ml-1 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider"
-						class:text-orange={badge === "pov"}
-						class:text-tan={badge === "cast"}
-						class:text-muted={badge === "post"}
-						style="background-color: rgb(var({badge === 'pov'
-							? '--color-orange'
-							: badge === 'cast'
-								? '--color-tan'
-								: '--color-muted'}) / 0.15);"
-					>
-						{badge === "pov" ? "POV" : badge === "cast" ? "cast" : "post-game"}
-					</span>
-				{/if}
+				<span
+					class="ml-1 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider"
+					class:text-orange={badge === "pov"}
+					class:text-tan={badge === "cast"}
+					style="background-color: rgb(var({badge === 'pov'
+						? '--color-orange'
+						: '--color-tan'}) / 0.15);"
+				>
+					{badge === "pov" ? "POV" : "cast"}
+				</span>
 			</span>
-			<span class="mt-0.5 block text-[11px] text-muted">{runtime}</span>
+			{#if runtime}
+				<span class="mt-0.5 block text-[11px] text-muted">{runtime}</span>
+			{/if}
 		</span>
 		<FeaturedStar {video} />
 	</div>
@@ -174,9 +198,22 @@
 		class="rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface-sunken));"
 	>
-		<div class="py-8 text-center text-sm text-gray-400">No videos yet.</div>
+		<div class="py-8 text-center text-sm text-gray-400">
+			{data.archive.source === "none"
+				? "This tournament has no video playlist."
+				: "No videos yet."}
+		</div>
 	</div>
 {:else}
+	{#if data.archive.source === "feed"}
+		<!-- The keyless read: recent playlist entries only, none with a runtime,
+		     dated by when the VOD went up. Say so, or "0 h" and undated parts
+		     read as a broken archive. -->
+		<p class="mb-3 text-xs text-muted">
+			Showing the playlist's most recent entries. Runtimes and the full history
+			need the server's YouTube API key.
+		</p>
+	{/if}
 	<div
 		class="mb-3 flex flex-wrap items-center gap-3 rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface-sunken));"
@@ -253,13 +290,15 @@
 					<button
 						type="button"
 						onclick={() => toggle(a.match_id)}
-						aria-expanded={isOpen(a)}
+						aria-expanded={open.has(a.match_id)}
 						class="grid flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-hover lg:grid-cols-[5rem_minmax(0,1fr)_auto]"
 					>
 						<span
 							class="w-20 flex-none text-[11px] font-bold tracking-wider text-muted"
 						>
-							MATCH {String(a.match_number).padStart(3, "0")}
+							{#if a.match_number != null}
+								MATCH {padMatchNumber(a.match_number)}
+							{/if}
 						</span>
 						<span class="flex min-w-0 flex-wrap items-center gap-2">
 							<span class="flex items-center gap-1.5">
@@ -305,9 +344,9 @@
 							{#if a.total_turns}<span
 									><b class="text-tan">{a.total_turns}</b> turns</span
 								>{/if}
-							<span
-								><b class="text-tan">{formatRuntime(totalSeconds(a))}</b> filmed</span
-							>
+							{#if totalSeconds(a) > 0}<span
+									><b class="text-tan">{formatRuntime(totalSeconds(a))}</b> filmed</span
+								>{/if}
 							<span
 								><b class="text-tan">{a.parts.length}</b> part{a.parts
 									.length === 1
@@ -326,7 +365,7 @@
 					</button>
 				</div>
 
-				{#if isOpen(a)}
+				{#if open.has(a.match_id)}
 					<div class="flex flex-col gap-2 px-4 pb-3">
 						{#if a.parts.length === 0}
 							<div
@@ -349,7 +388,8 @@
 											>{/if}
 									</div>
 									<div class="mt-0.5 text-xs text-muted">
-										{formatShortDate(p.aired)} · {formatRuntime(p.seconds)}
+										{formatShortDate(p.aired)}{#if p.seconds > 0}
+											· {formatRuntime(p.seconds)}{/if}
 									</div>
 								</div>
 								<div class="flex flex-1 flex-wrap gap-2">
@@ -357,7 +397,7 @@
 										{@render tile(
 											g.video,
 											g.channel,
-											formatRuntime(g.seconds),
+											runtimeLabel(g.seconds),
 											g.angle,
 										)}
 									{/each}
