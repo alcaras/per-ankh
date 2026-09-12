@@ -677,7 +677,17 @@ export async function handleTournamentVideoArchive(
 		? parseYouTubePlaylistUrl(tournament.youtube_playlist_url)
 		: null;
 	if (!parsed)
-		return jsonResponse({ matches: [], unattributed: [] }, 200, cors);
+		return jsonResponse(
+			{ source: "none", matches: [], unattributed: [] },
+			200,
+			cors,
+		);
+	// Where the videos came from, so the tab can say the true thing when a list
+	// is empty or unpriced: "api" is the keyed Data API read (whole playlist,
+	// runtimes, air times); "feed" is the keyless RSS fallback (recent entries
+	// only, no runtimes, VOD dates). Without this the three empty states —
+	// no playlist, no key, no footage — are the same empty array.
+	const source: "api" | "feed" = env.YOUTUBE_API_KEY ? "api" : "feed";
 
 	const [videos, matchesWithRound, slots] = await Promise.all([
 		getPlaylistVideosCached(env, parsed.playlistId, ctx),
@@ -719,24 +729,20 @@ export async function handleTournamentVideoArchive(
 		};
 	});
 
-	const timed: TimedVideo[] = attributed.flatMap((v) =>
-		v.duration_seconds == null
-			? []
-			: [
-					{
-						video: v,
-						channel:
-							"display_name" in v
-								? v.display_name
-								: "uploader_name" in v
-									? v.uploader_name
-									: "",
-						uploaderUserId: "user_id" in v ? v.user_id : null,
-						aired: v.published_at,
-						seconds: v.duration_seconds,
-					},
-				],
-	);
+	// Every video goes in, priced or not: attribution reads the title, and a
+	// broadcast still running (null runtime) is the one video the tab must show.
+	const timed: TimedVideo[] = attributed.map((v) => ({
+		video: v,
+		channel:
+			"display_name" in v
+				? v.display_name
+				: "uploader_name" in v
+					? v.uploader_name
+					: "",
+		uploaderUserId: "user_id" in v ? v.user_id : null,
+		aired: v.published_at,
+		seconds: v.duration_seconds,
+	}));
 	const { byMatch, unattributed } = attributeVideos(timed, inputs);
 
 	const playableRows = playable.map(({ match }) => match);
@@ -744,15 +750,6 @@ export async function handleTournamentVideoArchive(
 		loadTurnsForMatches(env, playableRows),
 		loadPlayerSummaryFieldsForMatches(env, playableRows),
 	]);
-	// Nations come from the linked game's player summaries, the same source
-	// serializeMatch reads them from — so a crest here matches the crest the
-	// matches table draws for the same match.
-	const nationOf = (m: MatchRow, side: "a" | "b") => {
-		const idx = side === "a" ? m.slot_a_player_index : m.slot_b_player_index;
-		if (m.game_id === null || idx === null) return null;
-		return summaryByGamePlayer.get(`${m.game_id}:${idx}`)?.nation ?? null;
-	};
-
 	const inputById = new Map(inputs.map((i) => [i.match_id, i]));
 	const body = playable
 		.map(({ match, round }) => {
@@ -775,8 +772,12 @@ export async function handleTournamentVideoArchive(
 				slot_b_id: match.slot_b_id,
 				slot_a_display_name: input?.players[0] ?? null,
 				slot_b_display_name: input?.players[1] ?? null,
-				slot_a_nation: nationOf(match, "a"),
-				slot_b_nation: nationOf(match, "b"),
+				// The same read serializeMatch makes, so a crest here matches the one
+				// the matches table draws for the same match.
+				slot_a_nation:
+					sideSummary(match, "a", summaryByGamePlayer)?.nation ?? null,
+				slot_b_nation:
+					sideSummary(match, "b", summaryByGamePlayer)?.nation ?? null,
 				winner_slot_id: match.winner_slot_id,
 				map_script: match.map_script,
 				total_turns: match.game_id
@@ -786,14 +787,19 @@ export async function handleTournamentVideoArchive(
 				gaps,
 			};
 		})
-		// A played match with no footage still belongs here — that is a gap in the
-		// archive, and dropping it would make it indistinguishable from a match
-		// that never happened. A pending match nobody filmed is simply not news.
-		.filter((m) => m.parts.length > 0 || m.status === "complete")
+		// A decided match with no footage still belongs here — that is a gap in
+		// the archive, and dropping it would make it indistinguishable from a
+		// match that never happened. A pending match nobody filmed is simply not
+		// news. (Byes were filtered above.)
+		.filter((m) => m.parts.length > 0 || m.status !== "pending")
 		.sort((x, y) => (x.match_number ?? 0) - (y.match_number ?? 0));
 
 	return jsonResponse(
-		{ matches: body, unattributed: unattributed.map((v) => v.video) },
+		{
+			source,
+			matches: body,
+			unattributed: unattributed.map((v) => v.video),
+		},
 		200,
 		cors,
 	);
@@ -2131,14 +2137,8 @@ function serializeMatch(
 	// slot↔player_index mapping (migration 0007) against player_summaries. Null
 	// when no save is linked or the index/field is unknown (bye, forfeit,
 	// admin-set, legacy match).
-	const slotASummary =
-		m.game_id && m.slot_a_player_index !== null
-			? summaryByGamePlayer?.get(`${m.game_id}:${m.slot_a_player_index}`)
-			: undefined;
-	const slotBSummary =
-		m.game_id && m.slot_b_player_index !== null
-			? summaryByGamePlayer?.get(`${m.game_id}:${m.slot_b_player_index}`)
-			: undefined;
+	const slotASummary = sideSummary(m, "a", summaryByGamePlayer);
+	const slotBSummary = sideSummary(m, "b", summaryByGamePlayer);
 	return {
 		match_id: m.match_id,
 		slot_a_id: m.slot_a_id,
@@ -2276,6 +2276,19 @@ export interface UserIdentity {
 // follows that user's current profile, matching how the rest of the site
 // renders people. For pending matches (snapshot user_ids are NULL) callers can
 // pass an empty match list — no users → no query.
+// One side's pick summary (nation, archetype) from the linked game, keyed the
+// way loadPlayerSummaryFieldsForMatches keys it. serializeMatch and the video
+// archive both read crests through here, so they cannot disagree about one.
+function sideSummary(
+	m: MatchRow,
+	side: "a" | "b",
+	summaryByGamePlayer: Map<string, PickSummary> | undefined,
+): PickSummary | undefined {
+	const idx = side === "a" ? m.slot_a_player_index : m.slot_b_player_index;
+	if (!m.game_id || idx === null) return undefined;
+	return summaryByGamePlayer?.get(`${m.game_id}:${idx}`);
+}
+
 // Who to show for one side of a match, and which account that is.
 //
 // Identity is pinned, presentation follows the profile: a decided match keeps
@@ -2286,8 +2299,8 @@ export interface UserIdentity {
 // all, so it falls through to whoever holds the seat now.
 //
 // This precedence is easy to get backwards — preferring the frozen handle looks
-// equally reasonable and is wrong — so it lives here and serializeMatch and the
-// video archive both call it rather than restating it.
+// equally reasonable and is wrong — so it lives here, and serializeMatch, the
+// CSV export and the video archive all call it rather than restating it.
 export function matchOccupant(
 	m: MatchRow,
 	side: "a" | "b",
