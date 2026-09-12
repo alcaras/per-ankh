@@ -194,6 +194,8 @@ export interface UserMe {
 	stream_url: string | null;
 }
 
+import type { VideoArchive } from "$lib/tournament/video-archive";
+
 export interface GameListItem {
 	game_id: string;
 	game_name: string | null;
@@ -1312,13 +1314,16 @@ export const cloudApi = {
 	// attribution (Discord identity when the uploader is a linked Per-Ankh user,
 	// else the raw YouTube channel). Public read; feeds the tournament "Videos"
 	// tab. Empty when no playlist is configured.
-	getTournamentPlaylistVideos: async (
+
+	// The tournament's recorded games, grouped match -> part -> angle. The
+	// Worker owns the grouping and the attribution; see
+	// cloud/src/tournament/video-archive.ts.
+	getTournamentVideoArchive: async (
 		tournamentId: string,
 		opts?: CallOpts,
-	): Promise<TournamentVideo[]> => {
-		const res = await request(`/tournaments/${tournamentId}/videos`, opts);
-		return (await (res.json() as Promise<{ videos: TournamentVideo[] }>))
-			.videos;
+	): Promise<VideoArchive> => {
+		const res = await request(`/tournaments/${tournamentId}/video-archive`, opts);
+		return res.json() as Promise<VideoArchive>;
 	},
 
 	getGameTournamentLink: async (

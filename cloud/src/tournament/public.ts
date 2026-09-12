@@ -628,34 +628,6 @@ export async function handleTournamentDetail(
 // enumerate the full playlist; without one we fall back to the free RSS feed's
 // ~15 most-recent entries (search then only spans those). Both produce the same
 // PlaylistVideo shape, so the cache and attribution below are identical.
-export async function handleTournamentPlaylistVideos(
-	tournamentId: string,
-	request: Request,
-	env: TournamentPublicEnv,
-	ctx: ExecutionContext,
-): Promise<Response> {
-	const cors = cloudCorsHeaders(env, request);
-	const session = await sessionFromRequest(env, request);
-	const tournament = await loadViewableTournament(
-		env,
-		request,
-		tournamentId,
-		cors,
-		session,
-	);
-	if (tournament instanceof Response) return tournament;
-	const parsed = tournament.youtube_playlist_url
-		? parseYouTubePlaylistUrl(tournament.youtube_playlist_url)
-		: null;
-	if (!parsed) return jsonResponse({ videos: [] }, 200, cors);
-	const videos = await getPlaylistVideosCached(env, parsed.playlistId, ctx);
-	const usersByChannel = await loadPlaylistUploaders(env, videos);
-	return jsonResponse(
-		{ videos: attributePlaylistVideos(videos, usersByChannel) },
-		200,
-		cors,
-	);
-}
 
 export async function handleTournamentVideoArchive(
 	tournamentId: string,

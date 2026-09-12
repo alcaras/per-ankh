@@ -542,12 +542,6 @@ Single match detail.
 - **Response 200:** `{ ...serializeMatch, round_id, round_number, phase, division, tournament_id }`.
 - **Errors:** `404 MATCH_NOT_FOUND` (missing, or the match's round isn't in this tournament), `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
 
-### `GET /v1/tournaments/:id/videos`
-Uploads from the tournament's admin-set YouTube playlist (`youtube_playlist_url`) — feeds the Videos tab, whose search filters the returned list client-side. KV-cached (stale-while-revalidate), same as the profile videos read. When `YOUTUBE_API_KEY` is configured the whole playlist is enumerated via the Data API (`playlistItems.list`, paged, capped at 500) so search can reach every video, and broadcasts are re-dated to when they aired (`videos.list` with `part=liveStreamingDetails,contentDetails`, one further unit per 50 videos — same correction as the profile videos read); without the key it falls back to the free RSS feed's ~15 most-recent entries, dated as the feed gave them.
-
-- **Response 200:** `{ videos: [{ id, title, url, thumbnail_url, published_at, platform, duration_seconds, …uploader }] }`, newest first (on the keyed path, by air time for live content). Each video carries uploader attribution: a linked Per-Ankh uploader adds `{ user_id, display_name, slug, avatar_url }` (Discord identity, like the creator feed); an unlinked YouTube uploader adds `{ uploader_name, uploader_url }`; a feed without an author adds neither. Empty when no playlist is configured or the stored value no longer parses.
-- **Errors:** `404 TOURNAMENT_NOT_FOUND`, `429 RATE_LIMIT_TOURNAMENT_VIEW`.
-
 ### `GET /v1/tournaments/:id/video-archive`
 The tournament's recorded games, grouped **match → part → angle** — the shape the Videos tab browses. A match is one game, played across one or more **parts** (its `parts[]` sittings), each of which may have been filmed from several **angles**: a caster's broadcast, or a player's own point of view.
 
@@ -885,7 +879,7 @@ Writes are admin-only; the set itself is public — see [`GET /v1/featured-video
 ### `GET /v1/admin/featured-videos`
 The whole featured set, newest video first (`published_at DESC`). Uncapped — the set is hand-curated.
 
-- **Response 200:** `{ videos: FeaturedVideo[] }`, each `{ id, title, url, thumbnail_url, published_at, platform }` plus one of three uploader attributions: `user_id, display_name, slug, avatar_url` (a linked Per-Ankh user), `uploader_name, uploader_url` (an unlinked YouTube channel), or nothing at all. The same three-way shape [`GET /v1/tournaments/:id/videos`](#get-v1tournamentsidvideos) returns.
+- **Response 200:** `{ videos: FeaturedVideo[] }`, each `{ id, title, url, thumbnail_url, published_at, platform }` plus one of three uploader attributions: `user_id, display_name, slug, avatar_url` (a linked Per-Ankh user), `uploader_name, uploader_url` (an unlinked YouTube channel), or nothing at all. The same three-way shape the tournament archive puts on each angle, and the cross-tournament feed on each entry.
 - **Errors:** `404 NOT_FOUND`.
 
 ### `POST /v1/admin/featured-videos`

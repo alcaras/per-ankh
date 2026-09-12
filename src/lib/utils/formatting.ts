@@ -616,6 +616,31 @@ export function formatGameTitle(game: {
  * @param iso - ISO-8601 instant string, or null/undefined
  * @returns e.g. "in 2 days", or "" when the input is empty/invalid
  */
+/**
+ * A day in the short "4 Sep" form, on the pinned locale so the month never
+ * arrives translated and server and client agree across hydration.
+ *
+ * `timeZone` names the clock the day is read on. The tournament header needs
+ * UTC for `starts_at` and the viewer's own zone for `completed_at`, because the
+ * two columns are written differently (see migration 0020); callers that do not
+ * care omit it.
+ *
+ * Returns null for a missing or unparseable instant rather than "Invalid Date".
+ */
+export function formatShortDate(
+	iso: string | null | undefined,
+	timeZone?: string,
+): string | null {
+	if (!iso) return null;
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return null;
+	return d.toLocaleDateString(TIME_LOCALE, {
+		timeZone,
+		month: "short",
+		day: "numeric",
+	});
+}
+
 export function formatRelativeToNow(iso: string | null | undefined): string {
 	if (!iso) return "";
 	const d = new Date(iso);
