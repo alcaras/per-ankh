@@ -45,7 +45,10 @@ interface CachedVideos {
 	videos: Video[];
 }
 
-function cacheKey(platform: string, cacheId: string): string {
+// Exported for the integration tests that seed an entry directly: they must
+// write the key this module reads, or a CACHE_VERSION bump turns their seed
+// into an orphan and the handler under test into one reading nothing.
+export function cacheKey(platform: string, cacheId: string): string {
 	return `videos:v${CACHE_VERSION}:${platform}:${cacheId}`;
 }
 
