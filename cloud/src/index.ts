@@ -83,6 +83,7 @@ import {
 	handleTournamentMatchDetail,
 	handleTournamentMatches,
 	handleTournamentPlaylistVideos,
+	handleTournamentVideoArchive,
 	handleTournamentRounds,
 	handleTournamentStandings,
 	handleTournamentStats,
@@ -654,6 +655,16 @@ const ROUTES: RouteSpec[] = [
 		route: "GET /v1/tournaments/:id/videos",
 		// Passes ctx so the video cache can refresh in the background (SWR).
 		handler: (r, e, m, c) => handleTournamentPlaylistVideos(m![1], r, e, c),
+	},
+	{
+		method: "GET",
+		match: {
+			kind: "regex",
+			regex: /^\/v1\/tournaments\/([A-Za-z0-9_-]{21})\/video-archive$/,
+		},
+		route: "GET /v1/tournaments/:id/video-archive",
+		// Passes ctx so the video cache can refresh in the background (SWR).
+		handler: (r, e, m, c) => handleTournamentVideoArchive(m![1], r, e, c),
 	},
 	{
 		method: "GET",
