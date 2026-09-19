@@ -5,13 +5,14 @@
 	// the single board they always were, and the row below the hero is two
 	// trays (this and the tools) instead of four.
 	//
-	// The inset chrome and its label live here rather than in StatListInset,
-	// the same split FeaturedTournamentPanel makes with its two boxes: the
-	// inset is the list, the panel is what the list sits in.
+	// The inset chrome and its label are PanelInset's, the same box the
+	// featured tile's two previews sit in; StatListInset is only the ranked
+	// list inside it.
 	import type { SpriteCategory } from "$lib/game-detail/helpers";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import type { StatListRow } from "$lib/home/home-stats";
 	import Panel from "$lib/ui/Panel.svelte";
+	import PanelInset from "$lib/ui/PanelInset.svelte";
 	import StatListInset from "./StatListInset.svelte";
 
 	let {
@@ -27,8 +28,7 @@
 	} = $props();
 
 	// The label's glyph — the game's own art for what the list ranks, in the
-	// same descriptor shape the rows carry. Smaller than a row icon, so the
-	// label reads as the inset's marker and not as its first entry.
+	// same descriptor shape the rows carry.
 	const LABEL_ICON_SIZE = 14;
 
 	const sections: Array<{
@@ -66,19 +66,16 @@
 	     standalone panels had. -->
 	<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 		{#each sections as section (section.id)}
-			<div class="rounded-lg bg-surface-deep p-2">
-				<h3
-					class="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase text-gray-400"
-				>
+			<PanelInset label={section.label}>
+				{#snippet icon()}
 					<SpriteIcon
 						category={section.icon.category}
 						value={section.icon.value}
 						size={LABEL_ICON_SIZE}
 					/>
-					{section.label}
-				</h3>
+				{/snippet}
 				<StatListInset rows={section.rows} />
-			</div>
+			</PanelInset>
 		{/each}
 	</div>
 </Panel>

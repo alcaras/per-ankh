@@ -7,8 +7,8 @@
 	// before the first pixel of plot. A list has nowhere to hover, so the second
 	// number a bar keeps in its tooltip rides in the row beside the first.
 	//
-	// The box and its label belong to HomeStatsPanel, the same split
-	// FeaturedTournamentPanel makes with its two insets.
+	// The box around it and its label are PanelInset's, the same box the
+	// featured tile's two previews sit in; this is only the list inside.
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import type { StatListRow } from "$lib/home/home-stats";
 

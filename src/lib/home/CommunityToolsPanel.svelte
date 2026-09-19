@@ -7,6 +7,7 @@
 	// outbound watch URL.
 	import { ATLAS_BASE_URL } from "$lib/tournament/map-script-options";
 	import Panel from "$lib/ui/Panel.svelte";
+	import PanelInset from "$lib/ui/PanelInset.svelte";
 
 	// Duel Maps is the atlas the tournament map links already deep-link into, so
 	// its base URL comes from there rather than being written down a second time.
@@ -24,7 +25,7 @@
 	     so the row reads as two trays of the same thing rather than one tray of
 	     insets next to a bare list. No label on the box: it is the panel's only
 	     child, and the heading above it already names what is in it. -->
-	<div class="rounded-lg bg-surface-deep p-2">
+	<PanelInset>
 		<!-- eslint-disable svelte/no-navigation-without-resolve -- external sites, not app routes; rel guards tabnabbing + referrer leakage -->
 		<ul class="list-disc pl-4 text-[13px] text-tan">
 			{#each APPS as app (app.href)}
@@ -41,5 +42,5 @@
 			{/each}
 		</ul>
 		<!-- eslint-enable svelte/no-navigation-without-resolve -->
-	</div>
+	</PanelInset>
 </Panel>

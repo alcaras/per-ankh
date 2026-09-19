@@ -20,6 +20,7 @@
 	} from "$lib/api-cloud";
 	import { slotMapsFromStandings } from "$lib/tournament/slot-identity";
 	import Panel from "$lib/ui/Panel.svelte";
+	import PanelInset from "$lib/ui/PanelInset.svelte";
 	import TournamentStandingsInset from "./TournamentStandingsInset.svelte";
 	import TournamentUpcomingInset from "./TournamentUpcomingInset.svelte";
 
@@ -76,13 +77,10 @@
 			class="absolute inset-0 -z-10 bg-black/70 transition-colors group-hover:bg-black/60"
 		></div>
 
-		<!-- The insets are nearly opaque: the art is the tile's backdrop, not a
-		     texture behind their rows, and at any less the still's lit half fights
-		     the names in front of it. What shows the picture is the space around
-		     them, not what bleeds through them. The grid is deliberately not
-		     stretched to the panel: the tile keeps the season
-		     boards' height, `mt-auto` drops the insets to its foot, and what they
-		     leave over is the art.
+		<!-- The insets take PanelInset's `overArt` variant, for the reason that
+		     prop gives. The grid is deliberately not stretched to the panel: the
+		     tile keeps the season boards' height, `mt-auto` drops the insets to
+		     its foot, and what they leave over is the art.
 
 		     Both boxes are a FIXED height rather than content-height, which is what
 		     stops the tile reshaping itself under the reader. Upcoming's row count
@@ -96,18 +94,12 @@
 		     and `overflow-hidden` is the partner to the fixed height — nothing can
 		     spill past it if a time string wraps at the narrowest column. -->
 		<div class="mt-auto grid gap-2 sm:grid-cols-2">
-			<div class="h-[102px] overflow-hidden rounded-lg bg-surface-deep/90 p-2">
-				<h4 class="mb-1 text-[10px] font-bold uppercase text-gray-400">
-					Standings
-				</h4>
+			<PanelInset label="Standings" overArt class="h-[102px] overflow-hidden">
 				<TournamentStandingsInset rows={leaders} />
-			</div>
-			<div class="h-[102px] overflow-hidden rounded-lg bg-surface-deep/90 p-2">
-				<h4 class="mb-1 text-[10px] font-bold uppercase text-gray-400">
-					Upcoming
-				</h4>
+			</PanelInset>
+			<PanelInset label="Upcoming" overArt class="h-[102px] overflow-hidden">
 				<TournamentUpcomingInset {matches} {slots} />
-			</div>
+			</PanelInset>
 		</div>
 	</Panel>
 </a>
