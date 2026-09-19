@@ -4,7 +4,15 @@ import type { ReligionInfo } from "./ReligionInfo";
 /**
  * Tile data for map visualization
  */
-export type MapTile = { x: number, y: number, terrain: string | null, height: string | null, vegetation: string | null, resource: string | null, improvement: string | null, improvement_pillaged: boolean, has_road: boolean, specialist: string | null, tribe_site: string | null, 
+export type MapTile = { x: number, y: number, terrain: string | null, height: string | null, vegetation: string | null, resource: string | null, improvement: string | null, improvement_pillaged: boolean, 
+/**
+ * Turns of construction still owed on `improvement`; null once built.
+ * `> 0` is the game's `isImprovementUnfinished()`, which `getActiveImprovement`
+ * treats exactly like pillage — the improvement neither pays its own yields
+ * nor grants adjacency bonuses. Optional: absent on blobs parsed before
+ * PARSER_VERSION 2.17.0.
+ */
+improvement_turns_left?: number | null, has_road: boolean, specialist: string | null, tribe_site: string | null, 
 /**
  * All religions present in this tile's city (up to 5)
  */

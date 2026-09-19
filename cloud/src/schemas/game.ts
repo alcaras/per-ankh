@@ -154,6 +154,20 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         saves from Old World builds before it started recording the
 //         history, so the Techs tab hides the card rather than showing a
 //         half-answer.
+// 2.17.0 — map_tiles[].improvement_turns_left, and improvement_pillaged now
+//         parses at all. Both tags were read under names the game never
+//         writes: it writes `<Pillaged />` as an empty element (presence is
+//         the test, as with `<Road />`) and `<ImprovementBuildTurnsLeft>`,
+//         so the flag was always false and the turns always null. The third
+//         name, `<ImprovementDisabled>`, is a GAME-level list of globally
+//         disabled improvements — already parsed as such into
+//         game_details.disabled_improvements — never a tile flag, so the
+//         tile-level field is gone rather than renamed. Together they are
+//         the game's `getActiveImprovement`: a pillaged or still-building
+//         improvement pays no yield and grants no adjacency bonus, which
+//         the Techs tab's science-source breakdown now honours. The added
+//         field costs the largest blob in the corpus +248 KiB uncompressed
+//         and +1.8 KiB gzipped — it is null on almost every tile.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -177,13 +191,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.14.0",
 	"2.15.0",
 	"2.16.0",
+	"2.17.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.16.0";
+export const CURRENT_PARSER_VERSION = "2.17.0";
 
 // ----- Reusable atoms -----
 
