@@ -1,5 +1,5 @@
-// Player-nested data parsers. Seven collections per <Player>: resources,
-// technology progress/completed/states, council, laws, goals.
+// Player-nested data parsers. Eight collections per <Player>: resources,
+// technology progress/completed/states/choices, council, laws, goals.
 
 import { ParseError } from "../extract-zip.js";
 import {

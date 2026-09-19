@@ -1,4 +1,4 @@
-// Pure derivation for the Techs tab's "Tech choices" card: how each tech a
+// Pure derivation for the Techs tab's "Tech draws" card: how each tech a
 // player holds came to them.
 //
 // Old World deals a hand of techs and the player takes one; the rest go back

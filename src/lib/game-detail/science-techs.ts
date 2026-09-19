@@ -380,25 +380,57 @@ export function scienceTechMarkers(
 
 export type FreeTechMarker = {
 	turn: number;
-	// Every (non-bonus-card) tech the player completed that turn.
+	// The granted techs when `exact`; otherwise every (non-bonus-card) tech the
+	// player completed that turn, one of which was the free one.
 	techs: string[];
 	// True when the turn matches the player's Sages seat founding — the seat
 	// grants a free tech, which attributes the extra completion.
 	sages: boolean;
+	// True when the save's choice history named these techs outright, false
+	// when they were inferred from a double-completion turn. Decides whether
+	// the tooltip can drop its "which one" hedge.
+	exact: boolean;
 };
 
 /**
- * Turns where a player completed more than one tech — research finishes at
- * most one tech per turn, so the extras were granted free (event, ruins,
- * Sages seat). Turn 1 is skipped (nation starting techs all land there), and
- * bonus cards are excluded (they complete alongside their parent by design).
- * A single-tech turn is still flagged when it matches the Sages seat founding
- * turn, since the free tech may have been the only completion.
+ * Turns where a player gained a tech they never drafted.
+ *
+ * `grantedTechs` is the choice history's verdict — the techs the player holds
+ * that no draw accounts for — or `null` when the save carries no history. Given
+ * it, each marker names the granted techs outright.
+ *
+ * Without it, the fallback: turns where a player completed more than one tech,
+ * since research finishes at most one tech per turn, so the extras were granted
+ * free (event, ruins, Sages seat). That path skips turn 1 (nation starting
+ * techs all land there) and bonus cards (they complete alongside their parent
+ * by design), and still flags a single-tech turn matching the Sages seat
+ * founding, since the free tech may have been the only completion.
  */
 export function freeTechMarkers(
 	techs: PlayerTech[],
 	sagesSeatTurn: number | null,
+	grantedTechs: ReadonlySet<string> | null,
 ): FreeTechMarker[] {
+	if (grantedTechs != null) {
+		// No turn-1 or bonus-card filter here: both exist to keep the heuristic
+		// below from reading a false positive it can't tell apart, and the
+		// history has already excluded every tech that came out of a draw.
+		const exactByTurn = new Map<number, string[]>();
+		for (const t of techs) {
+			if (!grantedTechs.has(t.tech)) continue;
+			const list = exactByTurn.get(t.completed_turn) ?? [];
+			list.push(t.tech);
+			exactByTurn.set(t.completed_turn, list);
+		}
+		return [...exactByTurn]
+			.map(([turn, list]) => ({
+				turn,
+				techs: list,
+				sages: turn === sagesSeatTurn,
+				exact: true,
+			}))
+			.sort((a, b) => a.turn - b.turn);
+	}
 	const byTurn = new Map<number, string[]>();
 	for (const t of techs) {
 		if (t.completed_turn <= 1 || t.tech.includes("_BONUS")) continue;
@@ -409,7 +441,8 @@ export function freeTechMarkers(
 	const markers: FreeTechMarker[] = [];
 	for (const [turn, list] of byTurn) {
 		const sages = turn === sagesSeatTurn;
-		if (list.length > 1 || sages) markers.push({ turn, techs: list, sages });
+		if (list.length > 1 || sages)
+			markers.push({ turn, techs: list, sages, exact: false });
 	}
 	return markers.sort((a, b) => a.turn - b.turn);
 }

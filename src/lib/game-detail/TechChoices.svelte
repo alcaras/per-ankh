@@ -12,6 +12,7 @@
 	import type { TechChoiceInfo } from "$lib/parser/types";
 	import { techChoiceRows, type TechChoiceRow } from "./tech-choices";
 	import { ownedByPlayer, techName, type DetailPlayer } from "./helpers";
+	import SpriteIcon from "./SpriteIcon.svelte";
 
 	let {
 		players,
@@ -44,13 +45,19 @@
 			.map((c) => ({
 				...c,
 				drafted: c.rows.filter((r) => r.origin === "drafted").length,
+				starting: c.rows.filter((r) => r.origin === "starting").length,
 				granted: c.rows.filter((r) => r.origin === "granted").length,
 			})),
 	);
-	// Two columns read comfortably; more than four and each would be too
-	// narrow for a tech name plus its alternates, so they stack.
+	// One column per nation while a column still fits a tech name beside its
+	// alternates: three abreast at most, four pairing off two-by-two. Past four
+	// they stack — the threshold TechsTab already uses for `sideBySide`.
 	const columnClass = $derived(
-		columns.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2",
+		columns.length > 4
+			? ""
+			: columns.length === 3
+				? "lg:grid-cols-3"
+				: "lg:grid-cols-2",
 	);
 	const originLabel: Record<TechChoiceRow["origin"], string> = {
 		drafted: "",
@@ -69,21 +76,30 @@
 			tech,
 			perPlayer: columns.map((col) => {
 				let offers = 0;
-				let takenTurn: number | null = null;
-				let taken = false;
+				let held: TechChoiceRow | null = null;
 				for (const row of col.rows) {
 					if (row.tech === tech) {
-						taken = true;
-						takenTurn = row.turn;
+						held = row;
 						// The draw it was taken from counts as an offer too.
 						if (row.origin === "drafted") offers += 1;
 					}
 					if (row.alternates.includes(tech)) offers += 1;
 				}
-				return { player: col.player, offers, taken, takenTurn };
+				return { player: col.player, offers, held };
 			}),
 		};
 	});
+
+	// How the player came to hold the hovered tech. Only a draw is "taken" — a
+	// starting or free tech was never in a hand, so saying it was taken would
+	// contradict that row's own Passed over cell.
+	function heldClause(row: TechChoiceRow | null): string {
+		if (row == null) return "";
+		const turn = row.turn == null ? "" : ` T${row.turn}`;
+		return row.origin === "drafted"
+			? `, taken${turn}`
+			: `, ${originLabel[row.origin]}${turn}`;
+	}
 </script>
 
 {#if columns.length > 0}
@@ -105,11 +121,7 @@
 							<span style="color: {p.player.color};">{p.player.label}</span>
 							{p.offers === 0
 								? "never offered"
-								: `offered ${p.offers}×`}{p.taken
-								? p.takenTurn == null
-									? ", taken"
-									: `, taken T${p.takenTurn}`
-								: ""}
+								: `offered ${p.offers}×`}{heldClause(p.held)}
 						</span>
 					{/each}
 				{/if}
@@ -124,9 +136,9 @@
 					>
 						{col.player.label}
 						<span class="text-xs font-normal text-gray-400">
-							{col.drafted} drafted{col.granted > 0
-								? ` · ${col.granted} free`
-								: ""}
+							{col.drafted} drafted{col.starting > 0
+								? ` · ${col.starting} starting`
+								: ""}{col.granted > 0 ? ` · ${col.granted} free` : ""}
 						</span>
 					</div>
 					<table class="w-full text-xs">
@@ -147,7 +159,7 @@
 									</td>
 									<td class="whitespace-nowrap py-0.5 pl-2">
 										<span
-											class="cursor-default rounded px-1 font-semibold {hovered ===
+											class="inline-flex cursor-default items-center gap-1 rounded px-1 font-semibold {hovered ===
 											row.tech
 												? 'bg-orange/25 text-bright'
 												: 'text-tan'}"
@@ -156,6 +168,7 @@
 											onmouseenter={() => (hovered = row.tech)}
 											onmouseleave={() => (hovered = null)}
 										>
+											<SpriteIcon category="techs" value={row.tech} size={14} />
 											{techName(row.tech)}
 										</span>
 									</td>

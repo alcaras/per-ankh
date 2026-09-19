@@ -137,7 +137,6 @@ export function extractAllGameData(
 	const playerGoals = parsePlayerGoals(root);
 	const playerResources = parsePlayerResources(root);
 	const projectsProduced = parseProjectsProduced(root);
-
 	const religions = parseReligions(root);
 	const religionOpinionHistory = parseReligionOpinionHistory(root);
 	const yieldPriceHistory = parseYieldPriceHistory(root);

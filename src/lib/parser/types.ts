@@ -225,20 +225,22 @@ export interface UnitPromotionInfo {
 }
 
 /**
- * One project a player completed, with its whole-game count — the Player
- * node's ProjectsProduced map. PARSER_VERSION 2.13.0+; absent on older blobs.
+ * One tech a player CHOSE, with the cards passed over in the same draw
+ * (Player.TechPathHistory). `alternates` is never empty — a draw with nothing
+ * else in it records no pair, and so no row. Order across a player's rows is
+ * the order the draws happened, the only ordering the save gives: it records
+ * no turn against a choice. PARSER_VERSION 2.16.0+; absent on older blobs.
  */
-// One tech a player CHOSE, with the cards passed over in the same draw
-// (Player.TechPathHistory). `alternates` is never empty — a draw with nothing
-// else in it records no pair, and so no row. Order across a player's rows is
-// the order the draws happened, the only ordering the save gives: it records
-// no turn against a choice.
 export interface TechChoiceInfo {
 	player_xml_id: number;
 	tech: string;
 	alternates: string[];
 }
 
+/**
+ * One project a player completed, with its whole-game count — the Player
+ * node's ProjectsProduced map. PARSER_VERSION 2.13.0+; absent on older blobs.
+ */
 export interface ProjectProducedInfo {
 	player_xml_id: number;
 	project: string;
@@ -358,7 +360,8 @@ export interface FullGameData {
 
 	match_metadata: MatchMetadata;
 
-	// SharedGameData fields (present in the existing share blob).
+	// The original share-blob fields (SharedGameData), plus later additive
+	// fields placed beside the field they extend rather than appended below.
 	game_details: GameDetails;
 	player_history: PlayerHistory[];
 	yield_history: YieldHistory[];
@@ -378,7 +381,8 @@ export interface FullGameData {
 	game_religions: GameReligion[];
 	player_wonders: PlayerWonder[];
 
-	// New cloud-only fields (spec §3 lines 790–806).
+	// Fields new to the cloud rewrite (spec §3 lines 790–806), plus later
+	// additive fields placed on the same principle.
 	tile_ownership_history: TileOwnershipEntry[];
 	player_nations: PlayerNationEntry[];
 	player_roster: PlayerRosterEntry[];

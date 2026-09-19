@@ -34,6 +34,7 @@
 	} from "./EventRail.svelte";
 	import TechComparison from "./TechComparison.svelte";
 	import TechChoices from "./TechChoices.svelte";
+	import { techChoiceRows } from "./tech-choices";
 	import { specialistName } from "./specialists";
 	import {
 		type DetailPlayer,
@@ -326,11 +327,18 @@
 	}
 
 	function freeTechTooltip(m: FreeTechMarker, color: string): string {
-		const source = m.sages
-			? m.techs.length > 1
-				? "Sages family seat founded this turn — one of these was its free tech (the save doesn't record which)"
-				: "Sages family seat founded this turn — the seat grants a free tech"
-			: "Research finishes one tech per turn; the rest were granted free (event, ruins, tribes)";
+		// `exact` means the save's choice history named these techs, so the
+		// copy states it. The hedged wording is the heuristic's, and survives
+		// for saves older than the history.
+		const source = m.exact
+			? m.sages
+				? "Sages family seat founded this turn — the seat grants a free tech"
+				: "Never dealt in a tech draw, so it was granted free (event, ruins, tribes)"
+			: m.sages
+				? m.techs.length > 1
+					? "Sages family seat founded this turn — one of these was its free tech (the save doesn't record which)"
+					: "Sages family seat founded this turn — the seat grants a free tech"
+				: "Research finishes one tech per turn; the rest were granted free (event, ruins, tribes)";
 		const items = m.techs
 			.map((t) => `<div style="color:${TOOLTIP_TEXT}">${techName(t)}</div>`)
 			.join("");
@@ -472,9 +480,28 @@
 					(y) => y.nation,
 				)?.data ?? [];
 			const expeditions = expeditionEvents(player, storyEvents);
+			// The techs the choice history says no draw accounts for. Same
+			// derivation the Tech draws card runs on the same inputs, so the two
+			// surfaces can't disagree about what was granted. Null when the save
+			// carries no history — that is what puts the rail back on its
+			// double-completion heuristic.
+			const choiceRows = techChoiceRows(
+				techChoices.filter((c) => c.player_xml_id === player.playerId),
+				techs,
+				player.nation,
+			);
+			const grantedTechs =
+				choiceRows.length === 0
+					? null
+					: new Set(
+							choiceRows
+								.filter((r) => r.origin === "granted")
+								.map((r) => r.tech),
+						);
 			return {
 				player,
 				techs,
+				grantedTechs,
 				improvements,
 				laws,
 				stealTurns,
@@ -493,6 +520,7 @@
 					{
 						player,
 						techs,
+						grantedTechs,
 						improvements,
 						laws,
 						stealTurns,
@@ -529,6 +557,7 @@
 								families,
 								cityStatistics.cities,
 							),
+							grantedTechs,
 						).map((m) => ({
 							turn: m.turn,
 							iconCategory: "techs" as const,
