@@ -13,9 +13,8 @@
 // Conversion factor between the public rating scale and the internal (mu/phi)
 // scale, and the system volatility constant tau. Match ratings.py exactly.
 //
-// SCALE is exported because the recommender works on the internal scale too:
-// it predicts a prospective game with the same arithmetic an actual result
-// would be scored with. Same constant, one definition.
+// SCALE is exported because the recommender works on the internal scale too.
+// Same constant, one definition.
 export const SCALE = 173.7178;
 const DEFAULT_TAU = 0.5;
 
@@ -39,18 +38,25 @@ export interface Glicko2Result {
 	games: number;
 }
 
-// The two quantities a Glicko-2 update is built out of, exported for the
-// recommender (cloud/src/ratings/recommend.ts), which scores a *prospective*
-// game with the same arithmetic an actual result would be scored with. Keeping
-// them here rather than restating them there is what guarantees the model the
-// recommendations come from is the model the ratings come from.
+// The two quantities a Glicko-2 update is built out of.
 function g(phi: number): number {
 	return 1.0 / Math.sqrt(1.0 + (3.0 * phi * phi) / (Math.PI * Math.PI));
 }
 
-// Player i's win probability against j, both already on the internal scale.
-export function expectedScore(mu: number, muJ: number, phiJ: number): number {
+// Player i's expected score against j, both already on the internal scale,
+// with j's uncertainty damping the gap the way the update does.
+function expectedScore(mu: number, muJ: number, phiJ: number): number {
 	return 1.0 / (1.0 + Math.exp(-g(phiJ) * (mu - muJ)));
+}
+
+// The same logistic with no damping: a win probability read straight off a
+// rating gap on the internal scale. Exported for the recommender
+// (cloud/src/ratings/recommend.ts), which predicts from conservative ratings
+// — each side's deviation already spent making its estimate pessimistic — so
+// applying g(phi) on top would count the uncertainty twice. What the
+// recommender shares with the engine is this curve and SCALE, not the update.
+export function winProbability(mu: number, muJ: number): number {
+	return 1.0 / (1.0 + Math.exp(-(mu - muJ)));
 }
 
 // The conservative estimate: the rating a player is very likely at least. The

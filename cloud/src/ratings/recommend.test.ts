@@ -155,16 +155,22 @@ describe("buildRecommendations", () => {
 	});
 
 	it("spreads the load instead of sending everyone to the same player", () => {
-		// Far more receivers than candidates: without the load term the pool's
-		// most-informative player would be on all ninety lists. Ninety is also
-		// enough for the ceiling to hold without any list coming up short, which
-		// is the case it is meant to bind in.
-		const players = pool(90);
+		// Twice as many receivers as candidates: forty in the pool, and forty
+		// more who read a list without being on anyone's. Eight hundred picks
+		// over forty names is exactly the ceiling, so it binds on every
+		// candidate and still leaves every list full — the case it is meant
+		// to hold in.
+		const players = [
+			...pool(40),
+			...pool(40, "reader").map((p) => ({ ...p, openToMatches: false })),
+		];
 		const lists = buildRecommendations({ players, duels: [], today: TODAY });
 
 		const appearances = new Map<string, number>();
 		for (const p of players) {
-			for (const id of idsFor(lists, p.userId)) {
+			const ids = idsFor(lists, p.userId);
+			expect(ids).toHaveLength(RECOMMENDATION_COUNT);
+			for (const id of ids) {
 				appearances.set(id, (appearances.get(id) ?? 0) + 1);
 			}
 		}
@@ -246,14 +252,12 @@ describe("buildRecommendations", () => {
 	});
 
 	it("fills a thin pool rather than handing anyone a short list", () => {
-		// Eleven settled players competing for ninety lists: the appearance
-		// ceiling cannot be honoured and still fill them, and a page with three
-		// names on it is the feature not working.
+		// Eleven candidates for ninety lists: the appearance ceiling cannot be
+		// honoured and still fill them, and a page with three names on it is
+		// the feature not working, so the ceiling is what gives.
 		const players = [
 			...pool(11, "few"),
-			...Array.from({ length: 79 }, (_, i) =>
-				player(`crowd${i}`, { rd: 250, games: 2 }),
-			),
+			...pool(79, "reader").map((p) => ({ ...p, openToMatches: false })),
 		];
 		const lists = buildRecommendations({ players, duels: [], today: TODAY });
 

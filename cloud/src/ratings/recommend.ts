@@ -27,7 +27,7 @@
 // many times the pair has already played, and badges the viewer could have
 // worked out for themselves. See migration 0046.
 
-import { conservative, expectedScore, SCALE, type Duel } from "./glicko2";
+import { conservative, SCALE, winProbability, type Duel } from "./glicko2";
 
 // Ten. Enough that the list survives a few of them being busy, few enough to
 // read in one go and to keep any single player from being everyone's answer.
@@ -121,6 +121,11 @@ function pairKey(a: string, b: string): string {
 	return a < b ? `${a} ${b}` : `${b} ${a}`;
 }
 
+// Comparator: the later YYYY-MM-DD first. Dates in that shape sort as strings.
+function byMostRecent(a: string, b: string): number {
+	return a < b ? 1 : a > b ? -1 : 0;
+}
+
 /**
  * Build every player's list. Pure: the same players, duels and date always give
  * the same answer, which is what lets it be tested and what keeps a nightly
@@ -149,25 +154,34 @@ export function buildRecommendations(args: {
 		}
 	}
 
-	// Who may be suggested, and how strongly their recency argues for them.
-	const eligible = new Map<string, number>();
+	// Who may be suggested, when they were last seen, and how strongly that
+	// recency argues for them.
+	const eligible = new Map<
+		string,
+		{ candidate: RecommendationCandidate; lastActive: string; recency: number }
+	>();
 	for (const p of players) {
-		if (!p.openToMatches) continue;
-		const idle = p.lastActive
-			? daysBetween(p.lastActive, today)
-			: Number.POSITIVE_INFINITY;
+		if (!p.openToMatches || p.lastActive === null) continue;
+		const idle = daysBetween(p.lastActive, today);
 		if (idle > ACTIVE_WINDOW_DAYS) continue;
-		eligible.set(p.userId, activityWeight(idle));
+		eligible.set(p.userId, {
+			candidate: p,
+			lastActive: p.lastActive,
+			recency: activityWeight(idle),
+		});
 	}
 
 	// Everyone gets a list, but the players who are themselves in the pool get
-	// theirs first. Someone hidden or idle still spends the load budget of the
-	// names on their page, and they are the least likely to act on it, so they
-	// take what is left rather than what the active players wanted. Ties by
-	// id, so the pass is an ordering and not a coin flip.
+	// theirs first, most recently seen first within it. Someone hidden or idle
+	// still spends the load budget of the names on their page, and they are
+	// the least likely to act on it, so they take what is left rather than
+	// what the active players wanted; among the active, the person who played
+	// this week is the likeliest to read the page. Ties by id, so the pass is
+	// an ordering and not a coin flip.
 	const receivers = [...players].sort(
 		(a, b) =>
 			Number(eligible.has(b.userId)) - Number(eligible.has(a.userId)) ||
+			byMostRecent(a.lastActive ?? "", b.lastActive ?? "") ||
 			(a.userId < b.userId ? -1 : 1),
 	);
 
@@ -184,17 +198,14 @@ export function buildRecommendations(args: {
 			lastActive: string;
 			appearances: number;
 		}[] = [];
-		for (const [candidateId, recency] of eligible) {
+		for (const [candidateId, { candidate, lastActive, recency }] of eligible) {
 			if (candidateId === viewer.userId) continue;
 			const appearances = picked.get(candidateId) ?? 0;
-			const candidate = byId.get(candidateId)!;
 
-			// The predicted result between the two conservative ratings. Each
-			// side's deviation has already been spent making its estimate
-			// pessimistic, so it is not applied a second time as g(phi) — the
-			// zero says "take the gap at face value".
+			// The predicted result between the two conservative ratings — see
+			// winProbability for why the gap is taken at face value.
 			const muJ = (conservative(candidate.r, candidate.rd) - 1500) / SCALE;
-			const e = expectedScore(mu, muJ, 0);
+			const e = winProbability(mu, muJ);
 
 			// Closeness: even odds score 0.5, a certainty scores 0. One
 			// expression, and it says the thing the tab promises.
@@ -222,8 +233,7 @@ export function buildRecommendations(args: {
 				// than filtered on, because it is the last rule the fill below
 				// relaxes and it has to still be there to relax.
 				inBand: e >= lo && e <= hi,
-				// Eligible, so seen within the window: never null here.
-				lastActive: candidate.lastActive!,
+				lastActive,
 				appearances,
 				rec: {
 					opponentUserId: candidateId,
@@ -247,8 +257,10 @@ export function buildRecommendations(args: {
 		// The last pass gives up the no-stomp band itself, and only down to the
 		// floor: at the ends of the ladder there really are only a handful of
 		// close games available, and six names — the last of them not quite even
-		// — beat one name and a lot of white space. Because the score is
-		// closeness, the order this pass admits people in is closest-game-first.
+		// — beat one name and a lot of white space. The score is closeness
+		// discounted by rematches, staleness and load, so the order this pass
+		// admits people in is closest-game-first with those three having had
+		// their say.
 		scored.sort((a, b) => b.score - a.score);
 		const chosen: typeof scored = [];
 		const taken = new Set<number>();
@@ -285,11 +297,8 @@ export function buildRecommendations(args: {
 		// week. Ties by id, so the list is stable between rebuilds.
 		chosen.sort(
 			(a, b) =>
-				(a.lastActive < b.lastActive
-					? 1
-					: a.lastActive > b.lastActive
-						? -1
-						: 0) || (a.rec.opponentUserId < b.rec.opponentUserId ? -1 : 1),
+				byMostRecent(a.lastActive, b.lastActive) ||
+				(a.rec.opponentUserId < b.rec.opponentUserId ? -1 : 1),
 		);
 		out.set(
 			viewer.userId,
