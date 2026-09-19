@@ -9,8 +9,8 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import FeaturedTournamentPanel from "$lib/home/FeaturedTournamentPanel.svelte";
 	import CommunityToolsPanel from "$lib/home/CommunityToolsPanel.svelte";
+	import HomeStatsPanel from "$lib/home/HomeStatsPanel.svelte";
 	import SeasonStandingsPanel from "$lib/home/SeasonStandingsPanel.svelte";
-	import StatListPanel from "$lib/home/StatListPanel.svelte";
 	import YourSeasonPanel from "$lib/home/YourSeasonPanel.svelte";
 	import {
 		homeArchetypeRows,
@@ -24,11 +24,12 @@
 
 	const user = $derived(page.data.user);
 
-	// The three stats panels, built together or not at all — the payload is one
-	// envelope, so there is no state where one of them has data. A cache miss
-	// (or a failed fetch) is `null`, and the page drops the whole stats region
-	// rather than laying out three empty boxes; the tools panel beside them keeps
-	// its column, the same way the discovery grid closes up on an empty feed.
+	// The stats panel's three lists, built together or not at all — the payload
+	// is one envelope, so there is no state where one of them has data. A cache
+	// miss (or a failed fetch) is `null`, and the page drops the whole stats
+	// panel rather than laying out three empty insets; the tools panel beside it
+	// keeps its column, the same way the discovery grid closes up on an empty
+	// feed.
 	const stats = $derived.by(() => {
 		const summary = data.homeSummary;
 		if (!summary) return null;
@@ -250,32 +251,25 @@
 			</div>
 
 			<!--
-			Row 2 — the three stats lists, then the community tools. Four across, and
-			breaking at the same widths the season pair above does, so a list is always
-			the standings panel's width and reads the same way: a rank, a crest, a name
-			and two numbers. That is also why these are lists at all — a horizontal bar
-			spends 140px on its label gutter before the first pixel of plot, which is
-			most of a panel this wide.
+			Row 2 — the stats tray, then the community tools. The three lists are
+			insets of one panel rather than three panels of their own: they are one
+			board read together, and at four panels across the row repeated the
+			panel chrome three times to say so. At `lg` an inset is still the
+			standings panel's width and reads the same way: a rank, a crest, a name
+			and two numbers. That is also why these are lists at all — a horizontal
+			bar spends 140px on its label gutter before the first pixel of plot,
+			which is most of a panel this wide.
 
 			The stats can be absent — with no summary the tools list is the row's only
 			panel, at the width it would have had beside them.
 			-->
-			<div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<div class="mb-4 grid gap-4 lg:grid-cols-4">
 				{#if stats}
-					<StatListPanel
-						title="Nations"
-						titleIcon={{ category: "icons", value: "TRIBES" }}
-						rows={stats.nationPickRate}
-					/>
-					<StatListPanel
-						title="Starting Family"
-						titleIcon={{ category: "icons", value: "RELATIONSHIPS" }}
-						rows={stats.capitalFamily}
-					/>
-					<StatListPanel
-						title="Starting Leader"
-						titleIcon={{ category: "icons", value: "CHARACTERS" }}
-						rows={stats.archetype}
+					<HomeStatsPanel
+						nationPickRate={stats.nationPickRate}
+						capitalFamily={stats.capitalFamily}
+						archetype={stats.archetype}
+						class="lg:col-span-3"
 					/>
 				{/if}
 
