@@ -225,6 +225,19 @@ export interface UnitPromotionInfo {
 }
 
 /**
+ * One tech a player CHOSE, with the cards passed over in the same draw
+ * (Player.TechPathHistory). `alternates` is never empty — a draw with nothing
+ * else in it records no pair, and so no row. Order across a player's rows is
+ * the order the draws happened, the only ordering the save gives: it records
+ * no turn against a choice. PARSER_VERSION 2.16.0+; absent on older blobs.
+ */
+export interface TechChoiceInfo {
+	player_xml_id: number;
+	tech: string;
+	alternates: string[];
+}
+
+/**
  * One project a player completed, with its whole-game count — the Player
  * node's ProjectsProduced map. PARSER_VERSION 2.13.0+; absent on older blobs.
  */
@@ -347,7 +360,8 @@ export interface FullGameData {
 
 	match_metadata: MatchMetadata;
 
-	// SharedGameData fields (present in the existing share blob).
+	// The original share-blob fields (SharedGameData), plus later additive
+	// fields placed beside the field they extend rather than appended below.
 	game_details: GameDetails;
 	player_history: PlayerHistory[];
 	yield_history: YieldHistory[];
@@ -356,6 +370,10 @@ export interface FullGameData {
 	current_laws: PlayerLaw[];
 	tech_discovery_history: TechDiscoveryHistory[];
 	completed_techs: PlayerTech[];
+	// Per player, each tech they CHOSE and the cards passed over in that draw
+	// (Player.TechPathHistory). Empty for saves older than the Old World
+	// release that started recording it, and for blobs parsed before 2.16.0.
+	tech_choices: TechChoiceInfo[];
 	units_produced: PlayerUnitProduced[];
 	city_statistics: CityStatistics;
 	improvement_data: ImprovementData;
@@ -363,7 +381,8 @@ export interface FullGameData {
 	game_religions: GameReligion[];
 	player_wonders: PlayerWonder[];
 
-	// New cloud-only fields (spec §3 lines 790–806).
+	// Fields new to the cloud rewrite (spec §3 lines 790–806), plus later
+	// additive fields placed on the same principle.
 	tile_ownership_history: TileOwnershipEntry[];
 	player_nations: PlayerNationEntry[];
 	player_roster: PlayerRosterEntry[];
@@ -391,4 +410,4 @@ export interface FullGameData {
  * fixes, MINOR for additive fields, MAJOR for breaking schema changes.
  * Initial value `2.0.0` mirrors `FullGameData.version: 2`.
  */
-export const PARSER_VERSION = "2.15.0";
+export const PARSER_VERSION = "2.16.0";
