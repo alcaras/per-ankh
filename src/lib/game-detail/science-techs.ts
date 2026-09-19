@@ -293,6 +293,13 @@ const tenths = (science: number): number => Math.round(science * 10);
  * against this improvement's class, and its CLASS's rule against that class.
  * Every one is read off the neighbour — the tables live on the tile that
  * GRANTS the bonus, which is the opposite of how the XML reads.
+ *
+ * Both CLASS terms are gated on BOTH sides having a class, as the game gates
+ * them. `neighbourClass` stands in for its `eAdjacentClass != NONE` and is the
+ * narrower test: IMPROVEMENT_CLASS is baked only for tokens a science rule
+ * names, so a neighbour outside the science tables reads as classless here.
+ * Such a neighbour grants nothing either way, so the two agree wherever the
+ * difference could be seen.
  */
 function adjacentModifier(
 	improvement: string,
@@ -301,16 +308,28 @@ function adjacentModifier(
 ): number {
 	const byNeighbour = IMPROVEMENT_ADJACENT_MODIFIER[neighbour];
 	const neighbourClass = IMPROVEMENT_CLASS[neighbour];
-	const byNeighbourClass =
-		neighbourClass != null
-			? IMPROVEMENT_ADJACENT_MODIFIER[neighbourClass]
-			: undefined;
-	if (improvementClass == null) return byNeighbour?.[improvement] ?? 0;
+	const own = byNeighbour?.[improvement] ?? 0;
+	if (improvementClass == null || neighbourClass == null) return own;
 	return (
-		(byNeighbour?.[improvement] ?? 0) +
+		own +
 		(byNeighbour?.[improvementClass] ?? 0) +
-		(byNeighbourClass?.[improvementClass] ?? 0)
+		(IMPROVEMENT_ADJACENT_MODIFIER[neighbourClass]?.[improvementClass] ?? 0)
 	);
+}
+
+/**
+ * The improvement the game would actually read off this tile, or null.
+ * `Tile.getActiveImprovement` (Tile.cs:5167) answers NONE for a pillaged OR
+ * a still-building one, and everything downstream goes through it: the tile
+ * pays no yield of its own (City.calculateBaseYield, City.cs:4427) and grants
+ * no neighbour its adjacency bonus (Tile.yieldModifierNoSpecialist,
+ * Tile.cs:13819). Both flags read correctly only on blobs from PARSER_VERSION
+ * 2.17.0 up; older ones carry `false`/absent and price the tile as standing.
+ */
+function activeImprovement(t: MapTile): string | null {
+	if (t.improvement_pillaged) return null;
+	if ((t.improvement_turns_left ?? 0) > 0) return null;
+	return t.improvement;
 }
 
 /**
@@ -1100,8 +1119,8 @@ export function scienceBreakdown(
 	const tileAt = new Map<string, MapTile>();
 	for (const t of tiles) tileAt.set(`${t.x},${t.y}`, t);
 	for (const t of tiles) {
-		const improvement = t.improvement;
-		if (improvement == null || t.improvement_pillaged) continue;
+		const improvement = activeImprovement(t);
+		if (improvement == null) continue;
 		const perResource = IMPROVEMENT_ADJACENT_RESOURCE_SCIENCE[improvement] ?? 0;
 		const base = tenths(tileScience(improvement, t.resource, null));
 		if (base === 0 && perResource === 0) continue;
@@ -1129,8 +1148,9 @@ export function scienceBreakdown(
 			const n = tileAt.get(`${nx},${ny}`);
 			if (n == null) continue;
 			if (n.resource != null) resources += 1;
-			if (n.improvement == null || n.improvement_pillaged) continue;
-			const rate = adjacentModifier(improvement, cls, n.improvement);
+			const nImprovement = activeImprovement(n);
+			if (nImprovement == null) continue;
+			const rate = adjacentModifier(improvement, cls, nImprovement);
 			if (rate === 0) continue;
 			// Keyed by the neighbour's improvement AND rate. The row still reads
 			// as the class — the rules below all carry the same class label and
@@ -1138,9 +1158,9 @@ export function scienceBreakdown(
 			// icon can be the one the row is mostly made of, and a class whose
 			// members grant different percentages still can't hide behind one
 			// row's headline number.
-			const key = `${n.improvement}|${rate}`;
+			const key = `${nImprovement}|${rate}`;
 			const seen = granted.get(key) ?? {
-				improvement: n.improvement,
+				improvement: nImprovement,
 				rate,
 				count: 0,
 			};
