@@ -110,7 +110,11 @@
 		<div class="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
 			<h3 class="text-base font-bold text-tan">Tech draws</h3>
 			<!-- The hover readout replaces itself in place; the row keeps its
-			     height either way so the table below never jumps. -->
+			     height either way so the table below never jumps. The idle
+			     state still renders a space: with no line box of its own, an
+			     empty flex item's baseline is synthesized from its bottom
+			     edge, which drags the heading down off its own baseline until
+			     something is hovered. -->
 			<div class="min-h-[1.25rem] text-xs text-gray-400">
 				{#if hoverSummary}
 					<span class="font-semibold text-bright"
@@ -124,7 +128,7 @@
 								: `offered ${p.offers}×`}{heldClause(p.held)}
 						</span>
 					{/each}
-				{/if}
+				{:else}&nbsp;{/if}
 			</div>
 		</div>
 		<div class="grid grid-cols-1 gap-x-8 gap-y-5 {columnClass}">
@@ -190,7 +194,9 @@
 													>{/if}
 											{/each}
 										{:else}
-											<span class="italic">{originLabel[row.origin]}</span>
+											<!-- px-1 to match the alternates' hover inset, so both
+											     kinds of cell start on the same edge. -->
+											<span class="px-1 italic">{originLabel[row.origin]}</span>
 										{/if}
 									</td>
 								</tr>
