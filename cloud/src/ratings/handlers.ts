@@ -20,7 +20,7 @@ import {
 	getClientIp,
 	jsonResponse,
 } from "../util";
-import { rebuildRatings } from "./rebuild";
+import { rebuildLogFields, rebuildRatings } from "./rebuild";
 import type { OpponentBadge } from "./recommend";
 
 export interface OpponentsEnv extends SessionEnv {
@@ -44,9 +44,9 @@ interface OpponentRow {
 }
 
 // GET /v1/users/me/opponents — the signed-in viewer's ten suggested opponents,
-// most recently active first. Identity, a link to
-// their Discord profile, and the pair's history: no rating, no probability, no
-// score, because the numbers stop at this line.
+// most recently active first. Identity, a link to their Discord profile, and
+// the pair's history: no rating, no probability, no score, because the numbers
+// stop at this line.
 //
 // `rated` is what separates the two empty lists: a player with no rated
 // multiplayer game yet has nothing the model can reason from and needs to be
@@ -128,16 +128,14 @@ export async function handleRebuildRatings(
 
 	let result;
 	try {
-		result = await rebuildRatings(env.SHARE_DB as D1Database);
+		result = await rebuildRatings(env.SHARE_DB);
 	} catch (e) {
 		logError("ratings_rebuild_failed", e);
 		return errorResponse("Rebuild failed", 500, cors, "REBUILD_FAILED");
 	}
 	logEvent("info", "ratings_rebuild_completed", {
 		trigger: "admin",
-		users: result.users,
-		ratable_duels: result.ratableDuels,
-		recommended: result.recommended,
+		...rebuildLogFields(result),
 	});
 
 	// Audited like the other admin sweeps (admin_reimport, admin_reindex): this
@@ -165,5 +163,22 @@ export async function handleRebuildRatings(
 		logError("audit_event_log_failed", e, { event_type: "ratings_rebuild" });
 	}
 
-	return jsonResponse({ ...result }, 200, cors);
+	// Counts only, in the snake_case every handler-built payload uses.
+	return jsonResponse(
+		{
+			users: result.users,
+			ratable_duels: result.ratableDuels,
+			recommended: result.recommended,
+			stats: {
+				tournament: result.stats.tournament,
+				casual: result.stats.casual,
+				deduped: result.stats.deduped,
+				casual_games_scanned: result.stats.casualGamesScanned,
+				unresolved_opponent: result.stats.unresolvedOpponent,
+				ambiguous_online_id: result.stats.ambiguousOnlineId,
+			},
+		},
+		200,
+		cors,
+	);
 }

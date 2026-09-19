@@ -106,7 +106,7 @@
 				<div class="mt-1 flex flex-wrap items-center gap-1.5">
 					{#each labelsFor(o) as label (label)}
 						<span
-							class="rounded bg-amber-700/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-tan"
+							class="rounded bg-amber-700/40 px-1.5 py-0.5 text-xs text-amber-300"
 						>
 							{label}
 						</span>

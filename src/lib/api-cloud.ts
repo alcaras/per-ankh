@@ -2446,15 +2446,15 @@ export type OpponentBadge = "active_this_week" | "new_here";
 // Worker, not even for an admin.
 export interface RatingsRebuildSummary {
 	users: number;
-	ratableDuels: number;
+	ratable_duels: number;
 	recommended: number;
 	stats: {
 		tournament: number;
 		casual: number;
 		deduped: number;
-		casualGamesScanned: number;
-		unresolvedOpponent: number;
-		ambiguousOnlineId: number;
+		casual_games_scanned: number;
+		unresolved_opponent: number;
+		ambiguous_online_id: number;
 	};
 }
 

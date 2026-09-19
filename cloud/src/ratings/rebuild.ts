@@ -8,6 +8,7 @@
 // tournament results — so a rebuild replaces rather than merges. Pure D1: no
 // R2 read, no network.
 
+import type { QueryableD1 } from "../d1";
 import { glicko2 } from "./glicko2";
 import { extractDuels, type DuelExtraction } from "./duels";
 import {
@@ -30,13 +31,15 @@ export interface RatingsRebuildResult {
 // delete-then-insert: a chunk that throws after the DELETE would leave the
 // table truncated site-wide until the next nightly run. Instead every row is
 // written in place (INSERT OR REPLACE, stamped with this run's `computed_at`)
-// and the rows this run did not touch are swept last. A rebuild that fails
+// and the rows stamped by an earlier run are swept last. A rebuild that fails
 // halfway leaves a mix of old and new rows — every list still full — which is
-// the worst case a viewer can see.
+// the worst case a viewer can see. Two runs overlapping (the admin button
+// during the cron) each sweep only what is older than themselves, so the later
+// run's rows are the ones that survive.
 const BATCH_SIZE = 200;
 
 async function writeInChunks(
-	db: D1Database,
+	db: QueryableD1,
 	statements: D1PreparedStatement[],
 ): Promise<void> {
 	for (let i = 0; i < statements.length; i += BATCH_SIZE) {
@@ -44,12 +47,27 @@ async function writeInChunks(
 	}
 }
 
+// The log fields both callers report, so the cron and the admin trigger
+// describe a rebuild the same way.
+export function rebuildLogFields(
+	result: RatingsRebuildResult,
+): Record<string, number> {
+	return {
+		users: result.users,
+		ratable_duels: result.ratableDuels,
+		recommended: result.recommended,
+		unresolved_opponent: result.stats.unresolvedOpponent,
+		ambiguous_online_id: result.stats.ambiguousOnlineId,
+	};
+}
+
 export async function rebuildRatings(
-	db: D1Database,
+	db: QueryableD1,
 ): Promise<RatingsRebuildResult> {
 	// One instant for the whole run: what the rows are stamped with, and what
-	// the final sweep keeps.
-	const computedAt = new Date().toISOString();
+	// the final sweep keeps. Shaped like the columns' datetime('now') default
+	// so the table holds one format whoever wrote the row.
+	const computedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
 	const today = computedAt.slice(0, 10);
 
 	const { duels, stats } = await extractDuels(db);
@@ -65,8 +83,10 @@ export async function rebuildRatings(
 		}
 	}
 
-	// Only cache rows for users who still exist — the foreign key would reject
-	// the whole batch on a rating left behind by a deleted account.
+	// Only cache rows for users the table knows. Nothing deletes a user today,
+	// so this guards against the data rather than a case that has happened: a
+	// duel naming an id `users` does not hold would have the foreign key
+	// reject its whole chunk.
 	const userRows = await db
 		.prepare(
 			`SELECT user_id, open_to_matches, substr(last_login_at, 1, 10) AS last_login
@@ -118,12 +138,12 @@ export async function rebuildRatings(
 						? played
 						: user.last_login
 					: (played ?? user.last_login),
-			openToMatches: user.open_to_matches !== 0,
+			openToMatches: user.open_to_matches === 1,
 		});
 	}
 	ratingStatements.push(
 		db
-			.prepare("DELETE FROM user_ratings WHERE computed_at <> ?")
+			.prepare("DELETE FROM user_ratings WHERE computed_at < ?")
 			.bind(computedAt),
 	);
 	await writeInChunks(db, ratingStatements);
@@ -157,7 +177,7 @@ export async function rebuildRatings(
 	// dropped out of the pool leave whole lists. Both go here.
 	recommendationStatements.push(
 		db
-			.prepare("DELETE FROM user_recommended_opponents WHERE computed_at <> ?")
+			.prepare("DELETE FROM user_recommended_opponents WHERE computed_at < ?")
 			.bind(computedAt),
 	);
 	await writeInChunks(db, recommendationStatements);

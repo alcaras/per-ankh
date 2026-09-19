@@ -145,7 +145,7 @@ Exchange the OAuth code for a session.
 Current session's user profile.
 
 - **Auth:** Session.
-- **Response 200:** `{ user_id, discord_id, display_name, discord_username, avatar_url, slug: string|null, is_beta: boolean, is_admin: boolean, default_game_public: boolean, stream_url: string|null }`.
+- **Response 200:** `{ user_id, discord_id, display_name, discord_username, avatar_url, slug: string|null, is_beta: boolean, is_admin: boolean, default_game_public: boolean, stream_url: string|null, open_to_matches: boolean }`.
 - **Errors:** `401 UNAUTHORIZED` (also if the session points at a deleted user, which clears the cookie).
 - **Notes:** Re-claims pre-linked tournament slots on every call. `slug` is the caller's profile URL, null when they have none — carried here so the account page has it without a second fetch. `is_beta`/`is_admin` are advisory (frontend gating); the server re-checks per endpoint.
 
@@ -890,7 +890,7 @@ Unfeature.
 Rebuild the rating cache and every player's suggested-opponent list now, instead of waiting for the nightly cron.
 
 - **Auth:** Session + **site admin**.
-- **Response 200:** `{ users, ratableDuels, recommended, stats }` — how many players were rated, how many duels the model could reconstruct, how many ended up with a list, and the extraction diagnostics (`tournament`, `casual`, `deduped`, `casualGamesScanned`, `unresolvedOpponent`, `ambiguousOnlineId`).
+- **Response 200:** `{ users, ratable_duels, recommended, stats }` — how many players were rated, how many duels the model could reconstruct, how many ended up with a list, and the extraction diagnostics (`tournament`, `casual`, `deduped`, `casual_games_scanned`, `unresolved_opponent`, `ambiguous_online_id`).
 - **Errors:** `404 NOT_FOUND` (non-admin), `500 REBUILD_FAILED`.
 - **Notes:** Idempotent and full-replace; takes no body. Run it after the reindex sweep has backfilled `player_summaries.online_id`, which is what lets a casual game's opponent be identified at all. Audited as `ratings_rebuild`. The nightly cron runs the same job unaudited — the audit trail records people, not schedules.
 

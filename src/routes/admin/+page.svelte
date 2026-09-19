@@ -64,7 +64,7 @@
 		try {
 			const r = await cloudApi.rebuildRatings();
 			toast.info(
-				`Rated ${r.users} players from ${r.ratableDuels} duels; ${r.recommended} got a list.`,
+				`Rated ${r.users} players from ${r.ratable_duels} duels; ${r.recommended} got a list.`,
 			);
 		} catch (err) {
 			toast.error(
@@ -335,9 +335,7 @@
 					class="rounded-lg p-4"
 					style="background-color: rgb(var(--color-surface));"
 				>
-					<h3 class="mb-3 text-base font-bold text-tan">
-						Admin — Recommended opponents
-					</h3>
+					<h3 class="mb-3 text-base font-bold text-tan">Admin — Ratings</h3>
 					<div
 						class="rounded-lg p-3"
 						style="background-color: rgb(var(--color-surface-raised));"

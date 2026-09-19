@@ -19,6 +19,7 @@
 // casually *and* archived into a tournament, counts once. All bulk D1 — no R2,
 // no per-game round trips.
 
+import type { QueryableD1 } from "../d1";
 import type { Duel } from "./glicko2";
 
 export interface ResolvedDuel extends Duel {
@@ -49,7 +50,7 @@ export interface DuelExtraction {
 // to null: whichever we picked would be a coin flip, and the "this is me"
 // claim path is where that gets sorted out, not here.
 async function loadOnlineIdIndex(
-	db: D1Database,
+	db: QueryableD1,
 ): Promise<Map<string, string | null>> {
 	const rows = await db
 		.prepare("SELECT online_id, user_id FROM user_online_ids")
@@ -68,7 +69,7 @@ async function loadOnlineIdIndex(
 // Tournament matches: both user_ids and the winner are already columns. Joined
 // to games so a match with an attached save carries that save's xml_game_id and
 // can dedup against the casual copy of the same game.
-async function tournamentDuels(db: D1Database): Promise<ResolvedDuel[]> {
+async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 	const rows = await db
 		.prepare(
 			`SELECT m.match_id, m.slot_a_id, m.slot_a_user_id, m.slot_b_user_id,
@@ -124,7 +125,7 @@ interface HumanSlotRow {
 // once, here, rather than restated as a correlated subquery in each of two
 // SELECTs where the two copies could drift apart.
 async function casualDuels(
-	db: D1Database,
+	db: QueryableD1,
 	onlineIds: Map<string, string | null>,
 	stats: DuelExtraction["stats"],
 ): Promise<ResolvedDuel[]> {
@@ -189,7 +190,7 @@ async function casualDuels(
 
 // Every ratable duel in D1, de-duplicated by key. A tournament record wins a
 // shared key: it is the reported, official result.
-export async function extractDuels(db: D1Database): Promise<DuelExtraction> {
+export async function extractDuels(db: QueryableD1): Promise<DuelExtraction> {
 	const stats: DuelExtraction["stats"] = {
 		tournament: 0,
 		casual: 0,

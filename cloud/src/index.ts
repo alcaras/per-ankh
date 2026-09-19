@@ -156,7 +156,7 @@ import {
 import type { TournamentAdminEnv } from "./tournament/admin";
 import { handleMyOpponents, handleRebuildRatings } from "./ratings/handlers";
 import type { OpponentsEnv, RatingsAdminEnv } from "./ratings/handlers";
-import { rebuildRatings } from "./ratings/rebuild";
+import { rebuildLogFields, rebuildRatings } from "./ratings/rebuild";
 
 // The per-request env handlers receive. `SHARE_DB` is a `QueryableD1` because
 // `routeEnv` may substitute a Sessions API handle for the raw binding, and
@@ -1361,11 +1361,7 @@ export default {
 			const result = await rebuildRatings(env.SHARE_DB);
 			logEvent("info", "ratings_rebuild_completed", {
 				trigger: "cron",
-				users: result.users,
-				ratable_duels: result.ratableDuels,
-				recommended: result.recommended,
-				unresolved_opponent: result.stats.unresolvedOpponent,
-				ambiguous_online_id: result.stats.ambiguousOnlineId,
+				...rebuildLogFields(result),
 			});
 		} catch (err) {
 			logError("ratings_rebuild_failed", err);
