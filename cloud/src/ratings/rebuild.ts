@@ -26,10 +26,13 @@ export interface RatingsRebuildResult {
 }
 
 // D1 caps how much one batch may carry, and a full rebuild is thousands of
-// statements. Chunked writes give up single-transaction atomicity for the
-// second table, which is the right trade for a cache rebuilt nightly: the
-// worst case is a viewer loading the page mid-rebuild and seeing a short list
-// for one request.
+// statements, so a table is replaced across several batches. That rules out
+// delete-then-insert: a chunk that throws after the DELETE would leave the
+// table truncated site-wide until the next nightly run. Instead every row is
+// written in place (INSERT OR REPLACE, stamped with this run's `computed_at`)
+// and the rows this run did not touch are swept last. A rebuild that fails
+// halfway leaves a mix of old and new rows — every list still full — which is
+// the worst case a viewer can see.
 const BATCH_SIZE = 200;
 
 async function writeInChunks(
@@ -44,6 +47,11 @@ async function writeInChunks(
 export async function rebuildRatings(
 	db: D1Database,
 ): Promise<RatingsRebuildResult> {
+	// One instant for the whole run: what the rows are stamped with, and what
+	// the final sweep keeps.
+	const computedAt = new Date().toISOString();
+	const today = computedAt.slice(0, 10);
+
 	const { duels, stats } = await extractDuels(db);
 	const ratings = glicko2(duels);
 
@@ -74,13 +82,11 @@ export async function rebuildRatings(
 	);
 
 	const insertRating = db.prepare(
-		`INSERT INTO user_ratings
-		   (user_id, glicko_r, glicko_rd, glicko_vol, games, last_played)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO user_ratings
+		   (user_id, glicko_r, glicko_rd, glicko_vol, games, last_played, computed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 	);
-	const ratingStatements: D1PreparedStatement[] = [
-		db.prepare("DELETE FROM user_ratings"),
-	];
+	const ratingStatements: D1PreparedStatement[] = [];
 	const players: RecommendationCandidate[] = [];
 
 	for (const [userId, rating] of Object.entries(ratings)) {
@@ -95,6 +101,7 @@ export async function rebuildRatings(
 				rating.vol,
 				rating.games,
 				played,
+				computedAt,
 			),
 		);
 		players.push({
@@ -114,19 +121,21 @@ export async function rebuildRatings(
 			openToMatches: user.open_to_matches !== 0,
 		});
 	}
+	ratingStatements.push(
+		db
+			.prepare("DELETE FROM user_ratings WHERE computed_at <> ?")
+			.bind(computedAt),
+	);
 	await writeInChunks(db, ratingStatements);
 
-	const today = new Date().toISOString().slice(0, 10);
 	const lists = buildRecommendations({ players, duels, today });
 
 	const insertRecommendation = db.prepare(
-		`INSERT INTO user_recommended_opponents
-		   (user_id, position, opponent_user_id, meetings, badges)
-		 VALUES (?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO user_recommended_opponents
+		   (user_id, position, opponent_user_id, meetings, badges, computed_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
 	);
-	const recommendationStatements: D1PreparedStatement[] = [
-		db.prepare("DELETE FROM user_recommended_opponents"),
-	];
+	const recommendationStatements: D1PreparedStatement[] = [];
 	let recommended = 0;
 	for (const [userId, list] of lists) {
 		if (list.length === 0) continue;
@@ -139,10 +148,18 @@ export async function rebuildRatings(
 					rec.opponentUserId,
 					rec.meetings,
 					JSON.stringify(rec.badges),
+					computedAt,
 				),
 			);
 		});
 	}
+	// Lists that got shorter leave their tail positions behind; players who
+	// dropped out of the pool leave whole lists. Both go here.
+	recommendationStatements.push(
+		db
+			.prepare("DELETE FROM user_recommended_opponents WHERE computed_at <> ?")
+			.bind(computedAt),
+	);
 	await writeInChunks(db, recommendationStatements);
 
 	return {

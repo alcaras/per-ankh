@@ -16,8 +16,11 @@
 -- triple (r, RD, sigma), so all three are stored even though the recommender
 -- only converts r and RD to the internal scale — a snapshot missing sigma is
 -- not a rating. `games` and `last_played` feed the "new here" badge and the
--- activity filter respectively. Win/loss tallies and the conservative rating
--- (r - 2*RD) are deliberately absent: nothing reads them today.
+-- activity filter respectively. Win/loss tallies are deliberately absent:
+-- nothing reads them today. The conservative rating (r - 2*RD) the recommender
+-- predicts from is arithmetic on two of these columns, not a column of its own.
+-- `computed_at` is the run that wrote the row; a rebuild replaces rows in
+-- place and sweeps the ones it did not touch (ratings/rebuild.ts).
 CREATE TABLE user_ratings (
     user_id     TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
     glicko_r    REAL NOT NULL,
