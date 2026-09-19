@@ -14,9 +14,8 @@
 // scale, and the system volatility constant tau. Match ratings.py exactly.
 //
 // SCALE is exported because the recommender works on the internal scale too:
-// the Fisher information a prospective game carries is a statement about phi,
-// and converting it back to rating points is what makes "how much would this
-// game settle you" comparable across players. Same constant, one definition.
+// it predicts a prospective game with the same arithmetic an actual result
+// would be scored with. Same constant, one definition.
 export const SCALE = 173.7178;
 const DEFAULT_TAU = 0.5;
 
@@ -45,13 +44,21 @@ export interface Glicko2Result {
 // game with the same arithmetic an actual result would be scored with. Keeping
 // them here rather than restating them there is what guarantees the model the
 // recommendations come from is the model the ratings come from.
-export function g(phi: number): number {
+function g(phi: number): number {
 	return 1.0 / Math.sqrt(1.0 + (3.0 * phi * phi) / (Math.PI * Math.PI));
 }
 
 // Player i's win probability against j, both already on the internal scale.
 export function expectedScore(mu: number, muJ: number, phiJ: number): number {
 	return 1.0 / (1.0 + Math.exp(-g(phiJ) * (mu - muJ)));
+}
+
+// The conservative estimate: the rating a player is very likely at least. The
+// community ladder (owglick) ranks and seeds by this, and the recommender
+// predicts games from it, so that a player the model barely knows is placed at
+// the bottom of what they might be rather than at the starting rating.
+export function conservative(r: number, rd: number): number {
+	return r - 2 * rd;
 }
 
 function round1(x: number): number {

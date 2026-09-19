@@ -1,26 +1,18 @@
 // Who should I play next?
 //
-// Picks ten opponents per player. The two things it optimises for turn out to
-// be the same thing: a game both players might win is the one worth playing,
-// and it is also the one that tells the rating model the most. That is not a
-// coincidence — the information a Glicko-2 result carries about a player is
-// g(phi_j)^2 * E * (1 - E), and E(1 - E) peaks at even odds. A 95% favourite
-// learns nothing by winning, and nobody enjoys being the other 5%.
+// Picks ten opponents per player: the people the model is most confident
+// would give them a close game. The score is closeness and nothing else —
+// how far the predicted result sits from even odds — and the prediction is
+// made from each side's conservative rating, r - 2·RD, the same estimate the
+// community ladder ranks by. That is where uncertainty enters, and it enters
+// against the pair: a player the model barely knows is placed at the bottom of
+// what they might be, so they are only suggested to someone whose rating even
+// that pessimistic estimate is close to. As their deviation collapses over a
+// few games the estimate rises to meet their real rating and they move up
+// the lists on their own.
 //
-// Four things then shape that raw information into a recommendation:
+// Three things then shape closeness into a recommendation:
 //
-//   - Uncertainty removed, not information gained. The same information about
-//     an already-settled player is worth less, so the score converts to the
-//     deviation each side would shed by playing. Large for someone the model
-//     barely knows, near zero for a veteran — which is the right priority,
-//     because the community learns most from the games of the people it knows
-//     least about.
-//   - Distance in the game graph. Per-pair information is blind to the case
-//     where the community has split into groups that rarely play each other;
-//     each group's ratings are then internally consistent and the offset
-//     between them is guesswork. A game across that gap is worth more than the
-//     local arithmetic says, so pairs who have never met, and share no
-//     opponent, get a modest lift.
 //   - Novelty and activity. The tenth rematch this month is neither fun nor
 //     informative, and someone who stopped playing in March is not an
 //     opponent.
@@ -28,16 +20,14 @@
 //     piles up, because the best opponent for many people is the same person.
 //     Lists are built in one pass with a running count of how often each
 //     candidate has been picked, as a soft penalty and then a hard cap.
+//   - A floor. At the ends of the ladder there are only a handful of close
+//     games to be had, and a page with one name on it is not a recommendation.
 //
 // Nothing numeric survives this file. What gets written down is a name, how
 // many times the pair has already played, and badges the viewer could have
 // worked out for themselves. See migration 0046.
 
-import { g, expectedScore, SCALE, type Duel } from "./glicko2";
-// Deliberately the tournament engine's RNG rather than a second one: it is a
-// generic seeded mulberry32 that the pairing and map-assignment algorithms
-// already use for exactly this reason — a shuffle a test can reproduce.
-import { createRng, shuffle } from "../tournament/rng";
+import { conservative, expectedScore, SCALE, type Duel } from "./glicko2";
 
 // Ten. Enough that the list survives a few of them being busy, few enough to
 // read in one go and to keep any single player from being everyone's answer.
@@ -58,28 +48,16 @@ export const MIN_RECOMMENDATION_COUNT = 6;
 const ACTIVE_WINDOW_DAYS = 90;
 
 // Win probabilities outside this band are a stomp for somebody, and no amount
-// of information redeems that game for the player on the wrong end.
+// of load-balancing redeems that game for the player on the wrong end.
 const STOMP_WINDOW: readonly [number, number] = [0.3, 0.7];
 
-// ...except that for a player the model barely knows, the estimate the band is
-// applied to is itself a guess. Above this deviation the band widens rather
-// than pretending to a precision it doesn't have, which is also what stops a
-// newcomer's list from coming back empty.
+// ...except that when either side is a player the model barely knows, the
+// estimate the band is applied to is itself a guess. Above this deviation the
+// band widens rather than pretending to a precision it doesn't have: do not
+// promise a close game from a rating nobody trusts yet, but do not refuse one
+// either.
 const UNSETTLED_RD = 150;
 const UNSETTLED_WINDOW: readonly [number, number] = [0.2, 0.8];
-
-// How many of the ten may be players the model has barely placed.
-//
-// This is the one place where the arithmetic and a good evening's game pull
-// apart, and the game wins. An unsettled player is worth suggesting — they need
-// an opponent more than anyone, and their result teaches the model the most, so
-// the uncertainty-shed score rates them highest. But every unrated player sits
-// at the same starting rating, so "even odds" against one is not a prediction,
-// it is the absence of one. Left to the score alone, a mid-ladder veteran's
-// whole list comes back as ten strangers nobody can vouch for. Three of ten
-// keeps newcomers visible on real players' lists without crowding out the
-// pairings the model actually stands behind.
-export const MAX_UNSETTLED_PER_LIST = 3;
 
 // Rematch decay: how hard a recent meeting discounts the pair, and how far
 // back "recent" reaches.
@@ -94,29 +72,15 @@ const NOVELTY_WINDOW_DAYS = 90;
 // of the number.
 export const MAX_APPEARANCES = 2 * RECOMMENDATION_COUNT;
 
-// Graph-distance multipliers. A pair that has already played is worth slightly
-// less than a pair who share an opponent; a pair with no path between them at
-// all is worth most, because that game is the only thing that would tie their
-// two corners of the community together. A tilt, not a takeover.
-const BRIDGE_WEIGHT: Record<number, number> = { 1: 0.85, 2: 1.0, 3: 1.15 };
-const BRIDGE_WEIGHT_DISTANT = 1.3;
-// The distance at which the pairing is worth calling out to the player, and
-// how much of a circle the viewer needs before "we share nobody" is news about
-// the pairing rather than news about them. Below the floor, everyone is far
-// away by definition, and a badge on all ten rows says only "you are new" —
-// ten times.
-const BRIDGE_BADGE_DISTANCE = 3;
-const BRIDGE_BADGE_MIN_CIRCLE = 3;
-
 // A rated duel or two is not a track record, and saying so is the honest way
 // to tell a viewer why a name they do not recognise is on their list.
 const NEW_HERE_GAMES = 3;
 
 const ACTIVE_THIS_WEEK_DAYS = 7;
 
-// Every badge is a fact about the opponent or about the pair that the viewer
-// could establish by reading a profile. None is derived from a rating.
-export type OpponentBadge = "active_this_week" | "new_here" | "bridges_circles";
+// Every badge is a fact about the opponent that the viewer could establish by
+// reading a profile. None is derived from a rating.
+export type OpponentBadge = "active_this_week" | "new_here";
 
 // One player the model knows something about. `lastActive` is the later of
 // their most recent rated game and their most recent login, as YYYY-MM-DD.
@@ -157,35 +121,10 @@ function pairKey(a: string, b: string): string {
 	return a < b ? `${a} ${b}` : `${b} ${a}`;
 }
 
-// Breadth-first distance from one player to every other along the graph of who
-// has played whom. Unreached players are absent from the map, which the caller
-// reads as "no path at all" — the strongest bridging case there is.
-function distancesFrom(
-	origin: string,
-	adjacency: Map<string, Set<string>>,
-): Map<string, number> {
-	const dist = new Map<string, number>([[origin, 0]]);
-	let frontier = [origin];
-	let depth = 0;
-	while (frontier.length > 0) {
-		depth += 1;
-		const next: string[] = [];
-		for (const node of frontier) {
-			for (const neighbour of adjacency.get(node) ?? []) {
-				if (dist.has(neighbour)) continue;
-				dist.set(neighbour, depth);
-				next.push(neighbour);
-			}
-		}
-		frontier = next;
-	}
-	return dist;
-}
-
 /**
  * Build every player's list. Pure: the same players, duels and date always give
  * the same answer, which is what lets it be tested and what keeps a nightly
- * rebuild from reshuffling a list that has not changed.
+ * rebuild from reordering a list that has not changed.
  *
  * `today` is YYYY-MM-DD.
  */
@@ -198,20 +137,11 @@ export function buildRecommendations(args: {
 
 	const byId = new Map(players.map((p) => [p.userId, p]));
 
-	// Who has played whom, how often, and how often lately.
-	const adjacency = new Map<string, Set<string>>();
+	// How often each pair has played, and how often lately.
 	const meetings = new Map<string, number>();
 	const recentMeetings = new Map<string, number>();
 	for (const d of duels) {
 		if (!byId.has(d.p1) || !byId.has(d.p2)) continue;
-		for (const [a, b] of [
-			[d.p1, d.p2],
-			[d.p2, d.p1],
-		]) {
-			const set = adjacency.get(a);
-			if (set) set.add(b);
-			else adjacency.set(a, new Set([b]));
-		}
 		const key = pairKey(d.p1, d.p2);
 		meetings.set(key, (meetings.get(key) ?? 0) + 1);
 		if (daysBetween(d.date, today) <= NOVELTY_WINDOW_DAYS) {
@@ -230,30 +160,28 @@ export function buildRecommendations(args: {
 		eligible.set(p.userId, activityWeight(idle));
 	}
 
-	// Least-settled player first, so the people the model knows least get the
-	// pick of the pool before the load penalty starts to bite. Ties by id, so
-	// the pass is an ordering and not a coin flip.
+	// Everyone gets a list, but the players who are themselves in the pool get
+	// theirs first. Someone hidden or idle still spends the load budget of the
+	// names on their page, and they are the least likely to act on it, so they
+	// take what is left rather than what the active players wanted. Ties by
+	// id, so the pass is an ordering and not a coin flip.
 	const receivers = [...players].sort(
-		(a, b) => b.rd - a.rd || (a.userId < b.userId ? -1 : 1),
+		(a, b) =>
+			Number(eligible.has(b.userId)) - Number(eligible.has(a.userId)) ||
+			(a.userId < b.userId ? -1 : 1),
 	);
 
 	const picked = new Map<string, number>();
 	const out = new Map<string, Recommendation[]>();
 
 	for (const viewer of receivers) {
-		const mu = (viewer.r - 1500) / SCALE;
-		const phi = viewer.rd / SCALE;
-		const [lo, hi] = viewer.rd > UNSETTLED_RD ? UNSETTLED_WINDOW : STOMP_WINDOW;
-		const distance = distancesFrom(viewer.userId, adjacency);
-		// You can only bridge two circles if you are in one.
-		const viewerHasCircle =
-			(adjacency.get(viewer.userId)?.size ?? 0) >= BRIDGE_BADGE_MIN_CIRCLE;
+		const mu = (conservative(viewer.r, viewer.rd) - 1500) / SCALE;
 
 		const scored: {
 			rec: Recommendation;
 			score: number;
 			inBand: boolean;
-			unsettled: boolean;
+			lastActive: string;
 			appearances: number;
 		}[] = [];
 		for (const [candidateId, recency] of eligible) {
@@ -261,30 +189,21 @@ export function buildRecommendations(args: {
 			const appearances = picked.get(candidateId) ?? 0;
 			const candidate = byId.get(candidateId)!;
 
-			const muJ = (candidate.r - 1500) / SCALE;
-			const phiJ = candidate.rd / SCALE;
-			const e = expectedScore(mu, muJ, phiJ);
+			// The predicted result between the two conservative ratings. Each
+			// side's deviation has already been spent making its estimate
+			// pessimistic, so it is not applied a second time as g(phi) — the
+			// zero says "take the gap at face value".
+			const muJ = (conservative(candidate.r, candidate.rd) - 1500) / SCALE;
+			const e = expectedScore(mu, muJ, 0);
 
-			// The Fisher information each side would gain, converted to the
-			// deviation they would shed by playing. The shared E(1 - E) is what
-			// makes the even game the valuable one; the g(phi)^2 factors are why a
-			// settled opponent is the sharper yardstick.
-			const evenness = e * (1 - e);
-			const shed = (ownPhi: number, information: number): number =>
-				(ownPhi - 1 / Math.sqrt(1 / (ownPhi * ownPhi) + information)) * SCALE;
-			const value =
-				shed(phi, g(phiJ) * g(phiJ) * evenness) +
-				shed(phiJ, g(phi) * g(phi) * evenness);
+			// Closeness: even odds score 0.5, a certainty scores 0. One
+			// expression, and it says the thing the tab promises.
+			const closeness = 0.5 - Math.abs(e - 0.5);
 
-			const d = distance.get(candidateId);
-			const bridge =
-				d === undefined
-					? BRIDGE_WEIGHT_DISTANT
-					: (BRIDGE_WEIGHT[d] ?? BRIDGE_WEIGHT_DISTANT);
 			const key = pairKey(viewer.userId, candidateId);
 			const novelty = 1 / (1 + NOVELTY_DECAY * (recentMeetings.get(key) ?? 0));
 
-			const score = (value * bridge * novelty * recency) / (1 + appearances);
+			const score = (closeness * novelty * recency) / (1 + appearances);
 
 			const badges: OpponentBadge[] = [];
 			const idle = candidate.lastActive
@@ -292,17 +211,19 @@ export function buildRecommendations(args: {
 				: Number.POSITIVE_INFINITY;
 			if (idle <= ACTIVE_THIS_WEEK_DAYS) badges.push("active_this_week");
 			if (candidate.games <= NEW_HERE_GAMES) badges.push("new_here");
-			if (viewerHasCircle && (d === undefined || d >= BRIDGE_BADGE_DISTANCE)) {
-				badges.push("bridges_circles");
-			}
 
+			const [lo, hi] =
+				viewer.rd > UNSETTLED_RD || candidate.rd > UNSETTLED_RD
+					? UNSETTLED_WINDOW
+					: STOMP_WINDOW;
 			scored.push({
 				score,
 				// Whether this is a game both of them might win. Recorded rather
 				// than filtered on, because it is the last rule the fill below
 				// relaxes and it has to still be there to relax.
 				inBand: e >= lo && e <= hi,
-				unsettled: candidate.rd > UNSETTLED_RD,
+				// Eligible, so seen within the window: never null here.
+				lastActive: candidate.lastActive!,
 				appearances,
 				rec: {
 					opponentUserId: candidateId,
@@ -316,37 +237,28 @@ export function buildRecommendations(args: {
 		// one rule — and a later pass only ever runs because an earlier one left
 		// the list short.
 		//
-		// The first three rules exist to stop a healthy pool from piling everyone
-		// onto a few names, and none of them is worth a short page. In this
+		// The appearance ceiling exists to stop a healthy pool from piling
+		// everyone onto a few names, and it is not worth a short page: in this
 		// community only a minority of players are settled enough to be a
 		// confident pairing, so a strict reading hands exactly the veterans who
-		// most want this feature a list of three, the appearance ceiling having
-		// been spent on whoever was processed before them.
+		// most want this feature a list of three, the ceiling having been spent
+		// on whoever was processed before them.
 		//
 		// The last pass gives up the no-stomp band itself, and only down to the
 		// floor: at the ends of the ladder there really are only a handful of
 		// close games available, and six names — the last of them not quite even
-		// — beat one name and a lot of white space. Because the score's own
-		// evenness term peaks at even odds, the order this pass admits people in
-		// is closest-game-first.
+		// — beat one name and a lot of white space. Because the score is
+		// closeness, the order this pass admits people in is closest-game-first.
 		scored.sort((a, b) => b.score - a.score);
 		const chosen: typeof scored = [];
 		const taken = new Set<number>();
-		let unsettledChosen = 0;
 		const passes = [
 			// Every rule honoured.
-			{ target: RECOMMENDATION_COUNT, cap: true, quota: true, band: true },
+			{ target: RECOMMENDATION_COUNT, cap: true, band: true },
 			// Someone may be on one list too many.
-			{ target: RECOMMENDATION_COUNT, cap: false, quota: true, band: true },
-			// More than three of them may be players nobody can place yet.
-			{ target: RECOMMENDATION_COUNT, cap: false, quota: false, band: true },
+			{ target: RECOMMENDATION_COUNT, cap: false, band: true },
 			// And finally, the game need not be even — but only to the floor.
-			{
-				target: MIN_RECOMMENDATION_COUNT,
-				cap: false,
-				quota: false,
-				band: false,
-			},
+			{ target: MIN_RECOMMENDATION_COUNT, cap: false, band: false },
 		];
 		for (const pass of passes) {
 			if (chosen.length >= pass.target) continue;
@@ -355,14 +267,6 @@ export function buildRecommendations(args: {
 				if (taken.has(index)) continue;
 				if (pass.band && !candidate.inBand) continue;
 				if (pass.cap && candidate.appearances >= MAX_APPEARANCES) continue;
-				if (
-					pass.quota &&
-					candidate.unsettled &&
-					unsettledChosen >= MAX_UNSETTLED_PER_LIST
-				) {
-					continue;
-				}
-				if (candidate.unsettled) unsettledChosen += 1;
 				taken.add(index);
 				chosen.push(candidate);
 			}
@@ -374,16 +278,22 @@ export function buildRecommendations(args: {
 			);
 		}
 
-		// Shuffled before it is stored, so the order the viewer reads carries no
-		// information: the list is ten people, not a ranking of ten people. The
-		// seed is the viewer and the day, so a reload does not reshuffle and a
-		// test can reproduce it.
+		// Stored most recently active first. The order the viewer reads must
+		// carry nothing about rating — sorted by score, the first name would be
+		// their nearest neighbour on the ladder — and last-active is both safe
+		// and the next thing they want to know: who can actually play this
+		// week. Ties by id, so the list is stable between rebuilds.
+		chosen.sort(
+			(a, b) =>
+				(a.lastActive < b.lastActive
+					? 1
+					: a.lastActive > b.lastActive
+						? -1
+						: 0) || (a.rec.opponentUserId < b.rec.opponentUserId ? -1 : 1),
+		);
 		out.set(
 			viewer.userId,
-			shuffle(
-				chosen.map((c) => c.rec),
-				createRng(`${viewer.userId}:${today}`),
-			),
+			chosen.map((c) => c.rec),
 		);
 	}
 

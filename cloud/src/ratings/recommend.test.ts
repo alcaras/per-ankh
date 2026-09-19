@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
 	buildRecommendations,
 	MAX_APPEARANCES,
-	MAX_UNSETTLED_PER_LIST,
 	MIN_RECOMMENDATION_COUNT,
 	RECOMMENDATION_COUNT,
 	type RecommendationCandidate,
@@ -86,39 +85,48 @@ describe("buildRecommendations", () => {
 		expect(idsFor(lists, "p0")).toHaveLength(RECOMMENDATION_COUNT);
 	});
 
-	it("widens the band for a player it barely knows, rather than giving up", () => {
-		// Each of these is ~200 rating points away: outside the band a settled
-		// player is held to, inside the one a barely-known player gets. Six
-		// same-strength players sit alongside them so the floor is already
-		// satisfied and the band is what decides.
-		const opponents = [
-			player("a", { r: 1700 }),
-			player("b", { r: 1300 }),
-			player("c", { r: 1660 }),
-		];
-		const nearby = pool(6, "near");
+	it("widens the band when either side is a player it barely knows", () => {
+		// Everyone here sits at a conservative rating (r - 2·RD) of 1500 or
+		// 1340. The 160-point gap predicts about 29/71: outside the band a
+		// settled pair is held to, inside the one a pair with a barely-known
+		// player on either side gets. Six same-strength players sit alongside
+		// so the floor is already satisfied and the band is what decides.
+		const near = pool(6, "near").map((p) => ({ ...p, r: 1660 }));
+		const far = pool(3, "far");
 
-		// A settled player at the same rating finds none of the three close
-		// enough, and fills up from the six instead.
+		// A settled player finds none of the three close enough.
 		const settled = buildRecommendations({
-			players: [player("settled"), ...opponents, ...nearby],
+			players: [player("settled", { r: 1660 }), ...near, ...far],
 			duels: [],
 			today: TODAY,
 		});
-		const settledIds = idsFor(settled, "settled");
-		expect(settledIds.sort()).toEqual(nearby.map((p) => p.userId).sort());
+		expect(idsFor(settled, "settled").sort()).toEqual(
+			near.map((p) => p.userId).sort(),
+		);
 
-		// The newcomer's band is wide enough to reach all nine.
+		// The same conservative rating with a wide deviation reaches all nine.
 		const unsettled = buildRecommendations({
 			players: [
-				player("newcomer", { r: 1500, rd: 300, games: 1 }),
-				...opponents,
-				...nearby,
+				player("newcomer", { r: 1900, rd: 200, games: 1 }),
+				...near,
+				...far,
 			],
 			duels: [],
 			today: TODAY,
 		});
 		expect(idsFor(unsettled, "newcomer")).toHaveLength(9);
+
+		// ...and so does a settled player looking at a barely-known candidate.
+		const candidate = buildRecommendations({
+			players: [
+				player("settled", { r: 1660 }),
+				...near,
+				player("unplaced", { r: 1740, rd: 200, games: 1 }),
+			],
+			duels: [],
+			today: TODAY,
+		});
+		expect(idsFor(candidate, "settled")).toContain("unplaced");
 	});
 
 	it("leaves out anyone who opted out, and still gives them their own list", () => {
@@ -172,17 +180,10 @@ describe("buildRecommendations", () => {
 			player("stranger"),
 			player("rookie", { games: 2 }),
 			player("today", { lastActive: TODAY }),
-			...pool(3, "circle"),
 		];
-		// Two games with the rival, plus enough other opponents that "we share
-		// nobody" is a fact about the pairing and not about how little `me` has
-		// played (see BRIDGE_BADGE_MIN_CIRCLE).
 		const duels: Duel[] = [
 			{ date: "2026-08-01", p1: "me", p2: "rival", winner: "me" },
 			{ date: "2026-08-10", p1: "me", p2: "rival", winner: "rival" },
-			{ date: "2026-07-01", p1: "me", p2: "circle0", winner: "me" },
-			{ date: "2026-07-02", p1: "me", p2: "circle1", winner: "me" },
-			{ date: "2026-07-03", p1: "me", p2: "circle2", winner: "me" },
 		];
 		const lists = buildRecommendations({ players, duels, today: TODAY });
 		const mine = new Map(
@@ -190,44 +191,11 @@ describe("buildRecommendations", () => {
 		);
 
 		expect(mine.get("rival")!.meetings).toBe(2);
-		// Already played, so not a bridge to anywhere.
-		expect(mine.get("rival")!.badges).not.toContain("bridges_circles");
 		expect(mine.get("stranger")!.meetings).toBe(0);
-		expect(mine.get("stranger")!.badges).toContain("bridges_circles");
 		expect(mine.get("rookie")!.badges).toContain("new_here");
 		expect(mine.get("today")!.badges).toContain("active_this_week");
 		// Nobody who has played forty games is "new here".
 		expect(mine.get("rival")!.badges).not.toContain("new_here");
-	});
-
-	it("does not tell a player who has barely played that they bridge circles", () => {
-		// One prior opponent is not a circle — everyone else is distant by
-		// definition, and the badge would land on all ten rows saying nothing.
-		const players = [player("fresh", { games: 1, rd: 300 }), ...pool(12)];
-		const duels: Duel[] = [
-			{ date: "2026-08-01", p1: "fresh", p2: "p0", winner: "p0" },
-		];
-		const lists = buildRecommendations({ players, duels, today: TODAY });
-		for (const rec of lists.get("fresh") ?? []) {
-			expect(rec.badges).not.toContain("bridges_circles");
-		}
-
-		// A player with a real history gets it back: `veteran` has played three
-		// people, and the rest of the pool are strangers to all of them.
-		const withCircle = buildRecommendations({
-			players: [player("veteran"), ...pool(12)],
-			duels: [
-				{ date: "2026-08-01", p1: "veteran", p2: "p0", winner: "p0" },
-				{ date: "2026-08-02", p1: "veteran", p2: "p1", winner: "p1" },
-				{ date: "2026-08-03", p1: "veteran", p2: "p2", winner: "p2" },
-			],
-			today: TODAY,
-		});
-		expect(
-			(withCircle.get("veteran") ?? []).some((r) =>
-				r.badges.includes("bridges_circles"),
-			),
-		).toBe(true);
 	});
 
 	it("prefers a fresh pairing to this month's third rematch", () => {
@@ -253,32 +221,34 @@ describe("buildRecommendations", () => {
 	});
 
 	it("does not hand a settled player a list of strangers", () => {
-		// Every unrated player sits at the starting rating, so on score alone a
-		// pool of newcomers would sweep a mid-ladder player's whole list.
+		// Every unrated player sits at the starting rating, so a prediction
+		// from raw ratings would call them an even game for anyone mid-ladder.
+		// The conservative estimate places them at the bottom of what they
+		// might be instead, and a newcomer only reaches a settled player's list
+		// once even that pessimistic estimate is close.
 		const newcomers = Array.from({ length: 12 }, (_, i) =>
 			player(`new${i}`, { rd: 300, games: 1 }),
 		);
 		const known = Array.from({ length: 8 }, (_, i) =>
 			player(`known${i}`, { r: 1480 + i * 5 }),
 		);
+		const proven = player("proven", { r: 1900, rd: 300, games: 2 });
 		const lists = buildRecommendations({
-			players: [player("veteran"), ...known, ...newcomers],
+			players: [player("veteran"), ...known, ...newcomers, proven],
 			duels: [],
 			today: TODAY,
 		});
 
 		const ids = idsFor(lists, "veteran");
-		expect(ids).toHaveLength(RECOMMENDATION_COUNT);
-		expect(ids.filter((id) => id.startsWith("new")).length).toBe(
-			MAX_UNSETTLED_PER_LIST,
-		);
+		expect(ids.filter((id) => id.startsWith("new"))).toHaveLength(0);
+		expect(ids).toContain("proven");
+		for (const k of known) expect(ids).toContain(k.userId);
 	});
 
 	it("fills a thin pool rather than handing anyone a short list", () => {
 		// Eleven settled players competing for ninety lists: the appearance
 		// ceiling cannot be honoured and still fill them, and a page with three
-		// names on it is the feature not working. Same for the quota — with only
-		// unsettled candidates left, a stranger beats a blank.
+		// names on it is the feature not working.
 		const players = [
 			...pool(11, "few"),
 			...Array.from({ length: 79 }, (_, i) =>
@@ -290,6 +260,20 @@ describe("buildRecommendations", () => {
 		for (const p of players) {
 			expect(idsFor(lists, p.userId)).toHaveLength(RECOMMENDATION_COUNT);
 		}
+	});
+
+	it("lists the most recently active first, whatever their rating", () => {
+		// Three players spread across the band, seen on three different days.
+		// Nearest-in-rating would put `mid` first; the stored order is who can
+		// actually play this week.
+		const players = [
+			player("me"),
+			player("mid", { r: 1505, lastActive: "2026-08-01" }),
+			player("far", { r: 1560, lastActive: TODAY }),
+			player("near", { r: 1520, lastActive: RECENT }),
+		];
+		const lists = buildRecommendations({ players, duels: [], today: TODAY });
+		expect(idsFor(lists, "me")).toEqual(["far", "near", "mid"]);
 	});
 
 	it("is deterministic — same inputs, same lists in the same order", () => {

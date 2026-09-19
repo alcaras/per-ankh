@@ -11,8 +11,9 @@
 	// is deliberately incapable of showing a rating: the payload carries none,
 	// so there is no number here to leak into a tooltip, a title attribute or a
 	// sort. Everything rendered is either identity or a fact the viewer could
-	// have established by opening the profile themselves. The order is the
-	// shuffled order the rebuild stored, which is why nothing here is numbered.
+	// have established by opening the profile themselves. The order is the one
+	// the rebuild stored — most recently active first — and says nothing about
+	// rating, which is why nothing here is numbered.
 	import { resolve } from "$app/paths";
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import type {
@@ -35,12 +36,11 @@
 	const opponents = $derived(suggestions.opponents);
 
 	// Badge copy. Each one is checkable by hand — how many rated games they
-	// have, when they last played, whether the two of you share an opponent —
-	// which is the test every badge here has to pass.
+	// have, when they last played — which is the test every badge here has to
+	// pass.
 	const BADGE_LABELS: Record<OpponentBadge, string> = {
 		active_this_week: "Active this week",
 		new_here: "New here",
-		bridges_circles: "No mutual opponents",
 	};
 
 	// The card's badge row: the pair's history first, then the opponent's own
@@ -50,26 +50,16 @@
 	// a stranger's name reads as a fact about them — that they have never played
 	// at all — which is both wrong and the opposite of a recommendation.
 	// "First meeting" can only be about the two of you.
-	//
-	// It steps aside entirely for "No mutual opponents", which already implies
-	// the two have never met (the graph distance behind it is at least three),
-	// rather than saying the weaker half of the same thing twice.
 	function labelsFor(o: RecommendedOpponent): string[] {
-		const bridges = o.badges.includes("bridges_circles");
 		const history =
 			o.meetings === 0
-				? bridges
-					? null
-					: "First meeting"
+				? "First meeting"
 				: o.meetings === 1
 					? "Played once"
 					: o.meetings === 2
 						? "Played twice"
 						: `Played ${o.meetings} times`;
-		return [
-			...(history ? [history] : []),
-			...o.badges.map((b) => BADGE_LABELS[b]),
-		];
+		return [history, ...o.badges.map((b) => BADGE_LABELS[b])];
 	}
 </script>
 

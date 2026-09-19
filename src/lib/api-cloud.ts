@@ -2440,7 +2440,7 @@ export interface RecommendedOpponent {
 	badges: OpponentBadge[];
 }
 
-export type OpponentBadge = "active_this_week" | "new_here" | "bridges_circles";
+export type OpponentBadge = "active_this_week" | "new_here";
 
 // What a rebuild did. Counts only — the ratings themselves never leave the
 // Worker, not even for an admin.

@@ -1,4 +1,5 @@
--- Recommended opponents: the ten players each user is shown on /opponents.
+-- Recommended opponents: the ten players each user is shown on the Opponents
+-- tab of their own profile.
 --
 -- Rebuilt nightly, right after user_ratings (0045), by
 -- cloud/src/ratings/recommend.ts. Nightly rather than per request for three
@@ -12,14 +13,16 @@
 -- fetches, not in a data attribute. Per-Ankh shows nobody a rating, and the
 -- weakest link in that promise is a number that leaks out of the recommender,
 -- so the numbers stop at the Worker and only names and observable facts are
--- persisted. `position` is a shuffled slot, not a rank, so even the ordering
--- carries nothing (see recommend.ts).
+-- persisted. `position` orders the list by when the opponent was last active,
+-- not by anything rating-derived, so even the ordering carries nothing (see
+-- recommend.ts).
 --
 -- `badges` is a JSON array of keys the frontend maps to copy — every one of
 -- them a fact the viewer could establish themselves by reading profiles
--- ("you have never played", "active this week"). `meetings` is the number of
--- rated games the pair has already played, which the "played N times" badge
--- renders.
+-- ("new here", "active this week"). `meetings` is the number of rated games
+-- the pair has already played, which the "played N times" badge renders.
+-- `computed_at` is the run that wrote the row; a rebuild replaces rows in
+-- place and sweeps the ones it did not touch (ratings/rebuild.ts).
 CREATE TABLE user_recommended_opponents (
     user_id          TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     position         INTEGER NOT NULL,

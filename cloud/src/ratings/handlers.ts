@@ -44,7 +44,7 @@ interface OpponentRow {
 }
 
 // GET /v1/users/me/opponents — the signed-in viewer's ten suggested opponents,
-// in the order the nightly rebuild shuffled them into. Identity, a link to
+// most recently active first. Identity, a link to
 // their Discord profile, and the pair's history: no rating, no probability, no
 // score, because the numbers stop at this line.
 //
