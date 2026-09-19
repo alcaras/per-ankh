@@ -535,17 +535,24 @@ export function sagesSeatFoundedTurn(
 // Sprite for one breakdown row, resolved through getSpritePath by the view.
 export type BreakdownIcon = { category: string; value: string };
 
+// One named thing in a row's label, with the sprite that belongs to it — the
+// icon goes before the name, as everywhere else in the app. Most rows name one
+// thing and so have one segment; an adjacency row names two ("Grove next to
+// Monastery"), and each takes its own.
+export type BreakdownSegment = { text: string; icon?: BreakdownIcon };
+
 // One itemized science source: "Elder Poet", "Grove (luxury)", "Library".
 // `pct` is set on percent-modifier items (libraries, Musaeum, governors),
 // where `science` is the estimated points (city base × pct). `order` is the
 // research cost of the source's unlocking tech (0 = no tech gate), so rows
-// read early-tech → late-tech.
+// read early-tech → late-tech. `label` is the row's identity — the table
+// unions rows across players by it — and reads as `segments` joined by spaces.
 export type BreakdownItem = {
 	label: string;
 	count: number;
 	science: number;
 	pct?: number;
-	icon?: BreakdownIcon;
+	segments: BreakdownSegment[];
 	order: number;
 };
 
@@ -822,6 +829,14 @@ export function scienceBreakdown(
 		science: number;
 		pct: number;
 		icon?: BreakdownIcon;
+		// Set on rows built from segments. A segment's name is a CLASS, so
+		// several concrete improvements feed it — they're tallied by tile count
+		// and the commonest supplies the icon, rather than whichever tile the map
+		// walk happened to reach first.
+		segments?: {
+			text: string;
+			icons: Map<string, { icon: BreakdownIcon; count: number }>;
+		}[];
 		order: number;
 	};
 	const bump = (
@@ -968,18 +983,43 @@ export function scienceBreakdown(
 	const cityBonusRows = new Map<string, Acc>();
 	const addModifierRow = (
 		rows: Map<string, Acc>,
-		label: string,
+		parts: BreakdownSegment[],
 		science: number,
 		count: number,
 		order: number,
 	) => {
-		const acc = rows.get(label) ?? { count: 0, science: 0, pct: 0, order };
+		const label = parts.map((p) => p.text).join(" ");
+		const acc = rows.get(label) ?? {
+			count: 0,
+			science: 0,
+			pct: 0,
+			order,
+			segments: parts.map((p) => ({ text: p.text, icons: new Map() })),
+		};
 		acc.count += count;
 		acc.science += science;
 		// A row's tiers can differ in unlock cost; the latest gates the row.
 		acc.order = Math.max(acc.order, order);
+		parts.forEach((part, i) => {
+			const seg = acc.segments?.[i];
+			if (part.icon == null || seg == null) return;
+			const key = `${part.icon.category}/${part.icon.value}`;
+			const tally = seg.icons.get(key) ?? { icon: part.icon, count: 0 };
+			tally.count += count;
+			seg.icons.set(key, tally);
+		});
 		rows.set(label, acc);
 	};
+	const improvementIcon = (improvement: string): BreakdownIcon => ({
+		category: "improvements",
+		value: improvement,
+	});
+	// A family class shows its archetype crest — the crest set is keyed by
+	// archetype, and a class always has one.
+	const familyClassIcon = (familyClass: string): BreakdownIcon => ({
+		category: "crests",
+		value: `ARCHETYPE_${familyClass.slice("FAMILYCLASS_".length)}`,
+	});
 	// A tile reads as its CLASS — "Grove next to Monastery" — so the six
 	// per-religion monastery rules collapse into one row instead of splitting
 	// the comparison table six ways.
@@ -993,11 +1033,15 @@ export function scienceBreakdown(
 	// City-granted rules, resolved per city from what the save records: the
 	// player's nation and their ruler's traits reach every city; the city's own
 	// family class, completed projects and governor's traits reach only it.
-	type CityRule = { token: string; percent: number; scope: string };
+	// `scope` is the phrase that follows the tile in the row — segmented, so
+	// the thing it names (the nation, the family, the project) carries its own
+	// icon. A trait scope is one plain segment: the trait sprites are the
+	// archetype set, and these traits aren't in it.
+	type CityRule = { token: string; percent: number; scope: BreakdownSegment[] };
 	const collect = (
 		into: CityRule[],
 		mods: Readonly<Record<string, number>> | undefined,
-		scope: string,
+		scope: BreakdownSegment[],
 	) => {
 		for (const [token, percent] of Object.entries(mods ?? {})) {
 			if (percent !== 0) into.push({ token, percent, scope });
@@ -1005,45 +1049,49 @@ export function scienceBreakdown(
 	};
 	const playerRules: CityRule[] = [];
 	if (cityContext.nation != null) {
-		collect(
-			playerRules,
-			NATION_IMPROVEMENT_MODIFIER[cityContext.nation],
-			`in ${nationName(cityContext.nation)}`,
-		);
+		collect(playerRules, NATION_IMPROVEMENT_MODIFIER[cityContext.nation], [
+			{ text: "in" },
+			{
+				text: nationName(cityContext.nation),
+				icon: { category: "crests", value: cityContext.nation },
+			},
+		]);
 	}
 	for (const trait of cityContext.leaderTraits) {
-		collect(
-			playerRules,
-			LEADER_TRAIT_IMPROVEMENT_MODIFIER[trait],
-			`under a ${formatEnum(trait, "TRAIT_")} ruler`,
-		);
+		collect(playerRules, LEADER_TRAIT_IMPROVEMENT_MODIFIER[trait], [
+			{ text: `under a ${formatEnum(trait, "TRAIT_")} ruler` },
+		]);
 	}
 	const cityRules = new Map<string, CityRule[]>();
 	for (const city of cityContext.cities) {
 		const rules = [...playerRules];
 		if (city.family_class != null) {
-			collect(
-				rules,
-				FAMILY_CLASS_IMPROVEMENT_MODIFIER[city.family_class],
-				`in ${formatEnum(city.family_class, "FAMILYCLASS_")} cities`,
-			);
+			collect(rules, FAMILY_CLASS_IMPROVEMENT_MODIFIER[city.family_class], [
+				{ text: "in" },
+				{
+					text: formatEnum(city.family_class, "FAMILYCLASS_"),
+					icon: familyClassIcon(city.family_class),
+				},
+				{ text: "cities" },
+			]);
 		}
 		for (const pc of city.project_counts ?? []) {
-			// bSingle throughout, so a repeated completion pays once.
+			// <iMaxCount>1</iMaxCount> throughout, so a repeated completion
+			// pays once.
 			if (pc.count <= 0) continue;
-			collect(
-				rules,
-				PROJECT_IMPROVEMENT_MODIFIER[pc.project],
-				`with ${projectDisplayName(pc.project)}`,
-			);
+			collect(rules, PROJECT_IMPROVEMENT_MODIFIER[pc.project], [
+				{ text: "with" },
+				{
+					text: projectDisplayName(pc.project),
+					icon: { category: "projects", value: pc.project },
+				},
+			]);
 		}
 		if (city.governor_xml_id != null) {
 			for (const trait of cityContext.governorTraits(city.governor_xml_id)) {
-				collect(
-					rules,
-					GOVERNOR_TRAIT_IMPROVEMENT_MODIFIER[trait],
-					`under a ${formatEnum(trait, "TRAIT_")} governor`,
-				);
+				collect(rules, GOVERNOR_TRAIT_IMPROVEMENT_MODIFIER[trait], [
+					{ text: `under a ${formatEnum(trait, "TRAIT_")} governor` },
+				]);
 			}
 		}
 		if (rules.length > 0) cityRules.set(city.city_name, rules);
@@ -1063,7 +1111,7 @@ export function scienceBreakdown(
 		// contributes — they're attributed their share of the result below.
 		const rules: {
 			rows: Map<string, Acc>;
-			label: string;
+			parts: BreakdownSegment[];
 			percent: number;
 			count: number;
 			order: number;
@@ -1075,7 +1123,7 @@ export function scienceBreakdown(
 		let resources = 0;
 		const granted = new Map<
 			string,
-			{ rate: number; count: number; unlock: number }
+			{ improvement: string; rate: number; count: number }
 		>();
 		for (const [nx, ny] of hexNeighbors(t.x, t.y)) {
 			const n = tileAt.get(`${nx},${ny}`);
@@ -1084,32 +1132,50 @@ export function scienceBreakdown(
 			if (n.improvement == null || n.improvement_pillaged) continue;
 			const rate = adjacentModifier(improvement, cls, n.improvement);
 			if (rate === 0) continue;
-			// Keyed by class AND rate, so a class whose members grant different
-			// percentages can't hide behind one row's headline number.
-			const key = `${tileLabel(n.improvement)} (+${rate}%)`;
-			const seen = granted.get(key) ?? { rate, count: 0, unlock: 0 };
+			// Keyed by the neighbour's improvement AND rate. The row still reads
+			// as the class — the rules below all carry the same class label and
+			// merge into one row — but each member is counted separately, so the
+			// icon can be the one the row is mostly made of, and a class whose
+			// members grant different percentages still can't hide behind one
+			// row's headline number.
+			const key = `${n.improvement}|${rate}`;
+			const seen = granted.get(key) ?? {
+				improvement: n.improvement,
+				rate,
+				count: 0,
+			};
 			seen.count += 1;
-			seen.unlock = Math.max(
-				seen.unlock,
-				IMPROVEMENT_UNLOCK_COST[n.improvement] ?? 0,
-			);
 			granted.set(key, seen);
 		}
-		for (const [neighbour, source] of granted) {
+		for (const source of granted.values()) {
 			rules.push({
 				rows: adjacencyRows,
-				label: `${tileLabel(improvement)} next to ${neighbour}`,
+				parts: [
+					{ text: tileLabel(improvement), icon: improvementIcon(improvement) },
+					{ text: "next to" },
+					{
+						text: `${tileLabel(source.improvement)} (+${source.rate}%)`,
+						icon: improvementIcon(source.improvement),
+					},
+				],
 				percent: source.rate * source.count,
 				count: source.count,
 				// The row needs BOTH sides built, so the later unlock gates it.
-				order: Math.max(order, source.unlock),
+				order: Math.max(
+					order,
+					IMPROVEMENT_UNLOCK_COST[source.improvement] ?? 0,
+				),
 			});
 		}
 		for (const rule of cityRules.get(t.owner_city ?? "") ?? []) {
 			if (rule.token !== improvement && rule.token !== cls) continue;
 			rules.push({
 				rows: cityBonusRows,
-				label: `${tileLabel(improvement)} ${rule.scope} (+${rule.percent}%)`,
+				parts: [
+					{ text: tileLabel(improvement), icon: improvementIcon(improvement) },
+					...rule.scope,
+					{ text: `(+${rule.percent}%)` },
+				],
 				percent: rule.percent,
 				count: 1,
 				order,
@@ -1131,7 +1197,13 @@ export function scienceBreakdown(
 		if (fromFlat !== 0) {
 			addModifierRow(
 				adjacencyRows,
-				`${improvementLabel(improvement)} (per adjacent resource)`,
+				[
+					{
+						text: improvementLabel(improvement),
+						icon: improvementIcon(improvement),
+					},
+					{ text: "(per adjacent resource)" },
+				],
 				fromFlat / 10,
 				1,
 				order,
@@ -1143,7 +1215,7 @@ export function scienceBreakdown(
 			for (const rule of rules) {
 				addModifierRow(
 					rule.rows,
-					rule.label,
+					rule.parts,
 					(fromPercent * rule.percent) / percent / 10,
 					rule.count,
 					rule.order,
@@ -1285,10 +1357,7 @@ export function scienceBreakdown(
 				city.city_name,
 				familyRate * specialists,
 				specialists,
-				{
-					category: "crests",
-					value: `ARCHETYPE_${city.family_class.slice("FAMILYCLASS_".length)}`,
-				},
+				familyClassIcon(city.family_class),
 			);
 		}
 		// Babylonia: flat science in every city, from the nation's player
@@ -1299,6 +1368,7 @@ export function scienceBreakdown(
 				city.city_name,
 				nationScience,
 				1,
+				{ category: "crests", value: cityContext.nation },
 			);
 		}
 		// Theologies (Dualism): a city holding a religion that established the
@@ -1331,6 +1401,7 @@ export function scienceBreakdown(
 				city.city_name,
 				effective * info.science,
 				effective,
+				{ category: "projects", value: pc.project },
 			);
 		}
 		// Conditional grants: a law the player still holds, or their leader's
@@ -1463,7 +1534,15 @@ export function scienceBreakdown(
 				label,
 				count: a.count,
 				science: round1(a.science),
-				icon: a.icon,
+				// A row that named one thing is one segment; a segmented row resolves
+				// each name to the commonest improvement standing behind it.
+				segments: a.segments
+					? a.segments.map((seg) => ({
+							text: seg.text,
+							icon: [...seg.icons.values()].sort((x, y) => y.count - x.count)[0]
+								?.icon,
+						}))
+					: [{ text: label, icon: a.icon }],
 				order: a.order,
 				...(withPct ? { pct: a.pct } : {}),
 			}))

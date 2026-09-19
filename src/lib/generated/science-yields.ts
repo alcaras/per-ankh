@@ -148,8 +148,8 @@ export const FAMILY_CLASS_IMPROVEMENT_MODIFIER: Readonly<
 	Record<string, Readonly<Record<string, number>>>
 > = { FAMILYCLASS_CLERICS: { IMPROVEMENTCLASS_MONASTERY: 100 } };
 
-// A project the city completed. All are <bSingle>, so the modifier
-// lands once however many completions the city reports.
+// A project the city completed. All cap at <iMaxCount>1</iMaxCount>,
+// so the modifier lands once however many completions the city reports.
 export const PROJECT_IMPROVEMENT_MODIFIER: Readonly<
 	Record<string, Readonly<Record<string, number>>>
 > = {

@@ -67,6 +67,7 @@
 		type FreeTechMarker,
 		type ScienceSpike,
 		type ScienceBreakdown,
+		type BreakdownSegment,
 		type NamedCount,
 		type LeaderChangeMarker,
 		type KnowledgeFlipMarker,
@@ -661,13 +662,14 @@
 			: gameOptions.GAMEOPTION_COMPETITIVE_MODE === true,
 	);
 	const characterById = $derived(new Map(characters.map((c) => [c.xml_id, c])));
-	// Character → the traits they still hold at game end (a removed trait
-	// stops paying), for the breakdown's city-bonus rows.
+	// Character → their traits, for the breakdown's city-bonus rows. The
+	// save records acquisition but not removal, so a trait a character later
+	// lost is still priced; the signed remainder absorbs it — the same
+	// caveat the Orders breakdown carries.
 	const traitsByCharacter = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
 		const byId = new Map<number, string[]>();
 		for (const t of characterTraits) {
-			if (t.removed_turn != null) continue;
 			const held = byId.get(t.character_xml_id) ?? [];
 			held.push(t.trait_name);
 			byId.set(t.character_xml_id, held);
@@ -833,16 +835,23 @@
 			)
 			.map(([label]) => label);
 	}
-	// A row's icon: the first player's item that carries one.
-	function breakdownIcon(
+	// A row's label, as the named things it's built from: the first player's
+	// item that carries any icon, so a row shared across players draws the
+	// sprites of the first one that has them.
+	function breakdownSegments(
 		key: (typeof BREAKDOWN_SECTIONS)[number]["key"],
 		label: string,
-	) {
+	): BreakdownSegment[] {
+		let plain: BreakdownSegment[] | undefined;
 		for (const col of scienceBreakdowns) {
-			const icon = col.b[key].items.find((i) => i.label === label)?.icon;
-			if (icon) return icon;
+			const segments = col.b[key].items.find(
+				(i) => i.label === label,
+			)?.segments;
+			if (segments == null) continue;
+			if (segments.some((seg) => seg.icon != null)) return segments;
+			plain ??= segments;
 		}
-		return undefined;
+		return plain ?? [{ text: label }];
 	}
 	function breakdownItem(
 		col: BreakdownColumn,
@@ -1064,18 +1073,21 @@
 								{/each}
 							</tr>
 							{#each breakdownRows(section.key) as label (label)}
-								{@const icon = breakdownIcon(section.key, label)}
 								<tr>
 									<td class="py-0.5 pl-2 text-xs text-gray-400">
-										<span class="inline-flex items-center gap-1.5">
-											{#if icon}
-												<SpriteIcon
-													category={icon.category as SpriteCategory}
-													value={icon.value}
-													size={14}
-												/>
-											{/if}
-											{label}
+										<span class="inline-flex flex-wrap items-center gap-1.5">
+											{#each breakdownSegments(section.key, label) as seg, i (i)}
+												<span class="inline-flex items-center gap-1.5">
+													{#if seg.icon}
+														<SpriteIcon
+															category={seg.icon.category as SpriteCategory}
+															value={seg.icon.value}
+															size={14}
+														/>
+													{/if}
+													{seg.text}
+												</span>
+											{/each}
 										</span>
 									</td>
 									{#each scienceBreakdowns as col (col.player.playerId)}

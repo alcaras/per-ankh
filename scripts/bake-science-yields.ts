@@ -1058,9 +1058,11 @@ async function main(): Promise<void> {
 	);
 	lines.push("");
 	lines.push(
-		"// A project the city completed. All are <bSingle>, so the modifier",
+		"// A project the city completed. All cap at <iMaxCount>1</iMaxCount>,",
 	);
-	lines.push("// lands once however many completions the city reports.");
+	lines.push(
+		"// so the modifier lands once however many completions the city reports.",
+	);
 	lines.push(
 		`export const PROJECT_IMPROVEMENT_MODIFIER: Readonly<Record<string, Readonly<Record<string, number>>>> = ${JSON.stringify(sortedDeep(projectImprovementModifier))};`,
 	);
