@@ -1,9 +1,10 @@
-// The /stats selection vocabulary, client side: the composition slice and the
-// nation facet that together name one global corpus.
+// The /stats selection vocabulary, client side: the composition slice, the
+// nation facet and the recency window that together name one global corpus.
 //
-// The Worker parses both params forgivingly (games-scope.ts — parseSliceParam,
-// parseNationParam): a stale bookmark, a hand-edited URL, or a slice this
-// version no longer has degrades to a neighbouring view rather than 400ing.
+// The Worker parses all three params forgivingly (games-scope.ts —
+// parseSliceParam, parseNationParam, parsePeriodParam): a stale bookmark, a
+// hand-edited URL, or a slice this version no longer has degrades to a
+// neighbouring view rather than 400ing.
 // The page has to land on the same answer the Worker did, or the facet
 // controls would light a selection the payload isn't for — so the parse is
 // mirrored here, the way profileScope mirrors parseScopeParam.

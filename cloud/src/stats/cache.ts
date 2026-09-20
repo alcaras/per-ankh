@@ -11,7 +11,7 @@
 // Key shape:
 //   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:user:{user_id}:{viewerScope}:{scope}
 //   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:tournament:{tournament_id}:{updated_at}
-//   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:global:{slice}:{nations}
+//   stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:global:{slice}:{nations}:{period}
 //
 // Each corpus stores two payloads: the chart bundle at the key above, and the
 // records at that same key with a ":records" segment appended. They are built

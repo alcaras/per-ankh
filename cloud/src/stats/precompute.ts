@@ -5,13 +5,17 @@
 // hourly warm rebuilds only the unfaceted bundles a version bump orphaned
 // (§12).
 //
-// Every selection the /stats surface can express is a (slice, nation?) pair,
-// and the whole space is small enough to build ahead of time: four composition
-// slices, each unfaceted plus one bundle per nation seated in it. The request
-// path still computes on a miss (global-stats design §5) — this warms the
-// cache, it does not own it, and no correctness rests on it having run. That
-// is also why it writes through putCached rather than a longer-lived tier:
-// both paths produce the same kind of entry, so both get the same 24h TTL.
+// A selection the /stats surface can express is a (slice, nation?, period)
+// triple, and the part of that space this module builds ahead of time is the
+// all-time window of it: four composition slices, each unfaceted plus one
+// bundle per nation seated in it. A narrowed window is deliberately left out
+// (design §4.4) — tripling a cron whose cost is denominated in the unfaceted
+// slice's game count, to warm views most visits never open, buys less than
+// the compute-on-miss path already gives them. The request path still
+// computes on a miss (global-stats design §5) — this warms the cache, it does
+// not own it, and no correctness rests on it having run. That is also why it
+// writes through putCached rather than a longer-lived tier: both paths produce
+// the same kind of entry, so both get the same 24h TTL.
 
 import { buildChartBundle } from "./aggregate";
 import type { AggregateEnv } from "./aggregate";

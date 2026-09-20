@@ -1,11 +1,10 @@
 <script lang="ts">
 	// The /stats facet row — the three controls that name the global corpus: a
 	// composition slice, optionally one nation ANDed with it, and how recently
-	// the games were played. Sibling of
-	// $lib/users/ScopeRow.svelte and built to the same shape: hand-rolled
-	// popovers (not native <select>) matching the game-detail action popups,
-	// each writing its selection to the URL so the load re-runs and the view
-	// stays linkable.
+	// the games were played. Sibling of $lib/users/ScopeRow.svelte and built to
+	// the same shape: hand-rolled popovers (not native <select>) matching the
+	// game-detail action popups, each writing its selection to the URL so the
+	// load re-runs and the view stays linkable.
 	//
 	// Single-select throughout. The nightly precompute holds the slice × nation
 	// space; it deliberately warms the all-time window only, so a narrowed
@@ -48,7 +47,7 @@
 		options: Option[];
 		current: string;
 		currentLabel: string;
-		// The value that carries no param. Both defaults drop their param
+		// The value that carries no param. Every default drops its param
 		// rather than spelling it out (as ScopeRow does for scope=all), so the
 		// default view has one canonical URL — and so one edge-cache entry
 		// rather than several spellings of the same bundle.
