@@ -73,22 +73,33 @@ const NOVELTY_WINDOW_DAYS = 90;
 export const MAX_APPEARANCES = 2 * RECOMMENDATION_COUNT;
 
 // A rated duel or two is not a track record, and saying so is the honest way
-// to tell a viewer why a name they do not recognise is on their list.
+// to tell a viewer why a name they do not recognise is on their list. Counted
+// over their public games, like every badge here.
 const NEW_HERE_GAMES = 3;
 
 const ACTIVE_THIS_WEEK_DAYS = 7;
 
 // Every badge is a fact about the opponent that the viewer could establish by
-// reading a profile. None is derived from a rating.
+// reading a profile. None is derived from a rating, and none from a game a
+// visitor cannot see: both are counted over public results only, which is why
+// the candidate carries a visible-record pair of fields beside the ones the
+// pool is managed with.
 export type OpponentBadge = "active_this_week" | "new_here";
 
-// One player the model knows something about. `lastActive` is the later of
-// their most recent rated game and their most recent login, as YYYY-MM-DD.
+// One player the model knows something about.
+//
+// `lastActive` is the later of their most recent rated game and their most
+// recent login, as YYYY-MM-DD — the pool's own signal, deciding who is still
+// around and in what order lists are built and stored. It is deliberately not
+// what the badges read: a login appears on no profile, and neither does a
+// private game. `publicGames` and `lastPublicPlayed` are the record a visitor
+// can check, and the badges come from those.
 export interface RecommendationCandidate {
 	userId: string;
 	r: number;
 	rd: number;
-	games: number;
+	publicGames: number;
+	lastPublicPlayed: string | null;
 	lastActive: string | null;
 	openToMatches: boolean;
 }
@@ -127,9 +138,10 @@ function byMostRecent(a: string, b: string): number {
 }
 
 /**
- * Build every player's list. Pure: the same players, duels and date always give
- * the same answer, which is what lets it be tested and what keeps a nightly
- * rebuild from reordering a list that has not changed.
+ * Build every player's list. Pure, and independent of the order the players
+ * and duels arrive in — every sort here carries a tiebreak. That is what lets
+ * it be tested, and what keeps a nightly rebuild from reordering a list that
+ * has not changed.
  *
  * `today` is YYYY-MM-DD.
  */
@@ -217,11 +229,13 @@ export function buildRecommendations(args: {
 			const score = (closeness * novelty * recency) / (1 + appearances);
 
 			const badges: OpponentBadge[] = [];
-			const idle = candidate.lastActive
-				? daysBetween(candidate.lastActive, today)
+			const sinceVisible = candidate.lastPublicPlayed
+				? daysBetween(candidate.lastPublicPlayed, today)
 				: Number.POSITIVE_INFINITY;
-			if (idle <= ACTIVE_THIS_WEEK_DAYS) badges.push("active_this_week");
-			if (candidate.games <= NEW_HERE_GAMES) badges.push("new_here");
+			if (sinceVisible <= ACTIVE_THIS_WEEK_DAYS) {
+				badges.push("active_this_week");
+			}
+			if (candidate.publicGames <= NEW_HERE_GAMES) badges.push("new_here");
 
 			const [lo, hi] =
 				viewer.rd > UNSETTLED_RD || candidate.rd > UNSETTLED_RD
@@ -261,7 +275,17 @@ export function buildRecommendations(args: {
 		// discounted by rematches, staleness and load, so the order this pass
 		// admits people in is closest-game-first with those three having had
 		// their say.
-		scored.sort((a, b) => b.score - a.score);
+		//
+		// Descending score, ties by id. The tiebreak is what makes the purity
+		// above true of a rebuild and not only of a call: two candidates can
+		// score exactly equal, and without it their order would be the order they
+		// were pushed in — which is the order D1 returned the duel rows in, and
+		// nothing pins that.
+		scored.sort(
+			(a, b) =>
+				b.score - a.score ||
+				(a.rec.opponentUserId < b.rec.opponentUserId ? -1 : 1),
+		);
 		const chosen: typeof scored = [];
 		const taken = new Set<number>();
 		const passes = [

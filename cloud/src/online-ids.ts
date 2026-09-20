@@ -18,6 +18,27 @@ export interface OnlineIdsEnv extends SessionEnv, EventsEnv {
 	ALLOWED_ORIGINS: string;
 }
 
+// The rows of user_online_ids whose online_id resolves to exactly one account,
+// as a subquery yielding (online_id, user_id).
+//
+// user_online_ids is many-to-many by design (0003: shared account, Discord
+// account rebuild) and links are captured implicitly from whichever seat an
+// uploader claimed, so an id can name two people without either of them doing
+// anything wrong. Crediting both hands one player the other's history, and
+// nothing here distinguishes the real owner — the earliest claimant is not the
+// likelier one. So an id claimed twice resolves to nobody until the claim path
+// sorts it out.
+//
+// One definition, because both readers must answer it the same way: the
+// played-games leaderboard credits seats with it (stats/handlers.ts) and the
+// rating model resolves duel rosters with it (ratings/duels.ts).
+export const UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL = `SELECT uo.online_id, uo.user_id
+	   FROM user_online_ids uo
+	  WHERE NOT EXISTS (
+	          SELECT 1 FROM user_online_ids amb
+	           WHERE amb.online_id = uo.online_id
+	             AND amb.user_id <> uo.user_id)`;
+
 export async function getUserOnlineIds(
 	env: Pick<OnlineIdsEnv, "SHARE_DB">,
 	userId: string,

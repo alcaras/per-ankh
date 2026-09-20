@@ -36,8 +36,9 @@
 
 	// The boolean preferences — optimistic toggles backed by the worker,
 	// mirroring the lock toggle in GameActions: flip immediately, revert on
-	// failure. Initialised at construction from the server value; nothing
-	// re-fetches /me on this page, so no re-sync effect is needed.
+	// failure. Initialised at construction from the server value and not
+	// re-synced afterwards: the optimistic value is already what the write
+	// stored, and a failed write reverts it here.
 	// svelte-ignore state_referenced_locally
 	let defaultPublic = $state(data.user.default_game_public);
 	// svelte-ignore state_referenced_locally
@@ -129,8 +130,10 @@
 		if (savingPref) return;
 		set(next);
 		savingPref = field;
+		let changed = false;
 		try {
 			await cloudApi.updateSettings({ [field]: next });
+			changed = true;
 		} catch (err) {
 			set(!next);
 			toast.error(
@@ -139,6 +142,12 @@
 		} finally {
 			savingPref = null;
 		}
+		// `data.user` is the LAYOUT's copy of /me, and another page reads this
+		// write out of it: the Opponents tab tells its owner whether they are
+		// listed. Without the reload, opting out here and navigating there shows a
+		// tab still claiming they are on everyone's lists. Outside the try for the
+		// same reason saveSlug is — a failed reload is not a failed save.
+		if (changed) await invalidateAll();
 	}
 
 	async function saveStreamUrl() {

@@ -19,7 +19,8 @@
 --
 -- `badges` is a JSON array of keys the frontend maps to copy — every one of
 -- them a fact the viewer could establish themselves by reading profiles
--- ("new here", "active this week"). `meetings` is the number of rated games
+-- ("new here", "active this week"), which is why both are counted over public
+-- games only and neither reads a login (ratings/recommend.ts). `meetings` is the number of rated games
 -- the pair has already played, which the "played N times" badge renders.
 -- `computed_at` is the run that wrote the row; a rebuild replaces rows in
 -- place and sweeps the ones it did not touch (ratings/rebuild.ts).

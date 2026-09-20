@@ -2,10 +2,13 @@
 // (cloud/src/ratings/rebuild.ts, handlers.ts). The recommender itself is unit
 // tested beside its module; what needs D1 is the rebuild's replace-in-place
 // contract — a row from an earlier run is gone afterwards, and a run never
-// leaves a table empty — and the shape of what crosses the wire.
+// leaves a table empty — the wire shape of the list, and which games the
+// extractor's SQL calls a duel at all.
 
 import { applyD1Migrations, env } from "cloudflare:test";
+import { nanoid } from "nanoid";
 import { beforeAll, describe, expect, it } from "vitest";
+import { extractDuels } from "../../../src/ratings/duels";
 import { rebuildRatings } from "../../../src/ratings/rebuild";
 import { expectOk } from "../../helpers/assertions";
 import {
@@ -78,6 +81,124 @@ describe("rebuildRatings", () => {
 			"SELECT COUNT(DISTINCT user_id) AS n FROM user_recommended_opponents",
 		).first<{ n: number }>();
 		expect(listed?.n).toBe(8);
+	});
+});
+
+// A casual save with a roster, for the extractor's SQL to select or reject.
+async function makeGame(opts: {
+	uploader: TestUser;
+	gameMode: string;
+	isPublic?: boolean;
+	seats: {
+		onlineId?: string;
+		isUploader?: boolean;
+		isHuman?: boolean;
+		won?: boolean;
+	}[];
+}): Promise<void> {
+	const gameId = nanoid(21);
+	await env.SHARE_DB.prepare(
+		`INSERT INTO games (
+		   game_id, user_id, xml_game_id, total_turns, file_hash, game_name,
+		   is_public, blob_version, blob_size_bytes, parser_version, game_mode,
+		   save_date
+		 ) VALUES (?, ?, ?, 50, ?, 'Casual Game', ?, 2, 1024, '1.0.0', ?, '2026-08-20')`,
+	)
+		.bind(
+			gameId,
+			opts.uploader.userId,
+			nanoid(36),
+			nanoid(64),
+			(opts.isPublic ?? true) ? 1 : 0,
+			opts.gameMode,
+		)
+		.run();
+	for (const [i, seat] of opts.seats.entries()) {
+		await env.SHARE_DB.prepare(
+			`INSERT INTO player_summaries (
+			   game_id, player_index, player_name, is_human, is_uploader, online_id,
+			   is_winner
+			 ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		)
+			.bind(
+				gameId,
+				i,
+				`Seat ${i}`,
+				(seat.isHuman ?? true) ? 1 : 0,
+				(seat.isUploader ?? false) ? 1 : 0,
+				seat.onlineId ?? null,
+				(seat.won ?? false) ? 1 : 0,
+			)
+			.run();
+	}
+}
+
+describe("extractDuels", () => {
+	it("rates a duel played apart, and nothing the repo would not call one", async () => {
+		// Three saves that a two-human count alone cannot tell apart, and only
+		// the first is a duel: the second has AI in it (games-scope.ts argues
+		// that case directly), and the third was played at one machine.
+		const [a, b] = [await makeUser(), await makeUser()];
+		const onlineA = nanoid(12);
+		const onlineB = nanoid(12);
+		for (const [user, id] of [
+			[a, onlineA],
+			[b, onlineB],
+		] as const) {
+			await env.SHARE_DB.prepare(
+				"INSERT INTO user_online_ids (user_id, online_id) VALUES (?, ?)",
+			)
+				.bind(user.userId, id)
+				.run();
+		}
+		const humans = [
+			{ onlineId: onlineA, isUploader: true, won: true },
+			{ onlineId: onlineB },
+		];
+
+		const before = (await extractDuels(env.SHARE_DB)).stats.casual;
+		await makeGame({ uploader: a, gameMode: "NETWORK", seats: humans });
+		await makeGame({
+			uploader: a,
+			gameMode: "NETWORK",
+			seats: [...humans, { isHuman: false }, { isHuman: false }],
+		});
+		await makeGame({ uploader: a, gameMode: "HOTSEAT", seats: humans });
+
+		const after = await extractDuels(env.SHARE_DB);
+		expect(after.stats.casual).toBe(before + 1);
+	});
+
+	it("marks a duel only the pair can see as not public", async () => {
+		// The badges are counted over this flag, so a private save must not
+		// arrive looking like a published result.
+		const [a, b] = [await makeUser(), await makeUser()];
+		const onlineA = nanoid(12);
+		const onlineB = nanoid(12);
+		for (const [user, id] of [
+			[a, onlineA],
+			[b, onlineB],
+		] as const) {
+			await env.SHARE_DB.prepare(
+				"INSERT INTO user_online_ids (user_id, online_id) VALUES (?, ?)",
+			)
+				.bind(user.userId, id)
+				.run();
+		}
+		await makeGame({
+			uploader: a,
+			gameMode: "NETWORK",
+			isPublic: false,
+			seats: [
+				{ onlineId: onlineA, isUploader: true, won: true },
+				{ onlineId: onlineB },
+			],
+		});
+
+		const { duels } = await extractDuels(env.SHARE_DB);
+		const mine = duels.filter((d) => d.p1 === a.userId || d.p2 === a.userId);
+		expect(mine).toHaveLength(1);
+		expect(mine[0].isPublic).toBe(false);
 	});
 });
 

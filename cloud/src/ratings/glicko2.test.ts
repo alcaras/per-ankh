@@ -35,6 +35,35 @@ describe("glicko2", () => {
 		expect(glicko2(shuffled)).toEqual(res);
 	});
 
+	it("has no rating period for a month nobody played in", () => {
+		// Periods are built from the duels, so a month with no games anywhere is
+		// not a period and nobody's deviation widens for it: two games four
+		// months apart land the same ratings as two in consecutive months. A
+		// player who sat out a month *others* played in is the different case
+		// below, and does have their deviation widened (Glicko-2 step 6).
+		//
+		// Not a golden vector: the reference (owglick's ratings.py) is not
+		// vendored here and the vectors above span contiguous months only. This
+		// pins the behaviour so a change to the period loop has to be deliberate.
+		const pair = (date: string, winner: string): Duel => ({
+			date,
+			p1: "A",
+			p2: "B",
+			winner,
+		});
+		expect(glicko2([pair("2026-01-05", "A"), pair("2026-06-05", "B")])).toEqual(
+			glicko2([pair("2026-01-05", "A"), pair("2026-02-05", "B")]),
+		);
+
+		const played = glicko2([pair("2026-01-05", "A")]);
+		const satOut = glicko2([
+			pair("2026-01-05", "A"),
+			{ date: "2026-02-05", p1: "B", p2: "C", winner: "B" },
+		]);
+		expect(satOut.A.rd).toBeGreaterThan(played.A.rd);
+		expect(satOut.A.r).toBe(played.A.r);
+	});
+
 	it("returns the defaults for a single player's lone win", () => {
 		const out = glicko2([
 			{ date: "2026-01-01", p1: "X", p2: "Y", winner: "X" },

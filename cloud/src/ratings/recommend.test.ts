@@ -19,7 +19,8 @@ function player(
 		userId,
 		r: 1500,
 		rd: 80,
-		games: 40,
+		publicGames: 40,
+		lastPublicPlayed: RECENT,
 		lastActive: RECENT,
 		openToMatches: true,
 		...over,
@@ -107,7 +108,7 @@ describe("buildRecommendations", () => {
 		// The same conservative rating with a wide deviation reaches all nine.
 		const unsettled = buildRecommendations({
 			players: [
-				player("newcomer", { r: 1900, rd: 200, games: 1 }),
+				player("newcomer", { r: 1900, rd: 200, publicGames: 1 }),
 				...near,
 				...far,
 			],
@@ -121,7 +122,7 @@ describe("buildRecommendations", () => {
 			players: [
 				player("settled", { r: 1660 }),
 				...near,
-				player("unplaced", { r: 1740, rd: 200, games: 1 }),
+				player("unplaced", { r: 1740, rd: 200, publicGames: 1 }),
 			],
 			duels: [],
 			today: TODAY,
@@ -184,8 +185,8 @@ describe("buildRecommendations", () => {
 			player("me"),
 			player("rival"),
 			player("stranger"),
-			player("rookie", { games: 2 }),
-			player("today", { lastActive: TODAY }),
+			player("rookie", { publicGames: 2 }),
+			player("today", { lastActive: TODAY, lastPublicPlayed: TODAY }),
 		];
 		const duels: Duel[] = [
 			{ date: "2026-08-01", p1: "me", p2: "rival", winner: "me" },
@@ -202,6 +203,28 @@ describe("buildRecommendations", () => {
 		expect(mine.get("today")!.badges).toContain("active_this_week");
 		// Nobody who has played forty games is "new here".
 		expect(mine.get("rival")!.badges).not.toContain("new_here");
+	});
+
+	it("badges only what a visitor could have read for themselves", () => {
+		// The private half of each candidate is set to the opposite of the
+		// public half: a veteran whose record is all private reads as new here,
+		// and someone active only in games nobody can see, or only by logging
+		// in, is not badged active. Getting these the other way round would put
+		// a fact about a private game on a stranger's screen.
+		const players = [
+			player("me"),
+			player("unseen", { publicGames: 1, lastPublicPlayed: "2026-06-01" }),
+			player("lurker", { lastActive: TODAY, lastPublicPlayed: "2026-06-01" }),
+			player("visible", { lastActive: TODAY, lastPublicPlayed: TODAY }),
+		];
+		const lists = buildRecommendations({ players, duels: [], today: TODAY });
+		const mine = new Map(
+			(lists.get("me") ?? []).map((r) => [r.opponentUserId, r]),
+		);
+
+		expect(mine.get("unseen")!.badges).toContain("new_here");
+		expect(mine.get("lurker")!.badges).not.toContain("active_this_week");
+		expect(mine.get("visible")!.badges).toContain("active_this_week");
 	});
 
 	it("prefers a fresh pairing to this month's third rematch", () => {
@@ -233,12 +256,12 @@ describe("buildRecommendations", () => {
 		// might be instead, and a newcomer only reaches a settled player's list
 		// once even that pessimistic estimate is close.
 		const newcomers = Array.from({ length: 12 }, (_, i) =>
-			player(`new${i}`, { rd: 300, games: 1 }),
+			player(`new${i}`, { rd: 300, publicGames: 1 }),
 		);
 		const known = Array.from({ length: 8 }, (_, i) =>
 			player(`known${i}`, { r: 1480 + i * 5 }),
 		);
-		const proven = player("proven", { r: 1900, rd: 300, games: 2 });
+		const proven = player("proven", { r: 1900, rd: 300, publicGames: 2 });
 		const lists = buildRecommendations({
 			players: [player("veteran"), ...known, ...newcomers, proven],
 			duels: [],

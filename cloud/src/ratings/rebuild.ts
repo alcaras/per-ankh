@@ -76,10 +76,23 @@ export async function rebuildRatings(
 	// The most recent rated game per player, which is half of "still around"
 	// (the other half is their last login). Walked from the same duel list the
 	// engine consumed rather than re-queried, so the two can't disagree.
+	//
+	// The public half is walked alongside it, and only it reaches a badge. A
+	// badge is a claim the viewer could check by opening a profile, and a
+	// profile shows public games — so `new here` and `active this week` are
+	// counted over the results a visitor can see, never over the rating's full
+	// input. The rating itself still runs on every duel: nobody is shown it.
 	const lastPlayed = new Map<string, string>();
+	const publicGames = new Map<string, number>();
+	const lastPublicPlayed = new Map<string, string>();
 	for (const d of duels) {
 		for (const uid of [d.p1, d.p2]) {
 			if (d.date > (lastPlayed.get(uid) ?? "")) lastPlayed.set(uid, d.date);
+			if (!d.isPublic) continue;
+			publicGames.set(uid, (publicGames.get(uid) ?? 0) + 1);
+			if (d.date > (lastPublicPlayed.get(uid) ?? "")) {
+				lastPublicPlayed.set(uid, d.date);
+			}
 		}
 	}
 
@@ -128,7 +141,8 @@ export async function rebuildRatings(
 			userId,
 			r: rating.r,
 			rd: rating.rd,
-			games: rating.games,
+			publicGames: publicGames.get(userId) ?? 0,
+			lastPublicPlayed: lastPublicPlayed.get(userId) ?? null,
 			// Either signal counts: a player mid-match hasn't finished a game in
 			// weeks, and one whose opponent uploads every save has no login of
 			// their own to show for it.
