@@ -1,29 +1,17 @@
-// Canonical Old World map_script identifiers with friendly display labels.
-// Source: Mohawk's Reference/XML.
+// Display helpers over the Old World map-script table: friendly labels, the
+// compact pool abbreviations, and the DLC grouping the "Add map" pickers use.
 //
-// Several identifiers carry quirks from the game source that are preserved
-// verbatim — saves and tournament rows will contain these exact strings, so
-// the lookup must match byte-for-byte:
-//   - MapScriptInlandSea2:        trailing digit
-//   - MapScripLakesAndGulfs:      missing trailing 't' in "MapScript"
-//   - MapScriptMediterrancean:    misspelling in source
-//   - Mapscript<X> (Indus DLC):   lowercase 's' in "Mapscript"
-//
-// Update this list when a new DLC ships or Mohawk renames an entry.
+// The table itself — every script's zType, and the key it takes in the baked
+// options manifest — is map-scripts-table.ts, which imports nothing so the
+// Worker package's tests can read it. Everything here needs formatMapClass,
+// which is why the two are separate files.
 
 import { formatMapClass } from "$lib/utils/formatting";
-
-export type MapScriptDlc = "base" | "wrath_of_gods" | "empires_of_the_indus";
-
-export interface MapScriptInfo {
-	value: string;
-	label: string;
-	// Short form for the compact map-pool label (e.g. "CRB", "AridP", "DOTA").
-	// Kept terse but recognizable so a pool reads at a glance; the full `label`
-	// is still shown in tooltips and the read-only summary.
-	abbrev: string;
-	dlc: MapScriptDlc;
-}
+import {
+	KNOWN_MAP_SCRIPTS,
+	type MapScriptDlc,
+	type MapScriptInfo,
+} from "$lib/tournament/map-scripts-table";
 
 export const DLC_GROUP_LABELS: Record<MapScriptDlc, string> = {
 	base: "Base game",
@@ -31,178 +19,32 @@ export const DLC_GROUP_LABELS: Record<MapScriptDlc, string> = {
 	empires_of_the_indus: "Empires of the Indus",
 };
 
-export const KNOWN_MAP_SCRIPTS: MapScriptInfo[] = [
-	{
-		value: "MAPCLASS_MapScriptArchipelago",
-		label: "Archipelago",
-		abbrev: "Arch",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptAridPlateau",
-		label: "Arid Plateau",
-		abbrev: "AridP",
-		dlc: "base",
-	},
-	{ value: "MAPCLASS_MapScriptBay", label: "Bay", abbrev: "Bay", dlc: "base" },
-	{
-		value: "MAPCLASS_MapScriptCoastalRainBasin",
-		label: "Coastal Rain Basin",
-		abbrev: "CRB",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptContinent",
-		label: "Continent",
-		abbrev: "Cont",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptDesert",
-		label: "Desert",
-		abbrev: "Desert",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptDisjunction",
-		label: "Disjunction",
-		abbrev: "Disj",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptDonut",
-		label: "Donut",
-		abbrev: "Donut",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptHardwoodForest",
-		label: "Hardwood Forest",
-		abbrev: "Hardwood",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptHighlands",
-		label: "Highlands",
-		abbrev: "Highlands",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptInlandSea2",
-		label: "Inland Sea",
-		abbrev: "InlSea",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScripLakesAndGulfs",
-		label: "Lakes and Gulfs",
-		abbrev: "L&G",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptMediterrancean",
-		label: "Mediterranean",
-		abbrev: "Med",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptContinents",
-		label: "Multiple Continents",
-		abbrev: "MultiC",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptNorthernOcean",
-		label: "Northern Ocean",
-		abbrev: "NOcean",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptPlayerIslands",
-		label: "Player Islands",
-		abbrev: "Islands",
-		dlc: "base",
-	},
-	{
-		value: "MAPCLASS_MapScriptSeaside",
-		label: "Seaside",
-		abbrev: "Seaside",
-		dlc: "base",
-	},
-
-	{
-		value: "MAPCLASS_MapScriptDesolation",
-		label: "Desolation",
-		abbrev: "Desol",
-		dlc: "wrath_of_gods",
-	},
-	{
-		value: "MAPCLASS_MapScriptEbbingSea",
-		label: "Ebbing Sea",
-		abbrev: "Ebbing",
-		dlc: "wrath_of_gods",
-	},
-	{
-		value: "MAPCLASS_MapScriptRejuvenation",
-		label: "Rejuvenation",
-		abbrev: "Rejuv",
-		dlc: "wrath_of_gods",
-	},
-	{
-		value: "MAPCLASS_MapScriptTumblingMountain",
-		label: "Tumbling Mountain",
-		abbrev: "Tumbling",
-		dlc: "wrath_of_gods",
-	},
-
-	{
-		value: "MAPCLASS_MapscriptJungle",
-		label: "Deep Jungle",
-		abbrev: "Jungle",
-		dlc: "empires_of_the_indus",
-	},
-	{
-		value: "MAPCLASS_MapScriptDota",
-		label: "Duel of the Ancients",
-		abbrev: "DOTA",
-		dlc: "empires_of_the_indus",
-	},
-	{
-		value: "MAPCLASS_MapscriptMountainPass",
-		label: "Mountain Pass",
-		abbrev: "MtnPass",
-		dlc: "empires_of_the_indus",
-	},
-	{
-		value: "MAPCLASS_MapscriptWetlands",
-		label: "Wetlands",
-		abbrev: "Wetlands",
-		dlc: "empires_of_the_indus",
-	},
-];
-
-const labelByValue: Record<string, string> = Object.fromEntries(
-	KNOWN_MAP_SCRIPTS.map((s) => [s.value, s.label]),
-);
-
-const abbrevByValue: Record<string, string> = Object.fromEntries(
-	KNOWN_MAP_SCRIPTS.map((s) => [s.value, s.abbrev]),
+// Every spelling a script answers to — its zType and any superseded ones —
+// mapped to the one entry that describes it. Aliases are folded in here rather
+// than at each call site so a legacy token labels itself correctly wherever it
+// surfaces, instead of relying on formatMapClass landing on the right words by
+// coincidence of the prefix strip.
+const infoBySpelling: Record<string, MapScriptInfo> = Object.fromEntries(
+	KNOWN_MAP_SCRIPTS.flatMap((s) => [
+		[s.value, s] as const,
+		...(s.aliases ?? []).map((a) => [a, s] as const),
+	]),
 );
 
 // Friendly display name for any map_script. Falls back to the generic
-// PascalCase-split formatter for unknown values (legacy data, future DLCs
-// not yet added to this table).
+// PascalCase-split formatter for unknown values (future DLCs not yet in
+// map-scripts-table, and the zType of a new script we guessed wrong).
 export function mapScriptLabel(value: string | null | undefined): string {
 	if (!value) return "Unknown";
-	return labelByValue[value] ?? formatMapClass(value);
+	return infoBySpelling[value]?.label ?? formatMapClass(value);
 }
 
 // Short form of a map_script name for compact pool labels (e.g. "CRB").
 // Falls back to the full friendly label for unknown values, so a future
-// DLC script still renders something sensible until it's added above.
+// DLC script still renders something sensible until it reaches the table.
 export function mapScriptAbbrev(value: string | null | undefined): string {
 	if (!value) return "Unknown";
-	return abbrevByValue[value] ?? mapScriptLabel(value);
+	return infoBySpelling[value]?.abbrev ?? mapScriptLabel(value);
 }
 
 // Returns map scripts grouped by DLC, with already-allowed values excluded.

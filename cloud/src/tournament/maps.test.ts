@@ -128,7 +128,7 @@ describe("assignMap", () => {
 		// still be Bay (Arid would repeat B too), but the *other* Bay instance
 		// (bay-small), not the exact bay-tiny A already played.
 		const pool: MapPoolEntry[] = [
-			{ id: "arid", script: "MAPCLASS_MapScriptAridPlateau", options: {} },
+			{ id: "arid", script: "MAPCLASS_AridPlateau", options: {} },
 			{
 				id: "bay-tiny",
 				script: "MAPCLASS_MapScriptBay",
@@ -144,7 +144,7 @@ describe("assignMap", () => {
 			{ ...m("m1", "A", "X", "bay-tiny"), map_script: "MAPCLASS_MapScriptBay" },
 			{
 				...m("m2", "B", "Y", "arid"),
-				map_script: "MAPCLASS_MapScriptAridPlateau",
+				map_script: "MAPCLASS_AridPlateau",
 			},
 		];
 		const entry = assignMap("A", "B", pool, prior, createRng("seed"));

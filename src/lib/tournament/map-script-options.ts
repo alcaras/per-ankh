@@ -14,6 +14,7 @@ import {
 import { MAP_SCRIPT_OPTIONS } from "$lib/generated/map-script-options";
 import { mapOptionChoiceLabel, mapOptionLabel } from "$lib/map-settings";
 import { mapScriptAbbrev, mapScriptLabel } from "$lib/tournament/map-scripts";
+import { mapScriptOptionsKey } from "$lib/tournament/map-scripts-table";
 import { slugify } from "$lib/utils/slug";
 
 // The generic option-label helpers live in $lib/map-settings (shared with the
@@ -34,8 +35,11 @@ export function poolEntryById(
 // Option zTypes that apply to a given script, in display order (globals
 // first, then script-specific). Empty array for unknown scripts (e.g.
 // legacy data from a tournament whose MAPCLASS is no longer baked).
+//
+// Keyed through mapScriptOptionsKey because the manifest is keyed by the
+// script's C# class name, which for four scripts is not its zType.
 export function optionsForScript(script: string): readonly string[] {
-	return MAP_SCRIPT_OPTIONS[script] ?? [];
+	return MAP_SCRIPT_OPTIONS[mapScriptOptionsKey(script)] ?? [];
 }
 
 // Definition record for an option zType, or undefined if unknown.
@@ -131,7 +135,7 @@ const VARIANT_OPTIONS_BY_SCRIPT: Record<string, readonly string[]> = {
 		"MAP_OPTIONS_MULTI_DOTA_INNER_TERRAIN",
 		"MAP_OPTIONS_MULTI_DOTA_BOUNDARY_TERRAIN",
 	],
-	MAPCLASS_MapScriptAridPlateau: ["MAP_OPTIONS_MULTI_ARID_WATER_SIZE"],
+	MAPCLASS_AridPlateau: ["MAP_OPTIONS_MULTI_ARID_WATER_SIZE"],
 	MAPCLASS_MapScriptDesert: ["MAP_OPTIONS_DESERT_COAST"],
 };
 

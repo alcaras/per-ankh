@@ -33,7 +33,7 @@ import {
 	printJson,
 } from "../../lib/cli";
 import { d1Batch, d1Exec, d1Query, isLocal, sqlStr } from "../wrangler";
-import { KNOWN_MAP_SCRIPTS } from "$lib/tournament/map-scripts";
+import { KNOWN_MAP_SCRIPTS } from "$lib/tournament/map-scripts-table";
 // cloud/ is a CJS package (no "type":"module") while scripts/ runs as ESM, so
 // the planner's named exports surface only through the default-interop object.
 // Types are erased at runtime, so they import cleanly by name.
@@ -184,10 +184,11 @@ async function runCreate(argv: string[], opts: CommandOpts): Promise<void> {
 	if (invalidMaps.length > 0) {
 		throw new Error(
 			`Unknown map_script value(s): ${invalidMaps.join(", ")}\n` +
-				`Expected canonical MAPCLASS_MapScript<Name> identifiers — ` +
-				`see KNOWN_MAP_SCRIPTS in src/lib/tournament/map-scripts.ts ` +
-				`for the full list (e.g. MAPCLASS_MapScriptContinent, ` +
-				`MAPCLASS_MapScriptAridPlateau, MAPCLASS_MapScriptInlandSea2).`,
+				`Expected a canonical MAPCLASS_* zType — the spelling is per ` +
+				`script and not always MapScript<Name>, so see ` +
+				`KNOWN_MAP_SCRIPTS in src/lib/tournament/map-scripts.ts for ` +
+				`the full list (e.g. MAPCLASS_MapScriptContinent, ` +
+				`MAPCLASS_AridPlateau, MAPCLASS_MapScriptInlandSea2).`,
 		);
 	}
 	const description = flagString(flags, "description") ?? null;

@@ -25,6 +25,16 @@
 //   MapScriptMediterrancean.cs      — misspelling in source
 //   Mapscript<X>.cs (Indus DLC)     — lowercase 's' in "Mapscript"
 //
+// SCRIPT KEYS ARE C# CLASS NAMES, NOT zTypes. The per-script map is keyed
+// `MAPCLASS_` + filename because that is all this bake can see: the scripts
+// aren't declared in Reference/XML/Infos/mapClass.xml (which holds only
+// MAPCLASS_RANDOM), so there is no zType here to read. For most scripts the
+// two strings coincide; for four they don't — including both quirks above,
+// which are quirks of the filenames and not of the zTypes. The zType side of
+// that mapping is curated in src/lib/tournament/map-scripts.ts (`optionsKey`),
+// and every read of this manifest goes through it. Don't "fix" the keys here
+// to match zTypes — this bake has no way to know them.
+//
 // OUTPUT: .bake/map-options.json (gitignored sidecar). The finalize step
 // (scripts/build-manifests.ts) reads it and emits the runtime modules at
 // src/lib/generated/{map-option-defs,map-script-options}.ts.
@@ -176,7 +186,8 @@ function parseOptionAdds(src: string): string[] {
 	return options;
 }
 
-// Translate a C# filename (without extension) into its MAPCLASS_* identifier.
+// Translate a C# filename (without extension) into the identifier this
+// manifest is keyed by. NOT necessarily the script's zType — see the header.
 // Examples:
 //   MapScriptDonut          → MAPCLASS_MapScriptDonut
 //   MapScripLakesAndGulfs   → MAPCLASS_MapScripLakesAndGulfs   (preserved typo)
