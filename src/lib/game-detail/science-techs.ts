@@ -78,6 +78,7 @@ import {
 	CITY_DAMAGE_YIELD_MODIFIER,
 	CITY_ASSIMILATE_YIELD_MODIFIER,
 } from "$lib/generated/science-yields";
+import { cultureRank } from "$lib/generated/wonders";
 import {
 	archetypeSpriteKey,
 	formatArchetype,
@@ -1720,16 +1721,6 @@ export type OneOffProject = {
 	// Its gated tiers all drop out, so `max` carries that city's FLOOR — the
 	// band's top is then a lower bound, not a ceiling.
 	ceilingFloored: boolean;
-	// The distinct per-completion values in play, ascending — what one
-	// completion was worth, for the caption's explanation of the band.
-	//
-	// Deliberately NOT used to attribute a turn's one-off science gain to
-	// this project: the generic event rewards (BONUS_SCIENCE_GAIN_SMALL and
-	// friends) pay base + per-city, so with four cities SMALL pays exactly
-	// 40 and AVERAGE exactly 80 — the same numbers an Inquiry pays. Matching
-	// on value would assert a source the save never records, which is the
-	// defect #212 already reports against this rail.
-	values: number[];
 };
 
 export function oneOffProjectScience(
@@ -1738,7 +1729,7 @@ export function oneOffProjectScience(
 ): OneOffProject[] {
 	const out = new Map<string, OneOffProject>();
 	for (const city of cities) {
-		const level = CULTURE_LEVELS.indexOf(city.culture_level ?? "");
+		const level = cultureRank(city.culture_level);
 		for (const pc of city.project_counts ?? []) {
 			const tiers = PROJECT_ONE_OFF_SCIENCE[pc.project];
 			if (!tiers || pc.count <= 0) continue;
@@ -1747,7 +1738,7 @@ export function oneOffProjectScience(
 			// level (index -1) leaves only the ungated tiers, which floors the
 			// ceiling rather than inventing one.
 			const reachable = tiers.filter(
-				(t) => t.culture == null || CULTURE_LEVELS.indexOf(t.culture) <= level,
+				(t) => t.culture == null || cultureRank(t.culture) <= level,
 			);
 			const usable = reachable.length > 0 ? reachable : [tiers[0]];
 			const row = out.get(pc.project) ?? {
@@ -1758,7 +1749,6 @@ export function oneOffProjectScience(
 				min: 0,
 				max: 0,
 				ceilingFloored: false,
-				values: [],
 			};
 			row.count += pc.count;
 			row.byCity.push({ name: city.city_name, count: pc.count });
@@ -1771,14 +1761,10 @@ export function oneOffProjectScience(
 			if (level < 0 && reachable.length < tiers.length) {
 				row.ceilingFloored = true;
 			}
-			for (const t of usable) {
-				if (!row.values.includes(t.science)) row.values.push(t.science);
-			}
 			out.set(pc.project, row);
 		}
 	}
 	for (const row of out.values()) {
-		row.values.sort((a, b) => a - b);
 		row.byCity.sort((a, b) => b.count - a.count);
 	}
 	return [...out.values()].sort((a, b) => b.max - a.max);
@@ -1838,12 +1824,11 @@ export function scienceSpikes(
 		const bonus = cur.cumulative - prev.cumulative - cur.rate;
 		if (bonus < SCIENCE_SPIKE_MIN) continue;
 		const sources: string[] = [];
-		const amount = Math.round(bonus);
 		if (steals.has(cur.turn)) sources.push("Steal Research mission");
 		sources.push(...(storiesByTurn.get(cur.turn) ?? []));
 		spikes.push({
 			turn: cur.turn,
-			amount,
+			amount: Math.round(bonus),
 			sources: sources.slice(0, SPIKE_SOURCES_MAX),
 		});
 	}
