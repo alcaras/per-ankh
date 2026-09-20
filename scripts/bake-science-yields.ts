@@ -964,11 +964,6 @@ async function main(): Promise<void> {
 		if (fc.zType && fc.EffectCity)
 			familyClassOfEffect.set(fc.EffectCity, fc.zType);
 	}
-	const typePairs = (block?: { Pair?: TypePair | TypePair[] }): TypePair[] => {
-		const p = block?.Pair;
-		if (p == null) return [];
-		return Array.isArray(p) ? p : [p];
-	};
 	const improvementFamilyClassScience: Record<
 		string,
 		Record<string, number>
