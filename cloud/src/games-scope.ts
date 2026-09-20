@@ -18,6 +18,10 @@
 // Scope is a single mutually-exclusive selection (UserScope) — the scope
 // row presents it as one dropdown. Identity visibility (visitors only
 // ever see is_public=1) composes on top.
+//
+// Beside the three, the vocabulary they are built from is exported where a
+// second surface has to ask the same question in the same words:
+// COMPOSITION_GAME_IDS_SQL and remoteGameModeSql.
 
 import type { GlobalSlice, UserScope } from "./stats/types";
 
@@ -126,19 +130,39 @@ export function parseNationParam(raw: string | null): string | null {
 // surface: a 2-human, 4-AI save is multiplayer to the person who played it,
 // and it is not a duel — counting only its humans would call it one. So a
 // duel is `COUNT(*) = 2 AND SUM(is_human) = 2` — the same composition test
-// the `duel-event-titles` admin sweep applies. The two forms stay apart
-// deliberately; migrating the user page onto this vocabulary is issue #228.
+// the `duel-event-titles` admin sweep applies, and the one the rating model
+// selects the games it rates with (ratings/duels.ts), which is why `duel` is
+// exported. The two forms stay apart deliberately; migrating the user page
+// onto this vocabulary is issue #228.
 //
 // The three compositions do not partition the corpus: a game with 2 humans
 // and any AI is too few humans for FFA, too many for single-player and too
 // many players for a duel. That is why "all" applies no composition filter
 // rather than unioning the other three.
-const COMPOSITION_GAME_IDS_SQL: Record<Exclude<GlobalSlice, "all">, string> = {
+export const COMPOSITION_GAME_IDS_SQL: Record<
+	Exclude<GlobalSlice, "all">,
+	string
+> = {
 	duel: "SELECT game_id FROM player_summaries GROUP BY game_id HAVING COUNT(*) = 2 AND SUM(is_human) = 2",
 	ffa: "SELECT game_id FROM player_summaries GROUP BY game_id HAVING SUM(is_human) >= 3",
 	single_player:
 		"SELECT game_id FROM player_summaries GROUP BY game_id HAVING SUM(is_human) = 1",
 };
+
+// Whether a game was played apart rather than at one machine, as a predicate
+// over `games` under the caller's alias — the same aliased-fragment shape
+// displayNameSql uses.
+//
+// Two modes are promoted rather than a list of local ones demoted, for the
+// reason the played-games board gives at length (stats/handlers.ts): game_mode
+// is the save's `@_GameMode` read verbatim and nothing validates it against an
+// enum, so a mode the game adds later must not be able to pass for a remote
+// game. Hotseat and LAN are two people at one machine, which is why that board
+// files a two-human hotseat under `other` rather than under duels, and why the
+// rating model (ratings/duels.ts) does not rate one.
+export function remoteGameModeSql(alias: string): string {
+	return `${alias}.game_mode IN ('NETWORK', 'PLAY_BY_CLOUD')`;
+}
 
 // Returns the SQL fragment to append after the global corpus's base clause
 // (begins with " AND " when non-empty, else ""). No binds — every fragment is

@@ -18,6 +18,7 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import UserTournamentsTab from "$lib/tournament/UserTournamentsTab.svelte";
 	import GamesTable from "$lib/users/GamesTable.svelte";
+	import OpponentsTab from "$lib/users/OpponentsTab.svelte";
 	import OverviewTab from "$lib/users/OverviewTab.svelte";
 	import ScopeRow from "$lib/users/ScopeRow.svelte";
 	import VideosTab from "$lib/users/VideosTab.svelte";
@@ -79,6 +80,10 @@
 				next.searchParams.delete(k);
 			}
 		}
+		// The scope selector applies to the save-backed tabs; suggested opponents
+		// come from the whole rated corpus and ignore it. Dropping it keeps the
+		// URL honest about what the page is filtered by.
+		if (value === "opponents") next.searchParams.delete("scope");
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- search-param-only update on the current route; URL objects are SvelteKit's documented dynamic-nav API
 		await goto(next, { keepFocus: true, noScroll: true });
 	}
@@ -215,6 +220,16 @@
 							<Tabs.Trigger value="stats" class={triggerClass}
 								>Stats</Tabs.Trigger
 							>
+							<!-- Owner-only — every other tab on this bar is the same for
+						     whoever is looking, so this one owes the owner an answer to
+						     "who else can read this?". The trigger looks like its
+						     siblings and the note at the foot of the tab gives the
+						     answer, rather than the bar carrying a mark of its own. -->
+							{#if data.isOwner}
+								<Tabs.Trigger value="opponents" class={triggerClass}
+									>Opponents</Tabs.Trigger
+								>
+							{/if}
 						</Tabs.List>
 
 						<Tabs.Content value="overview">
@@ -267,6 +282,19 @@
 								<StatsView {bundle} countLabel="Games" />
 							{/if}
 						</Tabs.Content>
+
+						{#if data.isOwner}
+							<Tabs.Content value="opponents">
+								<!-- Payload loads lazily with the tab (mirrors Videos and
+								     Tournaments), so it's null until then. -->
+								{#if data.suggestions}
+									<OpponentsTab
+										suggestions={data.suggestions}
+										openToMatches={page.data.user?.open_to_matches ?? true}
+									/>
+								{/if}
+							</Tabs.Content>
+						{/if}
 					</div>
 				</Tabs.Root>
 			</div>

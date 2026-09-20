@@ -17,6 +17,7 @@ import type { SessionEnv } from "../session";
 import { cloudCorsHeaders, errorResponse, jsonResponse } from "../util";
 import { buildAvatarUrl } from "../auth";
 import { displayNameSql } from "../identity";
+import { UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL } from "../online-ids";
 import {
 	parseNationParam,
 	parseScopeParam,
@@ -484,15 +485,11 @@ export async function handlePlayerLeaderboard(
 	// players are credited once.
 	//
 	// The online-id arm credits an id only while it resolves to exactly one
-	// user. `user_online_ids` is many-to-many by design (0003: shared
-	// account, Discord-account rebuild) and links are captured implicitly
-	// from whichever seat an uploader claimed, so an id can name two people
-	// without either of them doing anything wrong. Crediting both hands one
-	// player the other's entire history, and nothing here distinguishes the
-	// real owner — the earliest claimant is not the likelier one. An
-	// ambiguous id therefore credits nobody through this arm; both users
-	// still get their own uploads through the uploader arm above, and the
-	// credit returns on its own once the link is disambiguated.
+	// user — UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL (online-ids.ts), which is where
+	// that judgement is argued and where the rating model reads it from too.
+	// An ambiguous id credits nobody through this arm; both users still get
+	// their own uploads through the uploader arm above, and the credit returns
+	// on its own once the link is disambiguated.
 	//
 	// The category counts and the mode flags are CASE-wrapped, not bare
 	// predicates, because game_mode is nullable and `x AND NULL` is NULL, not
@@ -600,11 +597,8 @@ export async function handlePlayerLeaderboard(
 		     JOIN player_summaries ps
 		       ON ps.game_id = g.game_id AND ps.is_human = 1
 		          AND ps.online_id IS NOT NULL
-		     JOIN user_online_ids uo ON uo.online_id = ps.online_id
-		       AND NOT EXISTS (
-		         SELECT 1 FROM user_online_ids amb
-		         WHERE amb.online_id = ps.online_id AND amb.user_id <> uo.user_id
-		       )
+		     JOIN (${UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL}) uo
+		       ON uo.online_id = ps.online_id
 		     WHERE g.is_public = 1
 		       AND (?1 IS NULL OR g.created_at >= ?1)
 		       AND (?2 IS NULL OR g.created_at < ?2)

@@ -126,13 +126,14 @@ binding = "SESSIONS_KV"
 id = "b7029ad65b8f410b84b4b55623b25e56"
 preview_id = "e4725d2a3a324ec98580f6d6cae1f209"
 
-# Cron triggers. Three jobs, dispatched by exact pattern in the `scheduled`
+# Cron triggers. Four jobs, dispatched by exact pattern in the `scheduled`
 # handler (src/index.ts) with no fallback — a pattern listed here and matched
 # by none of them there logs and does nothing.
 #
 #   47 3      the retention sweep over the D1 `events` table. Per-event-type
 #             policy in src/retention.ts, which also names the pattern
-#             (RETENTION_CRON).
+#             (RETENTION_CRON). Followed, on the same trigger, by the ratings
+#             and recommended-opponents rebuild (src/ratings/rebuild.ts).
 #   17 4..7   the public /stats bundle precompute, one pattern per composition
 #             slice (STATS_PRECOMPUTE_CRONS in src/stats/precompute.ts, which
 #             maps each to its slice). Four patterns rather than one because
