@@ -10,16 +10,17 @@
 // SCRIPT_OPTIONS_KEYS below for the four where the two disagree.
 //
 // Why duplicated: cloud/ is a separate package with its own tsconfig
-// (cloud/tsconfig.json), bundled by wrangler/esbuild — importing from
-// ../../../src/lib/tournament/map-scripts would pull in SvelteKit-shaped
-// modules ($lib/utils/formatting and friends) that the Worker bundle
-// doesn't need to ship.
+// (cloud/tsconfig.json), bundled by wrangler/esbuild — the Worker bundle has
+// no business shipping SvelteKit-shaped modules.
 //
-// Drift safety nets: the create-tournament integration test (which
-// exercises the strict schema) will fail if a value here doesn't exist
-// in the lookup table, canonical-maps.test.ts pins every value against the
-// baked options manifest, and the admin CLI does its own validation against
-// the SvelteKit list (scripts/admin/commands/tournament.ts).
+// Drift safety net: canonical-maps.test.ts imports map-scripts-table.ts
+// across the package boundary and asserts this copy against the original —
+// the value list, the options keys below, and that neither side resolves an
+// alias — as well as against the baked options manifest, as a bijection. That
+// import is a test reading a table, not the Worker importing $lib; the table
+// module is kept free of imports precisely so it stays readable from here.
+// The admin CLI validates its own input against the same table
+// (scripts/admin/commands/tournament.ts).
 
 export const CANONICAL_MAP_SCRIPTS: readonly string[] = [
 	// Base game
@@ -64,7 +65,10 @@ export const CANONICAL_MAP_SCRIPTS_SET: ReadonlySet<string> = new Set(
 // zType to read — mapClass.xml declares only MAPCLASS_RANDOM), so it is keyed
 // by class name while everything a pool stores is keyed by zType.
 //
-// Mirror of the `optionsKey` fields in KNOWN_MAP_SCRIPTS.
+// Mirror of the `optionsKey` fields in KNOWN_MAP_SCRIPTS. A superseded
+// spelling is deliberately absent: it has no manifest of its own and must not
+// borrow its successor's, so it falls through unresolved here exactly as it
+// does in mapScriptOptionsKey.
 const SCRIPT_OPTIONS_KEYS: Readonly<Record<string, string>> = {
 	MAPCLASS_AridPlateau: "MAPCLASS_MapScriptAridPlateau",
 	MAPCLASS_CoastalRainBasin: "MAPCLASS_MapScriptCoastalRainBasin",

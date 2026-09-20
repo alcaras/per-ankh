@@ -13,11 +13,8 @@ import {
 } from "$lib/generated/map-option-defs";
 import { MAP_SCRIPT_OPTIONS } from "$lib/generated/map-script-options";
 import { mapOptionChoiceLabel, mapOptionLabel } from "$lib/map-settings";
-import {
-	mapScriptAbbrev,
-	mapScriptLabel,
-	mapScriptOptionsKey,
-} from "$lib/tournament/map-scripts";
+import { mapScriptAbbrev, mapScriptLabel } from "$lib/tournament/map-scripts";
+import { mapScriptOptionsKey } from "$lib/tournament/map-scripts-table";
 import { slugify } from "$lib/utils/slug";
 
 // The generic option-label helpers live in $lib/map-settings (shared with the

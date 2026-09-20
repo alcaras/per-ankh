@@ -33,7 +33,7 @@ import {
 	printJson,
 } from "../../lib/cli";
 import { d1Batch, d1Exec, d1Query, isLocal, sqlStr } from "../wrangler";
-import { KNOWN_MAP_SCRIPTS } from "$lib/tournament/map-scripts";
+import { KNOWN_MAP_SCRIPTS } from "$lib/tournament/map-scripts-table";
 // cloud/ is a CJS package (no "type":"module") while scripts/ runs as ESM, so
 // the planner's named exports surface only through the default-interop object.
 // Types are erased at runtime, so they import cleanly by name.
