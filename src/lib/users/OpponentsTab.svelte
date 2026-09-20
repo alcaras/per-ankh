@@ -66,31 +66,43 @@
 </script>
 
 {#snippet opponentCard(o: RecommendedOpponent)}
-	<div
-		class="flex items-center gap-2 rounded-lg bg-surface p-3 transition-colors hover:bg-surface-hover"
-	>
-		<!-- Identity is one link to the profile, the way a tournament row card is
-		     — a card whose name alone is clickable makes the reader hunt for it.
-		     The Discord link is its sibling rather than a child, because an
+	<!-- Bottom-aligned, not centred: the badge row is the last thing in the
+	     identity column, so its baseline is the column's bottom edge — ending the
+	     row there puts the Discord chip on the same line as the badges. -->
+	<div class="flex items-end gap-2 rounded-lg bg-surface p-3">
+		<!-- Identity: the avatar and the name link, and nothing else in the card
+		     does — the badges state facts about the pair, so they are not a way to
+		     reach anyone. Two anchors rather than one around the pair, because the
+		     badges sit under the name and inside that anchor they would be
+		     clickable too. The Discord link is their sibling, not a child: an
 		     anchor inside an anchor is not markup. -->
-		<ProfileLink
-			userId={o.user_id}
-			slug={o.slug}
-			class="flex min-w-0 flex-1 items-center gap-3"
-			title="{o.display_name}'s profile"
-		>
-			<img
-				src={o.avatar_url}
-				alt=""
-				width="40"
-				height="40"
-				class="h-10 w-10 shrink-0 rounded-full border-2 border-black"
-			/>
+		<div class="flex min-w-0 flex-1 items-center gap-3">
+			<ProfileLink
+				userId={o.user_id}
+				slug={o.slug}
+				class="shrink-0"
+				ariaLabel="{o.display_name}'s profile"
+			>
+				<img
+					src={o.avatar_url}
+					alt=""
+					width="40"
+					height="40"
+					class="h-10 w-10 shrink-0 rounded-full border-2 border-black transition-colors hover:border-orange"
+				/>
+			</ProfileLink>
 
 			<div class="min-w-0 flex-1">
-				<div class="truncate text-base font-bold text-white">
+				<!-- inline-block, so the hit area and the hover underline stop at the
+				     end of the name instead of running the column's full width. -->
+				<ProfileLink
+					userId={o.user_id}
+					slug={o.slug}
+					class="inline-block max-w-full truncate align-bottom text-base font-bold text-white hover:underline"
+					title="{o.display_name}'s profile"
+				>
 					{o.display_name}
-				</div>
+				</ProfileLink>
 
 				<div class="mt-1 flex flex-wrap items-center gap-1.5">
 					{#each labelsFor(o) as label (label)}
@@ -102,13 +114,18 @@
 					{/each}
 				</div>
 			</div>
-		</ProfileLink>
+		</div>
 
-		<!-- Their Discord profile. The mark alone, no label: it lands on the
-		     profile rather than in a DM — Discord publishes no compose URL, and
-		     whether a stranger may message them at all stays their privacy
-		     setting to make — so a button reading "DM" would promise something it
-		     does not do. The tooltip and the aria-label say where it goes.
+		<!-- Their Discord profile, in the blurple the home page signs in with —
+		     same brand call to action, so the one Discord control on a page always
+		     looks like the others. It opens their profile, not a compose box:
+		     Discord publishes no DM URL, and whether a stranger may message them
+		     at all stays their privacy setting to make. The tooltip names whose
+		     profile it is, which the shared label can't. Half again the badges'
+		     height: text-xs and the default 16px mark set a 16px line box, and 7px
+		     of pad above and below take it to 30px against their 20px. Bottom
+		     alignment is what keeps it readable — the chip grows upward, so it
+		     still sits on the badge line rather than floating off it.
 		     discord.com, not an app route, so resolve() doesn't apply; rel guards
 		     tabnabbing + referrer leakage (same shape as VideoCard's). -->
 		<!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -116,11 +133,11 @@
 			href={o.discord_url}
 			target="_blank"
 			rel="noopener noreferrer"
-			class="inline-flex shrink-0 items-center rounded border border-tan p-1.5 text-tan transition-colors hover:border-orange hover:text-orange"
+			class="inline-flex shrink-0 items-center gap-1.5 rounded bg-[#5865F2] px-2 py-[7px] text-xs font-semibold text-white transition-colors hover:bg-[#4752c4]"
 			title="{o.display_name} on Discord"
-			aria-label="{o.display_name} on Discord"
 		>
 			<DiscordMark />
+			Message on Discord
 		</a>
 		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 	</div>
