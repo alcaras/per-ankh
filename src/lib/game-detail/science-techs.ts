@@ -1709,10 +1709,21 @@ export function scienceBreakdown(
  * assumes every completion was the cheapest tier; the ceiling gives each city
  * the dearest tier its culture allowed. Culture only ever climbs, so a city's
  * final level is a true upper bound on what was available earlier.
+ *
+ * A city that CHANGED HANDS gets its own row per project, separate from the
+ * cities the player held alone. Its count is a single end-state number with no
+ * per-owner split and no turn, so what each holder ran is not in the save at
+ * all: either could have completed every one of them, or none. Such a row
+ * therefore carries the full ceiling and a floor of ZERO, and every player who
+ * held the city gets one — the width of that band is exactly what the save
+ * leaves unsaid, rather than a number one of them is asserted to have earned.
  */
 export type OneOffProject = {
 	project: string;
 	label: string;
+	// True for the cities this player shared with a conqueror or a victim.
+	// `min` is 0 on these rows; see the note above.
+	uncertain: boolean;
 	count: number;
 	byCity: NamedCount[];
 	min: number;
@@ -1726,10 +1737,12 @@ export type OneOffProject = {
 export function oneOffProjectScience(
 	cities: CityInfo[],
 	projectLabel: (zType: string) => string,
+	changedHands: (city: CityInfo) => boolean,
 ): OneOffProject[] {
 	const out = new Map<string, OneOffProject>();
 	for (const city of cities) {
 		const level = cultureRank(city.culture_level);
+		const uncertain = changedHands(city);
 		for (const pc of city.project_counts ?? []) {
 			const tiers = PROJECT_ONE_OFF_SCIENCE[pc.project];
 			if (!tiers || pc.count <= 0) continue;
@@ -1741,9 +1754,11 @@ export function oneOffProjectScience(
 				(t) => t.culture == null || cultureRank(t.culture) <= level,
 			);
 			const usable = reachable.length > 0 ? reachable : [tiers[0]];
-			const row = out.get(pc.project) ?? {
+			const key = oneOffProjectKey({ project: pc.project, uncertain });
+			const row = out.get(key) ?? {
 				project: pc.project,
 				label: projectLabel(pc.project),
+				uncertain,
 				count: 0,
 				byCity: [],
 				min: 0,
@@ -1752,7 +1767,10 @@ export function oneOffProjectScience(
 			};
 			row.count += pc.count;
 			row.byCity.push({ name: city.city_name, count: pc.count });
-			row.min += pc.count * usable[0].science;
+			// A city held alongside someone else adds nothing to the floor: this
+			// player may have run none of its completions. Only the ceiling is
+			// theirs to claim.
+			if (!uncertain) row.min += pc.count * usable[0].science;
 			row.max += pc.count * usable[usable.length - 1].science;
 			// An unknown culture level didn't bound this city's ceiling, it only
 			// hid it: every gated tier dropped out, so the city's contribution to
@@ -1761,13 +1779,24 @@ export function oneOffProjectScience(
 			if (level < 0 && reachable.length < tiers.length) {
 				row.ceilingFloored = true;
 			}
-			out.set(pc.project, row);
+			out.set(key, row);
 		}
 	}
 	for (const row of out.values()) {
 		row.byCity.sort((a, b) => b.count - a.count);
 	}
 	return [...out.values()].sort((a, b) => b.max - a.max);
+}
+
+/**
+ * Row identity for one-off project science: a project run in cities the player
+ * held alone and in cities that changed hands is TWO rows, because the two
+ * carry different claims (see OneOffProject).
+ */
+export function oneOffProjectKey(
+	p: Pick<OneOffProject, "project" | "uncertain">,
+): string {
+	return `${p.project}:${p.uncertain}`;
 }
 
 // ─── One-off science gains ───────────────────────────────────────────

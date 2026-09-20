@@ -61,6 +61,7 @@
 		sagesSeatFoundedTurn,
 		scienceSpikes,
 		oneOffProjectScience,
+		oneOffProjectKey,
 		type OneOffProject,
 		scienceBreakdown,
 		expeditionEvents,
@@ -523,9 +524,11 @@
 			// conqueror the loser's Inquiries and leaves a player conquered out of
 			// the game with none — while the measured row beside it still carries
 			// their gains. cloud/src/derive-player-summary.ts:255 makes the same
-			// call for the same reason. The cost is that a captured city's
-			// completions count for both owners, which errs toward crediting too
-			// much — the safe direction under a ceiling.
+			// call for the same reason.
+			//
+			// A city that changed hands is not credited to either holder: its
+			// completions are one end-state number with no per-owner split, so it
+			// gets its own row per project, carrying the ceiling and no floor.
 			const endStateCities = new Set(
 				ownedByPlayer(
 					cityStatistics.cities,
@@ -544,6 +547,9 @@
 						) ?? endStateCities.has(c),
 				),
 				projectDisplayName,
+				// Those same blobs carry no flip signal either, so their cities stay
+				// certain — the pre-2.10.0 reading is unchanged, not silently widened.
+				(c) => (c.player_families?.length ?? 1) > 1,
 			);
 			return {
 				player,
@@ -830,28 +836,58 @@
 		}));
 		return cols.some((c) => c.projects.length > 0) ? cols : [];
 	});
-	// Union of project labels across players, dearest first, so a row exists
-	// wherever any player ran one.
+	// Union of project rows across players, dearest project first, so a row
+	// exists wherever any player ran one. A project run both in cities a player
+	// held alone and in cities that changed hands is two rows — keyed on
+	// oneOffProjectKey — and the uncertain one sits directly under its certain
+	// sibling, so the pair reads as one project rather than two that happen to
+	// share a name.
 	const oneOffRows = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
 		const best = new Map<
 			string,
-			{ project: string; label: string; max: number }
+			{
+				key: string;
+				project: string;
+				label: string;
+				uncertain: boolean;
+				max: number;
+			}
 		>();
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
+		const projectMax = new Map<string, number>();
 		for (const col of oneOffColumns) {
 			for (const p of col.projects) {
-				const seen = best.get(p.project);
+				const key = oneOffProjectKey(p);
+				const seen = best.get(key);
 				if (!seen || p.max > seen.max) {
-					best.set(p.project, {
+					best.set(key, {
+						key,
 						project: p.project,
 						label: p.label,
+						uncertain: p.uncertain,
 						max: p.max,
 					});
 				}
+				projectMax.set(
+					p.project,
+					Math.max(projectMax.get(p.project) ?? 0, p.max),
+				);
 			}
 		}
-		return [...best.values()].sort((a, b) => b.max - a.max);
+		// Rank on the project's dearest row so both of its rows travel together;
+		// the zType tiebreak keeps two equally dear projects from interleaving.
+		return [...best.values()].sort(
+			(a, b) =>
+				(projectMax.get(b.project) ?? 0) - (projectMax.get(a.project) ?? 0) ||
+				a.project.localeCompare(b.project) ||
+				Number(a.uncertain) - Number(b.uncertain),
+		);
 	});
+	// Why a project's completions can sit on a row that credits nobody. A native
+	// title, matching the per-city breakdown on the value cells beside it.
+	const UNCERTAIN_NOTE =
+		"Cities that changed hands. The save records their completions as one number per city with no per-owner split, so either holder could have run all of them — or none.";
 	// A city whose culture level the save doesn't record loses every gated
 	// tier, so its share of `max` is a floor — render the band open-ended
 	// rather than let a floored ceiling read as a point estimate.
@@ -1244,7 +1280,11 @@
 							     part of it. No bar: the bars above scale per-turn science against
 							     breakdownMaxItem, and a lifetime lump doesn't belong on that
 							     scale. Counts are exact; each completion's worth is a band,
-							     because the save records neither the tier nor the turn. -->
+							     because the save records neither the tier nor the turn.
+							     A project also run in cities that changed hands carries a second,
+							     uncertain row under its own: those completions belong to whoever
+							     held the city, which the save doesn't say, so the row claims a
+							     ceiling and no floor for every player who held it. -->
 							{#if oneOffColumns.length > 0}
 								<tr class="border-t border-border-subtle">
 									<td class="py-1.5 font-semibold text-tan">One-off science</td>
@@ -1254,21 +1294,24 @@
 										</td>
 									{/each}
 								</tr>
-								{#each oneOffRows as row (row.project)}
+								{#each oneOffRows as row (row.key)}
 									<tr>
 										<td class="py-0.5 pl-2 text-xs text-gray-400">
-											<span class="inline-flex items-center gap-1.5">
+											<span
+												class="inline-flex items-center gap-1.5"
+												title={row.uncertain ? UNCERTAIN_NOTE : undefined}
+											>
 												<SpriteIcon
 													category="projects"
 													value={row.project}
 													size={14}
 												/>
-												{row.label}
+												{row.label}{row.uncertain ? " (uncertain)" : ""}
 											</span>
 										</td>
 										{#each oneOffColumns as col (col.player.playerId)}
 											{@const p = col.projects.find(
-												(x) => x.project === row.project,
+												(x) => oneOffProjectKey(x) === row.key,
 											)}
 											<td class="py-0.5 pr-4 text-right">
 												{#if p}
