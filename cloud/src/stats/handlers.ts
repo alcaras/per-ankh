@@ -273,9 +273,9 @@ export async function handleGlobalStats(
 			env,
 			slice,
 			nations,
+			period,
 			CURRENT_PARSER_VERSION,
 			corpus,
-			period,
 		);
 
 	if (corpus.gameIds.length === 0) {

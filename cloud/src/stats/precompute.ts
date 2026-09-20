@@ -101,13 +101,19 @@ export interface PrecomputeSliceResult {
 // whether a stale lookup is worth a keyspace walk (stats/handlers.ts). Passing
 // it back in is what keeps that from being a second resolve of the same
 // selection. The nightly loop has no such decision and omits it.
+//
+// slice, nations and period are the three that name the selection, and they
+// sit together and required for that reason — the same three the cache key
+// carries, in the same order. A defaulted period trailing `resolved` would let
+// a caller pass a corpus narrowed to one window and cache it under another,
+// and the compiler would have nothing to say about it.
 export async function buildGlobalSelection(
 	env: PrecomputeEnv,
 	slice: GlobalSlice,
 	nations: string[],
+	period: GlobalPeriod,
 	parserVersion: string,
 	resolved?: StatsCorpus,
-	period: GlobalPeriod = DEFAULT_GLOBAL_PERIOD,
 ): Promise<ChartBundleCore> {
 	const corpus =
 		resolved ?? (await resolveGlobalCorpus(env, slice, { nations, period }));
@@ -153,6 +159,7 @@ export async function precomputeGlobalSlice(
 			env,
 			slice,
 			selection,
+			DEFAULT_GLOBAL_PERIOD,
 			parserVersion,
 		);
 		if (selection.length === 0) games = bundle.meta.game_count;
@@ -233,7 +240,13 @@ export async function warmGlobalSlices(
 		// empty corpus, whose bundle is fully shaped, costs no aggregation, and is
 		// deliberately not cached — so it reports built on every pass, which is
 		// accurate and costs the one resolve query.
-		await buildGlobalSelection(env, slice, [], parserVersion);
+		await buildGlobalSelection(
+			env,
+			slice,
+			[],
+			DEFAULT_GLOBAL_PERIOD,
+			parserVersion,
+		);
 		built.push(slice);
 	}
 
