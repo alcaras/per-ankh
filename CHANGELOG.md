@@ -1,5 +1,33 @@
 # Changelog
 
+## [2026-09-19-1a174f1] - 2026-09-19
+
+### Features
+
+- (techs) show the hand each tech was picked from — [f5787a4](https://github.com/becked/per-ankh/commit/f5787a4e20b2aaa7aa0381701bb34b0bd3675ee9)
+- (techs) name the free tech instead of guessing at it — [1e884df](https://github.com/becked/per-ankh/commit/1e884dfe4a3cf8b2b304c1fc54b175a3a0352cae)
+- (bake) bake what a tile's neighbours add to its science — [76002c5](https://github.com/becked/per-ankh/commit/76002c5b0dd29f62907630a149efec91d447bce7)
+- (techs) Science Sources itemizes what a tile's neighbours add — [332c169](https://github.com/becked/per-ankh/commit/332c16928a208a3842478df78b84bb9084169f4f)
+- (bake) bake the city half of the tile modifier too — [48a1609](https://github.com/becked/per-ankh/commit/48a160941e6ef1cea7d14fc0caeca687f99b730a)
+- (techs) Science Sources itemizes the city's half of the tile modifier — [50bbd14](https://github.com/becked/per-ankh/commit/50bbd14a85e03016922e175e1e078fc0738c8d8d)
+- (techs) price the conditional wonder modifiers too — [ec8d0e3](https://github.com/becked/per-ankh/commit/ec8d0e3c192b3bbcf580b982feac5da9aa67e531)
+- (techs) give every name in a breakdown row its icon — [c3b29a9](https://github.com/becked/per-ankh/commit/c3b29a969550264c5e838ee166aab8acd9d1ac7f)
+
+### Fixes
+
+- (techs) align the Tech draws heading and origin labels — [e7810a4](https://github.com/becked/per-ankh/commit/e7810a4322117d648f6d89cbbdd13e1179b9006e)
+- (bake) guard the assumption the tile modifiers rest on — [b5fd104](https://github.com/becked/per-ankh/commit/b5fd1047b3dadfd84d1bd0cd9ecd440dc13daa34)
+- (parser) a tile's pillage and build-turns flags read the real tags — [15765f8](https://github.com/becked/per-ankh/commit/15765f86c4c9e2164510fa5f915982be35b2f896)
+- (techs) an unfinished improvement is as inactive as a pillaged one — [9f5c5c7](https://github.com/becked/per-ankh/commit/9f5c5c79fead7a89d6ef7fbf4494dc3928451ef1)
+
+### Other
+
+- (home) one Global Stats panel, three insets — [11cec8b](https://github.com/becked/per-ankh/commit/11cec8bf4818635cf09f792c3d8ddfaa48147e5c)
+- (ui) extract PanelInset, drop Panel's orphaned icon slot — [0cc62e7](https://github.com/becked/per-ankh/commit/0cc62e78e948d73ba395fb59a093127c7745c649)
+- (techs) drop an exported type nothing consumes — [eb4486b](https://github.com/becked/per-ankh/commit/eb4486b862030de9f911ce4f8bafdf327640a771)
+- (map) hex adjacency moves out of SpriteMap into a shared helper — [476d0b6](https://github.com/becked/per-ankh/commit/476d0b604717c89020db5a0c4b98af775e1a1d21)
+- (techs) drop a single-use label indirection, guard the pro-rata split — [fa3f71f](https://github.com/becked/per-ankh/commit/fa3f71f6c9842a2c9093a85e9f42054c69e6d0ee)
+
 ## [2026-09-09-dbea57c] - 2026-09-09
 
 ### Features
