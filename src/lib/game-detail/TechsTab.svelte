@@ -844,29 +844,24 @@
 	// share a name.
 	const oneOffRows = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
-		const best = new Map<
+		const rows = new Map<
 			string,
-			{
-				key: string;
-				project: string;
-				label: string;
-				uncertain: boolean;
-				max: number;
-			}
+			{ key: string; project: string; label: string; uncertain: boolean }
 		>();
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
 		const projectMax = new Map<string, number>();
 		for (const col of oneOffColumns) {
 			for (const p of col.projects) {
 				const key = oneOffProjectKey(p);
-				const seen = best.get(key);
-				if (!seen || p.max > seen.max) {
-					best.set(key, {
+				// Whichever player's row lands first supplies it: the key is the
+				// project plus its certainty, and the label is that project's
+				// display name, so every player's row for a key renders the same.
+				if (!rows.has(key)) {
+					rows.set(key, {
 						key,
 						project: p.project,
 						label: p.label,
 						uncertain: p.uncertain,
-						max: p.max,
 					});
 				}
 				projectMax.set(
@@ -877,7 +872,7 @@
 		}
 		// Rank on the project's dearest row so both of its rows travel together;
 		// the zType tiebreak keeps two equally dear projects from interleaving.
-		return [...best.values()].sort(
+		return [...rows.values()].sort(
 			(a, b) =>
 				(projectMax.get(b.project) ?? 0) - (projectMax.get(a.project) ?? 0) ||
 				a.project.localeCompare(b.project) ||
