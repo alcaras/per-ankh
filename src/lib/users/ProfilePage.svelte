@@ -220,33 +220,15 @@
 							<Tabs.Trigger value="stats" class={triggerClass}
 								>Stats</Tabs.Trigger
 							>
-							<!-- Owner-only, and the padlock says so — every other tab on this
-						     bar is the same for whoever is looking, so a tab that isn't
-						     needs to announce itself rather than leave the owner wondering
-						     who else can read it. -->
+							<!-- Owner-only — every other tab on this bar is the same for
+						     whoever is looking, so this one owes the owner an answer to
+						     "who else can read this?". The trigger looks like its
+						     siblings and the note at the foot of the tab gives the
+						     answer, rather than the bar carrying a mark of its own. -->
 							{#if data.isOwner}
-								<Tabs.Trigger
-									value="opponents"
-									class="{triggerClass} flex items-center gap-1.5"
-									title="Only you can see this"
+								<Tabs.Trigger value="opponents" class={triggerClass}
+									>Opponents</Tabs.Trigger
 								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										class="h-3.5 w-3.5"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke="currentColor"
-										stroke-width="2"
-										aria-hidden="true"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-										/>
-									</svg>
-									Opponents
-								</Tabs.Trigger>
 							{/if}
 						</Tabs.List>
 

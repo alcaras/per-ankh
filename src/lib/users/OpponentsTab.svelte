@@ -156,3 +156,10 @@
 		is either already busy or away.
 	</p>
 {/if}
+
+<!-- The tab bar gives this tab no mark of its own, so the answer to "who else
+     sees this?" lives here: under the list, in every state, because it is as
+     true of an empty page as of a full one. -->
+<p class="mt-4 text-right text-xs text-tan opacity-60">
+	Opponent recommendations are private.
+</p>
