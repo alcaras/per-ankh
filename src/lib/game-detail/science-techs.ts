@@ -65,9 +65,12 @@ import {
 	COMPETITIVE_SCIENCE_STIPEND,
 	KNOWLEDGE_TIERS,
 	FAMILY_CLASS_SCIENCE_PER_SPECIALIST,
+	THEOLOGY_BUILDING_SCIENCE_PER_URBAN_SPECIALIST,
+	IMPROVEMENT_RELIGION,
 	NATION_CITY_SCIENCE,
 	THEOLOGY_SCIENCE_PER_RELIGION,
 	PROJECT_SCIENCE,
+	PROJECT_ONE_OFF_SCIENCE,
 	LAW_PROJECT_SCIENCE,
 	ARCHETYPE_PROJECT_SCIENCE,
 	PROJECT_CITY_HP,
@@ -75,6 +78,7 @@ import {
 	CITY_DAMAGE_YIELD_MODIFIER,
 	CITY_ASSIMILATE_YIELD_MODIFIER,
 } from "$lib/generated/science-yields";
+import { cultureRank } from "$lib/generated/wonders";
 import {
 	archetypeSpriteKey,
 	formatArchetype,
@@ -1039,6 +1043,12 @@ export function scienceBreakdown(
 		category: "crests",
 		value: `ARCHETYPE_${familyClass.slice("FAMILYCLASS_".length)}`,
 	});
+	// theology.xml names every entry's <zIconName> after its own zType, so the
+	// theology sprites key straight off the enum.
+	const theologyIcon = (theology: string): BreakdownIcon => ({
+		category: "theology",
+		value: theology,
+	});
 	// A tile reads as its CLASS — "Grove next to Monastery" — so the six
 	// per-religion monastery rules collapse into one row instead of splitting
 	// the comparison table six ways.
@@ -1373,12 +1383,48 @@ export function scienceBreakdown(
 		const specialists = citySpecialists.get(city.city_name) ?? 0;
 		if (familyRate > 0 && specialists > 0 && city.family_class != null) {
 			addEffect(
-				`${formatEnum(city.family_class, "FAMILYCLASS_")} cities`,
+				// Named for what it scales with, not just whose perk it is —
+				// a reader hunting for specialist science looks here last.
+				`${formatEnum(city.family_class, "FAMILYCLASS_")} per specialist`,
 				city.city_name,
 				familyRate * specialists,
 				specialists,
 				familyClassIcon(city.family_class),
 			);
+		}
+		// Gnosticism: a Temple of a religion that established the theology puts
+		// an effect in its city paying science per URBAN specialist
+		// (improvementClass aeTheologyCityEffect → aiYieldRateSpecialistUrban).
+		// The theology entry itself carries no science, so this is invisible to
+		// anyone reading theology.xml — the rule lives on the building.
+		const urban = cityUrban.get(city.city_name) ?? 0;
+		if (urban > 0) {
+			for (const [theology, byClass] of Object.entries(
+				THEOLOGY_BUILDING_SCIENCE_PER_URBAN_SPECIALIST,
+			)) {
+				for (const [cls, rate] of Object.entries(byClass)) {
+					// A building of that class in this city whose own religion
+					// established the theology.
+					const holds = improvements.some((i) => {
+						if (i.city_name !== city.city_name) return false;
+						const building = IMPROVEMENT_RELIGION[i.improvement];
+						if (building?.class !== cls) return false;
+						return (
+							cityContext.theologiesByReligion
+								.get(building.religion)
+								?.includes(theology) ?? false
+						);
+					});
+					if (!holds) continue;
+					addEffect(
+						`${formatEnum(theology, "THEOLOGY_")} per urban specialist`,
+						city.city_name,
+						rate * urban,
+						urban,
+						theologyIcon(theology),
+					);
+				}
+			}
 		}
 		// Babylonia: flat science in every city, from the nation's player
 		// effect.
@@ -1407,6 +1453,7 @@ export function scienceBreakdown(
 					city.city_name,
 					holders * rate * religions.length,
 					1,
+					theologyIcon(theology),
 				);
 			}
 		}
@@ -1647,6 +1694,109 @@ export function scienceBreakdown(
 		),
 		total: finalRate,
 	};
+}
+
+// ─── One-off project science (Inquiries, Archives) ───────────────────
+
+/**
+ * A repeatable project a player completed that paid a LUMP of science each
+ * time — the Inquiry line above all, four culture-gated tiers worth
+ * 40/80/120/160 apiece.
+ *
+ * `count` is exact: a save records how many of each project every city
+ * completed. The science is a BAND, not a number, because the save records
+ * neither which tier each completion was nor the turn it landed on. The floor
+ * assumes every completion was the cheapest tier; the ceiling gives each city
+ * the dearest tier its culture allowed. Culture only ever climbs, so a city's
+ * final level is a true upper bound on what was available earlier.
+ *
+ * A city that CHANGED HANDS gets its own row per project, separate from the
+ * cities the player held alone. Its count is a single end-state number with no
+ * per-owner split and no turn, so what each holder ran is not in the save at
+ * all: either could have completed every one of them, or none. Such a row
+ * therefore carries the full ceiling and a floor of ZERO, and every player who
+ * held the city gets one — the width of that band is exactly what the save
+ * leaves unsaid, rather than a number one of them is asserted to have earned.
+ */
+export type OneOffProject = {
+	project: string;
+	label: string;
+	// True for the cities this player shared with a conqueror or a victim.
+	// `min` is 0 on these rows; see the note above.
+	uncertain: boolean;
+	count: number;
+	byCity: NamedCount[];
+	min: number;
+	max: number;
+	// True when a contributing city's culture level is missing from the save.
+	// Its gated tiers all drop out, so `max` carries that city's FLOOR — the
+	// band's top is then a lower bound, not a ceiling.
+	ceilingFloored: boolean;
+};
+
+export function oneOffProjectScience(
+	cities: CityInfo[],
+	projectLabel: (zType: string) => string,
+	changedHands: (city: CityInfo) => boolean,
+): OneOffProject[] {
+	const out = new Map<string, OneOffProject>();
+	for (const city of cities) {
+		const level = cultureRank(city.culture_level);
+		const uncertain = changedHands(city);
+		for (const pc of city.project_counts ?? []) {
+			const tiers = PROJECT_ONE_OFF_SCIENCE[pc.project];
+			if (!tiers || pc.count <= 0) continue;
+			// Tiers this city could have run: ungated ones, plus every tier
+			// whose culture gate its culture had reached. An unknown culture
+			// level (index -1) leaves only the ungated tiers, which floors the
+			// ceiling rather than inventing one.
+			const reachable = tiers.filter(
+				(t) => t.culture == null || cultureRank(t.culture) <= level,
+			);
+			const usable = reachable.length > 0 ? reachable : [tiers[0]];
+			const key = oneOffProjectKey({ project: pc.project, uncertain });
+			const row = out.get(key) ?? {
+				project: pc.project,
+				label: projectLabel(pc.project),
+				uncertain,
+				count: 0,
+				byCity: [],
+				min: 0,
+				max: 0,
+				ceilingFloored: false,
+			};
+			row.count += pc.count;
+			row.byCity.push({ name: city.city_name, count: pc.count });
+			// A city held alongside someone else adds nothing to the floor: this
+			// player may have run none of its completions. Only the ceiling is
+			// theirs to claim.
+			if (!uncertain) row.min += pc.count * usable[0].science;
+			row.max += pc.count * usable[usable.length - 1].science;
+			// An unknown culture level didn't bound this city's ceiling, it only
+			// hid it: every gated tier dropped out, so the city's contribution to
+			// `max` is its floor. Flag it so the band doesn't read as a point
+			// estimate the save never supported.
+			if (level < 0 && reachable.length < tiers.length) {
+				row.ceilingFloored = true;
+			}
+			out.set(key, row);
+		}
+	}
+	for (const row of out.values()) {
+		row.byCity.sort((a, b) => b.count - a.count);
+	}
+	return [...out.values()].sort((a, b) => b.max - a.max);
+}
+
+/**
+ * Row identity for one-off project science: a project run in cities the player
+ * held alone and in cities that changed hands is TWO rows, because the two
+ * carry different claims (see OneOffProject).
+ */
+export function oneOffProjectKey(
+	p: Pick<OneOffProject, "project" | "uncertain">,
+): string {
+	return `${p.project}:${p.uncertain}`;
 }
 
 // ─── One-off science gains ───────────────────────────────────────────

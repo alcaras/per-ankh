@@ -448,6 +448,7 @@ export type SpriteCategory =
 	| "laws"
 	| "yields"
 	| "religions"
+	| "theology"
 	| "icons"
 	| "units"
 	| "traits"

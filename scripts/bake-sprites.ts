@@ -5,7 +5,7 @@
 //
 // SOURCES (all under <pinacotheca>/extracted/sprites/):
 //   crests/, techs/, laws/, religions/,          → category dir minus __ICON
-//   yields/, projects/                             glyph siblings (see below)
+//   yields/, projects/, theology/                  glyph siblings (see below)
 //   traits/ (2nd pass)                           → traits-trimmed/ content-
 //                                                  trimmed+squared, rail only
 //   units/                                       → UNIT_*.png minus UNIT_3D_*,
@@ -98,6 +98,10 @@ const MIRROR_CATEGORIES = [
 	// borrow another project's, so the runtime resolves through PROJECT_ICON
 	// (baked by bake-project-icons.ts). Powers the Economy tab's project panels.
 	"projects",
+	// Theology icons. theology.xml's <zIconName> matches the zType for every
+	// entry, so the plain category/enumValue lookup resolves them. Powers the
+	// theology rows in the Techs tab's science breakdown (Gnosticism, Dualism).
+	"theology",
 ] as const;
 
 // Pinacotheca's units/ holds the 2D portrait icons (UNIT_*.png), the 3D
