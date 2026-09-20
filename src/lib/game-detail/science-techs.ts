@@ -1042,6 +1042,12 @@ export function scienceBreakdown(
 		category: "crests",
 		value: `ARCHETYPE_${familyClass.slice("FAMILYCLASS_".length)}`,
 	});
+	// theology.xml names every entry's <zIconName> after its own zType, so the
+	// theology sprites key straight off the enum.
+	const theologyIcon = (theology: string): BreakdownIcon => ({
+		category: "theology",
+		value: theology,
+	});
 	// A tile reads as its CLASS — "Grove next to Monastery" — so the six
 	// per-religion monastery rules collapse into one row instead of splitting
 	// the comparison table six ways.
@@ -1414,6 +1420,7 @@ export function scienceBreakdown(
 						city.city_name,
 						rate * urban,
 						urban,
+						theologyIcon(theology),
 					);
 				}
 			}
@@ -1445,6 +1452,7 @@ export function scienceBreakdown(
 					city.city_name,
 					holders * rate * religions.length,
 					1,
+					theologyIcon(theology),
 				);
 			}
 		}

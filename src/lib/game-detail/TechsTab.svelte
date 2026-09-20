@@ -1296,9 +1296,17 @@
 										<Tooltip.Root>
 											<Tooltip.Trigger>
 												{#snippet child({ props })}
-													<span {...props} class="cursor-default"
-														>Measured one-off gains</span
+													<span
+														{...props}
+														class="inline-flex cursor-default items-center gap-1.5"
 													>
+														<SpriteIcon
+															category="yields"
+															value="YIELD_SCIENCE"
+															size={14}
+														/>
+														Measured one-off gains
+													</span>
 												{/snippet}
 											</Tooltip.Trigger>
 											<Tooltip.Portal>

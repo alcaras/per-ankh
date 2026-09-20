@@ -1876,6 +1876,24 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 	"techs/TECH_TRAPPING": "/sprites/techs/TECH_TRAPPING.106aed9b.png",
 	"techs/TECH_VAULTING": "/sprites/techs/TECH_VAULTING.9e5a6927.png",
 	"techs/TECH_WINDLASS": "/sprites/techs/TECH_WINDLASS.e97cc75d.png",
+	"theology/THEOLOGY_DUALISM":
+		"/sprites/theology/THEOLOGY_DUALISM.e7331aaf.png",
+	"theology/THEOLOGY_ENLIGHTENMENT":
+		"/sprites/theology/THEOLOGY_ENLIGHTENMENT.d8cc7963.png",
+	"theology/THEOLOGY_ESTABLISHED":
+		"/sprites/theology/THEOLOGY_ESTABLISHED.e7607b38.png",
+	"theology/THEOLOGY_GNOSTICISM":
+		"/sprites/theology/THEOLOGY_GNOSTICISM.ada7a4e8.png",
+	"theology/THEOLOGY_LEGALISM":
+		"/sprites/theology/THEOLOGY_LEGALISM.e453246c.png",
+	"theology/THEOLOGY_MYTHOLOGY":
+		"/sprites/theology/THEOLOGY_MYTHOLOGY.70971a74.png",
+	"theology/THEOLOGY_REDEMPTION":
+		"/sprites/theology/THEOLOGY_REDEMPTION.66eb29fc.png",
+	"theology/THEOLOGY_REVELATION":
+		"/sprites/theology/THEOLOGY_REVELATION.52a9867a.png",
+	"theology/THEOLOGY_VENERATION":
+		"/sprites/theology/THEOLOGY_VENERATION.267c6574.png",
 	"traits-trimmed/TRAIT_BUILDER":
 		"/sprites/traits-trimmed/TRAIT_BUILDER.031c3079.png",
 	"traits-trimmed/TRAIT_BUILDER_SILVER":
