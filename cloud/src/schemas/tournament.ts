@@ -25,17 +25,21 @@ const DiscordUsernameSchema = v.pipe(
 // the handler assigns nanoid-shaped ids to new entries. Both fit this regex.
 const mapPoolIdRegex = /^[A-Za-z0-9_-]{1,32}$/;
 
-// Strict schema: only accepts canonical MAPCLASS_MapScript<Name> identifiers
-// known to the SvelteKit lookup table. Used for each map_pool entry's script
-// so the pool can never contain a value that mapScriptLabel will fall back to
+// Strict schema: only accepts the canonical MAPCLASS_* zType of a script in
+// the SvelteKit lookup table. Used for each map_pool entry's script so the
+// pool can never contain a value that mapScriptLabel will fall back to
 // formatMapClass for (which produced ugly "A R I D _ P L A T E A U" output
 // before this gate existed).
+//
+// Canonical only — a script's superseded spellings (KNOWN_MAP_SCRIPTS
+// `aliases`) are resolved for display but rejected here, so a pool can't hold
+// two entries that are the same map under two names.
 const StrictMapScriptSchema = v.pipe(
 	v.string(),
 	v.trim(),
 	v.check(
 		(s) => CANONICAL_MAP_SCRIPTS_SET.has(s),
-		"map_script must be a canonical MAPCLASS_MapScript<Name> identifier",
+		"map_script must be a canonical MAPCLASS_* map-script identifier",
 	),
 );
 

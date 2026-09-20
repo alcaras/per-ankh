@@ -252,6 +252,12 @@ export const CANONICAL_MAP_OPTIONS: Readonly<
 // Per-script option applicability. Each entry is the list of option zTypes
 // (matching CANONICAL_MAP_OPTIONS keys) that this script registers — globals
 // from DefaultMapScript first, then script-specific in declaration order.
+//
+// Keyed by the script's C# class name, not its zType: the bake reads these
+// off Reference/Source/…/MapScripts/*.cs and has no zType available to key on
+// (mapClass.xml declares only MAPCLASS_RANDOM). The two differ for four
+// scripts, so index this through scriptOptionsKey (canonical-maps.ts) rather
+// than with a stored map_pool value directly.
 export const CANONICAL_SCRIPT_OPTIONS: Readonly<
 	Record<string, readonly string[]>
 > = {

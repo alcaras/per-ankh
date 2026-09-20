@@ -1,21 +1,44 @@
-// Canonical Old World map_script identifiers with friendly display labels.
-// Source: Mohawk's Reference/XML.
+// Old World map-script zTypes with friendly display labels.
 //
-// Several identifiers carry quirks from the game source that are preserved
-// verbatim — saves and tournament rows will contain these exact strings, so
-// the lookup must match byte-for-byte:
-//   - MapScriptInlandSea2:        trailing digit
-//   - MapScripLakesAndGulfs:      missing trailing 't' in "MapScript"
-//   - MapScriptMediterrancean:    misspelling in source
-//   - Mapscript<X> (Indus DLC):   lowercase 's' in "Mapscript"
+// A `value` here is the zType Old World declares for the script — the exact
+// string a save carries. Saves write `mapClass().mzType` (GameParameters.cs
+// WriteAttributeString("MapClass", …), Game.cs WriteElementString("MapClass",
+// …)), so a token observed in a save IS the declared zType, and it is the
+// strongest evidence available for what a script is called.
 //
-// Update this list when a new DLC ships or Mohawk renames an entry.
+// Not Reference/XML: the mapClass.xml we ship declares exactly one entry,
+// MAPCLASS_RANDOM. Every real script is declared by base-game or DLC content
+// absent from that snapshot, so the zTypes below are corroborated instead
+// from globalsType.xml's DEFAULT_MAPCLASS_SP/MP, the mod maps under
+// Reference/XML/Mods, the literal getType<MapClassType>("…") calls in
+// GameParameters.cs, and — for everything those miss — the uploaded corpus.
+//
+// Two identifier spaces meet here, and conflating them is what this table
+// previously got wrong:
+//
+//   * the zType, above, which saves and tournament rows carry;
+//   * the C# class name, which is what scripts/bake-map-options.ts reads off
+//     Reference/Source/…/MapScripts/*.cs to build MAP_SCRIPT_OPTIONS. The bake
+//     has no zType to read — mapClass.xml doesn't declare these — so it keys
+//     on `MAPCLASS_` + filename and always will.
+//
+// They coincide for most scripts and diverge for four, whose entries carry an
+// explicit `optionsKey`. The filename quirks the bake preserves verbatim
+// (MapScripLakesAndGulfs' missing 't', MapScriptMediterrancean's misspelling)
+// are quirks of the *filenames*; the zTypes spell both correctly.
+//
+// Update this list when a new DLC ships or Mohawk renames an entry. A new
+// script's zType is a guess until a save carrying it lands — the C# filename
+// is the best available prior, and the four `optionsKey` entries below are
+// what that prior costs when it turns out to be wrong.
 
 import { formatMapClass } from "$lib/utils/formatting";
 
 export type MapScriptDlc = "base" | "wrath_of_gods" | "empires_of_the_indus";
 
 export interface MapScriptInfo {
+	// The script's zType — what a save's MapClass holds and what a tournament
+	// map_pool entry stores. See the header on how each is corroborated.
 	value: string;
 	label: string;
 	// Short form for the compact map-pool label (e.g. "CRB", "AridP", "DOTA").
@@ -23,6 +46,22 @@ export interface MapScriptInfo {
 	// is still shown in tooltips and the read-only summary.
 	abbrev: string;
 	dlc: MapScriptDlc;
+	// zTypes of superseded versions of this same script, still carried by the
+	// saves that were played on them. Old World retires a script by replacing
+	// its content rather than by registering a replacement in mReplacedXMLTypes
+	// (Infos.cs), so nothing in the game maps an old token to the new one — a
+	// save uploaded years ago is the only place the old spelling survives, and
+	// this is where we record that the two name one map.
+	//
+	// Resolved for display (label, abbrev) so both spellings read alike.
+	// Deliberately NOT accepted as a map_pool value: a pool offering two
+	// spellings of one map is a pool that can pair the "same" map twice.
+	aliases?: readonly string[];
+	// This script's key in the baked MAP_SCRIPT_OPTIONS manifest, when it
+	// differs from `value` — i.e. when OW's zType and its C# class name
+	// disagree. Present on exactly the four scripts where they do; read
+	// through mapScriptOptionsKey rather than indexed directly.
+	optionsKey?: string;
 }
 
 export const DLC_GROUP_LABELS: Record<MapScriptDlc, string> = {
@@ -39,17 +78,23 @@ export const KNOWN_MAP_SCRIPTS: MapScriptInfo[] = [
 		dlc: "base",
 	},
 	{
-		value: "MAPCLASS_MapScriptAridPlateau",
+		// Short zType, long class name (MapScriptAridPlateau.cs).
+		value: "MAPCLASS_AridPlateau",
 		label: "Arid Plateau",
 		abbrev: "AridP",
 		dlc: "base",
+		optionsKey: "MAPCLASS_MapScriptAridPlateau",
 	},
 	{ value: "MAPCLASS_MapScriptBay", label: "Bay", abbrev: "Bay", dlc: "base" },
 	{
-		value: "MAPCLASS_MapScriptCoastalRainBasin",
+		// Short zType, long class name. The one script the shipped XML names
+		// outright: globalsType.xml gives DEFAULT_MAPCLASS_MP as
+		// MAPCLASS_CoastalRainBasin, and LBP-PersiaTheGood.xml maps to it.
+		value: "MAPCLASS_CoastalRainBasin",
 		label: "Coastal Rain Basin",
 		abbrev: "CRB",
 		dlc: "base",
+		optionsKey: "MAPCLASS_MapScriptCoastalRainBasin",
 	},
 	{
 		value: "MAPCLASS_MapScriptContinent",
@@ -88,22 +133,31 @@ export const KNOWN_MAP_SCRIPTS: MapScriptInfo[] = [
 		dlc: "base",
 	},
 	{
+		// The trailing digit is in the zType itself (LBP-EgyptTheJust.xml maps
+		// to it), not just the filename. MapScriptInlandSea is the retired
+		// first version — no MapScriptInlandSea.cs remains, so a save carrying
+		// it predates the replacement.
 		value: "MAPCLASS_MapScriptInlandSea2",
 		label: "Inland Sea",
 		abbrev: "InlSea",
 		dlc: "base",
+		aliases: ["MAPCLASS_MapScriptInlandSea"],
 	},
 	{
-		value: "MAPCLASS_MapScripLakesAndGulfs",
+		// MapScripLakesAndGulfs.cs is missing a 't'; the zType is not.
+		value: "MAPCLASS_MapScriptLakesAndGulfs",
 		label: "Lakes and Gulfs",
 		abbrev: "L&G",
 		dlc: "base",
+		optionsKey: "MAPCLASS_MapScripLakesAndGulfs",
 	},
 	{
-		value: "MAPCLASS_MapScriptMediterrancean",
+		// MapScriptMediterrancean.cs is misspelled; the zType is not.
+		value: "MAPCLASS_MapScriptMediterranean",
 		label: "Mediterranean",
 		abbrev: "Med",
 		dlc: "base",
+		optionsKey: "MAPCLASS_MapScriptMediterrancean",
 	},
 	{
 		value: "MAPCLASS_MapScriptContinents",
@@ -181,20 +235,24 @@ export const KNOWN_MAP_SCRIPTS: MapScriptInfo[] = [
 	},
 ];
 
-const labelByValue: Record<string, string> = Object.fromEntries(
-	KNOWN_MAP_SCRIPTS.map((s) => [s.value, s.label]),
-);
-
-const abbrevByValue: Record<string, string> = Object.fromEntries(
-	KNOWN_MAP_SCRIPTS.map((s) => [s.value, s.abbrev]),
+// Every spelling a script answers to — its zType and any superseded ones —
+// mapped to the one entry that describes it. Aliases are folded in here rather
+// than at each call site so a legacy token labels itself correctly wherever it
+// surfaces, instead of relying on formatMapClass landing on the right words by
+// coincidence of the prefix strip.
+const infoBySpelling: Record<string, MapScriptInfo> = Object.fromEntries(
+	KNOWN_MAP_SCRIPTS.flatMap((s) => [
+		[s.value, s] as const,
+		...(s.aliases ?? []).map((a) => [a, s] as const),
+	]),
 );
 
 // Friendly display name for any map_script. Falls back to the generic
-// PascalCase-split formatter for unknown values (legacy data, future DLCs
-// not yet added to this table).
+// PascalCase-split formatter for unknown values (future DLCs not yet added to
+// this table, and the zType of a new script we guessed wrong).
 export function mapScriptLabel(value: string | null | undefined): string {
 	if (!value) return "Unknown";
-	return labelByValue[value] ?? formatMapClass(value);
+	return infoBySpelling[value]?.label ?? formatMapClass(value);
 }
 
 // Short form of a map_script name for compact pool labels (e.g. "CRB").
@@ -202,7 +260,16 @@ export function mapScriptLabel(value: string | null | undefined): string {
 // DLC script still renders something sensible until it's added above.
 export function mapScriptAbbrev(value: string | null | undefined): string {
 	if (!value) return "Unknown";
-	return abbrevByValue[value] ?? mapScriptLabel(value);
+	return infoBySpelling[value]?.abbrev ?? mapScriptLabel(value);
+}
+
+// The key a script takes in the baked MAP_SCRIPT_OPTIONS manifest, which is
+// keyed by C# class name rather than zType — see the header. Unknown values
+// pass through unchanged so the caller's own lookup decides what to do with
+// them, which is the same answer they got before this indirection existed.
+export function mapScriptOptionsKey(value: string): string {
+	const info = infoBySpelling[value];
+	return info?.optionsKey ?? info?.value ?? value;
 }
 
 // Returns map scripts grouped by DLC, with already-allowed values excluded.

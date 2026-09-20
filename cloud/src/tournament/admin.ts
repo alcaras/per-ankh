@@ -84,6 +84,7 @@ import {
 	CANONICAL_MAP_OPTION_DEFAULTS,
 	CANONICAL_SCRIPT_OPTIONS,
 } from "./canonical-map-options";
+import { scriptOptionsKey } from "./canonical-maps";
 import type { Division, MapPoolEntry, MatchRef, Phase, SlotRef } from "./types";
 import type { EventsEnv } from "../d1";
 
@@ -108,7 +109,7 @@ function validateInstanceOptions(
 			ok: false;
 			message: string;
 	  } {
-	const applicable = CANONICAL_SCRIPT_OPTIONS[script];
+	const applicable = CANONICAL_SCRIPT_OPTIONS[scriptOptionsKey(script)];
 	if (!applicable) {
 		return {
 			ok: false,
@@ -166,7 +167,7 @@ function reconcileInstanceOptions(
 	script: string,
 	options: Record<string, string | boolean>,
 ): Record<string, string | boolean> {
-	const applicable = CANONICAL_SCRIPT_OPTIONS[script] ?? [];
+	const applicable = CANONICAL_SCRIPT_OPTIONS[scriptOptionsKey(script)] ?? [];
 	const next: Record<string, string | boolean> = {};
 	for (const optKey of applicable) {
 		if (Object.prototype.hasOwnProperty.call(options, optKey)) {
