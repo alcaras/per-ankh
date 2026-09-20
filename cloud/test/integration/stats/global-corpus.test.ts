@@ -113,11 +113,15 @@ const setSaveDate = (label: Label, date: string | null) =>
 		.bind(date, idOf(label))
 		.run();
 
-const monthsAgo = (n: number): string => {
-	const d = new Date();
-	d.setUTCMonth(d.getUTCMonth() - n);
-	return d.toISOString().slice(0, 10);
-};
+// Whole days back, not months. Subtracting months is the arithmetic
+// periodCutoff exists to get right — setUTCMonth alone rolls 31 February
+// forward to 3 March — and a fixture helper that reproduced the very defect
+// the code under test guards against would be testing the window with a date
+// it had quietly moved. Days have no such edge, and the offsets below clear
+// both window boundaries by nearly three months, so nothing here turns on
+// which month the suite runs in.
+const daysAgo = (n: number): string =>
+	new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 describe("global corpus", () => {
 	it("takes every public game and no private one", async () => {
@@ -174,9 +178,9 @@ describe("global corpus", () => {
 		it("keeps a game played inside the window and drops one outside it", async () => {
 			// Every fixture dated explicitly: the blobs carry their own save_date
 			// and a test that leaned on it would pass or fail by fixture vintage.
-			await setSaveDate("duel", monthsAgo(1));
-			await setSaveDate("ffa", monthsAgo(9));
-			await setSaveDate("ai_rome", monthsAgo(1));
+			await setSaveDate("duel", daysAgo(30));
+			await setSaveDate("ffa", daysAgo(270));
+			await setSaveDate("ai_rome", daysAgo(30));
 			expect(await gamesIn("all", [], "6m")).toEqual(
 				expected("duel", "ai_rome"),
 			);
@@ -192,8 +196,8 @@ describe("global corpus", () => {
 		});
 
 		it("ANDs the window with the slice and the nation", async () => {
-			await setSaveDate("duel", monthsAgo(9));
-			await setSaveDate("ffa", monthsAgo(1));
+			await setSaveDate("duel", daysAgo(270));
+			await setSaveDate("ffa", daysAgo(30));
 			// In the Rome corpus all-time, out of it once the window closes.
 			expect(await gamesIn("duel", [ROME])).toEqual(expected("duel"));
 			expect(await gamesIn("duel", [ROME], "6m")).toEqual(new Set());
