@@ -1708,6 +1708,10 @@ export type OneOffProject = {
 	byCity: NamedCount[];
 	min: number;
 	max: number;
+	// True when a contributing city's culture level is missing from the save.
+	// Its gated tiers all drop out, so `max` carries that city's FLOOR — the
+	// band's top is then a lower bound, not a ceiling.
+	ceilingFloored: boolean;
 	// The distinct per-completion values in play, ascending — what one
 	// completion was worth, for the caption's explanation of the band.
 	//
@@ -1745,12 +1749,20 @@ export function oneOffProjectScience(
 				byCity: [],
 				min: 0,
 				max: 0,
+				ceilingFloored: false,
 				values: [],
 			};
 			row.count += pc.count;
 			row.byCity.push({ name: city.city_name, count: pc.count });
 			row.min += pc.count * usable[0].science;
 			row.max += pc.count * usable[usable.length - 1].science;
+			// An unknown culture level didn't bound this city's ceiling, it only
+			// hid it: every gated tier dropped out, so the city's contribution to
+			// `max` is its floor. Flag it so the band doesn't read as a point
+			// estimate the save never supported.
+			if (level < 0 && reachable.length < tiers.length) {
+				row.ceilingFloored = true;
+			}
 			for (const t of usable) {
 				if (!row.values.includes(t.science)) row.values.push(t.science);
 			}

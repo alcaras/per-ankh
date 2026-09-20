@@ -34,6 +34,7 @@
 		type RailGroup,
 		type RailMarker,
 	} from "./EventRail.svelte";
+	import { Tooltip } from "bits-ui";
 	import TechComparison from "./TechComparison.svelte";
 	import TechChoices from "./TechChoices.svelte";
 	import { techChoiceRows } from "./tech-choices";
@@ -513,15 +514,34 @@
 								.filter((r) => r.origin === "granted")
 								.map((r) => r.tech),
 						);
-			// Repeatable projects that paid a lump of science — Inquiries. The
-			// count is exact; what they were worth is a band, because the save
-			// records neither the tier nor the turn.
-			const oneOff = oneOffProjectScience(
+			// Repeatable projects that paid a lump of science — Inquiries. What
+			// they were worth is a band, because the save records neither the tier
+			// nor the turn.
+			//
+			// Every city the player EVER held, not the ones they hold at the end:
+			// project_counts is city state, so an end-state filter hands a
+			// conqueror the loser's Inquiries and leaves a player conquered out of
+			// the game with none — while the measured row beside it still carries
+			// their gains. cloud/src/derive-player-summary.ts:255 makes the same
+			// call for the same reason. The cost is that a captured city's
+			// completions count for both owners, which errs toward crediting too
+			// much — the safe direction under a ceiling.
+			const endStateCities = new Set(
 				ownedByPlayer(
 					cityStatistics.cities,
 					player,
 					(c) => c.owner_player_xml_id,
 					(c) => c.owner_nation,
+				),
+			);
+			const oneOff = oneOffProjectScience(
+				// Pre-2.10.0 blobs ship no player_families, leaving the end-state
+				// owner as the only signal available.
+				cityStatistics.cities.filter(
+					(c) =>
+						c.player_families?.some(
+							(f) => f.player_xml_id === player.playerId,
+						) ?? endStateCities.has(c),
 				),
 				projectDisplayName,
 			);
@@ -814,16 +834,41 @@
 	// wherever any player ran one.
 	const oneOffRows = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
-		const best = new Map<string, number>();
+		const best = new Map<
+			string,
+			{ project: string; label: string; max: number }
+		>();
 		for (const col of oneOffColumns) {
 			for (const p of col.projects) {
-				best.set(p.label, Math.max(best.get(p.label) ?? 0, p.max));
+				const seen = best.get(p.project);
+				if (!seen || p.max > seen.max) {
+					best.set(p.project, {
+						project: p.project,
+						label: p.label,
+						max: p.max,
+					});
+				}
 			}
 		}
-		return [...best].sort((a, b) => b[1] - a[1]).map(([label]) => label);
+		return [...best.values()].sort((a, b) => b.max - a.max);
 	});
-	const oneOffBand = (p: OneOffProject) =>
-		p.min === p.max ? `+${p.min}` : `+${p.min}–${p.max}`;
+	// A city whose culture level the save doesn't record loses every gated
+	// tier, so its share of `max` is a floor — render the band open-ended
+	// rather than let a floored ceiling read as a point estimate.
+	const oneOffBand = (
+		p: Pick<OneOffProject, "min" | "max" | "ceilingFloored">,
+	) => {
+		const band = p.min === p.max ? `+${p.min}` : `+${p.min}–${p.max}`;
+		return p.ceilingFloored ? `${band}+` : band;
+	};
+	// The section header's figure, the way every other section header totals its
+	// own rows — these rows are bands, so the total is one too.
+	const oneOffSectionBand = (col: OneOffColumn) =>
+		oneOffBand({
+			min: col.projects.reduce((t, p) => t + p.min, 0),
+			max: col.projects.reduce((t, p) => t + p.max, 0),
+			ceilingFloored: col.projects.some((p) => p.ceilingFloored),
+		});
 
 	// Row layout: per section, the union of item labels across players,
 	// biggest first — ranked by one player when their header is clicked,
@@ -1083,182 +1128,210 @@
 				<!-- No max-width: fill the card (matches Techs by Turn). Side by side
 				     the flex-1 half bounds it; stacked (5+ nations) it spreads across
 				     the full panel rather than cram every column into a fixed 48rem. -->
-				<table class="w-full text-sm">
-					<thead>
-						<tr>
-							<th class="pb-2"></th>
-							{#each scienceBreakdowns as col (col.player.playerId)}
-								<th class="pb-2 pr-4 text-right">
-									<button
-										type="button"
-										class="inline-flex cursor-pointer items-center gap-1.5 font-semibold"
-										style="color: {col.player.color};"
-										title="Rank sources by {col.player.label}"
-										onclick={() => toggleBreakdownSort(col.player.playerId)}
-									>
-										{#if col.player.nation}
-											<SpriteIcon
-												category="crests"
-												value={col.player.nation}
-												size={15}
-												alt={col.player.label}
-											/>
-										{/if}
-										{col.player.label}
-										{#if breakdownSortId === col.player.playerId}<span
-												class="text-orange">↓</span
-											>{/if}
-									</button>
-								</th>
+				<Tooltip.Provider delayDuration={200} disableHoverableContent>
+					<table class="w-full text-sm">
+						<thead>
+							<tr>
+								<th class="pb-2"></th>
+								{#each scienceBreakdowns as col (col.player.playerId)}
+									<th class="pb-2 pr-4 text-right">
+										<button
+											type="button"
+											class="inline-flex cursor-pointer items-center gap-1.5 font-semibold"
+											style="color: {col.player.color};"
+											title="Rank sources by {col.player.label}"
+											onclick={() => toggleBreakdownSort(col.player.playerId)}
+										>
+											{#if col.player.nation}
+												<SpriteIcon
+													category="crests"
+													value={col.player.nation}
+													size={15}
+													alt={col.player.label}
+												/>
+											{/if}
+											{col.player.label}
+											{#if breakdownSortId === col.player.playerId}<span
+													class="text-orange">↓</span
+												>{/if}
+										</button>
+									</th>
+								{/each}
+							</tr>
+						</thead>
+						<tbody>
+							{#each visibleBreakdownSections as section (section.key)}
+								<tr class="border-t border-border-subtle">
+									<td class="py-1.5 font-semibold text-tan">{section.label}</td>
+									{#each scienceBreakdowns as col (col.player.playerId)}
+										<td class="py-1.5 pr-4 text-right font-semibold text-tan">
+											{col.b[section.key].total}
+										</td>
+									{/each}
+								</tr>
+								{#each breakdownRows(section.key) as label (label)}
+									<tr>
+										<td class="py-0.5 pl-2 text-xs text-gray-400">
+											<span class="inline-flex flex-wrap items-center gap-1.5">
+												{#each breakdownSegments(section.key, label) as seg, i (i)}
+													<span class="inline-flex items-center gap-1.5">
+														{#if seg.icon}
+															<SpriteIcon
+																category={seg.icon.category as SpriteCategory}
+																value={seg.icon.value}
+																size={14}
+															/>
+														{/if}
+														{seg.text}
+													</span>
+												{/each}
+											</span>
+										</td>
+										{#each scienceBreakdowns as col (col.player.playerId)}
+											{@const item = breakdownItem(col, section.key, label)}
+											<td class="py-0.5 pr-4">
+												{#if item}
+													<div class="flex items-center justify-end gap-1.5">
+														<div
+															class="h-1.5 shrink rounded-sm"
+															style="width: {(Math.max(0, item.science) /
+																breakdownMaxItem) *
+																100}%; max-width: 4rem; background: {col.player
+																.color};"
+														></div>
+														<span
+															class="shrink-0 whitespace-nowrap text-xs text-tan"
+															>{#if item.count > 1}<span class="text-gray-400"
+																	>({item.count}×)&nbsp;</span
+																>{/if}{item.science}</span
+														>
+													</div>
+												{:else}
+													<div class="text-right text-xs text-gray-400">—</div>
+												{/if}
+											</td>
+										{/each}
+									</tr>
+								{/each}
 							{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each visibleBreakdownSections as section (section.key)}
 							<tr class="border-t border-border-subtle">
-								<td class="py-1.5 font-semibold text-tan">{section.label}</td>
+								<td class="py-1.5 font-semibold text-tan">Other</td>
 								{#each scienceBreakdowns as col (col.player.playerId)}
 									<td class="py-1.5 pr-4 text-right font-semibold text-tan">
-										{col.b[section.key].total}
+										{col.b.other}
 									</td>
 								{/each}
 							</tr>
-							{#each breakdownRows(section.key) as label (label)}
+							<tr class="border-t border-border-subtle">
+								<td class="py-1.5 font-bold text-tan">
+									<span class="inline-flex items-center gap-1">
+										Science per turn
+										<SpriteIcon
+											category="yields"
+											value="YIELD_SCIENCE"
+											size={13}
+										/>
+									</span>
+								</td>
+								{#each scienceBreakdowns as col (col.player.playerId)}
+									<td class="py-1.5 pr-4 text-right font-bold text-tan">
+										{col.b.total}
+									</td>
+								{/each}
+							</tr>
+							<!-- One-off science: lumps paid on completing a repeatable project.
+							     Last section, below the rate total because it is deliberately not
+							     part of it. No bar: the bars above scale per-turn science against
+							     breakdownMaxItem, and a lifetime lump doesn't belong on that
+							     scale. Counts are exact; each completion's worth is a band,
+							     because the save records neither the tier nor the turn. -->
+							{#if oneOffColumns.length > 0}
+								<tr class="border-t border-border-subtle">
+									<td class="py-1.5 font-semibold text-tan">One-off science</td>
+									{#each oneOffColumns as col (col.player.playerId)}
+										<td class="py-1.5 pr-4 text-right font-semibold text-tan">
+											{oneOffSectionBand(col)}
+										</td>
+									{/each}
+								</tr>
+								{#each oneOffRows as row (row.project)}
+									<tr>
+										<td class="py-0.5 pl-2 text-xs text-gray-400">
+											<span class="inline-flex items-center gap-1.5">
+												<SpriteIcon
+													category="projects"
+													value={row.project}
+													size={14}
+												/>
+												{row.label}
+											</span>
+										</td>
+										{#each oneOffColumns as col (col.player.playerId)}
+											{@const p = col.projects.find(
+												(x) => x.project === row.project,
+											)}
+											<td class="py-0.5 pr-4 text-right">
+												{#if p}
+													<span
+														class="whitespace-nowrap text-xs text-tan"
+														title={p.byCity
+															.map(
+																(c) =>
+																	`${formatEnum(c.name, "CITYNAME_")} ×${c.count}`,
+															)
+															.join(", ")}
+														><span class="text-gray-400"
+															>({p.count}×)&nbsp;</span
+														>{oneOffBand(p)}</span
+													>
+												{:else}
+													<span class="text-xs text-gray-400">—</span>
+												{/if}
+											</td>
+										{/each}
+									</tr>
+								{/each}
 								<tr>
 									<td class="py-0.5 pl-2 text-xs text-gray-400">
-										<span class="inline-flex flex-wrap items-center gap-1.5">
-											{#each breakdownSegments(section.key, label) as seg, i (i)}
-												<span class="inline-flex items-center gap-1.5">
-													{#if seg.icon}
-														<SpriteIcon
-															category={seg.icon.category as SpriteCategory}
-															value={seg.icon.value}
-															size={14}
-														/>
-													{/if}
-													{seg.text}
-												</span>
-											{/each}
-										</span>
-									</td>
-									{#each scienceBreakdowns as col (col.player.playerId)}
-										{@const item = breakdownItem(col, section.key, label)}
-										<td class="py-0.5 pr-4">
-											{#if item}
-												<div class="flex items-center justify-end gap-1.5">
-													<div
-														class="h-1.5 shrink rounded-sm"
-														style="width: {(Math.max(0, item.science) /
-															breakdownMaxItem) *
-															100}%; max-width: 4rem; background: {col.player
-															.color};"
-													></div>
-													<span
-														class="shrink-0 whitespace-nowrap text-xs text-tan"
-														>{#if item.count > 1}<span class="text-gray-400"
-																>({item.count}×)&nbsp;</span
-															>{/if}{item.science}</span
+										<Tooltip.Root>
+											<Tooltip.Trigger>
+												{#snippet child({ props })}
+													<span {...props} class="cursor-default"
+														>Measured one-off gains</span
 													>
-												</div>
-											{:else}
-												<div class="text-right text-xs text-gray-400">—</div>
-											{/if}
-										</td>
-									{/each}
-								</tr>
-							{/each}
-						{/each}
-						<tr class="border-t border-border-subtle">
-							<td class="py-1.5 font-semibold text-tan">Other</td>
-							{#each scienceBreakdowns as col (col.player.playerId)}
-								<td class="py-1.5 pr-4 text-right font-semibold text-tan">
-									{col.b.other}
-								</td>
-							{/each}
-						</tr>
-						<tr class="border-t border-border-subtle">
-							<td class="py-1.5 font-bold text-tan">
-								<span class="inline-flex items-center gap-1">
-									Science per turn
-									<SpriteIcon
-										category="yields"
-										value="YIELD_SCIENCE"
-										size={13}
-									/>
-								</span>
-							</td>
-							{#each scienceBreakdowns as col (col.player.playerId)}
-								<td class="py-1.5 pr-4 text-right font-bold text-tan">
-									{col.b.total}
-								</td>
-							{/each}
-						</tr>
-					</tbody>
-				</table>
-			</div>
-
-			<!-- One-off science: lumps paid on completing a repeatable project,
-			     which the rate decomposition above deliberately excludes. The
-			     counts are exact; each completion's worth is a band, because the
-			     save records neither the tier nor the turn it landed on. -->
-			{#if oneOffColumns.length > 0}
-				<h4 class="mb-1 mt-5 text-sm font-bold text-tan">One-off science</h4>
-				<p class="mb-2 text-xs italic text-gray-400">
-					Paid once, on completing the project — not part of the per-turn rate
-					above. A save records how many a city finished, never which tier or
-					which turn, so the science is a range.
-				</p>
-				<div class="overflow-x-auto">
-					<table class="w-full text-sm">
-						<tbody>
-							{#each oneOffRows as label (label)}
-								<tr>
-									<td class="py-0.5 text-xs text-gray-400">{label}</td>
-									{#each oneOffColumns as col (col.player.playerId)}
-										{@const p = col.projects.find((x) => x.label === label)}
-										<td class="py-0.5 pr-4 text-right text-xs">
-											{#if p}
-												<span
-													class="text-tan"
-													title={p.byCity
-														.map(
-															(c) =>
-																`${formatEnum(c.name, "CITYNAME_")} ×${c.count}`,
-														)
-														.join(", ")}
+												{/snippet}
+											</Tooltip.Trigger>
+											<Tooltip.Portal>
+												<Tooltip.Content
+													side="top"
+													sideOffset={6}
+													class="z-50 max-w-xs rounded-lg border-2 border-surface-raised bg-blue-gray px-3 py-2.5 text-xs font-normal text-tan shadow-lg"
 												>
-													{p.count}× &nbsp;{oneOffBand(p)}
-												</span>
-											{:else}
-												<span class="text-gray-400">—</span>
-											{/if}
+													Turns where the science total rose by more than that
+													turn's rate — every one-off gain of 10+ the save
+													shows, whatever its source (events, ruins, missions,
+													these projects).
+												</Tooltip.Content>
+											</Tooltip.Portal>
+										</Tooltip.Root>
+									</td>
+									{#each oneOffColumns as col (col.player.playerId)}
+										<td class="py-0.5 pr-4 text-right">
+											<span class="whitespace-nowrap text-xs text-tan"
+												>+{col.measured}
+												<span class="text-gray-400">({col.events})</span></span
+											>
 										</td>
 									{/each}
 								</tr>
-							{/each}
-							<tr class="border-t border-border-subtle">
-								<td class="py-1.5 font-semibold text-tan">
-									<span
-										title="Turns where the science total rose by more than that turn's rate — every one-off gain the save shows, whatever its source (events, ruins, missions, these projects)."
-										>Measured one-off gains</span
-									>
-								</td>
-								{#each oneOffColumns as col (col.player.playerId)}
-									<td class="py-1.5 pr-4 text-right font-semibold text-tan">
-										+{col.measured}
-										<span class="font-normal text-gray-400">({col.events})</span
-										>
-									</td>
-								{/each}
-							</tr>
+							{/if}
 						</tbody>
 					</table>
-				</div>
-			{/if}
+				</Tooltip.Provider>
+			</div>
 		</div>
 	{/if}
 </div>
-
 <!-- Last on the tab: one long row per tech, so it sits under the charts
      and the tables rather than pushing them down. -->
 <TechChoices players={orderedPlayers} {techChoices} {completedTechs} />
