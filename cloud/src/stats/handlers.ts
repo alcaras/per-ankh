@@ -333,9 +333,9 @@ async function handleGlobalStatsPayload(
 			env,
 			slice,
 			nations,
+			period,
 			CURRENT_PARSER_VERSION,
 			corpus,
-			period,
 		);
 	const pick = (built: { bundle: ChartBundleCore; records: RecordsBundle }) =>
 		payload === "records" ? built.records : built.bundle;
