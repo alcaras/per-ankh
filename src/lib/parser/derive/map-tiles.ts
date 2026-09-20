@@ -102,6 +102,7 @@ export function deriveMapTiles(
 			resource: t.resource,
 			improvement: t.improvement,
 			improvement_pillaged: t.improvementPillaged,
+			improvement_turns_left: t.improvementTurnsLeft,
 			has_road: t.hasRoad,
 			specialist: t.specialist,
 			tribe_site: t.tribeSite,

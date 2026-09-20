@@ -6,10 +6,12 @@
 	import type { PlayerLaw } from "$lib/types/PlayerLaw";
 	import type { ImprovementData } from "$lib/types/ImprovementData";
 	import type { TechChoiceInfo } from "$lib/parser/types";
+	import type { MapTile } from "$lib/types/MapTile";
 	import type { CityStatistics } from "$lib/types/CityStatistics";
 	import type { StoryEvent } from "$lib/types/StoryEvent";
 	import type {
 		CharacterInfo,
+		CharacterTraitInfo,
 		FamilyInfo,
 		GameReligion,
 		MemoryInfo,
@@ -65,6 +67,7 @@
 		type FreeTechMarker,
 		type ScienceSpike,
 		type ScienceBreakdown,
+		type BreakdownSegment,
 		type NamedCount,
 		type LeaderChangeMarker,
 		type KnowledgeFlipMarker,
@@ -80,10 +83,12 @@
 		improvementData,
 		cityStatistics,
 		techChoices = [],
+		mapTiles = [],
 		families = [],
 		memoryData = [],
 		storyEvents = [],
 		characters = [],
+		characterTraits = [],
 		gameReligions = [],
 		gameOptions = null,
 		userNation = null,
@@ -101,10 +106,17 @@
 		// Empty for older blobs and for saves that predate the game recording
 		// the history — the card hides itself either way.
 		techChoices?: TechChoiceInfo[];
+		// The final-turn map, which carries the tile coordinates the science
+		// breakdown's adjacency rows need. Defaults to [] — a blob with no map
+		// simply gets no adjacency section.
+		mapTiles?: MapTile[];
 		families?: FamilyInfo[];
 		memoryData?: MemoryInfo[];
 		storyEvents?: StoryEvent[];
 		characters?: CharacterInfo[];
+		// Traits with the turn they were acquired and lost — the science
+		// breakdown reads the ones a ruler or governor still holds.
+		characterTraits?: CharacterTraitInfo[];
 		// Founded religions with their theologies (2.15.0+) — the science
 		// breakdown's Dualism rows. Defaults to [] for legacy callers.
 		gameReligions?: GameReligion[];
@@ -650,6 +662,20 @@
 			: gameOptions.GAMEOPTION_COMPETITIVE_MODE === true,
 	);
 	const characterById = $derived(new Map(characters.map((c) => [c.xml_id, c])));
+	// Character → their traits, for the breakdown's city-bonus rows. The
+	// save records acquisition but not removal, so a trait a character later
+	// lost is still priced; the signed remainder absorbs it — the same
+	// caveat the Orders breakdown carries.
+	const traitsByCharacter = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built once per derivation, never mutated after
+		const byId = new Map<number, string[]>();
+		for (const t of characterTraits) {
+			const held = byId.get(t.character_xml_id) ?? [];
+			held.push(t.trait_name);
+			byId.set(t.character_xml_id, held);
+		}
+		return byId;
+	});
 	// religion → theologies established, for the breakdown's Dualism rows.
 	// Empty lists on pre-2.15.0 blobs, which simply produce no rows.
 	const theologiesByReligion = $derived(
@@ -676,6 +702,15 @@
 				player,
 				(c) => c.owner_player_xml_id,
 				(c) => c.owner_nation,
+			);
+			// The player's own tiles as the map records them: the breakdown's
+			// adjacency terms need coordinates, which live only here, and only
+			// a player's OWN neighbours grant them (the game's same-team test).
+			const tiles = ownedByPlayer(
+				mapTiles,
+				player,
+				(t) => t.owner_player_xml_id,
+				(t) => t.owner_nation,
 			);
 			const capitalCity = cities.find((c) => c.is_capital);
 			// The reigning leader's Wisdom — the only court rating that pays
@@ -705,6 +740,7 @@
 				player,
 				b: scienceBreakdown(
 					improvements,
+					tiles,
 					activeLaws,
 					capitalCity
 						? {
@@ -722,6 +758,13 @@
 						leaderArchetype,
 						theologiesByReligion,
 						governorWisdom: (xmlId) => characterById.get(xmlId)?.wisdom ?? null,
+						governorTraits: (xmlId) => traitsByCharacter.get(xmlId) ?? [],
+						// Same reigning-leader rule as the archetype above: a ruler
+						// off the throne grants nothing.
+						leaderTraits:
+							leader == null || leader.death_turn != null
+								? []
+								: (traitsByCharacter.get(leader.xml_id) ?? []),
 					},
 					specialistName,
 					improvementDisplayName,
@@ -738,6 +781,8 @@
 		{ key: "specialistsRural", label: "Rural specialists" },
 		{ key: "specialistsUrban", label: "Urban specialists" },
 		{ key: "buildings", label: "Buildings & resources" },
+		{ key: "adjacency", label: "Adjacency" },
+		{ key: "cityBonuses", label: "City bonuses" },
 		{ key: "laws", label: "Laws" },
 		{ key: "cityEffects", label: "Nation, family & religion" },
 		{ key: "modifiers", label: "Modifiers" },
@@ -790,16 +835,23 @@
 			)
 			.map(([label]) => label);
 	}
-	// A row's icon: the first player's item that carries one.
-	function breakdownIcon(
+	// A row's label, as the named things it's built from: the first player's
+	// item that carries any icon, so a row shared across players draws the
+	// sprites of the first one that has them.
+	function breakdownSegments(
 		key: (typeof BREAKDOWN_SECTIONS)[number]["key"],
 		label: string,
-	) {
+	): BreakdownSegment[] {
+		let plain: BreakdownSegment[] | undefined;
 		for (const col of scienceBreakdowns) {
-			const icon = col.b[key].items.find((i) => i.label === label)?.icon;
-			if (icon) return icon;
+			const segments = col.b[key].items.find(
+				(i) => i.label === label,
+			)?.segments;
+			if (segments == null) continue;
+			if (segments.some((seg) => seg.icon != null)) return segments;
+			plain ??= segments;
 		}
-		return undefined;
+		return plain ?? [{ text: label }];
 	}
 	function breakdownItem(
 		col: BreakdownColumn,
@@ -1021,18 +1073,21 @@
 								{/each}
 							</tr>
 							{#each breakdownRows(section.key) as label (label)}
-								{@const icon = breakdownIcon(section.key, label)}
 								<tr>
 									<td class="py-0.5 pl-2 text-xs text-gray-400">
-										<span class="inline-flex items-center gap-1.5">
-											{#if icon}
-												<SpriteIcon
-													category={icon.category as SpriteCategory}
-													value={icon.value}
-													size={14}
-												/>
-											{/if}
-											{label}
+										<span class="inline-flex flex-wrap items-center gap-1.5">
+											{#each breakdownSegments(section.key, label) as seg, i (i)}
+												<span class="inline-flex items-center gap-1.5">
+													{#if seg.icon}
+														<SpriteIcon
+															category={seg.icon.category as SpriteCategory}
+															value={seg.icon.value}
+															size={14}
+														/>
+													{/if}
+													{seg.text}
+												</span>
+											{/each}
 										</span>
 									</td>
 									{#each scienceBreakdowns as col (col.player.playerId)}

@@ -100,6 +100,7 @@ export function reconstructMapTiles(
 			// Owned-at-turn gated.
 			improvement: owned ? t.improvement : null,
 			improvement_pillaged: owned ? t.improvement_pillaged : false,
+			improvement_turns_left: owned ? t.improvement_turns_left : null,
 			has_road: owned ? t.has_road : false,
 			specialist: owned ? t.specialist : null,
 			owner_nation: owned ? (playerNation.get(ownerXmlId) ?? null) : null,

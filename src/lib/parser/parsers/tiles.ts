@@ -26,7 +26,10 @@ export interface Tile {
 	resource: string | null;
 	improvement: string | null;
 	improvementPillaged: boolean;
-	improvementDisabled: boolean;
+	/** Turns of construction still owed on `improvement`; null once built.
+	 * `> 0` is the game's `isImprovementUnfinished()` (Tile.cs:5533), which
+	 * `getActiveImprovement` (Tile.cs:5167) treats exactly like pillage — the
+	 * improvement neither pays its own yields nor grants adjacency bonuses. */
 	improvementTurnsLeft: number | null;
 	specialist: string | null;
 	hasRoad: boolean;
@@ -161,9 +164,13 @@ export function parseTiles(root: Record<string, unknown>): Tile[] {
 			riverSe: optStr(node.RiverSE) != null,
 			resource: optStr(node.Resource),
 			improvement: optStr(node.Improvement),
-			improvementPillaged: optStr(node.ImprovementPillaged) === "true",
-			improvementDisabled: optStr(node.ImprovementDisabled) === "true",
-			improvementTurnsLeft: optInt(node.ImprovementTurnsLeft),
+			// The game writes `<Pillaged />` — an empty element, and only when
+			// pillaged (Tile.cs:1105, doSave) — so presence is the test, the same
+			// idiom as `hasRoad` below. There is no `<ImprovementPillaged>` tag,
+			// so the old name matched nothing and this was always false.
+			improvementPillaged: "Pillaged" in node,
+			// `<ImprovementBuildTurnsLeft>`, written only while > 0 (Tile.cs:1096).
+			improvementTurnsLeft: optInt(node.ImprovementBuildTurnsLeft),
 			specialist: optStr(node.Specialist),
 			// fast-xml-parser represents <Road/> as `Road: ""`, so the key
 			// presence check correctly distinguishes "has road" from "no road".
