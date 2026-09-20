@@ -266,7 +266,9 @@ The facet UI is a sibling of `ScopeRow.svelte` — a slice selector plus a singl
 
 **Built:** `src/lib/stats/GlobalFacetRow.svelte`, on `ScopeRow`'s markup — two hand-rolled popovers, one open at a time, each writing its own param. Both drop their param at the default rather than spelling it out, so the default view has one canonical URL and therefore one edge-cache entry (§11) instead of several spellings of the same bundle.
 
-Selection lives in the URL as `?slice=` and `?nation=`, parsed the way `parseScopeParam` parses `?scope=`: known values pass through, anything else falls back to the default, so a stale or hand-edited URL degrades instead of 400ing. The default slice is **Multiplayer duels**: 94% of the corpus is duels, so the all-public numbers *are* the duel numbers, and landing on the label that describes the distribution beats landing on a superset whose name implies breadth it does not have.
+**Since:** the recency window (§4.4) is the third popover, `?period=`, and cost the row nothing structural — `menus` is a data-driven array, so the control is one more entry in it and the drop-the-default rule already covered it. What follows holds for all three.
+
+Selection lives in the URL as `?slice=`, `?nation=` and `?period=`, parsed the way `parseScopeParam` parses `?scope=`: known values pass through, anything else falls back to the default, so a stale or hand-edited URL degrades instead of 400ing. The default slice is **Multiplayer duels**: 94% of the corpus is duels, so the all-public numbers *are* the duel numbers, and landing on the label that describes the distribution beats landing on a superset whose name implies breadth it does not have.
 
 **Built:** parsed a second time client-side, in `src/lib/stats/global-facets.ts`, the way `profileScope` mirrors `parseScopeParam`. The page has to land on the answer the Worker landed on, or the controls light a selection the payload is not for. The client parse is *stricter* on `?nation=`: the Worker only shape-checks, so a token naming no nation passes and then selects nothing, which would leave the control reading "All nations" over an empty bundle.
 
