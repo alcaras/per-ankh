@@ -1,5 +1,39 @@
 # Changelog
 
+## [2026-09-20-8892f51] - 2026-09-20
+
+### Features
+
+- (ratings) a Glicko-2 model over the duels D1 can reconstruct — [7592080](https://github.com/becked/per-ankh/commit/759208079aefc6a2fe85dd6e8ade0417f46a9370)
+- (opponents) suggest ten players you'd get a close game against — [5eeba76](https://github.com/becked/per-ankh/commit/5eeba766a69ab4912ab6bf1cceb5bdfc0651ae3f)
+- (opponents) a DM button, and less copy around the list — [badb315](https://github.com/becked/per-ankh/commit/badb315ae3e3ecb263c9101a3cb17809e1fa1398)
+- (techs) a One-off science table under the rate breakdown — [d14bb9f](https://github.com/becked/per-ankh/commit/d14bb9f8c29940f8998439ed9fdef16df4f78eb1)
+
+### Fixes
+
+- (opponents) nobody gets a one-name page — [334353d](https://github.com/becked/per-ankh/commit/334353df3a95c54694163a8e8c0c90b638d637d3)
+- (ratings) a rebuild that fails halfway leaves every list full — [eee660e](https://github.com/becked/per-ankh/commit/eee660e3d6c78d0308f21a2052b42278564c5805)
+- (ratings) sweep only older runs, stamp rows the way the column does — [a973dc3](https://github.com/becked/per-ankh/commit/a973dc38b84d2ace336743e4d726d4c04aeb2132)
+- (maps) store the zType Old World declares, not the C# filename — [0c88551](https://github.com/becked/per-ankh/commit/0c885518aaa1174a2a5b344f805f70a70ecde2f8)
+- (opponents) rate the games this repo calls duels, badge only what shows — [4a4b302](https://github.com/becked/per-ankh/commit/4a4b3023aed726a77c0996dcb8686fd643d36229)
+- (opponents) drop the padlock, answer the question under the list — [31e9e35](https://github.com/becked/per-ankh/commit/31e9e359edad2704da83fdcbf253b586e5e4e530)
+- (opponents) label the Discord link, link only the identity — [24d04c3](https://github.com/becked/per-ankh/commit/24d04c3f107384d6c45f1e87157699041eda26b5)
+- (techs) the Archive ladder, Gnosticism's temples, and the Sages label — [23eb244](https://github.com/becked/per-ankh/commit/23eb2447f501f270b695f14c4988e0dbe743297d)
+- (bake) drop the duplicate typePairs the rebase left behind — [7dfdf6f](https://github.com/becked/per-ankh/commit/7dfdf6f1f4f396a2fbe0764f28ec134d4ab5f051)
+- (techs) one-off science becomes a section of the rate breakdown — [00aa84c](https://github.com/becked/per-ankh/commit/00aa84cbf573e8a87de4c7ddf27113be58b72260)
+- (techs) the science breakdown's two icon-less rows — [0152c55](https://github.com/becked/per-ankh/commit/0152c559191ea58b53b3c6f8e4a94ac987aa9424)
+- (bake) declare the theology fields, repair a duplicated header line — [5e171a9](https://github.com/becked/per-ankh/commit/5e171a9e38607b4858ba6f4f088625bc47758900)
+- (techs) a city that changed hands gets its own uncertain row — [6874582](https://github.com/becked/per-ankh/commit/6874582ccc580a92847544372f165dec66e57acb)
+- (maps) an alias resolves the same on both sides, and a test says so — [de65ca6](https://github.com/becked/per-ankh/commit/de65ca658038a87988bdbb99bea26867dca79f54)
+
+### Other
+
+- (opponents) the list is a locked tab on your own profile — [cc48df8](https://github.com/becked/per-ankh/commit/cc48df8a22409791e419c83d6868a626b511a191)
+- (opponents) score on closeness, predicted from conservative ratings — [bc8b262](https://github.com/becked/per-ankh/commit/bc8b2629c17a53f7766e95b970756e792b794eff)
+- (opponents) predict with an undamped logistic, and narrow the types — [a5bac8d](https://github.com/becked/per-ankh/commit/a5bac8d221a0072352951b174e3097b131aa3867)
+- (techs) drop the dead band values, rank culture with the helper — [15f6e71](https://github.com/becked/per-ankh/commit/15f6e719dc49b187a06d147c1d9df16d29ccefa1)
+- (techs) the one-off row union stops picking a best row — [eb5c895](https://github.com/becked/per-ankh/commit/eb5c8952a3e0b5ec6f74f5cfea82e9e22f78e994)
+
 ## [2026-09-19-1a174f1] - 2026-09-19
 
 ### Features
