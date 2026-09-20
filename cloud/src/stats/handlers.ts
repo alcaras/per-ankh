@@ -26,6 +26,7 @@ import { buildAvatarUrl } from "../auth";
 import { displayNameSql } from "../identity";
 import { UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL } from "../online-ids";
 import {
+	DEFAULT_GLOBAL_PERIOD,
 	parseNationParam,
 	parsePeriodParam,
 	parseScopeParam,
@@ -952,6 +953,10 @@ export async function handleHomeSummary(
 		kind: "global" as const,
 		slice: "duel" as const,
 		nations: [],
+		// The all-time window, which is the only one the crons warm — and this
+		// endpoint can only ever read what a cron built. A narrowed window is
+		// keyed separately (stats/cache.ts) and has no entry to find here.
+		period: DEFAULT_GLOBAL_PERIOD,
 		parser_version: CURRENT_PARSER_VERSION,
 	};
 	const bundle =
