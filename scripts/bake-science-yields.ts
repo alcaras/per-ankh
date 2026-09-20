@@ -96,6 +96,9 @@ interface Entry {
 	ProjectPrereq?: string;
 	// improvement.xml — the religion a religious building belongs to.
 	ReligionPrereq?: string;
+	// improvementClass.xml — theology → the city effect a building of this
+	// class pays while the city holds that theology's religion.
+	aeTheologyCityEffect?: { Pair?: TypePair | TypePair[] };
 	zIconName?: string;
 	iCost?: string;
 	iValue?: string;
@@ -115,6 +118,7 @@ interface Entry {
 	aiYieldCourtRate?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldGovernorModifier?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRateSpecialist?: { Pair?: YieldPair | YieldPair[] };
+	aiYieldRateSpecialistUrban?: { Pair?: YieldPair | YieldPair[] };
 	aiYieldRateReligion?: { Pair?: YieldPair | YieldPair[] };
 	aiImprovementModifier?: { Pair?: YieldPair | YieldPair[] };
 	aiImprovementClassModifier?: { Pair?: YieldPair | YieldPair[] };
@@ -1530,12 +1534,8 @@ async function main(): Promise<void> {
 	lines.push(
 		"// the way up, and the save keeps only the highest rung (abInvalidBy).",
 	);
-	lines.push(
-		"// given city's completions can have been worth. Values are WHOLE",
-	);
-	lines.push(
-		"// science, not the file's usual ÷10 (Player.processYieldWhole).",
-	);
+	lines.push("// Values are WHOLE science, not the file's usual ÷10");
+	lines.push("// (Player.processYieldWhole).");
 	lines.push(
 		`export const PROJECT_ONE_OFF_SCIENCE: Readonly<Record<string, readonly { readonly project: string; readonly science: number; readonly culture: string | null }[]>> = ${JSON.stringify(sorted(projectOneOffScience as unknown as Record<string, unknown>))};`,
 	);

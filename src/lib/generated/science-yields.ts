@@ -745,8 +745,8 @@ export const PROJECT_CITY_HP: Readonly<Record<string, number>> = {
 // given city's completions can have been worth. `science` is CUMULATIVE
 // down a prereq ladder — an Archive III city was paid for I and II on
 // the way up, and the save keeps only the highest rung (abInvalidBy).
-// given city's completions can have been worth. Values are WHOLE
-// science, not the file's usual ÷10 (Player.processYieldWhole).
+// Values are WHOLE science, not the file's usual ÷10
+// (Player.processYieldWhole).
 export const PROJECT_ONE_OFF_SCIENCE: Readonly<
 	Record<
 		string,
