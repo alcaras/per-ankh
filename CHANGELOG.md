@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-09-20-bd4f40e] - 2026-09-20
+
+### Other
+
+- (profile) the Opponents tab is the Suggested tab — [bd4f40e](https://github.com/becked/per-ankh/commit/bd4f40ec3539022fcc97c008324984d14e8f0a2d)
+
 ## [2026-09-20-8892f51] - 2026-09-20
 
 ### Features
