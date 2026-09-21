@@ -1005,7 +1005,7 @@ const ROUTES: RouteSpec[] = [
 	},
 	// The viewer's own suggested opponents. There is deliberately no
 	// /v1/users/:user_id/opponents — a player sees only their own list, and
-	// the route table is where that is enforced. The profile's Opponents tab
+	// the route table is where that is enforced. The profile's Suggested tab
 	// is gated on isOwner too, but this is the gate that matters.
 	{
 		method: "GET",

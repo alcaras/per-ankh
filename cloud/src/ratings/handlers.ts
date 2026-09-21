@@ -139,7 +139,7 @@ export async function handleRebuildRatings(
 	});
 
 	// Audited like the other admin sweeps (admin_reimport, admin_reindex): this
-	// rewrites what every player sees on their Opponents tab, so who ran it and
+	// rewrites what every player sees on their Suggested tab, so who ran it and
 	// when is worth keeping. Through EVENTS_DB, never SHARE_DB — see cloud/src/d1.ts.
 	// Best-effort, for the same reason the reindex audit is: a failed audit
 	// insert must not turn a completed rebuild into a 500.

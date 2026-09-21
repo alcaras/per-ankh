@@ -143,6 +143,15 @@
 	</div>
 {/snippet}
 
+<!-- The tab bar says "Suggested"; this says what of. Only above an actual
+     list: each empty state already names what the list would have been, so
+     the frame there would announce players that aren't on the page. -->
+{#if opponents.length > 0}
+	<p class="mb-3 text-sm text-tan opacity-90">
+		Players who should give you a close game.
+	</p>
+{/if}
+
 {#if !openToMatches}
 	<p class="mb-3 text-sm text-tan opacity-70">
 		You're hidden from other players' lists —
@@ -154,7 +163,12 @@
 {/if}
 
 {#if opponents.length > 0}
-	<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+	<!-- Third column at xl, not lg like the video grid: these cards are
+	     horizontal, and the Discord chip is shrink-0, so a column narrower
+	     than ~400px pushes the badge row under the name instead of beside
+	     the chip. xl lands each card near the ~430px the card was laid out
+	     at, back when the list was its own max-w-4xl page. -->
+	<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 		{#each opponents as o (o.user_id)}
 			{@render opponentCard(o)}
 		{/each}

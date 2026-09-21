@@ -18,9 +18,9 @@
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import UserTournamentsTab from "$lib/tournament/UserTournamentsTab.svelte";
 	import GamesTable from "$lib/users/GamesTable.svelte";
-	import OpponentsTab from "$lib/users/OpponentsTab.svelte";
 	import OverviewTab from "$lib/users/OverviewTab.svelte";
 	import ScopeRow from "$lib/users/ScopeRow.svelte";
+	import SuggestedOpponentsTab from "$lib/users/SuggestedOpponentsTab.svelte";
 	import VideosTab from "$lib/users/VideosTab.svelte";
 	import StatsView from "$lib/stats/StatsView.svelte";
 	import { nationName } from "$lib/utils/formatting";
@@ -83,7 +83,7 @@
 		// The scope selector applies to the save-backed tabs; suggested opponents
 		// come from the whole rated corpus and ignore it. Dropping it keeps the
 		// URL honest about what the page is filtered by.
-		if (value === "opponents") next.searchParams.delete("scope");
+		if (value === "suggested") next.searchParams.delete("scope");
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- search-param-only update on the current route; URL objects are SvelteKit's documented dynamic-nav API
 		await goto(next, { keepFocus: true, noScroll: true });
 	}
@@ -101,7 +101,7 @@
 <div class="flex flex-1 overflow-hidden">
 	<main class="isolate flex flex-1 flex-col overflow-hidden">
 		<div
-			class="cloud-scroll flex-1 overflow-y-auto px-4 pb-8 pt-4"
+			class="cloud-scroll profile-scroll flex-1 overflow-y-auto px-4 pb-8 pt-4"
 			use:autohideScroll
 		>
 			<div class="mx-auto max-w-screen-2xl">
@@ -226,8 +226,8 @@
 						     siblings and the note at the foot of the tab gives the
 						     answer, rather than the bar carrying a mark of its own. -->
 							{#if data.isOwner}
-								<Tabs.Trigger value="opponents" class={triggerClass}
-									>Opponents</Tabs.Trigger
+								<Tabs.Trigger value="suggested" class={triggerClass}
+									>Suggested</Tabs.Trigger
 								>
 							{/if}
 						</Tabs.List>
@@ -284,11 +284,11 @@
 						</Tabs.Content>
 
 						{#if data.isOwner}
-							<Tabs.Content value="opponents">
+							<Tabs.Content value="suggested">
 								<!-- Payload loads lazily with the tab (mirrors Videos and
 								     Tournaments), so it's null until then. -->
 								{#if data.suggestions}
-									<OpponentsTab
+									<SuggestedOpponentsTab
 										suggestions={data.suggestions}
 										openToMatches={page.data.user?.open_to_matches ?? true}
 									/>
@@ -301,3 +301,13 @@
 		</div>
 	</main>
 </div>
+
+<style>
+	/* Always reserve the scrollbar's gutter, so switching to a tab short enough
+	   not to overflow — Suggested, at ten cards — doesn't widen the centred
+	   content and shove the scope selector sideways. Same fix, and scoped for the
+	   same reason, as the tournament layout's .view-scroll. */
+	.profile-scroll {
+		scrollbar-gutter: stable;
+	}
+</style>

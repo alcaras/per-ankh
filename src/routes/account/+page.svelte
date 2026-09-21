@@ -27,11 +27,11 @@
 	// reuses the same download → parse → upload pipeline.
 	let reparseGames = $state<GameListItem[] | null>(null);
 
-	// The reader's own Opponents tab, so "their Opponents tab" below links to
+	// The reader's own Suggested tab, so "their Suggested tab" below links to
 	// the thing it names. profileHref decides slug-vs-permalink; the tab is a
 	// search param on whichever it picks.
-	const opponentsHref = $derived(
-		`${profileHref({ user_id: data.user.user_id, slug: data.user.slug })}?tab=opponents`,
+	const suggestedHref = $derived(
+		`${profileHref({ user_id: data.user.user_id, slug: data.user.slug })}?tab=suggested`,
 	);
 
 	// The boolean preferences — optimistic toggles backed by the worker,
@@ -143,7 +143,7 @@
 			savingPref = null;
 		}
 		// `data.user` is the LAYOUT's copy of /me, and another page reads this
-		// write out of it: the Opponents tab tells its owner whether they are
+		// write out of it: the Suggested tab tells its owner whether they are
 		// listed. Without the reload, opting out here and navigating there shows a
 		// tab still claiming they are on everyone's lists. Outside the try for the
 		// same reason saveSlug is — a failed reload is not a failed save.
@@ -291,8 +291,8 @@
 	<!-- profileHref returns a resolve() result, and the tab is a search param on
 	     it; the rule can't see through the call. -->
 	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-	<a href={opponentsHref} class="text-orange transition-colors hover:text-tan"
-		>Opponents</a
+	<a href={suggestedHref} class="text-orange transition-colors hover:text-tan"
+		>Suggested</a
 	> tab. Turn this off to be left out of everyone's suggestions — you'll still get
 	your own.
 {/snippet}

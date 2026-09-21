@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The scope selector — one dropdown choosing which slice of the library
-	// every tab shows. The built-in slices (All / Public / vs AI /
+	// every save-backed tab shows. The built-in slices (All / Public / vs AI /
 	// Multiplayer / Tournament) and the user's collections are all
 	// mutually-exclusive options, each showing its game count like
 	// collections do. Hand-rolled popover (not a native <select>) to match

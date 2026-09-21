@@ -24,7 +24,7 @@ const TABS = new Set([
 	"games",
 	"videos",
 	"tournaments",
-	"opponents",
+	"suggested",
 ]);
 const SCOPE_KEYWORDS = new Set(["public", "vs_ai", "mp", "tournament"]);
 
@@ -86,9 +86,9 @@ export async function buildProfilePage(args: {
 	// "tournaments" when that tab exists.
 	if (tab === "videos" && !hasChannels) tab = defaultTab;
 	if (tab === "tournaments" && !isTournamentParticipant) tab = defaultTab;
-	// ?tab=opponents on someone else's profile — a shared link, or a guess —
+	// ?tab=suggested on someone else's profile — a shared link, or a guess —
 	// lands on their Overview rather than on a tab that isn't theirs to see.
-	if (tab === "opponents" && !isOwner) tab = defaultTab;
+	if (tab === "suggested" && !isOwner) tab = defaultTab;
 
 	// Games-tab filters (only meaningful when tab === "games").
 	const q = url.searchParams.get("q")?.trim() || "";
@@ -118,7 +118,7 @@ export async function buildProfilePage(args: {
 	// there is no by-id form, which is what makes this tab impossible to serve
 	// for anyone but its owner however the URL is written.
 	const suggestions =
-		tab === "opponents" ? await cloudApi.getMyOpponents({ fetch }) : null;
+		tab === "suggested" ? await cloudApi.getMyOpponents({ fetch }) : null;
 
 	// Fetch the first games page only when the Games tab is active —
 	// Overview/Stats render entirely from the bundle.
