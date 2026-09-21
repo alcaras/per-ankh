@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Ten players the profile's owner should get a close game against.
+	// Twelve players the profile's owner should get a close game against.
 	//
 	// Owner-only, and the only tab that is: the others are facts about the
 	// profile (it has channels, it holds a tournament slot), this one is about
@@ -183,8 +183,8 @@
 	</p>
 {:else}
 	<p class="p-8 text-center text-sm text-tan opacity-60">
-		Nothing to suggest right now — everyone close enough to give you a good game
-		is either already busy or away.
+		Nothing to suggest right now — there's nobody else both listed and around at
+		the moment.
 	</p>
 {/if}
 
