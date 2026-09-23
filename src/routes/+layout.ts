@@ -23,8 +23,9 @@ import type { LayoutLoad } from "./$types";
 // the page's own load.
 //
 // `meta` defaults are also exposed here. Pages override them by returning
-// their own `meta` from `+page.ts` — SvelteKit merges parent + child data
-// so the child's value wins. The root +layout.svelte renders one OG/
+// their own `meta` from a nested load — their `+page.ts`, or a `+layout.ts`
+// shared by several views (the game route's) — SvelteKit merges parent +
+// child data so the child's value wins. The root +layout.svelte renders one OG/
 // Twitter block from `data.meta`.
 export const load: LayoutLoad = async ({
 	fetch,

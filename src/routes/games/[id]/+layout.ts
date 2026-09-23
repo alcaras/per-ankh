@@ -9,7 +9,7 @@ import type { PageMeta } from "$lib/page-meta";
 import { formatEnum, formatGameTitle, nationName } from "$lib/utils/formatting";
 import { rethrowRateLimit } from "$lib/utils/load-errors";
 import { loginBounce } from "$lib/utils/safe-next";
-import type { PageLoad } from "./$types";
+import type { LayoutLoad } from "./$types";
 
 // Build the OG/Twitter description from match metadata. Same shape that
 // used to live inline in +page.svelte's <svelte:head>; moved here so
@@ -42,7 +42,7 @@ function buildMeta(game: {
 	const description =
 		parts.length > 0 ? parts.join(", ") : "An Old World save game on Per-Ankh.";
 	// Derive the social-share title from the same helper the on-page title
-	// uses (+page.svelte), so the <head>/OG title matches what the user
+	// uses (GameHeader.svelte), so the <head>/OG title matches what the user
 	// sees. This handles the owner rename, the empty / auto-generated
 	// "GameN" save name (falling through to "{Nation} - {Turns} turns"),
 	// and the bare-fallback cases uniformly — the prior ad-hoc `??` chain
@@ -74,7 +74,11 @@ function mapApiErrorToPage(err: unknown): never {
 	throw err;
 }
 
-// Game detail load.
+// Game detail load, shared by both views of a game: the analyst view
+// (/games/[id]) and the map view (/games/[id]/map). As a layout load it runs
+// once for the pair, so switching views makes no second request — but only
+// while the success path never reads `url`. SvelteKit reruns a load that has
+// read `url` on every URL change; today it's read only in the 401 branch.
 //
 // The API's `GET /v1/games/:id` is unified — it serves owners (full
 // payload, with `is_public` injected) and anonymous viewers of public
@@ -85,7 +89,7 @@ function mapApiErrorToPage(err: unknown): never {
 // 401 here means a genuinely private game viewed without a valid session
 // (or signed-in non-owner of a private game gets 403, handled separately
 // — anonymous+private is the only 401 case the load needs to redirect on).
-export const load: PageLoad = async ({ params, fetch, url }) => {
+export const load: LayoutLoad = async ({ params, fetch, url }) => {
 	// Start the tournament-link read before awaiting the game. It takes only
 	// params.id and reads nothing from the game payload, so the sequence these
 	// two used to run in was a false dependency — it charged the page the link
@@ -126,8 +130,9 @@ export const load: PageLoad = async ({ params, fetch, url }) => {
 	}
 
 	// Tournament link: cheap public read that returns the linked
-	// tournament/match (or null) for any game. Used by the preTabs banner
-	// on GameDetailView. Failure here just hides the banner — don't block
+	// tournament/match (or null) for any game. Used by the game header's
+	// breadcrumb, which parents a tournament game under its tournament.
+	// Failure here just falls back to the uploader's profile — don't block
 	// the page render. Issued above, concurrently with the game read.
 	const tournamentLink = await linkPromise;
 

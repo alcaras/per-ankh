@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { Snippet } from "svelte";
 	import type { GameDetails } from "$lib/types/GameDetails";
 	import type { TechChoiceInfo } from "$lib/parser/types";
 	import type { PlayerHistory } from "$lib/types/PlayerHistory";
@@ -32,7 +31,7 @@
 		ProjectProducedInfo,
 	} from "$lib/parser/types";
 	import { Tabs } from "bits-ui";
-	import { formatEnum, formatDate, nationName } from "$lib/utils/formatting";
+	import { formatEnum, nationName } from "$lib/utils/formatting";
 	import { mapScriptLabel } from "$lib/map-settings";
 	import {
 		PLAYER_CHART_KEYS,
@@ -59,7 +58,6 @@
 	import WondersTab from "./WondersTab.svelte";
 	import FamiliesTab from "./FamiliesTab.svelte";
 	import SpecialistsTab from "./SpecialistsTab.svelte";
-	import MapTab from "./MapTab.svelte";
 	import SettingsTab from "./SettingsTab.svelte";
 
 	let {
@@ -92,15 +90,9 @@
 		familyOpinionHistory = [],
 		projectsProduced = [],
 		mapTiles,
-		onMapTurnChange,
-		selectedMapTurn = null,
 		userNation = null,
 		userDisplayName = null,
 		userWon = null,
-		titleSlot,
-		headerActions,
-		preTabs,
-		mapMissingMessage,
 	}: {
 		gameDetails: GameDetails;
 		playerHistory: PlayerHistory[];
@@ -125,8 +117,8 @@
 		// every blob; used to recover player ids for pre-2.6.0 game_details
 		// rows that lack them.
 		playerRoster?: PlayerRosterEntry[];
-		// player_xml_id → nation, used by the map to resolve each city's founding
-		// nation for architecture rendering.
+		// player_xml_id → nation, used by the Cities tab to resolve each city's
+		// founding nation.
 		playerNations?: PlayerNationEntry[];
 		// Leader/character data for the Leaders tab. All default to [] for
 		// pre-2.8.0 blobs, where the tab is hidden.
@@ -158,9 +150,6 @@
 		// for legacy callers and older blobs, which hide the Economy panel.
 		projectsProduced?: ProjectProducedInfo[];
 		mapTiles: MapTile[] | null;
-		// eslint-disable-next-line no-unused-vars -- Callback type signature
-		onMapTurnChange?: ((turn: number) => Promise<void>) | null;
-		selectedMapTurn?: number | null;
 		// The uploader's picked nation, sourced from the games row by the
 		// cloud detail endpoint. The Worker's COALESCE fallback (first human
 		// player's nation) means this is virtually always set.
@@ -173,12 +162,6 @@
 		// are optional/null for observer-mode uploads.
 		userDisplayName?: string | null;
 		userWon?: boolean | null;
-		// The heading: the route passes a breadcrumb trail here, whose final
-		// segment is the game title.
-		titleSlot: Snippet;
-		headerActions?: Snippet;
-		preTabs?: Snippet;
-		mapMissingMessage?: Snippet;
 	} = $props();
 
 	// ─── Persistent UI state ──────────────────────────────────────────
@@ -305,24 +288,6 @@
 	const triggerClass =
 		"cursor-pointer rounded px-3 py-1.5 text-sm font-bold text-tan transition-colors hover:bg-tan-hover data-[state=active]:bg-surface-raised data-[state=inactive]:bg-surface";
 </script>
-
-<!-- Header -->
-<div class="mb-4 flex items-baseline justify-between gap-4">
-	<!-- The route passes a breadcrumb trail; its final segment is the
-	     game title. -->
-	{@render titleSlot()}
-	<div class="flex items-center gap-4">
-		{#if headerActions}
-			{@render headerActions()}
-		{/if}
-		<p class="text-sm text-gray-200">{formatDate(gameDetails.save_date)}</p>
-	</div>
-</div>
-
-<!-- Pre-tabs slot (e.g., the reparse banner) -->
-{#if preTabs}
-	{@render preTabs()}
-{/if}
 
 <!-- Summary Section -->
 <div
@@ -485,8 +450,6 @@
 		<Tabs.Trigger value="specialists" class={triggerClass}>
 			Specialists
 		</Tabs.Trigger>
-
-		<Tabs.Trigger value="map" class={triggerClass}>Map</Tabs.Trigger>
 
 		<Tabs.Trigger value="settings" class={triggerClass}>Settings</Tabs.Trigger>
 	</Tabs.List>
@@ -694,22 +657,6 @@
 			{improvementData}
 			{userNation}
 			bind:tableState={tables.specialists}
-		/>
-	</Tabs.Content>
-
-	<!-- Tab Content: Map -->
-	<Tabs.Content
-		value="map"
-		class="tab-pane min-h-[400px] rounded-lg bg-blue-gray p-4"
-	>
-		<MapTab
-			{mapTiles}
-			cities={cityStatistics.cities}
-			{playerNations}
-			totalTurns={gameDetails.total_turns}
-			selectedTurn={selectedMapTurn}
-			onTurnChange={onMapTurnChange}
-			missingMessage={mapMissingMessage}
 		/>
 	</Tabs.Content>
 

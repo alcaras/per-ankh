@@ -49,8 +49,9 @@
 	});
 
 	// Single source of truth for OG / Twitter metadata. Pages override by
-	// returning `{ meta: PageMeta }` from their +page.ts load; otherwise
-	// they inherit DEFAULT_META from +layout.ts. Rendering once here
+	// returning `{ meta: PageMeta }` from a nested load (their +page.ts, or a
+	// +layout.ts such as the game route's); otherwise they inherit
+	// DEFAULT_META from +layout.ts. Rendering once here
 	// avoids duplicate <meta> tags that crawlers handle inconsistently.
 	//
 	// Read from `page.data` (merged parent+child, child wins), not from

@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Inline action buttons rendered into GameDetailView's headerActions
-	// slot, next to the date in the main heading row.
+	// Inline action buttons rendered in the game header (GameHeader, shared
+	// by the analyst and map views), next to the save date.
 	//
 	// All three buttons are icon-only; click opens a small popover with
 	// an explanation + confirm/cancel pair. Click-outside and Escape

@@ -51,7 +51,6 @@ const GAME_TABS: GameTab[] = [
 	{ label: "Wonders" },
 	{ label: "Families" },
 	{ label: "Specialists" },
-	{ label: "Map" },
 	{ label: "Settings" },
 ];
 

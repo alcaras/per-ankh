@@ -9,12 +9,10 @@
 		tile,
 		cityFamily = null,
 		nationCrestKey = null,
-		pinned = false,
 		screenX,
 		screenY,
 		containerWidth,
 		containerHeight,
-		onClose,
 	}: {
 		tile: MapTile;
 		// Resolved family enum like "FAMILY_PTOLEMY", or null if unknown / not city.
@@ -23,12 +21,10 @@
 		// against nation-asset-aliases so variant nations (NATION_AMUN, NATION_ATHENS)
 		// fall back to their parent civ's crest (CREST_NATION_EGYPT, ...).
 		nationCrestKey?: string | null;
-		pinned?: boolean;
 		screenX: number;
 		screenY: number;
 		containerWidth: number;
 		containerHeight: number;
-		onClose?: () => void;
 	} = $props();
 
 	const nationColor = $derived.by(() => {
@@ -88,7 +84,7 @@
 	});
 </script>
 
-<div class="map-tooltip" class:pinned style={positionStyle} role="tooltip">
+<div class="map-tooltip" style={positionStyle} role="tooltip">
 	{#if headerLabel}
 		<div class="header">
 			<div class="crests">
@@ -103,22 +99,7 @@
 				{headerLabel}
 				{#if tile.is_capital}<span class="capital-marker">★</span>{/if}
 			</span>
-			{#if pinned && onClose}
-				<button
-					type="button"
-					class="close-btn"
-					onclick={onClose}
-					aria-label="Close tooltip">×</button
-				>
-			{/if}
 		</div>
-	{:else if pinned && onClose}
-		<button
-			type="button"
-			class="close-btn floating"
-			onclick={onClose}
-			aria-label="Close tooltip">×</button
-		>
 	{/if}
 
 	<div class="rows">
@@ -155,11 +136,6 @@
 		max-width: 240px;
 		box-shadow: 0 4px 12px rgb(var(--color-black) / 0.5);
 	}
-	.map-tooltip.pinned {
-		pointer-events: auto;
-		border-color: rgb(var(--color-tan));
-		box-shadow: 0 4px 16px rgb(var(--color-black) / 0.7);
-	}
 	.header {
 		display: flex;
 		align-items: center;
@@ -187,25 +163,6 @@
 		margin-left: 4px;
 		opacity: 0.85;
 		font-size: 10px;
-	}
-	.close-btn {
-		background: none;
-		border: none;
-		color: rgb(var(--color-brown));
-		cursor: pointer;
-		font-size: 16px;
-		line-height: 1;
-		padding: 0 2px;
-		transition: color 0.15s;
-		flex-shrink: 0;
-	}
-	.close-btn:hover {
-		color: rgb(var(--color-tan));
-	}
-	.close-btn.floating {
-		position: absolute;
-		top: 4px;
-		right: 6px;
 	}
 	.rows {
 		display: grid;

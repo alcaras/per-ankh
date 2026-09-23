@@ -5,7 +5,7 @@ description: >-
   atlases, sprites, and the XML-derived data tables — via the `npm run bake:*`
   pipeline. Use when the user asks to bake or re-bake assets, after refreshing
   pinacotheca renders or `Reference/XML/`, or when a `zType`/sprite isn't
-  rendering on the Map tab. NOT for routine coding.
+  rendering on a game's map view. NOT for routine coding.
 metadata:
   type: project
   geometry-source: scripts/lib/atlas-bake.ts
