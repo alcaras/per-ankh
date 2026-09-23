@@ -30,12 +30,13 @@ interface GameTab {
 	optional?: boolean;
 }
 
-// Game-detail tabs in nav order, mirroring the Tabs.List in GameDetailView.
-// `label` is the trigger's accessible name (bits-ui Tabs.Trigger emits
+// Game-detail tabs in nav order, mirroring GAME_TABS in
+// src/lib/game-detail/game-tabs.svelte.ts, which GameDetailView's Tabs.List
+// renders. `label` is the trigger's accessible name (bits-ui Tabs.Trigger emits
 // role="tab"); getByRole matches by accessible name and survives Tailwind
 // churn. The Tabs.List uses flex-wrap, so every trigger stays a clickable
 // role="tab" even at mobile width (no dropdown collapse). "Timeline" is
-// commented out there ("hidden pending redesign") so it's omitted here.
+// commented out of GAME_TABS ("hidden pending redesign") so it's omitted here.
 const GAME_TABS: GameTab[] = [
 	{ label: "Overview" },
 	{ label: "Events" },
