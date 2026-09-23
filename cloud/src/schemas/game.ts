@@ -168,6 +168,20 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         the Techs tab's science-source breakdown now honours. The added
 //         field costs the largest blob in the corpus +248 KiB uncompressed
 //         and +1.8 KiB gzipped — it is null on almost every tile.
+// 2.18.0 — yield_history[].cumulative_is_game_total, saying which quantity a
+//         series' `cumulative` holds: the game's own lifetime total for the
+//         yield, or our running sum of the per-turn rate. The two were mixed
+//         and indistinguishable before. It is a property of the save and of
+//         the yield, not of the series' rows — the game totals every yield
+//         but Discontent and Maintenance, which subtract from another yield
+//         and are credited to it instead, and a save's totals are complete
+//         only when it recorded them from the start. A game begun before
+//         Old World 1.0.81366 and continued on a later build starts its
+//         totals at the upgrade turn, from zero, and every one of its series
+//         falls back to the running sum. Series that do hold the game's
+//         total now read 0 before their first row, as the game does, where
+//         the old shape emitted null. Reparsed games carry those 0s into
+//         game_player_turn.*_cumulative, whose writer skips nulls today.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -192,13 +206,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.15.0",
 	"2.16.0",
 	"2.17.0",
+	"2.18.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.17.0";
+export const CURRENT_PARSER_VERSION = "2.18.0";
 
 // ----- Reusable atoms -----
 
