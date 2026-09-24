@@ -7,7 +7,7 @@
 	// GameTabState), so it outlives the tab.
 	import type { cloudApi } from "$lib/api-cloud";
 	import { formatEnum } from "$lib/utils/formatting";
-	import { resolveDetailPlayers } from "./helpers";
+	import { hasVictoryPoints, resolveGamePlayers } from "./helpers";
 	import { getGameTabState, type GameTabId } from "./game-tabs.svelte";
 	import OverviewTab from "./OverviewTab.svelte";
 	// eslint-disable-next-line no-unused-vars -- TimelineTab pending redesign, see commented block below
@@ -61,21 +61,7 @@
 
 	// Per-player iteration source: roster players enriched with a stable
 	// playerId + unique label + color. Mirror-match safe (nation alone isn't).
-	// `player_roster` is the id source; when a blob lacks it, fall back to one
-	// synthesized from player_history (which carries player_id) to recover ids
-	// for those id-less game_details.players rows.
-	const effectiveRoster = $derived(
-		game.player_roster.length > 0
-			? game.player_roster
-			: game.player_history.map((h) => ({
-					player_index: h.player_id,
-					player_name: h.player_name,
-					nation: h.nation,
-				})),
-	);
-	const resolvedPlayers = $derived(
-		resolveDetailPlayers(game.game_details.players, effectiveRoster),
-	);
+	const resolvedPlayers = $derived(resolveGamePlayers(game));
 
 	const victoryConditions = $derived(
 		game.game_details.victory_conditions
@@ -84,9 +70,7 @@
 			.join(", ") ?? "Unknown",
 	);
 
-	const victoryPointsEnabled = $derived(
-		game.game_details.victory_conditions?.includes("VICTORY_POINTS") ?? false,
-	);
+	const victoryPointsEnabled = $derived(hasVictoryPoints(game.game_details));
 
 	const dlcList = $derived(
 		game.game_details.enabled_dlc

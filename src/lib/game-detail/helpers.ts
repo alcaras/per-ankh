@@ -3,12 +3,14 @@ import type {
 	PlayerNationEntry,
 	CharacterInfo,
 	CharacterTraitInfo,
+	FullGameData,
 	PlayerGoalInfo,
 } from "$lib/parser/types";
 import type { YieldHistory } from "$lib/types/YieldHistory";
 import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
 import type { PlayerHistory } from "$lib/types/PlayerHistory";
 import type { PlayerInfo } from "$lib/types/PlayerInfo";
+import type { GameDetails } from "$lib/types/GameDetails";
 import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
@@ -973,6 +975,45 @@ export function resolveDetailPlayers(
 		label: resolved[i].label,
 		color: resolved[i].color,
 	}));
+}
+
+/**
+ * A game's per-player iteration source, shared by both views of a game: the
+ * tabs and the map view's chrome. `player_roster` is the id source; a blob
+ * without one falls back to a roster synthesized from player_history (which
+ * carries player_id) to recover ids for its id-less game_details.players rows.
+ */
+export function resolveGamePlayers(
+	game: Pick<FullGameData, "game_details" | "player_roster" | "player_history">,
+): DetailPlayer[] {
+	const roster: RosterLike[] =
+		game.player_roster.length > 0
+			? game.player_roster
+			: game.player_history.map((h) => ({
+					player_index: h.player_id,
+					player_name: h.player_name,
+					nation: h.nation,
+				}));
+	return resolveDetailPlayers(game.game_details.players, roster);
+}
+
+/** Whether the game can be won on victory points, so points mean something. */
+export function hasVictoryPoints(
+	details: Pick<GameDetails, "victory_conditions">,
+): boolean {
+	return details.victory_conditions?.includes("VICTORY_POINTS") ?? false;
+}
+
+/**
+ * The save owner: the first player of the uploader's nation. A nation can't
+ * tell two players apart in a mirror match, so the first one wins. With no
+ * nation to go on (an observer upload), each caller picks its own fallback.
+ */
+export function saveOwnerPlayer<T extends { nation: string | null }>(
+	players: T[],
+	nation: string,
+): T | undefined {
+	return players.find((p) => p.nation === nation);
 }
 
 /**

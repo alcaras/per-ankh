@@ -14,7 +14,6 @@
 	import { familyCrestKey, familyForOwner } from "$lib/game-detail/helpers";
 	import { hexNeighbors } from "$lib/utils/hex";
 	import MapTooltip from "$lib/MapTooltip.svelte";
-	import Checkbox from "$lib/ui/Checkbox.svelte";
 
 	// Hex geometry from atlas reference (pointy-top, matching sprite masks).
 	// Atlases are pre-baked by scripts/bake-terrain-3d.ts (terrain),
@@ -266,9 +265,8 @@
 		tiles,
 		cities = [],
 		playerNations = [],
-		totalTurns = null,
-		selectedTurn = null,
-		onTurnChange = null,
+		showPolitical = true,
+		showReligion = false,
 	}: {
 		tiles: MapTile[];
 		// Used to resolve owner_city → family for the tooltip's family crest.
@@ -278,10 +276,9 @@
 		// (CityInfo.first_owner_player_xml_id) for architecture rendering. Empty
 		// is fine — rendering then falls back to the tile's current owner_nation.
 		playerNations?: PlayerNationEntry[];
-		totalTurns?: number | null;
-		selectedTurn?: number | null;
-		// eslint-disable-next-line no-unused-vars -- Callback type signature
-		onTurnChange?: ((turn: number) => Promise<void> | void) | null;
+		// Layer visibility. The toggles live in the map view's chrome.
+		showPolitical?: boolean;
+		showReligion?: boolean;
 	} = $props();
 
 	// city_name → the player owning the city's centre tile at the represented
@@ -363,10 +360,6 @@
 	// reassigning the whole object on insert (simpler than per-key reactivity).
 	let familyManifests: Record<string, AtlasManifest> = $state({});
 	let assetsLoaded = $state(false);
-
-	// Layer visibility toggles
-	let showPolitical = $state(true);
-	let showReligion = $state(false);
 
 	// ─── Tooltip state ────────────────────────────────────────────────
 	// Hover position is in canvas-local CSS pixels (deck.gl onHover already
@@ -1674,76 +1667,6 @@
 		if (layers) targetDeck.setProps({ layers });
 	});
 
-	// ─── Turn slider + playback ───────────────────────────────────────
-	// Same pattern as HexMap: debounce slider input so we don't fire a backend
-	// fetch on every intermediate value while the user drags.
-	let sliderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-	function handleSliderChange(event: Event) {
-		const target = event.target as HTMLInputElement;
-		const turn = parseInt(target.value, 10);
-		if (sliderDebounceTimer) clearTimeout(sliderDebounceTimer);
-		sliderDebounceTimer = setTimeout(() => {
-			void onTurnChange?.(turn);
-		}, 100);
-	}
-
-	const showTurnSlider = $derived(
-		totalTurns != null && selectedTurn != null && onTurnChange != null,
-	);
-
-	let isPlaying = $state(false);
-	let isFastPlaying = $state(false);
-	let playbackInterval: ReturnType<typeof setInterval> | null = null;
-	const PLAYBACK_SPEED_MS = 300;
-	const FAST_PLAYBACK_SPEED_MS = 150;
-
-	function startPlayback(fast: boolean) {
-		if (totalTurns == null || selectedTurn == null) return;
-		stopPlayback();
-		if (selectedTurn >= totalTurns) {
-			void onTurnChange?.(1);
-		}
-		isPlaying = !fast;
-		isFastPlaying = fast;
-		const speed = fast ? FAST_PLAYBACK_SPEED_MS : PLAYBACK_SPEED_MS;
-		playbackInterval = setInterval(() => {
-			if (selectedTurn != null && totalTurns != null) {
-				if (selectedTurn >= totalTurns) {
-					stopPlayback();
-				} else {
-					void onTurnChange?.(selectedTurn + 1);
-				}
-			}
-		}, speed);
-	}
-
-	function stopPlayback() {
-		isPlaying = false;
-		isFastPlaying = false;
-		if (playbackInterval) {
-			clearInterval(playbackInterval);
-			playbackInterval = null;
-		}
-	}
-
-	function togglePlayback() {
-		if (isPlaying) stopPlayback();
-		else startPlayback(false);
-	}
-
-	function toggleFastPlayback() {
-		if (isFastPlaying) stopPlayback();
-		else startPlayback(true);
-	}
-
-	$effect(() => {
-		return () => {
-			if (playbackInterval) clearInterval(playbackInterval);
-			if (sliderDebounceTimer) clearTimeout(sliderDebounceTimer);
-		};
-	});
-
 	async function loadNationAliases(): Promise<Map<string, NationAliasEntry>> {
 		const response = await fetch(NATION_ALIASES_URL);
 		if (!response.ok) {
@@ -1839,99 +1762,6 @@
 	});
 </script>
 
-{#snippet controlsBar()}
-	<div class="flex flex-wrap items-center gap-4 text-sm">
-		<div class="flex items-center gap-3">
-			<Checkbox bind:checked={showPolitical} labelClass="gap-1.5">
-				<span class="select-none text-tan">Political</span>
-			</Checkbox>
-			<Checkbox bind:checked={showReligion} labelClass="gap-1.5">
-				<span class="select-none text-tan">Religion</span>
-			</Checkbox>
-		</div>
-
-		<div class="ml-auto flex items-center gap-6">
-			{#if showTurnSlider}
-				<div class="flex items-center gap-3">
-					<span class="text-sm font-bold text-tan">Turn:</span>
-					<div class="flex items-center">
-						<button
-							onclick={togglePlayback}
-							class="rounded p-1.5 transition-colors {isPlaying
-								? 'bg-brown text-tan'
-								: 'bg-brown/30 hover:bg-brown/50'}"
-							aria-label={isPlaying ? "Pause" : "Play"}
-							title={isPlaying ? "Pause" : "Play (1x)"}
-						>
-							{#if isPlaying}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<rect x="6" y="4" width="4" height="16" />
-									<rect x="14" y="4" width="4" height="16" />
-								</svg>
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path d="M8 5v14l11-7z" />
-								</svg>
-							{/if}
-						</button>
-						<button
-							onclick={toggleFastPlayback}
-							class="rounded p-1.5 transition-colors {isFastPlaying
-								? 'bg-brown text-tan'
-								: 'bg-brown/30 hover:bg-brown/50'}"
-							aria-label={isFastPlaying ? "Pause" : "Fast Forward"}
-							title={isFastPlaying ? "Pause" : "Fast Forward (2x)"}
-						>
-							{#if isFastPlaying}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<rect x="6" y="4" width="4" height="16" />
-									<rect x="14" y="4" width="4" height="16" />
-								</svg>
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path d="M4 5v14l8-7z" />
-									<path d="M12 5v14l8-7z" />
-								</svg>
-							{/if}
-						</button>
-					</div>
-					<input
-						type="range"
-						min="1"
-						max={totalTurns}
-						value={selectedTurn}
-						oninput={handleSliderChange}
-						class="turn-slider w-48"
-					/>
-					<span class="w-8 text-right text-sm font-bold text-tan"
-						>{selectedTurn}</span
-					>
-				</div>
-			{/if}
-		</div>
-	</div>
-{/snippet}
-
 {#snippet zoomControls()}
 	{@const zoom = currentViewState?.zoom ?? 0}
 	<div class="zoom-controls">
@@ -2005,11 +1835,6 @@
 <div class="sprite-map-container" bind:this={containerEl}>
 	<canvas bind:this={deckCanvas} class="sprite-map-canvas"></canvas>
 
-	<!-- Layer toggles + turn controls, laid over the top of the map -->
-	<div class="absolute inset-x-3 top-3 z-10 rounded-lg bg-black/90 px-4 py-3">
-		{@render controlsBar()}
-	</div>
-
 	{@render zoomControls()}
 
 	{#if hoverState}
@@ -2073,44 +1898,5 @@
 	.zoom-btn:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
-	}
-
-	.turn-slider {
-		-webkit-appearance: none;
-		appearance: none;
-		height: 6px;
-		background: rgb(var(--color-track));
-		border-radius: 3px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	.turn-slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 16px;
-		height: 16px;
-		background: rgb(var(--color-brown));
-		border-radius: 50%;
-		cursor: pointer;
-		transition: background 0.15s ease;
-	}
-
-	.turn-slider::-webkit-slider-thumb:hover {
-		background: rgb(var(--color-tan));
-	}
-
-	.turn-slider::-moz-range-thumb {
-		width: 16px;
-		height: 16px;
-		background: rgb(var(--color-brown));
-		border-radius: 50%;
-		cursor: pointer;
-		border: none;
-		transition: background 0.15s ease;
-	}
-
-	.turn-slider::-moz-range-thumb:hover {
-		background: rgb(var(--color-tan));
 	}
 </style>

@@ -4,6 +4,7 @@
 	import { getCivilizationColor } from "$lib/config";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { improvementDisplayName } from "$lib/game-detail/helpers";
+	import { CHROME_PANEL_CLASS } from "$lib/game-detail/map-chrome";
 
 	let {
 		tile,
@@ -84,7 +85,12 @@
 	});
 </script>
 
-<div class="map-tooltip" style={positionStyle} role="tooltip">
+<!-- In the chrome's frame, so the hover panel reads as part of it. -->
+<div
+	class="map-tooltip {CHROME_PANEL_CLASS}"
+	style={positionStyle}
+	role="tooltip"
+>
 	{#if headerLabel}
 		<div class="header">
 			<div class="crests">
@@ -123,18 +129,13 @@
 <style>
 	.map-tooltip {
 		position: absolute;
-		background: rgb(var(--color-surface-deep) / 0.97);
-		border: 2px solid rgb(var(--color-black));
-		border-radius: 6px;
 		padding: 8px 10px;
-		color: rgb(var(--color-tan));
 		font-size: 11px;
 		line-height: 1.4;
 		pointer-events: none;
 		z-index: 100;
 		min-width: 160px;
 		max-width: 240px;
-		box-shadow: 0 4px 12px rgb(var(--color-black) / 0.5);
 	}
 	.header {
 		display: flex;

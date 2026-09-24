@@ -276,7 +276,7 @@ export interface GdpSeries extends EmpireSeries {
  * series is forward-filled; turns before its first entry take that first
  * price, which costs nothing because turn 1 carries no yield rate to value.
  */
-function pricesByTurn(
+export function pricesByTurn(
 	prices: YieldPriceEntry[],
 	finalTurn: number,
 ): Map<string, number[]> {
@@ -405,7 +405,7 @@ export function yieldRateSeries(
 
 // Stockpiles are stored at the same ×10 fixed point as every other yield
 // quantity in the save.
-const STOCKPILE_SCALE = 10;
+export const STOCKPILE_SCALE = 10;
 
 /** What one player was sitting on at the final turn, priced. */
 export interface NationalWealth {
