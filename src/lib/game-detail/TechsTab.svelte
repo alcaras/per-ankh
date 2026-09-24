@@ -52,6 +52,7 @@
 		improvementDisplayName,
 		projectDisplayName,
 		createYieldChartOption,
+		cumulativeIsGameTotal,
 		rulerName,
 		rulerCognomen,
 	} from "./helpers";
@@ -251,11 +252,18 @@
 	type TechsChartMode = "cumulative" | "rate" | "techs";
 	let chartMode = $state<TechsChartMode>("cumulative");
 
-	const CHART_MODE_TITLES: Record<TechsChartMode, string> = {
-		cumulative: "Cumulative Science",
+	// The compact chart shows no title or axis names, so the toggle and the
+	// container's title are what say whether cumulative science is the game's
+	// own total or our running sum of the rate.
+	const scienceIsGameTotal = $derived(
+		cumulativeIsGameTotal(allYields, "YIELD_SCIENCE"),
+	);
+
+	const chartModeTitles: Record<TechsChartMode, string> = $derived({
+		cumulative: scienceIsGameTotal ? "Total Science" : "Cumulative Science",
 		rate: "Science per Turn",
 		techs: "Tech Discovery Over Time",
-	};
+	});
 
 	// Segmented-control button tokens for the sliding view toggle below,
 	// matching the tournament matches view switch. min-w keeps the three cells
@@ -1047,7 +1055,7 @@
 				aria-pressed={chartMode === "cumulative"}
 				onclick={() => (chartMode = "cumulative")}
 			>
-				Science Cumulative
+				{scienceIsGameTotal ? "Science Total" : "Science Cumulative"}
 			</button>
 			<button
 				type="button"
@@ -1111,7 +1119,7 @@
 				<ChartContainer
 					option={chartOption}
 					height="400px"
-					title={CHART_MODE_TITLES[chartMode]}
+					title={chartModeTitles[chartMode]}
 				/>
 			{/if}
 		{/if}

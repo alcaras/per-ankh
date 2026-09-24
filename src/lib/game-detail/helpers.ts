@@ -229,6 +229,23 @@ export const YIELD_CHART_CONFIG: YieldChartConfig[] = [
 	},
 ];
 
+/**
+ * Whether a yield's `cumulative` is the game's own lifetime total (true) or
+ * our running sum of the per-turn rate (false). The parser decides it per
+ * save and yield, so every player's series of one yield agree. Absent on
+ * blobs parsed before 2.18.0, where the two are mixed — that reads as the
+ * running sum, the claim the blob can't contradict.
+ */
+export function cumulativeIsGameTotal(
+	allYields: YieldHistory[],
+	yieldType: string,
+): boolean {
+	return (
+		allYields.find((y) => y.yield_type === yieldType)
+			?.cumulative_is_game_total ?? false
+	);
+}
+
 // ─── Shared data-table styling (game-detail data tabs) ───────────────
 // Visual tokens matching the player games table: a dark blue-gray frame
 // holding surface rounded card rows under a surface-sunken toolbar-style header
@@ -1295,10 +1312,17 @@ export function createYieldChartOption(
 	const resolved = resolvePlayers(yieldData);
 	const byId = new Map(resolved.map((p) => [p.playerId, p]));
 
+	// Title and axis name the same quantity: "Total" only when the series is
+	// the game's own total, "Cumulative" for our running sum.
+	const cumulativePrefix = cumulativeIsGameTotal(yieldData, yieldType)
+		? "Total"
+		: "Cumulative";
 	const fullTitle =
-		mode === "rate" ? `${title} per Turn` : `Cumulative ${title}`;
+		mode === "rate" ? `${title} per Turn` : `${cumulativePrefix} ${title}`;
 	const fullYAxisLabel =
-		mode === "rate" ? `${yAxisLabel} per Turn` : `Total ${yAxisLabel}`;
+		mode === "rate"
+			? `${yAxisLabel} per Turn`
+			: `${cumulativePrefix} ${yAxisLabel}`;
 
 	// Value x-axis with a small pad so the area fill doesn't clip at the edges.
 	const turns = yieldData[0]?.data.map((d: YieldDataPoint) => d.turn) ?? [];
@@ -1309,7 +1333,8 @@ export function createYieldChartOption(
 	return {
 		...CHART_THEME,
 		// Compact drops the chart title outright (the toggle above the plot names
-		// it); non-compact keeps the derived "Cumulative X" / "X per Turn" title.
+		// it); non-compact keeps the derived "Total X" / "Cumulative X" /
+		// "X per Turn" title.
 		title: compact
 			? { show: false }
 			: { ...CHART_THEME.title, text: fullTitle },
