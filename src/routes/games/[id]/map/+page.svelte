@@ -1,9 +1,20 @@
 <script lang="ts">
 	import { untrack } from "svelte";
+	import { BitsConfig } from "bits-ui";
 	import type { PageData } from "./$types";
 	import type { MapTile } from "$lib/types/MapTile";
+	import { autohideScroll } from "$lib/actions/autohideScroll";
+	import FullscreenDialog from "$lib/ui/FullscreenDialog.svelte";
 	import GameHeader from "$lib/game-detail/GameHeader.svelte";
+	import GameTab from "$lib/game-detail/GameTab.svelte";
 	import MapChrome from "$lib/game-detail/MapChrome.svelte";
+	import {
+		GameTabState,
+		gameTabs,
+		resolveTabId,
+		setGameTabState,
+		type GameTabId,
+	} from "$lib/game-detail/game-tabs.svelte";
 	import {
 		resolveGamePlayers,
 		saveOwnerPlayer,
@@ -62,6 +73,50 @@
 		selectedMapTurn = turn;
 		mapTiles = reconstructMapTiles(game, turn);
 	}
+
+	// ─── Lightboxes ───────────────────────────────────────────────────
+	// The chrome opens the game's analysis tabs in a lightbox, one at a time.
+	// The tabs' filters and sorts live here, so a lightbox reopens as it was
+	// left.
+	setGameTabState(new GameTabState(() => game));
+
+	const tabs = $derived(gameTabs(game));
+	// The lightbox's tab stays set while the lightbox animates closed, and
+	// clears once it has.
+	let lightboxTab = $state<GameTabId | null>(null);
+	let lightboxOpen = $state(false);
+	let lightboxDialog = $state<HTMLDialogElement | null>(null);
+	const lightboxLabel = $derived(
+		tabs.find((tab) => tab.id === lightboxTab)?.label,
+	);
+
+	// Only a tab this game has: a hash can name one it doesn't (#leaders on a
+	// game with no rulers), or no tab at all.
+	function openLightbox(id: string) {
+		const tab = tabs.find((t) => t.id === resolveTabId(id));
+		if (!tab) return;
+		lightboxTab = tab.id;
+		lightboxOpen = true;
+	}
+
+	// Deep-link the open lightbox via the URL hash (#techs), as the analyst
+	// view does its tab (GameDetailView): a reload or a shared link reopens
+	// it. The client opens it on mount, since the hash never reaches the
+	// server.
+	$effect(() => {
+		const fromHash = window.location.hash.replace(/^#/, "");
+		if (fromHash) untrack(() => openLightbox(fromHash));
+	});
+	$effect(() => {
+		const target = lightboxTab ? `#${lightboxTab}` : "";
+		if (window.location.hash !== target) {
+			history.replaceState(
+				history.state,
+				"",
+				`${window.location.pathname}${window.location.search}${target}`,
+			);
+		}
+	});
 </script>
 
 <main class="isolate flex flex-1 flex-col overflow-hidden">
@@ -97,9 +152,63 @@
 				bind:playerId
 				selectedTurn={selectedMapTurn}
 				onTurnChange={handleMapTurnChange}
+				onOpenTab={openLightbox}
 				bind:showPolitical
 				bind:showReligion
 			/>
 		</div>
 	{/if}
+
+	<FullscreenDialog
+		bind:open={lightboxOpen}
+		bind:dialog={lightboxDialog}
+		onclose={() => (lightboxTab = null)}
+	>
+		<div
+			class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-blue-gray"
+		>
+			<div
+				class="flex flex-shrink-0 items-center justify-between border-b border-tan/20 px-4 py-2"
+			>
+				<h2 class="text-lg font-bold text-bright">{lightboxLabel}</h2>
+				<button
+					onclick={() => (lightboxOpen = false)}
+					class="cursor-pointer rounded bg-black/20 p-1.5 transition-colors hover:bg-black/40 focus:outline-none"
+					aria-label="Close {lightboxLabel}"
+					title="Close (Esc)"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="block h-4 w-4 text-white"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+						stroke-width="2"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M6 18L18 6M6 6l12 12"
+						/>
+					</svg>
+				</button>
+			</div>
+			<!-- Scrolls as the analyst view's page does, so the tabs' sticky
+			     headers and toolbars sit where they do there. -->
+			<div
+				class="cloud-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4"
+				use:autohideScroll
+			>
+				{#if lightboxTab && lightboxDialog}
+					<!-- The tabs' selects and tooltips portal to body by default,
+					     which the modal dialog makes inert. -->
+					<BitsConfig defaultPortalTo={lightboxDialog}>
+						<!-- The whole game, as the analyst view renders it: never the
+						     chrome's player or turn (#269). -->
+						<GameTab {game} tab={lightboxTab} />
+					</BitsConfig>
+				{/if}
+			</div>
+		</div>
+	</FullscreenDialog>
 </main>

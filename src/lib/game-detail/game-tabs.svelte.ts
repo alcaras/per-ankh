@@ -11,7 +11,7 @@ import {
 	createDefaultCityVisibleColumns,
 	createDefaultSelection,
 } from "./helpers";
-import type { TimelineCategory } from "./helpers";
+import type { SpriteCategory, TimelineCategory } from "./helpers";
 
 // The URL hash names (#military). A shared link carries them, so they don't
 // follow the label: the Yields tab's id is `economics`.
@@ -34,6 +34,8 @@ export type GameTabId =
 type GameTabEntry = {
 	id: GameTabId;
 	label: string;
+	// The map view's menu icon for the tab, a baked sprite.
+	icon: { category: SpriteCategory; value: string };
 	// For a tab some games have nothing for: it shows only when this passes.
 	gate?: (game: FullGameData) => boolean;
 };
@@ -46,22 +48,79 @@ function hasLeaders(game: FullGameData): boolean {
 
 // In display order.
 const GAME_TABS: GameTabEntry[] = [
-	{ id: "overview", label: "Overview" },
+	{
+		id: "overview",
+		label: "Overview",
+		icon: { category: "icons", value: "ACHIEVEMENT_WIN" },
+	},
 	// Timeline tab hidden pending redesign
 	// { id: "timeline", label: "Timeline" },
-	{ id: "events", label: "Events" },
-	{ id: "leaders", label: "Leaders", gate: hasLeaders },
-	{ id: "laws", label: "Laws" },
-	{ id: "techs", label: "Techs" },
-	{ id: "orders", label: "Orders" },
-	{ id: "economics", label: "Yields" },
-	{ id: "military", label: "Military" },
-	{ id: "cities", label: "Cities" },
-	{ id: "economy", label: "Economy" },
-	{ id: "wonders", label: "Wonders" },
-	{ id: "families", label: "Families" },
-	{ id: "specialists", label: "Specialists" },
-	{ id: "settings", label: "Settings" },
+	{
+		id: "events",
+		label: "Events",
+		icon: { category: "icons", value: "REPLAY" },
+	},
+	{
+		id: "leaders",
+		label: "Leaders",
+		icon: { category: "icons", value: "CHARACTERS" },
+		gate: hasLeaders,
+	},
+	{
+		id: "laws",
+		label: "Laws",
+		icon: { category: "icons", value: "LAWS_Normal" },
+	},
+	{
+		id: "techs",
+		label: "Techs",
+		icon: { category: "icons", value: "TECHS_Normal" },
+	},
+	{
+		id: "orders",
+		label: "Orders",
+		icon: { category: "yields", value: "YIELD_ORDERS" },
+	},
+	{
+		id: "economics",
+		label: "Yields",
+		icon: { category: "icons", value: "STATS" },
+	},
+	{
+		id: "military",
+		label: "Military",
+		icon: { category: "icons", value: "MILITARY" },
+	},
+	{
+		id: "cities",
+		label: "Cities",
+		icon: { category: "icons", value: "CITY_FOUNDED" },
+	},
+	{
+		id: "economy",
+		label: "Economy",
+		icon: { category: "icons", value: "IMPROVEMENT_FINISHED" },
+	},
+	{
+		id: "wonders",
+		label: "Wonders",
+		icon: { category: "improvements", value: "IMPROVEMENT_PYRAMIDS" },
+	},
+	{
+		id: "families",
+		label: "Families",
+		icon: { category: "icons", value: "RELATIONSHIPS" },
+	},
+	{
+		id: "specialists",
+		label: "Specialists",
+		icon: { category: "specialists", value: "SPECIALIST_PHILOSOPHER" },
+	},
+	{
+		id: "settings",
+		label: "Settings",
+		icon: { category: "icons", value: "TOOL_SETTINGS" },
+	},
 ];
 
 // The tabs this game has, in display order.

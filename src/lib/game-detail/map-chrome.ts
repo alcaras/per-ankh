@@ -5,6 +5,7 @@
 import type { CharacterInfo } from "$lib/parser/types";
 import type { TechDiscoveryHistory } from "$lib/types/TechDiscoveryHistory";
 import { dynastyLeaders } from "./helpers";
+import type { GameTabId } from "./game-tabs.svelte";
 
 // The frame every piece of the chrome sits in, the tile hover panel included:
 // a dark fill with a thin tan trim, drawn in CSS on the palette tokens rather
@@ -17,18 +18,23 @@ export const CHROME_PANEL_CLASS =
 /**
  * The yields of the game's top bar: the eight it stockpiles, plus Science,
  * which it shows as a rate only. The rest (Growth, Culture, Happiness,
- * Discontent, Maintenance) stay out of it. In yield.xml's order.
+ * Discontent, Maintenance) stay out of it. In yield.xml's order. Clicking a
+ * yield opens `tab` in a lightbox.
  */
-export const TOP_BAR_YIELDS: { yieldType: string; stockpiled: boolean }[] = [
-	{ yieldType: "YIELD_CIVICS", stockpiled: true },
-	{ yieldType: "YIELD_TRAINING", stockpiled: true },
-	{ yieldType: "YIELD_SCIENCE", stockpiled: false },
-	{ yieldType: "YIELD_MONEY", stockpiled: true },
-	{ yieldType: "YIELD_ORDERS", stockpiled: true },
-	{ yieldType: "YIELD_FOOD", stockpiled: true },
-	{ yieldType: "YIELD_IRON", stockpiled: true },
-	{ yieldType: "YIELD_STONE", stockpiled: true },
-	{ yieldType: "YIELD_WOOD", stockpiled: true },
+export const TOP_BAR_YIELDS: {
+	yieldType: string;
+	stockpiled: boolean;
+	tab: GameTabId;
+}[] = [
+	{ yieldType: "YIELD_CIVICS", stockpiled: true, tab: "laws" },
+	{ yieldType: "YIELD_TRAINING", stockpiled: true, tab: "military" },
+	{ yieldType: "YIELD_SCIENCE", stockpiled: false, tab: "techs" },
+	{ yieldType: "YIELD_MONEY", stockpiled: true, tab: "economics" },
+	{ yieldType: "YIELD_ORDERS", stockpiled: true, tab: "orders" },
+	{ yieldType: "YIELD_FOOD", stockpiled: true, tab: "economics" },
+	{ yieldType: "YIELD_IRON", stockpiled: true, tab: "economics" },
+	{ yieldType: "YIELD_STONE", stockpiled: true, tab: "economics" },
+	{ yieldType: "YIELD_WOOD", stockpiled: true, tab: "economics" },
 ];
 
 /**

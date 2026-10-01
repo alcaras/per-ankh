@@ -5,12 +5,13 @@
 	// isn't the number the game would show. The stockpile is the final turn's
 	// (the save keeps no stockpile history), so it goes in the tooltip rather
 	// than the slot, where scrubbing to the last turn would jump from a total
-	// to a stockpile.
+	// to a stockpile. Clicking a slot opens its yield's tab (TOP_BAR_YIELDS).
 	import { Tooltip } from "bits-ui";
 	import type { YieldHistory } from "$lib/types/YieldHistory";
 	import type { PlayerResourceInfo, YieldPriceEntry } from "$lib/parser/types";
 	import { formatEnum } from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
+	import type { GameTabId } from "./game-tabs.svelte";
 	import {
 		YIELD_CHART_CONFIG,
 		cumulativeIsGameTotal,
@@ -31,6 +32,7 @@
 		player,
 		turn,
 		finalTurn,
+		onOpenTab,
 	}: {
 		allYields: YieldHistory[];
 		yieldPrices: YieldPriceEntry[];
@@ -38,6 +40,8 @@
 		player: DetailPlayer;
 		turn: number;
 		finalTurn: number;
+		// eslint-disable-next-line no-unused-vars -- Callback type signature
+		onOpenTab: (tab: GameTabId) => void;
 	} = $props();
 
 	// Game-wide, so independent of the player and the turn. Only the four
@@ -45,7 +49,7 @@
 	const prices = $derived(pricesByTurn(yieldPrices, finalTurn));
 
 	const slots = $derived(
-		TOP_BAR_YIELDS.map(({ yieldType, stockpiled }) => {
+		TOP_BAR_YIELDS.map(({ yieldType, stockpiled, tab }) => {
 			const series = findByPlayer(
 				allYields.filter((y) => y.yield_type === yieldType),
 				player,
@@ -61,6 +65,7 @@
 				: undefined;
 			return {
 				yieldType,
+				tab,
 				title:
 					YIELD_CHART_CONFIG.find((c) => c.yieldType === yieldType)?.title ??
 					formatEnum(yieldType, "YIELD_"),
@@ -87,40 +92,35 @@
 
 <Tooltip.Provider delayDuration={200} disableHoverableContent>
 	<div
-		class="flex h-12 items-stretch divide-x divide-tan/20 {CHROME_PANEL_CLASS}"
+		class="flex h-12 items-stretch divide-x divide-tan/20 overflow-hidden {CHROME_PANEL_CLASS}"
 	>
 		{#each slots as slot (slot.yieldType)}
 			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<div
-							{...props}
-							class="flex cursor-default items-center gap-1.5 px-3"
-							role="img"
-							aria-label={slot.title}
+				<Tooltip.Trigger
+					class="flex cursor-pointer items-center gap-1.5 px-3 text-left transition-colors hover:bg-tan/15"
+					aria-label={slot.title}
+					onclick={() => onOpenTab(slot.tab)}
+				>
+					<SpriteIcon category="yields" value={slot.yieldType} size={22} />
+					<span class="flex flex-col leading-tight">
+						<span
+							class="whitespace-nowrap text-sm font-bold tabular-nums text-bright"
 						>
-							<SpriteIcon category="yields" value={slot.yieldType} size={22} />
-							<div class="flex flex-col leading-tight">
-								<span
-									class="whitespace-nowrap text-sm font-bold tabular-nums text-bright"
+							{#if slot.total != null}
+								{amount(slot.total)}
+								<span class="text-xs font-normal text-tan"
+									>({rate(slot.rate)})</span
 								>
-									{#if slot.total != null}
-										{amount(slot.total)}
-										<span class="text-xs font-normal text-tan"
-											>({rate(slot.rate)})</span
-										>
-									{:else}
-										{rate(slot.rate)}
-									{/if}
-								</span>
-								{#if slot.price != null}
-									<span class="text-[10px] tabular-nums text-tan/70"
-										>{price(slot.price)}</span
-									>
-								{/if}
-							</div>
-						</div>
-					{/snippet}
+							{:else}
+								{rate(slot.rate)}
+							{/if}
+						</span>
+						{#if slot.price != null}
+							<span class="text-[10px] tabular-nums text-tan/70"
+								>{price(slot.price)}</span
+							>
+						{/if}
+					</span>
 				</Tooltip.Trigger>
 				<Tooltip.Portal>
 					<Tooltip.Content

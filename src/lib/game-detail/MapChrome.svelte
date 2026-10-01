@@ -3,13 +3,16 @@
 	// screen puts them: the yield strip across the top, the turn and the
 	// player switcher at top-left, research at top-right, the leader at
 	// bottom-left, and the turn controls along the bottom. It shows one
-	// player's view at the selected turn; the switcher changes whose.
+	// player's view at the selected turn; the switcher changes whose. Its
+	// panels, yields and menu icons open the game's analysis tabs, each in a
+	// lightbox the page renders (onOpenTab).
 	import type { cloudApi } from "$lib/api-cloud";
 	import Select from "$lib/ui/Select.svelte";
 	import { nationName } from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import MapYieldStrip from "./MapYieldStrip.svelte";
 	import MapTurnControls from "./MapTurnControls.svelte";
+	import { gameTabs, type GameTabId } from "./game-tabs.svelte";
 	import {
 		findByPlayer,
 		hasVictoryPoints,
@@ -30,6 +33,7 @@
 		playerId = $bindable(),
 		selectedTurn,
 		onTurnChange,
+		onOpenTab,
 		showPolitical = $bindable(true),
 		showReligion = $bindable(false),
 	}: {
@@ -40,11 +44,14 @@
 		selectedTurn: number;
 		// eslint-disable-next-line no-unused-vars -- Callback type signature
 		onTurnChange: (turn: number) => Promise<void> | void;
+		// eslint-disable-next-line no-unused-vars -- Callback type signature
+		onOpenTab: (tab: GameTabId) => void;
 		showPolitical?: boolean;
 		showReligion?: boolean;
 	} = $props();
 
 	const finalTurn = $derived(game.game_details.total_turns);
+	const tabs = $derived(gameTabs(game));
 	const player = $derived(
 		players.find((p) => p.playerId === playerId) ?? players[0],
 	);
@@ -87,18 +94,41 @@
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-10 flex flex-col gap-3 p-3">
-	{#if player}
-		<div class="pointer-events-auto">
-			<MapYieldStrip
-				allYields={game.yield_history}
-				yieldPrices={game.yield_price_history ?? []}
-				playerResources={game.player_resources ?? []}
-				{player}
-				turn={selectedTurn}
-				{finalTurn}
-			/>
+	<!-- Top bar: the yield strip, then a menu icon per tab -->
+	<div class="flex flex-wrap items-start gap-3">
+		{#if player}
+			<div class="pointer-events-auto">
+				<MapYieldStrip
+					allYields={game.yield_history}
+					yieldPrices={game.yield_price_history ?? []}
+					playerResources={game.player_resources ?? []}
+					{player}
+					turn={selectedTurn}
+					{finalTurn}
+					{onOpenTab}
+				/>
+			</div>
+		{/if}
+		<div
+			class="pointer-events-auto flex h-12 items-center gap-0.5 px-1.5 {CHROME_PANEL_CLASS}"
+		>
+			{#each tabs as tab (tab.id)}
+				<button
+					type="button"
+					onclick={() => onOpenTab(tab.id)}
+					class="flex cursor-pointer rounded p-1.5 transition-colors hover:bg-tan/15"
+					title={tab.label}
+				>
+					<SpriteIcon
+						category={tab.icon.category}
+						value={tab.icon.value}
+						size={24}
+						alt={tab.label}
+					/>
+				</button>
+			{/each}
 		</div>
-	{/if}
+	</div>
 
 	<div class="relative min-h-0 flex-1">
 		{#if player}
@@ -143,8 +173,10 @@
 							{value(standing?.points)}
 						</span>
 					{/if}
-					<span
-						class="flex items-center gap-1 tabular-nums"
+					<button
+						type="button"
+						onclick={() => onOpenTab("military")}
+						class="flex cursor-pointer items-center gap-1 tabular-nums transition-colors hover:text-bright"
 						title="Military Power"
 					>
 						<SpriteIcon
@@ -154,14 +186,16 @@
 							alt="Military Power"
 						/>
 						{value(standing?.military_power)}
-					</span>
+					</button>
 				</div>
 			</div>
 
 			<!-- Research (top-right): the next tech discovered after this turn -->
 			{#if research}
-				<div
-					class="pointer-events-auto absolute right-0 top-0 flex items-center gap-2 px-3 py-2 {CHROME_PANEL_CLASS}"
+				<button
+					type="button"
+					onclick={() => onOpenTab("techs")}
+					class="pointer-events-auto absolute right-0 top-0 flex cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
 				>
 					<SpriteIcon
 						category="techs"
@@ -169,34 +203,36 @@
 						size={32}
 						alt={techName(research.tech)}
 					/>
-					<div class="leading-tight">
-						<div class="text-sm font-bold text-bright">
+					<span class="leading-tight">
+						<span class="block text-sm font-bold text-bright">
 							{techName(research.tech)}
-						</div>
-						<div class="text-xs tabular-nums">{research.turns}y</div>
-					</div>
-				</div>
+						</span>
+						<span class="block text-xs tabular-nums">{research.turns}y</span>
+					</span>
+				</button>
 			{/if}
 
 			<!-- Leader (bottom-left) -->
 			{#if ruler}
 				{@const name = rulerName(ruler) ?? "Unknown"}
-				<div
-					class="pointer-events-auto absolute bottom-0 left-0 flex items-center gap-3 p-2 pr-4 {CHROME_PANEL_CLASS}"
+				<button
+					type="button"
+					onclick={() => onOpenTab("leaders")}
+					class="pointer-events-auto absolute bottom-0 left-0 flex cursor-pointer items-center gap-3 p-2 pr-4 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
 				>
 					{#if ruler.portrait}
-						<div class="overflow-hidden rounded border border-tan/50">
+						<span class="block overflow-hidden rounded border border-tan/50">
 							<SpriteIcon
 								category="portraits"
 								value={ruler.portrait}
 								size={64}
 								alt={name}
 							/>
-						</div>
+						</span>
 					{/if}
-					<div class="leading-tight">
-						<div class="text-sm font-bold text-bright">{name}</div>
-						<div
+					<span class="leading-tight">
+						<span class="block text-sm font-bold text-bright">{name}</span>
+						<span
 							class="mt-1 flex items-center gap-1 text-sm tabular-nums"
 							title="Legitimacy"
 						>
@@ -207,9 +243,9 @@
 								alt="Legitimacy"
 							/>
 							{value(standing?.legitimacy)}
-						</div>
-					</div>
-				</div>
+						</span>
+					</span>
+				</button>
 			{/if}
 		{/if}
 
