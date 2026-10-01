@@ -6,7 +6,7 @@ It exists because the repo's expensive bugs have been claims about the data that
 
 ## Getting saves
 
-Copy them out of an Old World install's save directory. It has to be a **completed** game: `validateCompletedGame` rejects a save without `<Game><GameOver/>`, so an in-progress save fails the upload with `NOT_COMPLETED` (a game that ended without a recorded winner is fine — those pre-date v1.0.62443 and import with the winner row simply absent and victory type shown as `—`). Age is otherwise no obstacle, and old saves are the point: `docs/save-file-format.md` documents per-event-type retention and temporal fidelity measured across a corpus spanning v1.0.62443 to v1.0.83591.
+Copy them out of an Old World install's save directory. It has to be a **completed** game: `validateCompletedGame` rejects a save without `<Game><GameOver/>`, so an in-progress save fails the upload with `NOT_COMPLETED` (a game that ended without a recorded winner is fine — those pre-date v1.0.62443 and import with the winner and victory-type cards both showing `-`). Age is otherwise no obstacle, and old saves are the point: `docs/save-file-format.md` documents per-event-type retention and temporal fidelity measured across a corpus spanning v1.0.62443 to v1.0.83591.
 
 Git ignores everything here except this README, `.gitkeep`, and `sample.xml` (`.gitignore:71-74`), so saves — which carry other players' names and Steam ids — cannot be committed by accident. Nothing reads `sample.xml`; don't give a real save that name.
 
