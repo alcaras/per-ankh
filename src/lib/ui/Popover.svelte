@@ -24,6 +24,7 @@
 		align = "end",
 		sideOffset = 8,
 		customAnchor = null,
+		updatePositionStrategy = "optimized",
 		contentClass = "w-[min(92vw,28rem)]",
 		frameClass = "border-4 border-surface-raised bg-blue-gray p-5 shadow-lg",
 		ariaLabel,
@@ -36,6 +37,11 @@
 		align?: Align;
 		sideOffset?: number;
 		customAnchor?: string | HTMLElement | Measurable | null;
+		// How often the floating panel re-measures its anchor. bits-ui's
+		// default only recomputes on scroll/resize; "always" re-measures every
+		// animation frame, which the map's popovers need — their anchor moves
+		// with a pan or a zoom, neither of which fires either event.
+		updatePositionStrategy?: "optimized" | "always";
 		// Width / size override for the floating panel. The surface, rounding,
 		// scroll, and shadow are fixed; width varies per use.
 		contentClass?: string;
@@ -96,6 +102,7 @@
 			{align}
 			{sideOffset}
 			{customAnchor}
+			{updatePositionStrategy}
 			onOpenAutoFocus={rememberPreFocus}
 			onCloseAutoFocus={restorePreFocus}
 			aria-label={ariaLabel}

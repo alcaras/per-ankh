@@ -475,7 +475,8 @@ export type SpriteCategory =
 	| "portraits"
 	| "improvements"
 	| "specialists"
-	| "projects";
+	| "projects"
+	| "resources";
 
 // Known tech name corrections (game data typos or alternate names)
 const TECH_SPRITE_FIXES: Record<string, string> = {

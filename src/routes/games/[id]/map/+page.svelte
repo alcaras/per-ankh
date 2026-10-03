@@ -5,6 +5,8 @@
 	import type { MapTile } from "$lib/types/MapTile";
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import FullscreenDialog from "$lib/ui/FullscreenDialog.svelte";
+	import Popover from "$lib/ui/Popover.svelte";
+	import CityPopover from "$lib/game-detail/CityPopover.svelte";
 	import GameHeader from "$lib/game-detail/GameHeader.svelte";
 	import GameTab from "$lib/game-detail/GameTab.svelte";
 	import MapChrome from "$lib/game-detail/MapChrome.svelte";
@@ -20,6 +22,7 @@
 		saveOwnerPlayer,
 		type DetailPlayer,
 	} from "$lib/game-detail/helpers";
+	import { CHROME_PANEL_CLASS } from "$lib/game-detail/map-chrome";
 	import { reconstructMapTiles } from "$lib/game-detail/reconstruct-map-tiles";
 	import SpriteMap from "$lib/SpriteMap.svelte";
 
@@ -72,6 +75,35 @@
 	async function handleMapTurnChange(turn: number) {
 		selectedMapTurn = turn;
 		mapTiles = reconstructMapTiles(game, turn);
+	}
+
+	// ─── City popover ─────────────────────────────────────────────────
+	// Opened from a city banner and anchored to it, so it tracks the map as
+	// the camera moves. It stays live while the turn slider scrubs, and closes
+	// once the selected turn is one the city has no banner at — before it was
+	// founded, or while it sits unowned mid-capture.
+	let popoverCity = $state<string | null>(null);
+	let popoverAnchor = $state<HTMLElement | null>(null);
+
+	const bannerCities = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- locally-scoped Set, not reactive state
+		const names = new Set<string>();
+		for (const t of mapTiles) {
+			if (t.is_city_center && t.owner_city) names.add(t.owner_city);
+		}
+		return names;
+	});
+
+	$effect(() => {
+		if (popoverCity !== null && !bannerCities.has(popoverCity)) {
+			popoverCity = null;
+			popoverAnchor = null;
+		}
+	});
+
+	function openCityPopover(cityName: string, element: HTMLElement) {
+		popoverCity = cityName;
+		popoverAnchor = element;
 	}
 
 	// ─── Lightboxes ───────────────────────────────────────────────────
@@ -145,6 +177,8 @@
 				playerNations={game.player_nations}
 				{showPolitical}
 				{showReligion}
+				isFinalTurn={selectedMapTurn >= game.game_details.total_turns}
+				onCityClick={openCityPopover}
 			/>
 			<MapChrome
 				{game}
@@ -158,6 +192,32 @@
 			/>
 		</div>
 	{/if}
+
+	<Popover
+		open={popoverCity !== null}
+		onOpenChange={(o) => {
+			if (!o) {
+				popoverCity = null;
+				popoverAnchor = null;
+			}
+		}}
+		customAnchor={popoverAnchor}
+		updatePositionStrategy="always"
+		side="top"
+		align="center"
+		contentClass="w-[min(92vw,26rem)]"
+		frameClass="{CHROME_PANEL_CLASS} p-3"
+		ariaLabel="City detail"
+	>
+		{#if popoverCity}
+			<CityPopover
+				{game}
+				{players}
+				cityName={popoverCity}
+				turn={selectedMapTurn}
+			/>
+		{/if}
+	</Popover>
 
 	<FullscreenDialog
 		bind:open={lightboxOpen}

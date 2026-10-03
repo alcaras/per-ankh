@@ -24,6 +24,7 @@
 	} from "./helpers";
 	import {
 		type KindFilter,
+		KIND_LABELS,
 		specialistInfo,
 		classLabel,
 		slotCoverage,
@@ -281,11 +282,6 @@
 		orderPlayersUploaderFirst(displayedPlayers, userNation),
 	);
 	const matchup = $derived(orderedPlayers.length === 2 ? orderedPlayers : null);
-
-	const KIND_LABELS: Record<string, string> = {
-		rural: "Rural",
-		urban: "Urban",
-	};
 
 	const comparisonPanels = $derived.by(() => {
 		const sides = orderedPlayers.map((player) => {

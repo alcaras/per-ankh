@@ -27,6 +27,12 @@ export function specialistInfo(zType: string | null): SpecialistInfo | null {
 	return SPECIALISTS[zType] ?? null;
 }
 
+/** Display name of a specialist kind — the Specialists tab's own labels. */
+export const KIND_LABELS: Record<SpecialistKind, string> = {
+	rural: "Rural",
+	urban: "Urban",
+};
+
 // The class line name ("Priest"), falling back to the generic formatter.
 export function classLabel(classKey: string): string {
 	return (

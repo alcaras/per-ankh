@@ -18,6 +18,15 @@
 
 import type { FullGameData, MapTile } from "$lib/parser/types";
 
+/**
+ * The save's id for a grid position. The parser writes `xml_id = y * width + x`
+ * (parsers/tiles.ts:149–150), and `tile_ownership_history` keys off it — so any
+ * join from an (x, y) tile to its ownership rows goes through here.
+ */
+export function tileXmlId(x: number, y: number, mapWidth: number): number {
+	return y * mapWidth + x;
+}
+
 export function reconstructMapTiles(
 	data: FullGameData,
 	turn: number,
@@ -71,8 +80,8 @@ export function reconstructMapTiles(
 
 	// 4. Project each final-turn tile through the per-turn gate.
 	const out: MapTile[] = data.map_tiles.map((t) => {
-		const tileXmlId = t.y * mapWidth + t.x;
-		const ownerXmlId = ownerAtTurn.get(tileXmlId) ?? null;
+		const xmlId = tileXmlId(t.x, t.y, mapWidth);
+		const ownerXmlId = ownerAtTurn.get(xmlId) ?? null;
 		const owned = ownerXmlId !== null;
 
 		const cityInfo =

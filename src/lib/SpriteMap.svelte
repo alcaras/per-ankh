@@ -14,6 +14,8 @@
 	import { familyCrestKey, familyForOwner } from "$lib/game-detail/helpers";
 	import { hexNeighbors } from "$lib/utils/hex";
 	import MapTooltip from "$lib/MapTooltip.svelte";
+	import MapCityBanners, { type CityBanner } from "$lib/MapCityBanners.svelte";
+	import { formatEnum } from "$lib/utils/formatting";
 
 	// Hex geometry from atlas reference (pointy-top, matching sprite masks).
 	// Atlases are pre-baked by scripts/bake-terrain-3d.ts (terrain),
@@ -267,6 +269,8 @@
 		playerNations = [],
 		showPolitical = true,
 		showReligion = false,
+		isFinalTurn,
+		onCityClick,
 	}: {
 		tiles: MapTile[];
 		// Used to resolve owner_city → family for the tooltip's family crest.
@@ -279,6 +283,13 @@
 		// Layer visibility. The toggles live in the map view's chrome.
 		showPolitical?: boolean;
 		showReligion?: boolean;
+		// Whether `tiles` is the final turn. CityInfo.citizens is an
+		// end-of-game count, so the banners carry it only then.
+		isFinalTurn: boolean;
+		// A banner was clicked: the city, and the banner element the city
+		// popover anchors to.
+		// eslint-disable-next-line no-unused-vars -- parameter in callback signature
+		onCityClick: (cityName: string, element: HTMLElement) => void;
 	} = $props();
 
 	// city_name → the player owning the city's centre tile at the represented
@@ -437,6 +448,51 @@
 		const py = -y * HEX_V_SPACING;
 		return [px, py];
 	}
+
+	// One banner per city-centre tile that is OWNED at the represented turn,
+	// joined to CityInfo by name. Taking the per-turn tiles as the source of
+	// truth has two consequences, both measured across the 122 local blobs and
+	// both matching what the sprites already do (reconstructMapTiles nulls
+	// `improvement` on an unowned tile):
+	//   - a banner appears one turn AFTER founded_turn — the centre tile's
+	//     first ownership row lands at founded_turn + 1 in 3,601 of the 3,604
+	//     cities (2 at +0, 1 at −3);
+	//   - a city sitting unowned mid-capture has no banner until the capture
+	//     resolves. 573 cities, in 96 of the 122 games, have a capture or an
+	//     unowned span.
+	const cityBanners = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- locally-scoped Map, not reactive state
+		const byName = new Map<string, CityInfo>();
+		// Duplicate city names across players are rare in OW; first match wins,
+		// as reconstructMapTiles does on the same join.
+		for (const c of cities) {
+			if (!byName.has(c.city_name)) byName.set(c.city_name, c);
+		}
+		const out: CityBanner[] = [];
+		for (const t of tiles) {
+			if (!t.is_city_center || !t.owner_city) continue;
+			const [worldX, worldY] = hexToPixel(t.x, t.y);
+			out.push({
+				cityName: t.owner_city,
+				label: formatEnum(t.owner_city, "CITYNAME_"),
+				tile: t,
+				worldX,
+				worldY,
+				// Resolved as MapTooltip resolves it, so a tile's hover colour
+				// and its banner agree.
+				nationColor: t.owner_nation
+					? (getCivilizationColor(t.owner_nation) ?? "rgb(var(--color-tan))")
+					: "rgb(var(--color-tan))",
+				nationCrestKey: resolveNationCrestKey(t.owner_nation),
+				familyCrestKey: cityFamilyCrestByName.get(t.owner_city) ?? null,
+				isCapital: t.is_capital,
+				citizens: isFinalTurn
+					? (byName.get(t.owner_city)?.citizens ?? null)
+					: null,
+			});
+		}
+		return out;
+	});
 
 	/**
 	 * Generate pointy-top elliptical hex polygon vertices centered at a pixel position.
@@ -1836,6 +1892,17 @@
 	<canvas bind:this={deckCanvas} class="sprite-map-canvas"></canvas>
 
 	{@render zoomControls()}
+
+	{#if currentViewState}
+		<MapCityBanners
+			banners={cityBanners}
+			viewState={currentViewState}
+			canvasWidth={containerWidth}
+			canvasHeight={containerHeight}
+			onBannerHover={(tile, x, y) => (hoverState = { tile, x, y })}
+			onBannerClick={onCityClick}
+		/>
+	{/if}
 
 	{#if hoverState}
 		<MapTooltip
