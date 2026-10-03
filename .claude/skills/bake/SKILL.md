@@ -38,6 +38,7 @@ npm run bake:goal-names        # GOAL_NAMES override table
 npm run bake:name-text         # NAME_TEXT override table (character names)
 npm run bake:nation-names      # NATION_NAMES override table (Hatti, Tamilakam)
 npm run bake:project-icons     # PROJECT_ICON table (project zType → its 2D icon name)
+npm run bake:project-names     # PROJECT_NAMES override table
 npm run bake:victory-ordering  # Global victory ordering table
 npm run bake:map-options       # Map option/script definition tables
 npm run bake:law-classes       # Law class table (emitted to src/ AND cloud/src/)
@@ -52,6 +53,15 @@ npm run bake:unit-stats        # unit-stats.ts (from Reference/XML)
 npm run bake:map-caveats       # map-caveats.ts (needs an owtournamentatlas checkout)
 npm run bake:owtt              # owtt.ts (needs a local owtt checkout, OWTT_DIR)
 npm run bake:momentum          # momentum.ts (src/ AND cloud/src/; fits on a local blob corpus)
+npm run bake:family-opinion    # family-opinion.ts (opinion bands + their city-upkeep effect)
+npm run bake:improvement-builds # improvement-builds.ts (worker-turn build cost per improvement)
+npm run bake:starting-techs    # starting-techs.ts (each nation's starting techs)
+npm run bake:family-colors     # family-colors.ts (each family's in-game colour)
+npm run bake:yield-colors      # yield-colors.ts (each yield's chart colour)
+npm run bake:orders-sources    # orders-sources.ts (orders-per-turn + legitimacy constants)
+npm run bake:power-tiers       # power-tiers.ts (military-power comparison tiers)
+npm run bake:cognomens         # cognomens.ts (cognomen → legitimacy + display string)
+npm run bake:wonders           # wonders.ts (src/ AND cloud/src/)
 ```
 
 Then:
@@ -61,7 +71,7 @@ npm run bake:finalize          # Emits committed manifest TS modules + reconcile
 npm run bake:all               # Every baker above except unit-stats, owtt + momentum, then finalize
 ```
 
-`bake:all` deliberately omits `bake:unit-stats`, `bake:owtt` and `bake:momentum` — rerun those by hand when their sources change. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
+`bake:all` runs 28 of the 31 bakers above, in the order listed, then `finalize`. It deliberately omits `bake:unit-stats`, `bake:owtt` and `bake:momentum` — rerun those by hand when their sources change. Membership doesn't follow from what a baker reads: `bake:map-caveats` needs an owtournamentatlas checkout and is in `bake:all`, while `bake:unit-stats` reads only `Reference/XML` and isn't — so a new baker records its choice here either way. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
 
 ## Adding a name-override table
 
