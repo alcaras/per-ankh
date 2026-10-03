@@ -1,11 +1,14 @@
 <script lang="ts">
 	// The map view's yield strip: the game's top-bar yields for one player at
-	// the selected turn. Each slot shows the rate, and the lifetime total only
-	// where the series holds the game's own total — a running sum of the rate
-	// isn't the number the game would show. The stockpile is the final turn's
-	// (the save keeps no stockpile history), so it goes in the tooltip rather
-	// than the slot, where scrubbing to the last turn would jump from a total
-	// to a stockpile. Clicking a slot opens its yield's tab (TOP_BAR_YIELDS).
+	// the selected turn, in the bar's own two groups (TOP_BAR_YIELD_GROUPS).
+	// Each slot shows the rate alone, signed and colored as the game's does.
+	// The game's own slot leads with the stockpile (getYieldStockpileWhole,
+	// ClientUI.cs:9591), which we can't follow: the save writes a player's
+	// stockpile as one scalar per yield (Player.cs:2559) and no history of it,
+	// and a stockpile isn't the running sum of the rate — spending leaves the
+	// rate untouched. So the final turn's stockpile and the lifetime total go
+	// in the tooltip, each labelled, rather than into a slot whose meaning
+	// would change as you scrub. Clicking a slot opens its yield's tab.
 	import { Tooltip } from "bits-ui";
 	import type { YieldHistory } from "$lib/types/YieldHistory";
 	import type { PlayerResourceInfo, YieldPriceEntry } from "$lib/parser/types";
@@ -20,7 +23,8 @@
 	import { STOCKPILE_SCALE, pricesByTurn } from "./economy";
 	import {
 		CHROME_PANEL_CLASS,
-		TOP_BAR_YIELDS,
+		TOP_BAR_YIELD_GROUPS,
+		type TopBarYield,
 		pointAtTurn,
 	} from "./map-chrome";
 
@@ -48,7 +52,7 @@
 	const prices = $derived(pricesByTurn(yieldPrices, finalTurn));
 
 	// A yield's name, from the Yields tab's own chart config, so the strip and
-	// that tab call a yield the same thing. Every TOP_BAR_YIELDS entry has a
+	// that tab call a yield the same thing. Every top-bar entry has a
 	// config — both are fixed lists — so a miss is a programming error, not a
 	// case to fall back on.
 	function yieldTitle(yieldType: string): string {
@@ -57,40 +61,52 @@
 		return config.title;
 	}
 
-	const slots = $derived(
-		TOP_BAR_YIELDS.map(({ yieldType, stockpiled, tab }) => {
-			const series = findByPlayer(
-				allYields.filter((y) => y.yield_type === yieldType),
-				player,
-				(y) => y.player_id,
-				(y) => y.nation,
-			);
-			const point = series ? pointAtTurn(series.data, turn) : undefined;
-			const held = stockpiled
-				? playerResources.find(
-						(r) =>
-							r.player_xml_id === player.playerId && r.yield_type === yieldType,
-					)
-				: undefined;
-			return {
-				yieldType,
-				tab,
-				title: yieldTitle(yieldType),
-				rate: point?.rate ?? null,
-				total: cumulativeIsGameTotal(allYields, yieldType)
-					? (point?.cumulative ?? null)
-					: null,
-				price: prices.get(yieldType)?.[turn] ?? null,
-				stockpile: held != null ? held.amount / STOCKPILE_SCALE : null,
-			};
-		}),
+	function slotFor({ yieldType, stockpiled, tab }: TopBarYield) {
+		const series = findByPlayer(
+			allYields.filter((y) => y.yield_type === yieldType),
+			player,
+			(y) => y.player_id,
+			(y) => y.nation,
+		);
+		const point = series ? pointAtTurn(series.data, turn) : undefined;
+		const held = stockpiled
+			? playerResources.find(
+					(r) =>
+						r.player_xml_id === player.playerId && r.yield_type === yieldType,
+				)
+			: undefined;
+		return {
+			yieldType,
+			tab,
+			title: yieldTitle(yieldType),
+			rate: point?.rate ?? null,
+			total: cumulativeIsGameTotal(allYields, yieldType)
+				? (point?.cumulative ?? null)
+				: null,
+			price: prices.get(yieldType)?.[turn] ?? null,
+			stockpile: held != null ? held.amount / STOCKPILE_SCALE : null,
+		};
+	}
+
+	const groups = $derived(
+		TOP_BAR_YIELD_GROUPS.map((group) => group.map(slotFor)),
 	);
 
-	// Yields are stored in tenths, so a rate carries at most one decimal.
-	const rate = (value: number | null): string =>
-		value == null
-			? "—"
-			: `${value > 0 ? "+" : ""}${value.toLocaleString("en-US", { maximumFractionDigits: 1 })}`;
+	// Signed, and whole unless the rate is under 1: the game formats `iRate`
+	// (tenths) with its decimal only between ±10, and divides it away above
+	// that (ClientUI.cs:9571-9578; YIELDS_MULTIPLIER = 10, Constants.cs:47).
+	const rate = (value: number | null): string => {
+		if (value == null) return "—";
+		const text =
+			Math.abs(value) < 1
+				? value.toLocaleString("en-US", { maximumFractionDigits: 1 })
+				: Math.round(value).toLocaleString("en-US");
+		return value > 0 ? `+${text}` : text;
+	};
+	// The game colors the rate by its sign, zero included
+	// (buildColorTextOptionalScope(rate, iRate >= 0), ClientUI.cs:9569).
+	const rateColor = (value: number | null): string =>
+		value == null ? "text-tan" : value < 0 ? "text-danger" : "text-success";
 	const amount = (value: number): string =>
 		Math.round(value).toLocaleString("en-US");
 	// Prices sit around 2–100 money, so whole numbers would hide their movement.
@@ -98,65 +114,66 @@
 </script>
 
 <Tooltip.Provider delayDuration={200} disableHoverableContent>
-	<div
-		class="flex h-12 items-stretch divide-x divide-tan/20 overflow-hidden {CHROME_PANEL_CLASS}"
-	>
-		{#each slots as slot (slot.yieldType)}
-			<Tooltip.Root>
-				<Tooltip.Trigger
-					class="flex cursor-pointer items-center gap-1.5 px-3 text-left transition-colors hover:bg-tan/15"
-					aria-label={slot.title}
-					onclick={() => onOpenTab(slot.tab)}
-				>
-					<SpriteIcon category="yields" value={slot.yieldType} size={22} />
-					<span class="flex flex-col leading-tight">
-						<span
-							class="whitespace-nowrap text-sm font-bold tabular-nums text-bright"
+	<!-- Two panels, as the game's bar is: the goods group, then the rates. -->
+	<div class="flex items-stretch gap-1">
+		{#each groups as group, i (i)}
+			<div
+				class="flex h-8 items-stretch divide-x divide-tan/20 overflow-hidden {CHROME_PANEL_CLASS}"
+			>
+				{#each group as slot (slot.yieldType)}
+					<Tooltip.Root>
+						<Tooltip.Trigger
+							class="flex cursor-pointer items-center gap-1.5 px-2 text-left transition-colors hover:bg-tan/15"
+							aria-label={slot.title}
+							onclick={() => onOpenTab(slot.tab)}
 						>
-							{#if slot.total != null}
-								{amount(slot.total)}
-								<span class="text-xs font-normal text-tan"
-									>({rate(slot.rate)})</span
-								>
-							{:else}
-								{rate(slot.rate)}
-							{/if}
-						</span>
-						{#if slot.price != null}
-							<span class="text-[10px] tabular-nums text-tan/70"
-								>{price(slot.price)}</span
+							<SpriteIcon category="yields" value={slot.yieldType} size={16} />
+							<!-- Width reserved for the widest rate the corpus holds —
+							     Money at +3,183, six characters, where every other
+							     top-bar yield stays inside four — so a panel doesn't
+							     resize under the pointer as playback runs. -->
+							<span
+								class="min-w-[6ch] whitespace-nowrap text-[11px] font-bold tabular-nums leading-tight {rateColor(
+									slot.rate,
+								)}"
 							>
-						{/if}
-					</span>
-				</Tooltip.Trigger>
-				<Tooltip.Portal>
-					<Tooltip.Content
-						side="bottom"
-						sideOffset={6}
-						class="z-50 min-w-40 px-3 py-2 text-xs {CHROME_PANEL_CLASS}"
-					>
-						<p class="mb-1.5 font-bold text-bright">{slot.title}</p>
-						<dl class="chrome-rows">
-							<dt>Per turn</dt>
-							<dd class="text-right tabular-nums">{rate(slot.rate)}</dd>
-							{#if slot.total != null}
-								<dt>Total</dt>
-								<dd class="text-right tabular-nums">{amount(slot.total)}</dd>
-							{/if}
-							{#if slot.price != null}
-								<dt>Market price</dt>
-								<dd class="text-right tabular-nums">{price(slot.price)}</dd>
-							{/if}
-							{#if slot.stockpile != null}
-								<dt>Stockpile, turn {finalTurn}</dt>
-								<dd class="text-right tabular-nums">
-									{amount(slot.stockpile)}
-								</dd>
-							{/if}
-						</dl>
-					</Tooltip.Content>
-				</Tooltip.Portal>
-			</Tooltip.Root>
+								{rate(slot.rate)}
+							</span>
+						</Tooltip.Trigger>
+						<Tooltip.Portal>
+							<Tooltip.Content
+								side="bottom"
+								sideOffset={6}
+								class="z-50 min-w-40 px-3 py-2 text-xs {CHROME_PANEL_CLASS}"
+							>
+								<p class="mb-1.5 font-bold text-bright">{slot.title}</p>
+								<dl class="chrome-rows">
+									<dt>Per turn</dt>
+									<dd class="text-right tabular-nums">{rate(slot.rate)}</dd>
+									{#if slot.total != null}
+										<dt>Total</dt>
+										<dd class="text-right tabular-nums">
+											{amount(slot.total)}
+										</dd>
+									{/if}
+									{#if slot.price != null}
+										<dt>Market price</dt>
+										<dd class="text-right tabular-nums">
+											{price(slot.price)}
+										</dd>
+									{/if}
+									{#if slot.stockpile != null}
+										<dt>Stockpile, turn {finalTurn}</dt>
+										<dd class="text-right tabular-nums">
+											{amount(slot.stockpile)}
+										</dd>
+									{/if}
+								</dl>
+							</Tooltip.Content>
+						</Tooltip.Portal>
+					</Tooltip.Root>
+				{/each}
+			</div>
 		{/each}
 	</div>
 </Tooltip.Provider>

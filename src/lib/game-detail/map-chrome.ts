@@ -15,26 +15,37 @@ import type { GameTabId } from "./game-tabs.svelte";
 export const CHROME_PANEL_CLASS =
 	"rounded border border-tan/50 bg-gradient-to-b from-surface/95 to-surface-deep/95 text-tan shadow-[inset_0_0_0_1px_rgb(var(--color-black)/0.6),0_4px_12px_rgb(var(--color-black)/0.5)]";
 
-/**
- * The yields of the game's top bar: the eight it stockpiles, plus Science,
- * which it shows as a rate only. The rest (Growth, Culture, Happiness,
- * Discontent, Maintenance) stay out of it. In yield.xml's order. Clicking a
- * yield opens `tab` in a lightbox.
- */
-export const TOP_BAR_YIELDS: {
+export interface TopBarYield {
 	yieldType: string;
+	/** `yield.xml`'s `<bStockpile>` — the game banks these between turns. */
 	stockpiled: boolean;
 	tab: GameTabId;
-}[] = [
-	{ yieldType: "YIELD_CIVICS", stockpiled: true, tab: "laws" },
-	{ yieldType: "YIELD_TRAINING", stockpiled: true, tab: "military" },
-	{ yieldType: "YIELD_SCIENCE", stockpiled: false, tab: "techs" },
-	{ yieldType: "YIELD_MONEY", stockpiled: true, tab: "economics" },
-	{ yieldType: "YIELD_ORDERS", stockpiled: true, tab: "orders" },
-	{ yieldType: "YIELD_FOOD", stockpiled: true, tab: "economics" },
-	{ yieldType: "YIELD_IRON", stockpiled: true, tab: "economics" },
-	{ yieldType: "YIELD_STONE", stockpiled: true, tab: "economics" },
-	{ yieldType: "YIELD_WOOD", stockpiled: true, tab: "economics" },
+}
+
+/**
+ * The yields of the game's top bar, in its order and its two groups.
+ * `yield.xml` gives each an `<iUIPosition>`, set on exactly these nine and on
+ * no other yield (Growth, Culture, Happiness, Discontent and Maintenance have
+ * none), and `ClientUI.start` builds top-bar.xml from it as two loops
+ * (ClientUI.cs:1726-1749): the `<bGoodsUI>` commodities, and the rates, which
+ * is every other positioned yield but Money and Orders because the bar places
+ * those two itself. That reads Money, the four goods and Orders, then Science,
+ * Civics and Training. Clicking a yield opens `tab` in a lightbox.
+ */
+export const TOP_BAR_YIELD_GROUPS: TopBarYield[][] = [
+	[
+		{ yieldType: "YIELD_MONEY", stockpiled: true, tab: "economics" },
+		{ yieldType: "YIELD_FOOD", stockpiled: true, tab: "economics" },
+		{ yieldType: "YIELD_IRON", stockpiled: true, tab: "economics" },
+		{ yieldType: "YIELD_STONE", stockpiled: true, tab: "economics" },
+		{ yieldType: "YIELD_WOOD", stockpiled: true, tab: "economics" },
+		{ yieldType: "YIELD_ORDERS", stockpiled: true, tab: "orders" },
+	],
+	[
+		{ yieldType: "YIELD_SCIENCE", stockpiled: false, tab: "techs" },
+		{ yieldType: "YIELD_CIVICS", stockpiled: true, tab: "laws" },
+		{ yieldType: "YIELD_TRAINING", stockpiled: true, tab: "military" },
+	],
 ];
 
 /**

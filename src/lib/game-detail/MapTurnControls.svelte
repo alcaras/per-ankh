@@ -82,7 +82,7 @@
 	});
 </script>
 
-<div class="flex flex-wrap items-center gap-4 text-sm">
+<div class="flex flex-wrap items-center gap-4 text-[11px]">
 	<div class="flex items-center gap-3">
 		<Checkbox bind:checked={showPolitical} labelClass="gap-1.5">
 			<span class="select-none text-tan">Political</span>
@@ -94,11 +94,11 @@
 
 	<div class="ml-auto flex items-center gap-6">
 		<div class="flex items-center gap-3">
-			<span class="text-sm font-bold text-tan">Turn:</span>
+			<span class="text-[11px] font-bold text-tan">Turn:</span>
 			<div class="flex items-center">
 				<button
 					onclick={togglePlayback}
-					class="rounded p-1.5 transition-colors {isPlaying
+					class="rounded p-1 transition-colors {isPlaying
 						? 'bg-brown text-tan'
 						: 'bg-brown/30 hover:bg-brown/50'}"
 					aria-label={isPlaying ? "Pause" : "Play"}
@@ -107,7 +107,7 @@
 					{#if isPlaying}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="h-4 w-4 text-tan"
+							class="h-3 w-3 text-tan"
 							fill="currentColor"
 							viewBox="0 0 24 24"
 						>
@@ -117,7 +117,7 @@
 					{:else}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="h-4 w-4 text-tan"
+							class="h-3 w-3 text-tan"
 							fill="currentColor"
 							viewBox="0 0 24 24"
 						>
@@ -127,7 +127,7 @@
 				</button>
 				<button
 					onclick={toggleFastPlayback}
-					class="rounded p-1.5 transition-colors {isFastPlaying
+					class="rounded p-1 transition-colors {isFastPlaying
 						? 'bg-brown text-tan'
 						: 'bg-brown/30 hover:bg-brown/50'}"
 					aria-label={isFastPlaying ? "Pause" : "Fast Forward"}
@@ -136,7 +136,7 @@
 					{#if isFastPlaying}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="h-4 w-4 text-tan"
+							class="h-3 w-3 text-tan"
 							fill="currentColor"
 							viewBox="0 0 24 24"
 						>
@@ -146,7 +146,7 @@
 					{:else}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="h-4 w-4 text-tan"
+							class="h-3 w-3 text-tan"
 							fill="currentColor"
 							viewBox="0 0 24 24"
 						>
@@ -164,7 +164,7 @@
 				oninput={handleSliderChange}
 				class="turn-slider w-48"
 			/>
-			<span class="w-8 text-right text-sm font-bold text-tan"
+			<span class="w-8 text-right text-[11px] font-bold text-tan"
 				>{selectedTurn}</span
 			>
 		</div>

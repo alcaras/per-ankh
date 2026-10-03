@@ -95,8 +95,28 @@
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-10 flex flex-col gap-3 p-3">
-	<!-- Top bar: the yield strip, then a menu icon per tab -->
+	<!-- Top bar: a menu icon per tab, then the yield strip, the way the game's
+	     own bar leads with its menu cluster and carries the yields after it. -->
 	<div class="flex flex-wrap items-start gap-3">
+		<div
+			class="pointer-events-auto flex h-8 items-center gap-0.5 px-1.5 {CHROME_PANEL_CLASS}"
+		>
+			{#each tabs as tab (tab.id)}
+				<button
+					type="button"
+					onclick={() => onOpenTab(tab.id)}
+					class="flex cursor-pointer rounded p-1 transition-colors hover:bg-tan/15"
+					title={tab.label}
+				>
+					<SpriteIcon
+						category={tab.icon.category}
+						value={tab.icon.value}
+						size={16}
+						alt={tab.label}
+					/>
+				</button>
+			{/each}
+		</div>
 		{#if player}
 			<div class="pointer-events-auto">
 				<MapYieldStrip
@@ -110,44 +130,27 @@
 				/>
 			</div>
 		{/if}
-		<div
-			class="pointer-events-auto flex h-12 items-center gap-0.5 px-1.5 {CHROME_PANEL_CLASS}"
-		>
-			{#each tabs as tab (tab.id)}
-				<button
-					type="button"
-					onclick={() => onOpenTab(tab.id)}
-					class="flex cursor-pointer rounded p-1.5 transition-colors hover:bg-tan/15"
-					title={tab.label}
-				>
-					<SpriteIcon
-						category={tab.icon.category}
-						value={tab.icon.value}
-						size={24}
-						alt={tab.label}
-					/>
-				</button>
-			{/each}
-		</div>
 	</div>
 
 	<div class="relative min-h-0 flex-1">
 		{#if player}
 			<!-- Turn and player switcher (top-left) -->
 			<div
-				class="pointer-events-auto absolute left-0 top-0 flex flex-col gap-2 px-3 py-2 {CHROME_PANEL_CLASS}"
+				class="pointer-events-auto absolute left-0 top-0 flex flex-col gap-1.5 px-2 py-1 {CHROME_PANEL_CLASS}"
 			>
-				<div class="flex items-center gap-1.5 text-sm font-bold text-bright">
-					<SpriteIcon category="icons" value="TURN" size={18} alt="" />
+				<div
+					class="flex items-center gap-1.5 text-[11px] font-bold text-bright"
+				>
+					<SpriteIcon category="icons" value="TURN" size={13} alt="" />
 					Turn {selectedTurn}
 				</div>
-				<div class="flex items-center gap-3 text-sm">
+				<div class="flex items-center gap-3 text-[11px]">
 					<div class="flex items-center gap-1.5">
 						{#if player.nation}
 							<SpriteIcon
 								category="crests"
 								value={player.nation}
-								size={20}
+								size={14}
 								alt={nationName(player.nation)}
 							/>
 						{/if}
@@ -158,6 +161,7 @@
 							}}
 							options={playerOptions}
 							ariaLabel="Player"
+							class="px-1.5 py-0.5 text-[11px]"
 						/>
 					</div>
 					{#if hasVictoryPoints(game.game_details)}
@@ -168,7 +172,7 @@
 							<SpriteIcon
 								category="icons"
 								value="VICTORY_NORMAL"
-								size={16}
+								size={12}
 								alt="Victory Points"
 							/>
 							{value(standing?.points)}
@@ -183,7 +187,7 @@
 						<SpriteIcon
 							category="icons"
 							value="MILITARY"
-							size={16}
+							size={12}
 							alt="Military Power"
 						/>
 						{value(standing?.military_power)}
@@ -196,19 +200,19 @@
 				<button
 					type="button"
 					onclick={() => onOpenTab("techs")}
-					class="pointer-events-auto absolute right-0 top-0 flex cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
+					class="pointer-events-auto absolute right-0 top-0 flex cursor-pointer items-center gap-1.5 px-2 py-1 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
 				>
 					<SpriteIcon
 						category="techs"
 						value={research.tech}
-						size={32}
+						size={22}
 						alt={techName(research.tech)}
 					/>
 					<span class="leading-tight">
-						<span class="block text-sm font-bold text-bright">
+						<span class="block text-[11px] font-bold text-bright">
 							{techName(research.tech)}
 						</span>
-						<span class="block text-xs tabular-nums"
+						<span class="block text-[10px] tabular-nums"
 							>{research.turns} turns</span
 						>
 					</span>
@@ -221,7 +225,7 @@
 				<button
 					type="button"
 					onclick={() => onOpenTab("leaders")}
-					class="pointer-events-auto absolute bottom-0 left-0 flex cursor-pointer items-center gap-3 p-2 pr-4 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
+					class="pointer-events-auto absolute bottom-0 left-0 flex cursor-pointer items-center gap-2 p-1.5 pr-3 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
 				>
 					<!-- The border belongs to the art, so the guard is whether the
 					     sprite resolves: SpriteIcon renders nothing for a portrait
@@ -231,15 +235,15 @@
 							<SpriteIcon
 								category="portraits"
 								value={ruler.portrait}
-								size={64}
+								size={40}
 								alt={name}
 							/>
 						</span>
 					{/if}
 					<span class="leading-tight">
-						<span class="block text-sm font-bold text-bright">{name}</span>
+						<span class="block text-[11px] font-bold text-bright">{name}</span>
 						<span
-							class="mt-1 flex items-center gap-1 text-sm tabular-nums"
+							class="mt-0.5 flex items-center gap-1 text-[10px] tabular-nums"
 							title="Legitimacy"
 						>
 							<SpriteIcon
@@ -257,7 +261,7 @@
 
 		<!-- Turn and layer controls (bottom) -->
 		<div
-			class="pointer-events-auto absolute bottom-0 left-1/2 -translate-x-1/2 px-4 py-2 {CHROME_PANEL_CLASS}"
+			class="pointer-events-auto absolute bottom-0 left-1/2 -translate-x-1/2 px-3 py-1 {CHROME_PANEL_CLASS}"
 		>
 			<MapTurnControls
 				totalTurns={finalTurn}

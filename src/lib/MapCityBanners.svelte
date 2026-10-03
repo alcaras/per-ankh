@@ -105,10 +105,10 @@
 		onclick={(e) => onBannerClick(banner.cityName, e.currentTarget)}
 	>
 		{#if full && banner.nationCrestKey}
-			<SpriteIcon category="crests" value={banner.nationCrestKey} size={14} />
+			<SpriteIcon category="crests" value={banner.nationCrestKey} size={10} />
 		{/if}
 		{#if full && banner.familyCrestKey}
-			<SpriteIcon category="crests" value={banner.familyCrestKey} size={14} />
+			<SpriteIcon category="crests" value={banner.familyCrestKey} size={10} />
 		{/if}
 		<span class="banner-name" style="color: {banner.nationColor};">
 			{banner.label}{#if banner.isCapital}<span class="capital-marker">★</span
@@ -127,9 +127,9 @@
 		transform: translate(-50%, -100%);
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		padding: 2px 6px;
-		font-size: 11px;
+		gap: 3px;
+		padding: 1px 4px;
+		font-size: 9px;
 		line-height: 1.3;
 		white-space: nowrap;
 		cursor: pointer;
@@ -161,8 +161,8 @@
 	}
 
 	.capital-marker {
-		margin-left: 3px;
-		font-size: 10px;
+		margin-left: 2px;
+		font-size: 8px;
 		opacity: 0.85;
 	}
 
