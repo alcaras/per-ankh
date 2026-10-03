@@ -305,6 +305,28 @@ async function captureGameDetail(
 	return recs;
 }
 
+// The game's other view (/games/[id]/map): the map under its chrome, one shot.
+// The chrome's lightboxes and the city popover are interaction states this
+// walkthrough doesn't drive, so what's captured is the view as it opens.
+async function captureGameMap(
+	page: Page,
+	baseUrl: string,
+	pass: Pass,
+	gameId: string,
+	state: string,
+): Promise<CaptureRecord> {
+	return captureSingle(page, baseUrl, {
+		id: `${pass}__game-map`,
+		pass,
+		page: "game-map",
+		tab: null,
+		title: "Map view",
+		route: `/games/${gameId}/map`,
+		state,
+		errorHint: "Map view failed — game may be private, missing, or redirected",
+	});
+}
+
 // User profile — URL-driven tabs (?tab=…). Yields one record per tab.
 async function captureUserProfile(
 	page: Page,
@@ -404,6 +426,7 @@ export async function captureAnon(
 	recs.push(
 		...(await captureGameDetail(page, baseUrl, "anon", ids.gameId, "visitor")),
 	);
+	recs.push(await captureGameMap(page, baseUrl, "anon", ids.gameId, "visitor"));
 	recs.push(
 		...(await captureUserProfile(page, baseUrl, "anon", ids.userId, "visitor")),
 	);
@@ -474,6 +497,15 @@ export async function captureAuth(
 			ids.gameId,
 			opts.ownsGame ? "owner" : "signed in",
 		)),
+	);
+	recs.push(
+		await captureGameMap(
+			page,
+			baseUrl,
+			"auth",
+			ids.gameId,
+			opts.ownsGame ? "owner" : "signed in",
+		),
 	);
 	recs.push(
 		await captureSingle(page, baseUrl, {

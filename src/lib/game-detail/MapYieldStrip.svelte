@@ -9,7 +9,6 @@
 	import { Tooltip } from "bits-ui";
 	import type { YieldHistory } from "$lib/types/YieldHistory";
 	import type { PlayerResourceInfo, YieldPriceEntry } from "$lib/parser/types";
-	import { formatEnum } from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import type { GameTabId } from "./game-tabs.svelte";
 	import {
@@ -48,6 +47,16 @@
 	// commodities the market prices (Food, Iron, Stone, Wood) have a curve.
 	const prices = $derived(pricesByTurn(yieldPrices, finalTurn));
 
+	// A yield's name, from the Yields tab's own chart config, so the strip and
+	// that tab call a yield the same thing. Every TOP_BAR_YIELDS entry has a
+	// config — both are fixed lists — so a miss is a programming error, not a
+	// case to fall back on.
+	function yieldTitle(yieldType: string): string {
+		const config = YIELD_CHART_CONFIG.find((c) => c.yieldType === yieldType);
+		if (!config) throw new Error(`no chart config for yield: ${yieldType}`);
+		return config.title;
+	}
+
 	const slots = $derived(
 		TOP_BAR_YIELDS.map(({ yieldType, stockpiled, tab }) => {
 			const series = findByPlayer(
@@ -66,9 +75,7 @@
 			return {
 				yieldType,
 				tab,
-				title:
-					YIELD_CHART_CONFIG.find((c) => c.yieldType === yieldType)?.title ??
-					formatEnum(yieldType, "YIELD_"),
+				title: yieldTitle(yieldType),
 				rate: point?.rate ?? null,
 				total: cumulativeIsGameTotal(allYields, yieldType)
 					? (point?.cumulative ?? null)
@@ -129,21 +136,19 @@
 						class="z-50 min-w-40 px-3 py-2 text-xs {CHROME_PANEL_CLASS}"
 					>
 						<p class="mb-1.5 font-bold text-bright">{slot.title}</p>
-						<dl
-							class="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-0.5"
-						>
-							<dt class="label">Per turn</dt>
+						<dl class="chrome-rows">
+							<dt>Per turn</dt>
 							<dd class="text-right tabular-nums">{rate(slot.rate)}</dd>
 							{#if slot.total != null}
-								<dt class="label">Total</dt>
+								<dt>Total</dt>
 								<dd class="text-right tabular-nums">{amount(slot.total)}</dd>
 							{/if}
 							{#if slot.price != null}
-								<dt class="label">Market price</dt>
+								<dt>Market price</dt>
 								<dd class="text-right tabular-nums">{price(slot.price)}</dd>
 							{/if}
 							{#if slot.stockpile != null}
-								<dt class="label">Stockpile, turn {finalTurn}</dt>
+								<dt>Stockpile, turn {finalTurn}</dt>
 								<dd class="text-right tabular-nums">
 									{amount(slot.stockpile)}
 								</dd>
@@ -155,13 +160,3 @@
 		{/each}
 	</div>
 </Tooltip.Provider>
-
-<style>
-	/* The hover panel's row label (MapTooltip), so the chrome reads alike. */
-	.label {
-		color: rgb(var(--color-muted));
-		font-size: 9.5px;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-</style>

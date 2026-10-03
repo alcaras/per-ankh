@@ -12,6 +12,7 @@
 	import { page } from "$app/state";
 	import type { ResolvedPathname } from "$app/types";
 	import type { TournamentDetail } from "$lib/api-cloud";
+	import SegmentedNav from "$lib/ui/SegmentedNav.svelte";
 	import {
 		TOURNAMENT_VIEW_LABELS,
 		tournamentView,
@@ -39,9 +40,9 @@
 			href: resolve("/tournaments/[slug]/stats", { slug: tournament.slug }),
 		},
 		// Videos appears only once an admin has set a playlist — otherwise the tab
-		// (and its route) would be empty for the vast majority of tournaments. The
-		// grid/pill geometry below is driven by navTabs.length, so the control
-		// stays correct whether there are three tabs or four.
+		// (and its route) would be empty for the vast majority of tournaments.
+		// SegmentedNav derives its grid/pill geometry from the item count, so the
+		// control stays correct whether there are three tabs or four.
 		...(tournament.youtube_playlist_url
 			? [
 					{
@@ -66,32 +67,11 @@
 	);
 </script>
 
-<!-- Segmented control matching the matches page's view toggle: an equal-column
-     grid with a raised-surface pill that slides under the active tab. Kept as
-     cross-route links (not buttons) — nav semantics, so aria-current, not
-     aria-pressed. Text stays tan; the pill is the sole active indicator. -->
-<nav
-	class="relative grid overflow-hidden rounded-lg border-2 border-surface"
-	style="background-color: rgb(var(--color-surface));"
-	style:grid-template-columns={`repeat(${navTabs.length}, minmax(0, 1fr))`}
-	aria-label="Tournament views"
->
-	<div
-		class="pointer-events-none absolute inset-y-0 left-0 transition-transform duration-200 ease-out"
-		style:width={`${100 / navTabs.length}%`}
-		style:background-color="rgb(var(--color-surface-raised))"
-		style:opacity={activeIndex < 0 ? "0" : "1"}
-		style:transform={`translateX(${(activeIndex < 0 ? 0 : activeIndex) * 100}%)`}
-	></div>
-	<!-- eslint-disable svelte/no-navigation-without-resolve -- tab.href is a resolve() result; not traceable through the array -->
-	{#each navTabs as tab, i (tab.href)}
-		<a
-			href={tab.href}
-			aria-current={i === activeIndex ? "page" : undefined}
-			class="relative z-10 px-3 py-1.5 text-center text-xs font-bold text-tan transition-colors"
-		>
-			{TOURNAMENT_VIEW_LABELS[tab.view]}
-		</a>
-	{/each}
-	<!-- eslint-enable svelte/no-navigation-without-resolve -->
-</nav>
+<SegmentedNav
+	items={navTabs.map((tab) => ({
+		href: tab.href,
+		label: TOURNAMENT_VIEW_LABELS[tab.view],
+	}))}
+	{activeIndex}
+	ariaLabel="Tournament views"
+/>

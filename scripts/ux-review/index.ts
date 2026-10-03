@@ -13,20 +13,21 @@
 // The walkthrough runs across three viewports (desktop / tablet / mobile) and
 // two auth states:
 //
-//   Anonymous  — the signed-out surface. Only three routes render real
-//                content without a session: / , /games/[id] (15 tabs),
-//                /users/[user_id] (3 tabs). Everything else redirects to
-//                /?next=… .
+//   Anonymous  — the signed-out surface. Only four routes render real
+//                content without a session: / , /games/[id] (14 tabs),
+//                /games/[id]/map, /users/[user_id] (3 tabs). Everything else
+//                redirects to /?next=… .
 //
 //   Signed in  — the same browser with a real session cookie minted for a
 //                local user (the local ADMIN_DISCORD_ID user by default, so
 //                the gated surfaces stay captured however the random game's
 //                ownership falls). Unlocks the authenticated surface: / ,
-//                /users/[user_id] (owner), /account, /games/[id] (owner
-//                only when that user owns the game picked), /tournaments,
-//                /tournaments/[slug], /admin (when the auth user is the
-//                local ADMIN_DISCORD_ID), plus a redirect-verification note
-//                for /dashboard, /games, /auth/callback.
+//                /users/[user_id] (owner), /account, /games/[id] and
+//                /games/[id]/map (owner only when that user owns the game
+//                picked), /tournaments, /tournaments/[slug], /admin (when the
+//                auth user is the local ADMIN_DISCORD_ID), plus a
+//                redirect-verification note for /dashboard, /games,
+//                /auth/callback.
 //
 // Auth mechanism: a session is just a `session` cookie carrying an opaque
 // token mapping in SESSIONS_KV to {user_id, discord_username} (see

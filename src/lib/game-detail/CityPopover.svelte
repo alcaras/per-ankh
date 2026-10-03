@@ -311,7 +311,7 @@
 		<!-- Zone 2: the only things reconstructible at the selected turn. -->
 		<section>
 			<h3 class="section-heading">At turn {turn}</h3>
-			<dl class="rows">
+			<dl class="chrome-rows">
 				<dt>Owner</dt>
 				<dd>
 					{#if ownerAtTurn}
@@ -375,7 +375,7 @@
 		     is only readable at the end of the game. -->
 		<section>
 			<h3 class="section-heading">End of game · turn {finalTurn}</h3>
-			<dl class="rows">
+			<dl class="chrome-rows">
 				{#each STATE_COLUMNS as col (col.key)}
 					{@const iconValue = col.iconValue
 						? col.iconValue(city)
@@ -455,7 +455,7 @@
 			<h4 class="mt-2 text-[10px] font-bold uppercase tracking-wide text-muted">
 				Territory
 			</h4>
-			<dl class="rows">
+			<dl class="chrome-rows">
 				<dt>Tiles</dt>
 				<dd>{cityTiles.length}</dd>
 				{#if wonders.length > 0}
@@ -545,25 +545,5 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: rgb(var(--color-bright));
-	}
-
-	.rows {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		column-gap: 0.75rem;
-		row-gap: 0.125rem;
-		align-items: baseline;
-	}
-
-	.rows dt {
-		color: rgb(var(--color-muted));
-		font-size: 9.5px;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.rows dd {
-		color: rgb(var(--color-tan));
-		min-width: 0;
 	}
 </style>

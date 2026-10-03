@@ -16,6 +16,7 @@
 	import { formatDate, formatGameTitle } from "$lib/utils/formatting";
 	import { profileHref } from "$lib/utils/profile-href";
 	import Breadcrumb, { type Crumb } from "$lib/Breadcrumb.svelte";
+	import SegmentedNav from "$lib/ui/SegmentedNav.svelte";
 	import ReimportButton from "$lib/ReimportButton.svelte";
 	import AdminReimportButton from "$lib/AdminReimportButton.svelte";
 	import GameActions from "$lib/GameActions.svelte";
@@ -39,10 +40,21 @@
 
 	const visibility = getGameVisibility();
 
-	// Which view is showing, read from the route id (as the tournament view
-	// tabs do), so the toggle marks the right view in the SSR'd first paint.
-	const isAnalysis = $derived(page.route.id === "/games/[id]");
-	const isMap = $derived(page.route.id === "/games/[id]/map");
+	// The game's two views, and which one is showing — read from the route id
+	// (as the tournament view tabs do), so the toggle's pill marks the right
+	// view in the SSR'd first paint rather than sliding into place on
+	// hydration.
+	const viewTabs = $derived([
+		{ href: resolve("/games/[id]", { id: gameId }), label: "Analysis" },
+		{ href: resolve("/games/[id]/map", { id: gameId }), label: "Map" },
+	]);
+	const activeViewIndex = $derived(
+		page.route.id === "/games/[id]/map"
+			? 1
+			: page.route.id === "/games/[id]"
+				? 0
+				: -1,
+	);
 
 	// Re-import banner: shown to owners when the stored parser_version is
 	// older than the current build's PARSER_VERSION. The blob carries
@@ -111,9 +123,6 @@
 		trail.push({ label: gameTitle });
 		return trail;
 	});
-
-	const viewLinkClass =
-		"px-3 py-1.5 text-center text-xs font-bold text-tan transition-colors";
 </script>
 
 <!-- Trail on the left, the view toggle in the middle, the actions and save
@@ -125,28 +134,11 @@
 >
 	<Breadcrumb {crumbs} class="min-w-0" />
 
-	<!-- Segmented control matching the tournament view tabs. Cross-route links,
-	     so aria-current, not aria-pressed; the raised fill marks the current
-	     view. -->
-	<nav
-		class="grid grid-cols-2 overflow-hidden rounded-lg border-2 border-surface bg-surface"
-		aria-label="Game views"
-	>
-		<a
-			href={resolve("/games/[id]", { id: gameId })}
-			aria-current={isAnalysis ? "page" : undefined}
-			class="{viewLinkClass} {isAnalysis ? 'bg-surface-raised' : ''}"
-		>
-			Analysis
-		</a>
-		<a
-			href={resolve("/games/[id]/map", { id: gameId })}
-			aria-current={isMap ? "page" : undefined}
-			class="{viewLinkClass} {isMap ? 'bg-surface-raised' : ''}"
-		>
-			Map
-		</a>
-	</nav>
+	<SegmentedNav
+		items={viewTabs}
+		activeIndex={activeViewIndex}
+		ariaLabel="Game views"
+	/>
 
 	<div class="flex flex-shrink-0 items-center gap-4 lg:justify-self-end">
 		<!--

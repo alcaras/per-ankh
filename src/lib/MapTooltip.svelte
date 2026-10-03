@@ -108,22 +108,22 @@
 		</div>
 	{/if}
 
-	<div class="rows">
-		<span class="label">Tile</span>
-		<span class="value">{tile.x}, {tile.y}</span>
+	<dl class="chrome-rows">
+		<dt>Tile</dt>
+		<dd>{tile.x}, {tile.y}</dd>
 		{#if terrainLabel}
-			<span class="label">Terrain</span>
-			<span class="value">{terrainLabel}</span>
+			<dt>Terrain</dt>
+			<dd>{terrainLabel}</dd>
 		{/if}
 		{#if improvementLabel}
-			<span class="label">Improvement</span>
-			<span class="value">{improvementLabel}</span>
+			<dt>Improvement</dt>
+			<dd>{improvementLabel}</dd>
 		{/if}
 		{#if specialistLabel}
-			<span class="label">Specialist</span>
-			<span class="value">{specialistLabel}</span>
+			<dt>Specialist</dt>
+			<dd>{specialistLabel}</dd>
 		{/if}
-	</div>
+	</dl>
 </div>
 
 <style>
@@ -164,21 +164,5 @@
 		margin-left: 4px;
 		opacity: 0.85;
 		font-size: 10px;
-	}
-	.rows {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		column-gap: 10px;
-		row-gap: 2px;
-		align-items: baseline;
-	}
-	.label {
-		color: rgb(var(--color-muted));
-		font-size: 9.5px;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-	.value {
-		color: rgb(var(--color-tan));
 	}
 </style>
