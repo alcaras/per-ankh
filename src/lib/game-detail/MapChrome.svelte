@@ -1,14 +1,19 @@
 <script lang="ts">
 	// The map view's chrome, laid over the map in the places Old World's own
-	// screen puts them: the yield strip across the top, the turn and the
-	// player switcher at top-left, research at top-right, the leader at
-	// bottom-left, and the turn controls along the bottom. It shows one
-	// player's view at the selected turn; the switcher changes whose. Its
-	// panels, yields and menu icons open the game's analysis tabs, each in a
-	// lightbox the page renders (onOpenTab).
+	// screen puts them: the yield strip across the top, research at top-right,
+	// the leader panel at bottom-left, and the turn controls along the bottom.
+	// It shows one player's view at the selected turn; the player switcher,
+	// which sits atop the leader panel because everything below it is that
+	// player's, changes whose. Its panels, yields and menu icons open the
+	// game's analysis tabs, each in a lightbox the page renders (onOpenTab).
 	import type { cloudApi } from "$lib/api-cloud";
 	import Select from "$lib/ui/Select.svelte";
-	import { nationName } from "$lib/utils/formatting";
+	import {
+		archetypeSpriteKey,
+		formatArchetype,
+		formatEnum,
+		nationName,
+	} from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import MapYieldStrip from "./MapYieldStrip.svelte";
 	import MapTurnControls from "./MapTurnControls.svelte";
@@ -16,16 +21,18 @@
 	import {
 		findByPlayer,
 		getSpritePath,
-		hasVictoryPoints,
+		rulerCognomen,
 		rulerName,
 		techName,
 		type DetailPlayer,
 	} from "./helpers";
 	import {
 		CHROME_PANEL_CLASS,
+		familyCrestFor,
 		nextDiscovery,
 		pointAtTurn,
 		rulerAt,
+		yieldPointAtTurn,
 	} from "./map-chrome";
 
 	let {
@@ -60,7 +67,7 @@
 		players.map((p) => ({ value: String(p.playerId), label: p.label })),
 	);
 
-	// Points, military power and legitimacy at the selected turn.
+	// The player's standing at the selected turn; the panel reads legitimacy.
 	const standing = $derived.by(() => {
 		if (!player) return undefined;
 		const history = findByPlayer(
@@ -89,6 +96,96 @@
 			? rulerAt(game.characters ?? [], player.playerId, selectedTurn)
 			: null,
 	);
+
+	// The ruler as the Leaders tab titles them, "Name the Cognomen" —
+	// rulerCognomen carries the game's own article, so it reads straight
+	// through. One line here, because the name sits above the portrait on its
+	// own rather than as two styled elements.
+	const rulerLabel = $derived.by(() => {
+		if (!ruler) return null;
+		const name = rulerName(ruler) ?? "Unknown";
+		const cognomen = rulerCognomen(ruler);
+		return cognomen ? `${name} ${cognomen}` : name;
+	});
+
+	// The portrait at its native size: every one of the 493 baked portraits is
+	// 128x128, so anything else resamples it. The art ships for most but not
+	// all rulers — 135 of the 149 reigning rulers across test-data/saves/ —
+	// and SpriteIcon renders nothing for the rest, so the frame is gated on
+	// the sprite resolving rather than on the id, or it would draw an empty
+	// box.
+	const PORTRAIT_SIZE = 128;
+	const portrait = $derived(
+		ruler?.portrait && getSpritePath("portraits", ruler.portrait)
+			? ruler.portrait
+			: null,
+	);
+
+	const archetype = $derived(
+		ruler?.archetype
+			? {
+					key: archetypeSpriteKey(ruler.archetype),
+					label: formatArchetype(ruler.archetype),
+				}
+			: null,
+	);
+
+	// `families` is absent from blobs parsed before it existed, and a ruler
+	// need not have a family at all — 93 of those 149 rulers do.
+	const family = $derived.by(() => {
+		if (!player || !ruler?.family) return null;
+		const crest = familyCrestFor(
+			game.families ?? [],
+			player.playerId,
+			ruler.family,
+		);
+		return crest ? { crest, label: formatEnum(ruler.family, "FAMILY_") } : null;
+	});
+
+	// The four Old World ratings, each granting its own yield (rating.xml:
+	// Wisdom→Science, Charisma→Civics, Courage→Training, Discipline→Money).
+	// PARSER_VERSION 2.8.0+, so an older blob has none and the row drops out
+	// rather than printing four dashes.
+	const ratings = $derived(
+		ruler
+			? [
+					{ label: "Wisdom", icon: "RATING_WISDOM", value: ruler.wisdom },
+					{ label: "Charisma", icon: "RATING_CHARISMA", value: ruler.charisma },
+					{ label: "Courage", icon: "RATING_COURAGE", value: ruler.courage },
+					{
+						label: "Discipline",
+						icon: "RATING_DISCIPLINE",
+						value: ruler.discipline,
+					},
+				].filter((r) => r.value != null)
+			: [],
+	);
+
+	// Orders at the selected turn: the rate, the same quantity the yield
+	// strip's Orders slot shows. The save records no stockpile history, so
+	// there is no held total to scrub through (MapYieldStrip says why). Whole,
+	// and unsigned — the rail reads as a standing beside legitimacy, not as
+	// the strip's signed per-turn delta.
+	const orders = $derived.by(() => {
+		if (!player) return null;
+		const rate = yieldPointAtTurn(
+			game.yield_history,
+			player,
+			"YIELD_ORDERS",
+			selectedTurn,
+		)?.rate;
+		return rate == null ? null : Math.round(rate);
+	});
+
+	// The four rail slots share one plate and one glyph size, so the pair on
+	// the left lines up with the pair on the right. Recessed against the
+	// panel's own frame, with its trim — the step below the panel's surface.
+	// The plate is sized for the widest value the corpus holds: legitimacy
+	// reaches 270 and the orders rate 81 across test-data/saves/, so three
+	// digits, and the slot doesn't resize under the pointer as playback runs.
+	const RAIL_SLOT_CLASS =
+		"flex h-11 w-11 flex-none flex-col items-center justify-center gap-0.5 rounded border border-tan/50 bg-surface-deep/80";
+	const RAIL_ICON_SIZE = 20;
 
 	const value = (n: number | null | undefined): string =>
 		n == null ? "—" : n.toLocaleString("en-US");
@@ -134,67 +231,6 @@
 
 	<div class="relative min-h-0 flex-1">
 		{#if player}
-			<!-- Turn and player switcher (top-left) -->
-			<div
-				class="pointer-events-auto absolute left-0 top-0 flex flex-col gap-1.5 px-2 py-1 {CHROME_PANEL_CLASS}"
-			>
-				<div
-					class="flex items-center gap-1.5 text-[11px] font-bold text-bright"
-				>
-					<SpriteIcon category="icons" value="TURN" size={13} alt="" />
-					Turn {selectedTurn}
-				</div>
-				<div class="flex items-center gap-3 text-[11px]">
-					<div class="flex items-center gap-1.5">
-						{#if player.nation}
-							<SpriteIcon
-								category="crests"
-								value={player.nation}
-								size={14}
-								alt={nationName(player.nation)}
-							/>
-						{/if}
-						<Select
-							value={String(player.playerId)}
-							onChange={(v) => {
-								if (v != null) playerId = Number(v);
-							}}
-							options={playerOptions}
-							ariaLabel="Player"
-							class="px-1.5 py-0.5 text-[11px]"
-						/>
-					</div>
-					{#if hasVictoryPoints(game.game_details)}
-						<span
-							class="flex items-center gap-1 tabular-nums"
-							title="Victory Points"
-						>
-							<SpriteIcon
-								category="icons"
-								value="VICTORY_NORMAL"
-								size={12}
-								alt="Victory Points"
-							/>
-							{value(standing?.points)}
-						</span>
-					{/if}
-					<button
-						type="button"
-						onclick={() => onOpenTab("military")}
-						class="flex cursor-pointer items-center gap-1 tabular-nums transition-colors hover:text-bright"
-						title="Military Power"
-					>
-						<SpriteIcon
-							category="icons"
-							value="MILITARY"
-							size={12}
-							alt="Military Power"
-						/>
-						{value(standing?.military_power)}
-					</button>
-				</div>
-			</div>
-
 			<!-- Research (top-right): the next tech discovered after this turn -->
 			{#if research}
 				<button
@@ -219,44 +255,126 @@
 				</button>
 			{/if}
 
-			<!-- Leader (bottom-left) -->
-			{#if ruler}
-				{@const name = rulerName(ruler) ?? "Unknown"}
-				<button
-					type="button"
-					onclick={() => onOpenTab("leaders")}
-					class="pointer-events-auto absolute bottom-0 left-0 flex cursor-pointer items-center gap-2 p-1.5 pr-3 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
-				>
-					<!-- The border belongs to the art, so the guard is whether the
-					     sprite resolves: SpriteIcon renders nothing for a portrait
-					     with no baked art, which would leave an empty box. -->
-					{#if ruler.portrait && getSpritePath("portraits", ruler.portrait)}
-						<span class="block overflow-hidden rounded border border-tan/50">
-							<SpriteIcon
-								category="portraits"
-								value={ruler.portrait}
-								size={40}
-								alt={name}
-							/>
+			<!-- Leader (bottom-left): the ruler and the realm's standing at the
+			     selected turn, laid out as the game's own leader panel is — who the
+			     ruler is on the left rail, what the realm holds on the right, the
+			     name above the portrait and the ratings below it. The rails sit in
+			     the portrait's own row so they stay beside the art rather than at
+			     the edges of the name above it. The block is one target for the
+			     Leaders tab; nothing inside the panel links anywhere else. The
+			     switcher sits on top, because everything under it is that
+			     player's. -->
+			<div
+				class="pointer-events-auto absolute bottom-0 left-0 flex w-max flex-col items-center gap-2 p-2 {CHROME_PANEL_CLASS}"
+			>
+				<Select
+					value={String(player.playerId)}
+					onChange={(v) => {
+						if (v != null) playerId = Number(v);
+					}}
+					options={playerOptions}
+					ariaLabel="Player"
+					class="w-full px-1.5 py-0.5 text-[11px]"
+					icon={nationCrest}
+				/>
+
+				{#if ruler}
+					<button
+						type="button"
+						onclick={() => onOpenTab("leaders")}
+						class="flex cursor-pointer flex-col items-center gap-1.5 text-center transition-colors hover:text-bright"
+						title="Leaders"
+					>
+						<span class="block text-sm font-bold leading-tight text-bright">
+							{rulerLabel}
 						</span>
-					{/if}
-					<span class="leading-tight">
-						<span class="block text-[11px] font-bold text-bright">{name}</span>
-						<span
-							class="mt-0.5 flex items-center gap-1 text-[10px] tabular-nums"
-							title="Legitimacy"
-						>
-							<SpriteIcon
-								category="yields"
-								value="YIELD_LEGITIMACY"
-								size={16}
-								alt="Legitimacy"
-							/>
-							{value(standing?.legitimacy)}
+
+						<span class="flex items-stretch gap-1.5">
+							<!-- Left rail: who the ruler is. Archetype glyphs come
+							     from traits-trimmed, the squared copy that fills its box
+							     like the plated icons beside it (#85) — the untrimmed tile
+							     reads a size smaller at the same px. -->
+							<span class="flex flex-col justify-center gap-4">
+								{#if archetype}
+									<span class={RAIL_SLOT_CLASS} title={archetype.label}>
+										<SpriteIcon
+											category="traits-trimmed"
+											value={archetype.key}
+											size={RAIL_ICON_SIZE}
+											alt={archetype.label}
+										/>
+									</span>
+								{/if}
+								{#if family}
+									<span class={RAIL_SLOT_CLASS} title={family.label}>
+										<SpriteIcon
+											category="crests"
+											value={family.crest}
+											size={RAIL_ICON_SIZE}
+											alt={family.label}
+										/>
+									</span>
+								{/if}
+							</span>
+
+							{#if portrait}
+								<span
+									class="block overflow-hidden rounded border border-tan/50"
+								>
+									<SpriteIcon
+										category="portraits"
+										value={portrait}
+										size={PORTRAIT_SIZE}
+										alt={rulerLabel ?? ""}
+									/>
+								</span>
+							{/if}
+
+							<!-- Right rail: what the realm holds at this turn. -->
+							<span class="flex flex-col justify-center gap-4">
+								<span class={RAIL_SLOT_CLASS} title="Orders">
+									<SpriteIcon
+										category="yields"
+										value="YIELD_ORDERS"
+										size={RAIL_ICON_SIZE}
+										alt="Orders"
+									/>
+									<span class="text-xs font-bold tabular-nums text-bright">
+										{value(orders)}
+									</span>
+								</span>
+								<span class={RAIL_SLOT_CLASS} title="Legitimacy">
+									<SpriteIcon
+										category="yields"
+										value="YIELD_LEGITIMACY"
+										size={RAIL_ICON_SIZE}
+										alt="Legitimacy"
+									/>
+									<span class="text-xs font-bold tabular-nums text-bright">
+										{value(standing?.legitimacy)}
+									</span>
+								</span>
+							</span>
 						</span>
-					</span>
-				</button>
-			{/if}
+
+						{#if ratings.length > 0}
+							<span class="flex items-center gap-2 text-xs tabular-nums">
+								{#each ratings as rating (rating.label)}
+									<span class="flex items-center gap-1" title={rating.label}>
+										<SpriteIcon
+											category="icons"
+											value={rating.icon}
+											size={14}
+											alt={rating.label}
+										/>
+										{rating.value}
+									</span>
+								{/each}
+							</span>
+						{/if}
+					</button>
+				{/if}
+			</div>
 		{/if}
 
 		<!-- Turn and layer controls (bottom) -->
@@ -273,3 +391,17 @@
 		</div>
 	</div>
 </div>
+
+{#snippet nationCrest(option: string)}
+	{@const nation = players.find((p) => String(p.playerId) === option)?.nation}
+	{#if nation}
+		<span class="flex w-4 flex-none">
+			<SpriteIcon
+				category="crests"
+				value={nation}
+				size={16}
+				alt={nationName(nation)}
+			/>
+		</span>
+	{/if}
+{/snippet}

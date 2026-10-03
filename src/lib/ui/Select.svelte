@@ -10,7 +10,7 @@
 	// `resetAfterSelect`: the trigger snaps back to the placeholder after each
 	// pick. The reset is deferred (tick) so it doesn't fight bits-ui's commit.
 	import { Select } from "bits-ui";
-	import { tick } from "svelte";
+	import { tick, type Snippet } from "svelte";
 	import {
 		type SelectOption,
 		type SelectOptions,
@@ -27,6 +27,7 @@
 		ariaLabel,
 		class: klass = "",
 		resetAfterSelect = false,
+		icon,
 	}: {
 		value: string;
 		// eslint-disable-next-line no-unused-vars -- parameter in callback signature
@@ -38,6 +39,9 @@
 		ariaLabel?: string;
 		class?: string;
 		resetAfterSelect?: boolean;
+		// Leading glyph for an option, taking its value — rendered in the
+		// trigger for the current selection and beside each item in the list.
+		icon?: Snippet<[string]>;
 	} = $props();
 
 	// Writable derived: tracks the parent's `value`, but stays reassignable so
@@ -76,9 +80,14 @@
 		aria-label={ariaLabel}
 		class="flex cursor-pointer items-center justify-between gap-2 rounded border border-black bg-surface-raised px-2 py-1.5 text-xs text-tan disabled:opacity-50 {klass}"
 	>
-		<span class="truncate {isPlaceholder ? 'opacity-60' : ''}"
-			>{selectedLabel}</span
+		<span
+			class="flex min-w-0 items-center gap-1.5 {isPlaceholder
+				? 'opacity-60'
+				: ''}"
 		>
+			{#if icon}{@render icon(current)}{/if}
+			<span class="truncate">{selectedLabel}</span>
+		</span>
 		<span class="ml-2 text-tan opacity-60">▼</span>
 	</Select.Trigger>
 	<Select.Portal>
@@ -115,7 +124,10 @@
 		class="flex cursor-pointer items-center justify-between px-3 py-1.5 text-sm text-tan data-[disabled]:cursor-default data-[highlighted]:bg-surface-raised data-[disabled]:opacity-40"
 	>
 		{#snippet children({ selected })}
-			{opt.label}
+			<span class="flex min-w-0 items-center gap-1.5">
+				{#if icon}{@render icon(opt.value)}{/if}
+				<span class="truncate">{opt.label}</span>
+			</span>
 			{#if selected}<span class="text-orange">✓</span>{/if}
 		{/snippet}
 	</Select.Item>

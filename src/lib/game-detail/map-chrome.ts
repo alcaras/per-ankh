@@ -2,9 +2,16 @@
 // the chrome follows the selected turn, so each value is looked up at that
 // turn rather than taken from the end of the game.
 
-import type { CharacterInfo } from "$lib/parser/types";
+import type { CharacterInfo, FamilyInfo } from "$lib/parser/types";
 import type { TechDiscoveryHistory } from "$lib/types/TechDiscoveryHistory";
-import { dynastyLeaders } from "./helpers";
+import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
+import type { YieldHistory } from "$lib/types/YieldHistory";
+import {
+	dynastyLeaders,
+	familyCrestKey,
+	findByPlayer,
+	type DetailPlayer,
+} from "./helpers";
 import type { GameTabId } from "./game-tabs.svelte";
 
 // The frame every piece of the chrome sits in, the tile hover panel included:
@@ -58,6 +65,51 @@ export function pointAtTurn<T extends { turn: number }>(
 	turn: number,
 ): T | undefined {
 	return points.findLast((p) => p.turn <= turn);
+}
+
+/**
+ * One player's point for a single yield at `turn`. The yield strip and the
+ * leader panel both reach a yield this way, so a yield reads the same in
+ * both.
+ */
+export function yieldPointAtTurn(
+	allYields: YieldHistory[],
+	player: DetailPlayer,
+	yieldType: string,
+	turn: number,
+): YieldDataPoint | undefined {
+	const series = findByPlayer(
+		allYields.filter((y) => y.yield_type === yieldType),
+		player,
+		(y) => y.player_id,
+		(y) => y.nation,
+	);
+	return series ? pointAtTurn(series.data, turn) : undefined;
+}
+
+/**
+ * The crest sprite key for a ruler's family. A `CharacterInfo` carries the
+ * family but not its class, so the class comes from the game's own `families`
+ * rows — the save writes family state per player (Player.FamilyHeadID and its
+ * siblings, parsers/families.ts), so the match is on family *and* player.
+ *
+ * Across test-data/saves/ (12 saves, 149 reigning rulers) 93 rulers have a
+ * family at all; 89 of those resolve a crest, every one of them through the
+ * family class, because no ruler's family matched per-family crest art. So
+ * the class lookup is what makes the icon appear, not a refinement on it.
+ */
+export function familyCrestFor(
+	families: FamilyInfo[],
+	playerId: number,
+	family: string | null,
+): string | null {
+	if (!family) return null;
+	const row = families.find(
+		(f) => f.family_name === family && f.player_xml_id === playerId,
+	);
+	// `family_class` is "" when the save's global FamilyClass map had no entry,
+	// which familyCrestKey treats as absent.
+	return familyCrestKey(family, row?.family_class);
 }
 
 /**

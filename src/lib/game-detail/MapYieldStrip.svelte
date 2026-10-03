@@ -17,7 +17,6 @@
 	import {
 		YIELD_CHART_CONFIG,
 		cumulativeIsGameTotal,
-		findByPlayer,
 		type DetailPlayer,
 	} from "./helpers";
 	import { STOCKPILE_SCALE, pricesByTurn } from "./economy";
@@ -25,7 +24,7 @@
 		CHROME_PANEL_CLASS,
 		TOP_BAR_YIELD_GROUPS,
 		type TopBarYield,
-		pointAtTurn,
+		yieldPointAtTurn,
 	} from "./map-chrome";
 
 	let {
@@ -62,13 +61,7 @@
 	}
 
 	function slotFor({ yieldType, stockpiled, tab }: TopBarYield) {
-		const series = findByPlayer(
-			allYields.filter((y) => y.yield_type === yieldType),
-			player,
-			(y) => y.player_id,
-			(y) => y.nation,
-		);
-		const point = series ? pointAtTurn(series.data, turn) : undefined;
+		const point = yieldPointAtTurn(allYields, player, yieldType, turn);
 		const held = stockpiled
 			? playerResources.find(
 					(r) =>
