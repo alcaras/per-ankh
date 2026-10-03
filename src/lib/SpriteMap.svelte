@@ -130,17 +130,26 @@
 	}
 
 	// Returns the CAPITAL_<family> sprite key from improvements-base for a
-	// capital tile, or null if the tile isn't a capital or the resolved family
-	// has no capital render. Capital sprites include their own ground patch
-	// (pinacotheca 2.2.0+), so no URBAN underlay is drawn beneath them.
-	function capitalSpriteKeyFor(
+	// city-centre tile, or null if the tile isn't a centre or the resolved
+	// family has no city render. The key is named for nation.xml's
+	// <CapitalAsset>, but that asset is the city's head tile rather than the
+	// nation's capital: 32 of the 33 nation entries declaring either tag give
+	// <CityAsset> the same ASSET_VARIATION_CITY_<FAMILY>_CAPITAL value, and
+	// Tile.getUrbanAsset (Tile.cs:13105) hands back the urban asset only when
+	// the tile is NOT a revealed city. So every city centre draws it, and the
+	// capital is marked by the banner's star instead. (NATION_HYKSOS is the
+	// lone split — EGYPT capital, CARTHAGE cities — which the alias bake's
+	// urban+capital pair can't express; its centres all render CARTHAGE.)
+	// City sprites include their own ground patch (pinacotheca 2.2.0+), so no
+	// URBAN underlay is drawn beneath them.
+	function cityCenterSpriteKeyFor(
 		tile: MapTile,
 		aliases: Map<string, NationAliasEntry>,
 		baseManifest: AtlasManifest,
 		founderByCity: Map<string, string | null>,
 	): string | null {
 		const nation = renderNationFor(tile, founderByCity);
-		if (!tile.is_capital || !nation) return null;
+		if (!tile.is_city_center || !nation) return null;
 		const cf = capitalFamilyFor(nation, aliases);
 		if (!cf) return null;
 		const key = `CAPITAL_${cf}`;
@@ -1319,11 +1328,6 @@
 		applyViewState({ ...cur, zoom: newZoom });
 	}
 
-	function fitView() {
-		if (!deckCanvas) return;
-		applyViewState(calculateViewState());
-	}
-
 	function initDeck() {
 		if (!deckCanvas || !assetsLoaded) return;
 
@@ -1501,17 +1505,18 @@
 				sizeBasis: "width",
 				pickable: false,
 			}),
-			// Per-nation tile render — capital city for capital tiles, the
-			// nation's urban backdrop everywhere else. Both come from
+			// Per-nation tile render — the nation's city for a city centre,
+			// its urban backdrop everywhere else. Both come from
 			// improvements-base, both fully cover the inscribed hex, and
-			// neither is ever overdrawn by a composite (capitals don't have
-			// composite-eligible improvements; urban-empty tiles already
-			// filter out composite-covered ones).
+			// neither is ever overdrawn by a composite: of the 3,662 centre
+			// tiles in the local corpus 3,660 carry no improvement and 2 carry
+			// IMPROVEMENT_MINOR_CITY, which no family atlas renders, while
+			// urban-empty tiles already filter out composite-covered ones.
 			new IconLayer<MapTile>({
 				id: "nation-tile-icons",
 				data: tiles.filter((t) => {
-					const cap = capitalSpriteKeyFor(t, al, ibm, founderByCity);
-					if (cap != null) return true;
+					const city = cityCenterSpriteKeyFor(t, al, ibm, founderByCity);
+					if (city != null) return true;
 					if (t.terrain !== "TERRAIN_URBAN") return false;
 					const family = urbanFamilyFor(renderNationFor(t, founderByCity), al);
 					if (family == null) return false;
@@ -1522,8 +1527,8 @@
 				iconAtlas: IMPROVEMENTS_BASE_ATLAS_URL,
 				iconMapping: ibm.sprites,
 				getIcon: (d: MapTile) => {
-					const cap = capitalSpriteKeyFor(d, al, ibm, founderByCity);
-					if (cap != null) return cap;
+					const city = cityCenterSpriteKeyFor(d, al, ibm, founderByCity);
+					if (city != null) return city;
 					return `URBAN_${urbanFamilyFor(renderNationFor(d, founderByCity), al)}`;
 				},
 				getPosition: (d: MapTile) => hexToPixel(d.x, d.y),
@@ -1581,7 +1586,7 @@
 			// mod content not vendored into Reference/XML — by extending
 			// the iconMapping with the manifest's fallbackSprite cell.
 			// Excludes tiles already covered by a composite layer or by
-			// the nation-tile layer (capitals).
+			// the nation-tile layer (city centres).
 			new IconLayer<MapTile>({
 				id: "improvement-icons",
 				data: tiles.filter((t) => {
@@ -1592,7 +1597,7 @@
 					) {
 						return false;
 					}
-					if (capitalSpriteKeyFor(t, al, ibm, founderByCity) != null)
+					if (cityCenterSpriteKeyFor(t, al, ibm, founderByCity) != null)
 						return false;
 					if (compositeFamilyFor(t, al, fms, founderByCity) != null)
 						return false;
@@ -1861,28 +1866,6 @@
 				stroke-width="2.5"
 			>
 				<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
-			</svg>
-		</button>
-		<button
-			type="button"
-			class="zoom-btn"
-			onclick={fitView}
-			aria-label="Fit map to view"
-			title="Fit map to view"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M9 4H5a1 1 0 00-1 1v4m16 0V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4m6 0h4a1 1 0 001-1v-4"
-				/>
 			</svg>
 		</button>
 	</div>

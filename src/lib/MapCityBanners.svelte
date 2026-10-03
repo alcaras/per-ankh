@@ -32,10 +32,14 @@
 	import { CHROME_PANEL_CLASS } from "$lib/game-detail/map-chrome";
 
 	// How far above the tile centre the banner's foot sits, in WORLD units, so
-	// it hugs the sprite at every zoom. The city sprite is drawn from a
-	// 211 × 167 atlas cell centred on the tile, so its top edge is ~84 world
-	// units up; 95 clears it with a hair of air.
-	const BANNER_WORLD_OFFSET_Y = 95;
+	// it holds the same place at every zoom. This is the tile's own hex top
+	// vertex — SpriteMap's HEX_RADIUS_Y, HEX_V_SPACING / 1.5 — so the frame
+	// never floats past the hex it names. The atlas cell is 167 units tall
+	// against a 122-unit row pitch, so the earlier 95 put the foot above the
+	// vertex and into the neighbouring row, which is what made the centre tile
+	// ambiguous; the caret under the frame points out the rest. The sprite's
+	// top edge is ~84 units up, so the frame overlaps its topmost 3 units.
+	const BANNER_WORLD_OFFSET_Y = 81;
 
 	// Above this zoom a city gets the full framed banner; below it, the
 	// name-only label the game falls back to when zoomed out. Measured over the
@@ -134,6 +138,20 @@
 		white-space: nowrap;
 		cursor: pointer;
 		z-index: 5;
+	}
+
+	/* Caret under the frame, pointing into the hex the banner names. Fixed in
+	   CSS pixels like the frame it hangs from, so it stays legible at every
+	   zoom. The label variant drops it with the rest of the frame. */
+	.city-banner:not(.is-label)::after {
+		content: "";
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		margin-left: -4px;
+		border-left: 4px solid transparent;
+		border-right: 4px solid transparent;
+		border-top: 5px solid rgb(var(--color-tan) / 0.5);
 	}
 
 	/* Zoomed out: the name alone, legible against the map with no frame. */
