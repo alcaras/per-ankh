@@ -108,9 +108,9 @@
 		return cognomen ? `${name} ${cognomen}` : name;
 	});
 
-	// The portrait at its native size: every one of the 493 baked portraits is
+	// The portrait at its native size: every one of the 661 baked portraits is
 	// 128x128, so anything else resamples it. The art ships for most but not
-	// all rulers — 135 of the 149 reigning rulers across test-data/saves/ —
+	// all rulers — 147 of the 149 reigning rulers across test-data/saves/ —
 	// and SpriteIcon renders nothing for the rest, so the frame is gated on
 	// the sprite resolving rather than on the id, or it would draw an empty
 	// box.
