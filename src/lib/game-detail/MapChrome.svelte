@@ -178,8 +178,10 @@
 	// The plate is sized for the widest value the corpus holds: legitimacy
 	// reaches 270 and the orders rate 81 across test-data/saves/, so three
 	// digits, and the slot doesn't resize under the pointer as playback runs.
-	const RAIL_SLOT_CLASS =
-		"flex h-11 w-11 flex-none flex-col items-center justify-center gap-0.5 rounded border border-tan/50 bg-surface-deep/80";
+	// The size on its own dresses a slot that is reserved rather than filled,
+	// which is how the left rail keeps both its positions (see below).
+	const RAIL_SLOT_SIZE_CLASS = "h-11 w-11 flex-none";
+	const RAIL_SLOT_CLASS = `flex ${RAIL_SLOT_SIZE_CLASS} flex-col items-center justify-center gap-0.5 rounded border border-tan/50 bg-surface-deep/80`;
 	const RAIL_ICON_SIZE = 20;
 
 	const value = (n: number | null | undefined): string =>
@@ -285,7 +287,15 @@
 						</span>
 
 						<span class="flex items-stretch gap-1.5">
-							<!-- Left rail: who the ruler is. Archetype glyphs come
+							<!-- Left rail: who the ruler is — the archetype above, the
+							     family crest below. Both are optional, and 75 of the 149
+							     rulers across test-data/saves/ carry exactly one, so each
+							     position keeps its box whether or not anything draws in
+							     it: a rail that renders only what resolves centres its
+							     lone slot against the two opposite, and the archetype
+							     stops reading beside Orders. Reserved rather than plated,
+							     because an empty frame would read as a standing the ruler
+							     doesn't have. Archetype glyphs come
 							     from traits-trimmed, the squared copy that fills its box
 							     like the plated icons beside it (#85) — the untrimmed tile
 							     reads a size smaller at the same px. -->
@@ -299,6 +309,8 @@
 											alt={archetype.label}
 										/>
 									</span>
+								{:else}
+									<span class={RAIL_SLOT_SIZE_CLASS}></span>
 								{/if}
 								{#if family}
 									<span class={RAIL_SLOT_CLASS} title={family.label}>
@@ -309,6 +321,8 @@
 											alt={family.label}
 										/>
 									</span>
+								{:else}
+									<span class={RAIL_SLOT_SIZE_CLASS}></span>
 								{/if}
 							</span>
 
