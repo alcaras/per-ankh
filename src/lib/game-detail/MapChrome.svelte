@@ -15,6 +15,7 @@
 	import { gameTabs, type GameTabId } from "./game-tabs.svelte";
 	import {
 		findByPlayer,
+		getSpritePath,
 		hasVictoryPoints,
 		rulerName,
 		techName,
@@ -207,7 +208,9 @@
 						<span class="block text-sm font-bold text-bright">
 							{techName(research.tech)}
 						</span>
-						<span class="block text-xs tabular-nums">{research.turns}y</span>
+						<span class="block text-xs tabular-nums"
+							>{research.turns} turns</span
+						>
 					</span>
 				</button>
 			{/if}
@@ -220,7 +223,10 @@
 					onclick={() => onOpenTab("leaders")}
 					class="pointer-events-auto absolute bottom-0 left-0 flex cursor-pointer items-center gap-3 p-2 pr-4 text-left transition-colors hover:border-tan {CHROME_PANEL_CLASS}"
 				>
-					{#if ruler.portrait}
+					<!-- The border belongs to the art, so the guard is whether the
+					     sprite resolves: SpriteIcon renders nothing for a portrait
+					     with no baked art, which would leave an empty box. -->
+					{#if ruler.portrait && getSpritePath("portraits", ruler.portrait)}
 						<span class="block overflow-hidden rounded border border-tan/50">
 							<SpriteIcon
 								category="portraits"
