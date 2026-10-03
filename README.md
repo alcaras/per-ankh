@@ -112,7 +112,10 @@ To test **real Discord OAuth** instead, set `DISCORD_CLIENT_SECRET` in `cloud/.d
 npm run check        # svelte-kit sync + svelte-check
 npm run lint         # eslint
 npm run format       # prettier --write .
+(cd cloud && npm run typecheck && npm test)  # the Worker's type check + tests
 ```
+
+The pre-push set is `npm run lint && npm run check` plus that `cloud` line — [`CONTRIBUTING.md`](CONTRIBUTING.md#fork-and-pr-workflow) is the canonical copy.
 
 ### Cloud Admin CLI
 
