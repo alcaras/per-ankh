@@ -1204,10 +1204,14 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/HUN_LEADER_MALE_10_ADULT.2302922d.webp",
 	"portraits/HYPATIA":
 		"/sprites/portraits/HISTORICAL_PERSON_AGNODICE.b40f0757.webp",
+	"portraits/INCITATUS":
+		"/sprites/portraits/ANIMAL_PORTRAIT_HORSE.71ea5657.webp",
 	"portraits/JOSEPHUS":
 		"/sprites/portraits/HISTORICAL_PERSON_JOSEPHUS.c4031ee1.webp",
 	"portraits/JULIUS_CAESAR":
 		"/sprites/portraits/HISTORICAL_PERSON_JULIUS.c8e58d9c.webp",
+	"portraits/KANISHKA":
+		"/sprites/portraits/HISTORICAL_PERRSON_KANISHKA.24f22ea7.webp",
 	"portraits/KARIKALA":
 		"/sprites/portraits/HISTORICAL_PERSON_KARIKALA.fb7ba28c.webp",
 	"portraits/KHUFU": "/sprites/portraits/HISTORICAL_PERSON_KHUFU.72310b8c.webp",

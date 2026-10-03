@@ -20,9 +20,9 @@
 	import { gameTabs, type GameTabId } from "./game-tabs.svelte";
 	import {
 		findByPlayer,
-		getSpritePath,
 		rulerCognomen,
 		rulerName,
+		rulerPortrait,
 		techName,
 		type DetailPlayer,
 	} from "./helpers";
@@ -108,18 +108,13 @@
 		return cognomen ? `${name} ${cognomen}` : name;
 	});
 
-	// The portrait at its native size: every one of the 661 baked portraits is
+	// The portrait at its native size: every one of the 663 baked portraits is
 	// 128x128, so anything else resamples it. The art ships for most but not
 	// all rulers — 147 of the 149 reigning rulers across test-data/saves/ —
-	// and SpriteIcon renders nothing for the rest, so the frame is gated on
-	// the sprite resolving rather than on the id, or it would draw an empty
-	// box.
+	// so the frame hangs on rulerPortrait, which is null for the rest, rather
+	// than on the id, or it would draw an empty box.
 	const PORTRAIT_SIZE = 128;
-	const portrait = $derived(
-		ruler?.portrait && getSpritePath("portraits", ruler.portrait)
-			? ruler.portrait
-			: null,
-	);
+	const portrait = $derived(ruler ? rulerPortrait(ruler) : null);
 
 	const archetype = $derived(
 		ruler?.archetype

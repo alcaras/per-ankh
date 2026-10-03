@@ -5,7 +5,7 @@
 		PlayerGoalInfo,
 	} from "$lib/parser/types";
 	import type { DetailPlayer, Reign } from "./helpers";
-	import { rulerCognomen, rulerName } from "./helpers";
+	import { rulerCognomen, rulerName, rulerPortrait } from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import Popover from "$lib/ui/Popover.svelte";
 	import {
@@ -44,6 +44,11 @@
 	// cognomen carries its own styling.
 	const name = $derived(rulerName(ruler) ?? "Unknown");
 	const cognomen = $derived(rulerCognomen(ruler));
+
+	// Both portrait slots — the trigger's and the detail header's — hang on the
+	// art resolving, not on the id, so a ruler we ship no portrait for loses the
+	// slot instead of keeping an empty box and its gap.
+	const portrait = $derived(rulerPortrait(ruler));
 
 	const archetypeLabel = (c: CharacterInfo): string | null =>
 		c.archetype ? formatArchetype(c.archetype) : null;
@@ -91,20 +96,20 @@
 	bind:open
 	ariaLabel={name}
 	contentClass="w-max max-w-[min(92vw,32rem)]"
-	frameClass="border-2 border-[#211b12] bg-[#2a2623] p-5 shadow-2xl"
+	frameClass="border-2 border-blue-gray bg-surface p-5 shadow-2xl"
 >
 	{#snippet trigger({ props })}
 		<!-- Compact leader card: archetype image, name, years of reign. -->
 		<button
 			{...props}
 			type="button"
-			class="flex items-center gap-2 rounded bg-[#35302b] px-3.5 py-2.5 text-left transition hover:brightness-125"
+			class="flex items-center gap-2 rounded bg-surface-raised px-3.5 py-2.5 text-left transition hover:brightness-125"
 		>
-			{#if ruler.portrait}
+			{#if portrait}
 				<div class="overflow-hidden rounded">
 					<SpriteIcon
 						category="portraits"
-						value={ruler.portrait}
+						value={portrait}
 						size={46}
 						alt={name}
 					/>
@@ -155,11 +160,11 @@
 		style={accentColor ? `border-color: ${accentColor};` : undefined}
 	>
 		<div class="flex flex-wrap items-center gap-3">
-			{#if ruler.portrait}
+			{#if portrait}
 				<div class="overflow-hidden rounded">
 					<SpriteIcon
 						category="portraits"
-						value={ruler.portrait}
+						value={portrait}
 						size={64}
 						alt={name}
 					/>

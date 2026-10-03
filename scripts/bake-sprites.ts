@@ -12,7 +12,7 @@
 //                                                  incl. UNIT_*__ICON glyphs
 //   resources/                                   → RESOURCE_*.png minus the
 //                                                  RESOURCE_3D_* map renders
-//   portraits/                                   → every ADULT portrait, keyed
+//   portraits/ (+ other/)                        → every ADULT portrait, keyed
 //                                                  by portrait zType (see below)
 //   improvements/IMPROVEMENT_FINISHED.png        → icons/IMPROVEMENT_FINISHED.png
 //   other/Cycle_Military_Normal.png              → icons/MILITARY.png
@@ -51,7 +51,11 @@
 // HISTORICAL_PERSON_DARIUS_I), one of the ethnic sets (SCYTHIAN_FEMALE_04), or
 // a named one-off (PIEFACE → HISTORICAL_PERSON_JESTER). 12 of the 149 reigning
 // rulers across test-data/saves/ wear one, which is what takes that corpus
-// from 135 resolved portraits to 147.
+// from 135 resolved portraits to 147. Two of the art names land outside
+// portraits/ — ANIMAL_PORTRAIT_HORSE (Incitatus, a horse a save really can
+// seat on the throne) and HISTORICAL_PERRSON_KANISHKA, whose typo is the
+// game's own and identical in the zValue and the filename, so it needs no
+// correction — both in other/, which is why art resolution walks two dirs.
 //
 // OUTPUT:
 //   static/sprites/<category>/<basename>.<hash>.png
@@ -522,6 +526,18 @@ async function loadPortraitArt(infosDir: string): Promise<Map<string, string>> {
 	return artByZType;
 }
 
+// Where a portrait's art file lives: portraits/ holds all but two of them (see
+// the header), so the dirs are tried in that order and the first hit wins.
+const PORTRAIT_ART_DIRS = ["portraits", "other"];
+
+function findPortraitArt(artName: string): string | null {
+	for (const dir of PORTRAIT_ART_DIRS) {
+		const path = resolve(PINACOTHECA_SPRITES, dir, `${artName}.png`);
+		if (existsSync(path)) return path;
+	}
+	return null;
+}
+
 // Downscale + re-encode an art PNG to webp, content-hash the *output* bytes, and
 // write it. Returns the public URL. `stem` names the file (the art sprite name).
 async function bakePortrait(
@@ -545,7 +561,6 @@ async function bakePortrait(
 // Keyed by portrait zType (resolved through the Reference XML, above), so e.g.
 // CHARACTER_PORTRAIT_ROMAN_LEADER_MALE_06 resolves to the ROME_* art it names.
 async function copyPortraits(sidecar: SpriteSidecar): Promise<number> {
-	const src = resolve(PINACOTHECA_SPRITES, "portraits");
 	const dst = resolve(SPRITES_OUT, "portraits");
 	await wipeAndRecreate(dst);
 
@@ -561,8 +576,8 @@ async function copyPortraits(sidecar: SpriteSidecar): Promise<number> {
 	for (const [zBase, artName] of artByZType) {
 		let url = urlByArt.get(artName);
 		if (url == null) {
-			const srcPath = resolve(src, `${artName}.png`);
-			if (!existsSync(srcPath)) {
+			const srcPath = findPortraitArt(artName);
+			if (srcPath == null) {
 				// zType names art not present in this pinacotheca build — skip it;
 				// the runtime falls back to no portrait. Reported in the summary.
 				missing.push(artName);

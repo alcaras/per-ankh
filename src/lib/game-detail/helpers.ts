@@ -1170,6 +1170,20 @@ export function rulerCognomen(c: CharacterInfo): string | null {
 	return c.cognomen ? cognomenName(c.cognomen) : null;
 }
 
+/**
+ * A ruler's portrait id when we ship the art, else null — what a caller gates
+ * the portrait slot on. The id itself isn't that gate: a save can name a
+ * portrait neither the Reference XML nor pinacotheca defines (2 of the 149
+ * reigning rulers across test-data/saves/ wear one), SpriteIcon renders nothing
+ * for those, and a slot gated on the id keeps its frame and its gap around an
+ * image that never arrives.
+ */
+export function rulerPortrait(c: CharacterInfo): string | null {
+	return c.portrait && getSpritePath("portraits", c.portrait)
+		? c.portrait
+		: null;
+}
+
 // ─── Build Comparison Panels ─────────────────────────────────────────
 
 /** One row's subject and how many of it a side has. */
