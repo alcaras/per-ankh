@@ -28,6 +28,7 @@
 		class: klass = "",
 		resetAfterSelect = false,
 		icon,
+		matchTriggerWidth = false,
 	}: {
 		value: string;
 		// eslint-disable-next-line no-unused-vars -- parameter in callback signature
@@ -42,6 +43,13 @@
 		// Leading glyph for an option, taking its value — rendered in the
 		// trigger for the current selection and beside each item in the list.
 		icon?: Snippet<[string]>;
+		// For a caller that stretches the trigger (`w-full`), hold the list to
+		// the trigger's width instead of letting it shrink to its own items.
+		// bits-ui measures the trigger onto the content as
+		// --bits-select-anchor-width. A floor rather than a fixed width, so a
+		// label longer than the trigger still widens the list rather than
+		// truncating in it.
+		matchTriggerWidth?: boolean;
 	} = $props();
 
 	// Writable derived: tracks the parent's `value`, but stays reassignable so
@@ -92,7 +100,9 @@
 	</Select.Trigger>
 	<Select.Portal>
 		<Select.Content
-			class="z-50 max-h-72 overflow-y-auto rounded-lg border border-surface bg-surface-sunken shadow-lg"
+			class="z-50 max-h-72 overflow-y-auto rounded-lg border border-surface bg-surface-sunken shadow-lg {matchTriggerWidth
+				? 'min-w-[var(--bits-select-anchor-width)]'
+				: ''}"
 		>
 			<Select.Viewport>
 				{#each options as entry (isSelectGroup(entry) ? entry.heading : entry.value)}

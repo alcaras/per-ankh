@@ -175,12 +175,14 @@
 	// The four rail slots share one plate and one glyph size, so the pair on
 	// the left lines up with the pair on the right. Recessed against the
 	// panel's own frame, with its trim — the step below the panel's surface.
-	// The plate is sized for the widest value the corpus holds: legitimacy
-	// reaches 270 and the orders rate 81 across test-data/saves/, so three
-	// digits, and the slot doesn't resize under the pointer as playback runs.
-	// The size on its own dresses a slot that is reserved rather than filled,
-	// which is how the left rail keeps both its positions (see below).
-	const RAIL_SLOT_SIZE_CLASS = "h-11 w-11 flex-none";
+	// The plate's width is cut to what it carries rather than squared off its
+	// height, which sat a 20px glyph in a box more than twice its width. It is
+	// still cut for the widest value the corpus holds: legitimacy reaches 270
+	// and the orders rate 81 across test-data/saves/, so three digits, and the
+	// slot doesn't resize under the pointer as playback runs. The size on its
+	// own dresses a slot that is reserved rather than filled, which is how the
+	// left rail keeps both its positions (see below).
+	const RAIL_SLOT_SIZE_CLASS = "h-11 w-8 flex-none";
 	const RAIL_SLOT_CLASS = `flex ${RAIL_SLOT_SIZE_CLASS} flex-col items-center justify-center gap-0.5 rounded border border-tan/50 bg-surface-deep/80`;
 	const RAIL_ICON_SIZE = 20;
 
@@ -273,6 +275,7 @@
 					ariaLabel="Player"
 					class="w-full px-1.5 py-0.5 text-[11px]"
 					icon={nationCrest}
+					matchTriggerWidth
 				/>
 
 				{#if ruler}
@@ -286,7 +289,7 @@
 							{rulerLabel}
 						</span>
 
-						<span class="flex items-stretch gap-1.5">
+						<span class="flex items-stretch gap-2">
 							<!-- Left rail: who the ruler is — the archetype above, the
 							     family crest below. Both are optional, and 75 of the 149
 							     rulers across test-data/saves/ carry exactly one, so each
