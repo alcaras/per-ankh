@@ -31,6 +31,7 @@
 	import {
 		CHROME_PANEL_CLASS,
 		familyCrestFor,
+		hasYieldRates,
 		nextDiscovery,
 		pointAtTurn,
 		rulerAt,
@@ -229,7 +230,10 @@
 				{/each}
 			</div>
 		</Tooltip.Provider>
-		{#if player}
+		<!-- A save from before the game recorded yield rates leaves every slot
+		     empty, so the strip goes rather than reading as nine dashes — its
+		     wrapper with it, or the top bar keeps the gap the strip sat in. -->
+		{#if player && hasYieldRates(game.yield_history, player)}
 			<div class="pointer-events-auto">
 				<MapYieldStrip
 					allYields={game.yield_history}

@@ -10,6 +10,7 @@ import {
 	dynastyLeaders,
 	familyCrestKey,
 	findByPlayer,
+	ownedByPlayer,
 	type DetailPlayer,
 } from "./helpers";
 import type { GameTabId } from "./game-tabs.svelte";
@@ -85,6 +86,32 @@ export function yieldPointAtTurn(
 		(y) => y.nation,
 	);
 	return series ? pointAtTurn(series.data, turn) : undefined;
+}
+
+/**
+ * Whether this player's yield strip has anything to show: any yield, any
+ * turn. A save from before the game recorded yield rates has nothing, and the
+ * strip is dropped rather than drawn as nine dashes.
+ *
+ * It asks across every yield because a rate the save never recorded is a null
+ * point rather than a missing series: `deriveYieldHistory` builds each series
+ * over every turn whether the save had rows for it or not. Per yield the
+ * question would answer "no" far more often than it means to — the game
+ * writes a row only when the rate changes (`setTurnYieldRate`, Player.cs:11464)
+ * and the yield's block only when it has any row at all (`writeGameXML`,
+ * Player.cs:3413), so a realm that never earned Wood has no Wood rows and the
+ * slot reads "—" on an otherwise complete save.
+ */
+export function hasYieldRates(
+	allYields: YieldHistory[],
+	player: DetailPlayer,
+): boolean {
+	return ownedByPlayer(
+		allYields,
+		player,
+		(y) => y.player_id,
+		(y) => y.nation,
+	).some((series) => series.data.some((point) => point.rate != null));
 }
 
 /**
