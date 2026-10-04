@@ -17,6 +17,9 @@
 	import { resolve } from "$app/paths";
 	import DiscordMark from "$lib/ui/DiscordMark.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
+	import CopyButton from "$lib/tournament/CopyButton.svelte";
+	import CopyMark from "$lib/ui/CopyMark.svelte";
+	import CheckMark from "$lib/ui/CheckMark.svelte";
 	import type {
 		OpponentBadge,
 		RecommendedOpponent,
@@ -44,6 +47,28 @@
 		active_this_week: "Active this week",
 		new_here: "New here",
 	};
+
+	// The message to send them, ready to paste. The point of the whole card is
+	// to get from "here is someone to play" to a game being arranged, and the
+	// step that actually stalls is composing the opening line — so it is written
+	// here, map and all, and the viewer only has to paste it.
+	//
+	// `map.setting` is already the part that identifies the map — the Worker
+	// trims it (ratings/pick-map.ts), so the name and setting here are the same
+	// pair its test pins as unambiguous across the whole pool.
+	function dmFor(o: RecommendedOpponent): string {
+		if (!o.map) return "Fancy a game?";
+		return `Fancy a game? Per-Ankh suggests ${o.map.name} (${o.map.setting}) — ${o.map.url}`;
+	}
+
+	// What the button says it will do, as a sentence — the `title` half of the
+	// app's icon copy buttons, `label` being the accessible name. It names the
+	// map because the message does, so hovering tells the viewer what they are
+	// about to propose without copying it first.
+	function copyTitleFor(o: RecommendedOpponent): string {
+		const game = o.map ? `a game on ${o.map.name}` : "a game";
+		return `Copy a ready-to-paste message inviting ${o.display_name} to ${game}`;
+	}
 
 	// The card's badge row: the pair's history first, then the opponent's own
 	// badges.
@@ -104,6 +129,16 @@
 					{o.display_name}
 				</ProfileLink>
 
+				<!-- The suggested map, above the badges so the badge row stays the
+				     last thing in this column — the card is `items-end`, so whatever
+				     ends the column is what the Discord chip lines up with. Name and
+				     setting exactly as the copied message says them. -->
+				{#if o.map}
+					<div class="mt-1 truncate text-xs text-tan opacity-70">
+						{o.map.name} · {o.map.setting}
+					</div>
+				{/if}
+
 				<div class="mt-1 flex flex-wrap items-center gap-1.5">
 					{#each labelsFor(o) as label (label)}
 						<span
@@ -115,6 +150,23 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- Copy the opening message, map and link included. Drawn like every
+		     other icon copy button in the app (the account page, the match
+		     popover): `title` is the sentence saying what lands on the clipboard.
+		     `label` names the opponent, where its siblings' labels don't need to —
+		     theirs are one to a page, and there is one of these per card, so a
+		     bare "Copy message" would read out ten identical buttons. -->
+		<CopyButton
+			text={() => dmFor(o)}
+			label="Copy message to {o.display_name}"
+			title={copyTitleFor(o)}
+			class="inline-flex shrink-0 items-center justify-center rounded border border-surface p-1 text-tan transition-colors hover:bg-surface-hover hover:text-orange"
+		>
+			{#snippet children(copied)}
+				{#if copied}<CheckMark />{:else}<CopyMark />{/if}
+			{/snippet}
+		</CopyButton>
 
 		<!-- Their Discord profile, in the blurple the home page signs in with —
 		     same brand call to action, so the one Discord control on a page always

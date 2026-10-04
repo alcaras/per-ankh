@@ -5,8 +5,9 @@ import {
 	MIN_RECOMMENDATION_COUNT,
 	RECOMMENDATION_COUNT,
 	type RecommendationCandidate,
+	type RecommendationDuel,
 } from "./recommend";
-import type { Duel } from "./glicko2";
+import { ATLAS_POOL } from "../generated/atlas-pool";
 
 const TODAY = "2026-08-26";
 const RECENT = "2026-08-20";
@@ -188,9 +189,15 @@ describe("buildRecommendations", () => {
 			player("rookie", { publicGames: 2 }),
 			player("today", { lastActive: TODAY, lastPublicPlayed: TODAY }),
 		];
-		const duels: Duel[] = [
-			{ date: "2026-08-01", p1: "me", p2: "rival", winner: "me" },
-			{ date: "2026-08-10", p1: "me", p2: "rival", winner: "rival" },
+		const duels: RecommendationDuel[] = [
+			{ date: "2026-08-01", p1: "me", p2: "rival", winner: "me", script: null },
+			{
+				date: "2026-08-10",
+				p1: "me",
+				p2: "rival",
+				winner: "rival",
+				script: null,
+			},
 		];
 		const lists = buildRecommendations({ players, duels, today: TODAY });
 		const mine = new Map(
@@ -229,11 +236,12 @@ describe("buildRecommendations", () => {
 
 	it("prefers a fresh pairing to this month's third rematch", () => {
 		const players = [player("me"), player("again"), player("fresh")];
-		const duels: Duel[] = Array.from({ length: 3 }, (_, i) => ({
+		const duels: RecommendationDuel[] = Array.from({ length: 3 }, (_, i) => ({
 			date: `2026-08-0${i + 1}`,
 			p1: "me",
 			p2: "again",
 			winner: "me",
+			script: null,
 		}));
 		const lists = buildRecommendations({ players, duels, today: TODAY });
 		// With only two candidates there is room for both — the decay is a
@@ -301,6 +309,44 @@ describe("buildRecommendations", () => {
 		];
 		const lists = buildRecommendations({ players, duels: [], today: TODAY });
 		expect(idsFor(lists, "me")).toEqual(["far", "near", "mid"]);
+	});
+
+	it("suggests a different map on every row it can", () => {
+		// The pool holds several configurations of some scripts and one of
+		// others, so picking per pair in isolation returns the popular scripts
+		// over and over. Nobody here has played anything, so every row is free
+		// to be a fresh script and they should all differ.
+		const players = [player("me"), ...pool(12)];
+		const lists = buildRecommendations({ players, duels: [], today: TODAY });
+
+		const mine = lists.get("me") ?? [];
+		expect(mine.every((r) => r.mapAnchor !== null)).toBe(true);
+
+		const scripts = mine.map(
+			(r) => ATLAS_POOL.find((m) => m.anchor === r.mapAnchor)!.script,
+		);
+		expect(new Set(scripts).size).toBe(scripts.length);
+	});
+
+	it("avoids a map either of them has played lately", () => {
+		// Every duel on one script, recent — nobody should be sent back to it
+		// while the rest of the pool is untouched.
+		const players = [player("me"), player("rival")];
+		const duels: RecommendationDuel[] = [
+			{
+				date: "2026-08-01",
+				p1: "me",
+				p2: "rival",
+				winner: "me",
+				script: ATLAS_POOL[0].script,
+			},
+		];
+		const lists = buildRecommendations({ players, duels, today: TODAY });
+		const rec = (lists.get("me") ?? [])[0];
+
+		const playedScript = ATLAS_POOL[0].script;
+		const suggested = ATLAS_POOL.find((m) => m.anchor === rec.mapAnchor)!;
+		expect(suggested.script).not.toBe(playedScript);
 	});
 
 	it("is deterministic — same inputs, same lists in the same order", () => {

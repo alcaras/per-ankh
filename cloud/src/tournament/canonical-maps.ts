@@ -82,3 +82,27 @@ const SCRIPT_OPTIONS_KEYS: Readonly<Record<string, string>> = {
 export function scriptOptionsKey(script: string): string {
 	return SCRIPT_OPTIONS_KEYS[script] ?? script;
 }
+
+// A superseded spelling → the zType that replaced it. Mirror of the `aliases`
+// fields in KNOWN_MAP_SCRIPTS, and the one place in the Worker that folds the
+// two together.
+//
+// Old World retires a script by replacing its content rather than by
+// registering a replacement, so nothing in the game maps the old token to the
+// new one and a save uploaded under the old spelling is the only place it
+// survives. games.map_class carries whatever its save said, which is why the
+// fold belongs on the read path (ratings/duels.ts) and not in the vocabulary
+// above: an alias is still not a value a pool may hold, and
+// canonical-maps.test.ts pins both halves of that — it is absent from
+// CANONICAL_MAP_SCRIPTS_SET and it borrows no options manifest.
+const SUPERSEDED_SCRIPTS: Readonly<Record<string, string>> = {
+	MAPCLASS_MapScriptInlandSea: "MAPCLASS_MapScriptInlandSea2",
+};
+
+// The current zType for a script as some record spells it, so two records
+// written years apart compare as the same map. Unknown values pass through
+// unchanged — a script we have no entry for is still the best answer we have
+// for what it is.
+export function resolveScriptSpelling(script: string): string {
+	return SUPERSEDED_SCRIPTS[script] ?? script;
+}

@@ -30,6 +30,7 @@
 import type { QueryableD1 } from "../d1";
 import { COMPOSITION_GAME_IDS_SQL, remoteGameModeSql } from "../games-scope";
 import { UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL } from "../online-ids";
+import { resolveScriptSpelling } from "../tournament/canonical-maps";
 import type { Duel } from "./glicko2";
 
 export interface ResolvedDuel extends Duel {
@@ -41,6 +42,15 @@ export interface ResolvedDuel extends Duel {
 	// badge must not be derived from a game nobody outside the pair can see
 	// (recommend.ts).
 	isPublic: boolean;
+	// The map script they played it on, as the current zType spells it. The two
+	// sources read it from different columns — tournament_matches.map_script and
+	// games.map_class — and since migration 0045 both hold the zType Old World
+	// declares, which is also what the baked atlas pool stores, so the three
+	// compare directly. A save written before a script was replaced carries the
+	// superseded spelling instead, so the casual read folds it (see there).
+	// Null when the record doesn't say: an old game row, or a tournament match
+	// with no map set. Read by the map suggestion, not by the rating engine.
+	script: string | null;
 }
 
 export interface DuelExtraction {
@@ -97,7 +107,7 @@ async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 	const rows = await db
 		.prepare(
 			`SELECT m.match_id, m.slot_a_id, m.slot_a_user_id, m.slot_b_user_id,
-			        m.winner_slot_id,
+			        m.winner_slot_id, m.map_script,
 			        substr(COALESCE(m.reported_at, m.created_at), 1, 10) AS dt,
 			        g.xml_game_id
 			   FROM tournament_matches m
@@ -113,6 +123,7 @@ async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 			slot_a_user_id: string;
 			slot_b_user_id: string;
 			winner_slot_id: string;
+			map_script: string | null;
 			dt: string | null;
 			xml_game_id: string | null;
 		}>();
@@ -129,6 +140,7 @@ async function tournamentDuels(db: QueryableD1): Promise<ResolvedDuel[]> {
 			winner:
 				r.winner_slot_id === r.slot_a_id ? r.slot_a_user_id : r.slot_b_user_id,
 			isPublic: true,
+			script: r.map_script || null,
 		});
 	}
 	return out;
@@ -138,6 +150,7 @@ interface HumanSlotRow {
 	game_id: string;
 	xml_game_id: string;
 	uploader_user_id: string | null;
+	map_class: string | null;
 	dt: string | null;
 	is_public: number;
 	is_uploader: number;
@@ -158,6 +171,7 @@ async function casualDuels(
 		.prepare(
 			`SELECT ps.game_id, ps.is_uploader, ps.is_winner, ps.online_id,
 			        g.xml_game_id, g.user_id AS uploader_user_id, g.is_public,
+			        g.map_class,
 			        substr(COALESCE(g.save_date, g.created_at), 1, 10) AS dt
 			   FROM player_summaries ps
 			   JOIN games g ON g.game_id = ps.game_id
@@ -209,13 +223,67 @@ async function casualDuels(
 			p2: resolved[1].userId,
 			winner: winner.userId,
 			isPublic: slots[0].is_public === 1,
+			// Folded to the current zType: games.map_class is whatever the save
+			// said, and a game played before a script was replaced carries the
+			// superseded spelling, which would otherwise read as a map nobody has
+			// ever played. The tournament read needs no fold — an alias is not a
+			// value a pool may hold (canonical-maps.test.ts pins that), so a match
+			// row can't carry one.
+			script: slots[0].map_class
+				? resolveScriptSpelling(slots[0].map_class)
+				: null,
 		});
 	}
 	return out;
 }
 
-// Every ratable duel in D1, de-duplicated by key. A tournament record wins a
-// shared key: it is the reported, official result.
+// Merge the two sources into one duel per key.
+//
+// A tournament record wins a shared key — it is the reported, official result —
+// but winning the key is not the same as winning every field. Two of them come
+// from whichever source knows the answer, not from whichever row held the key:
+//
+//   isPublic — a match one player uploaded publicly and the other privately is
+//   a public match; the public upload already published that it happened. Same
+//   reading the played-games board takes of a double-uploaded match
+//   (stats/handlers.ts).
+//
+//   script — a tournament duel learns the map from the match row's map_script,
+//   a casual one from the save's map_class. A match reported without a map set,
+//   against a save that has one, would otherwise drop a game out of the map
+//   history for no better reason than which row happened to hold the key.
+//
+// A duel with no date is dropped rather than silently landing in whichever
+// rating period sorts first.
+//
+// Exported for the test: reaching this through extractDuels would mean a D1
+// fixture to exercise a merge rule. It fills fields in on the records it is
+// given and counts the dedup in `stats`, so the arrays it returns are the
+// caller's own.
+export function mergeDuels(
+	tournament: readonly ResolvedDuel[],
+	casual: readonly ResolvedDuel[],
+	stats: DuelExtraction["stats"],
+): ResolvedDuel[] {
+	const byKey = new Map<string, ResolvedDuel>();
+	for (const d of tournament) {
+		if (d.date) byKey.set(d.key, d);
+	}
+	for (const d of casual) {
+		if (!d.date) continue;
+		const seen = byKey.get(d.key);
+		if (seen) {
+			if (d.isPublic) seen.isPublic = true;
+			if (!seen.script && d.script) seen.script = d.script;
+			stats.deduped += 1;
+			continue;
+		}
+		byKey.set(d.key, d);
+	}
+	return [...byKey.values()];
+}
+
+// Every ratable duel in D1, de-duplicated by key.
 export async function extractDuels(db: QueryableD1): Promise<DuelExtraction> {
 	const stats: DuelExtraction["stats"] = {
 		tournament: 0,
@@ -232,26 +300,5 @@ export async function extractDuels(db: QueryableD1): Promise<DuelExtraction> {
 	stats.tournament = tournament.length;
 	stats.casual = casual.length;
 
-	// A duel with no date can't be placed in a rating period, so it is dropped
-	// rather than silently landing in whichever period sorts first.
-	const byKey = new Map<string, ResolvedDuel>();
-	for (const d of tournament) {
-		if (d.date) byKey.set(d.key, d);
-	}
-	for (const d of casual) {
-		if (!d.date) continue;
-		const seen = byKey.get(d.key);
-		if (seen) {
-			// A match one player uploaded publicly and the other privately is a
-			// public match — the public upload already published that it
-			// happened. Same reading the played-games board takes of a
-			// double-uploaded match (stats/handlers.ts).
-			if (d.isPublic) seen.isPublic = true;
-			stats.deduped += 1;
-			continue;
-		}
-		byKey.set(d.key, d);
-	}
-
-	return { duels: [...byKey.values()], stats };
+	return { duels: mergeDuels(tournament, casual, stats), stats };
 }

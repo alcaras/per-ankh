@@ -3,10 +3,7 @@
 // $lib/generated/{map-option-defs,map-script-options}.
 
 import type { MapPoolEntry } from "$lib/api-cloud";
-import {
-	LOW_CITY_SITES_THRESHOLD,
-	MAP_MIN_CITY_SITES,
-} from "$lib/generated/map-caveats";
+import { ATLAS_BASE_URL, ATLAS_POOL } from "$lib/generated/atlas-pool";
 import {
 	MAP_OPTION_DEFS,
 	type MapOptionDef,
@@ -297,8 +294,10 @@ export function mapPoolLabel(
 }
 
 // Base URL of the community map atlas (owtournamentatlas). The map anchor is
-// appended as a `#fragment`. Kept as a constant so a fork can repoint it.
-export const ATLAS_BASE_URL = "https://alcaras.github.io/owtournamentatlas/";
+// appended as a `#fragment`. Re-exported from the baked pool, which is the one
+// copy in the repo — a fork repoints it in scripts/bake-atlas-pool.ts and
+// re-bakes, so the Worker's link and this one can't disagree.
+export { ATLAS_BASE_URL };
 
 // The owtournamentatlas URL anchor for a map instance: its canonical compact
 // label, slugged — matching the atlas' own `slugify(cfgLabel(short))` — e.g.
@@ -317,26 +316,39 @@ export function atlasMapUrl(entry: MapPoolEntry): string {
 	return `${ATLAS_BASE_URL}#${atlasAnchor(entry)}`;
 }
 
+// A map can spawn few city sites when its observed minimum is at or below
+// this. A policy number, not an atlas fact — the atlas reports the minimum it
+// saw, and where to draw the line between "worth warning a player about" and
+// "normal" is ours. It lives beside its one reader rather than in the baked
+// pool so changing it doesn't mean re-running a baker.
+export const LOW_CITY_SITES_THRESHOLD = 10;
+
+// The pool by anchor. The baked module is an ordered array — the Worker picks
+// from it in order — and both lookups here are by anchor, so the index is
+// built once at module load.
+const POOL_BY_ANCHOR = new Map(ATLAS_POOL.map((m) => [m.anchor, m]));
+
 // Whether the map is covered by owtournamentatlas (its anchor resolves to a
-// real section). Keyed off the baked caveat table, which enumerates exactly the
-// atlas' PUBLISHED pool — the only maps the atlas index page creates anchors
-// for — so a map outside it never links to a dead anchor. Re-bake
-// (scripts/bake-map-caveats.ts) when the atlas pool changes.
+// real section). Keyed off the baked pool, which enumerates exactly the atlas'
+// PUBLISHED pool — the only maps the atlas index page creates anchors for — so
+// a map outside it never links to a dead anchor. Re-bake
+// (scripts/bake-atlas-pool.ts) when the atlas pool changes.
 export function mapInAtlas(entry: MapPoolEntry): boolean {
-	return atlasAnchor(entry) in MAP_MIN_CITY_SITES;
+	return POOL_BY_ANCHOR.has(atlasAnchor(entry));
 }
 
 const ARCHIPELAGO_SCRIPT = "MAPCLASS_MapScriptArchipelago";
 
 // A one-line generation caveat for the scheduling DM, or "" when the map has
-// none. Two independent risks (see map-caveats): Archipelago can spawn with the
-// capitals on separate landmasses (no land connection), and any map whose
-// observed minimum city sites is ≤ the threshold can spawn short on sites.
+// none. Two independent risks: Archipelago can spawn with the capitals on
+// separate landmasses (no land connection), and any map whose observed minimum
+// city sites (the baked pool's `minSites`) is ≤ the threshold can spawn short
+// on sites.
 // Either or both fold into a single "…if that happens, a caster will let you
 // know and you can reroll (or play on)" note, matching how casters handle it.
 export function mapCaveatNote(entry: MapPoolEntry): string {
 	const landRisk = entry.script === ARCHIPELAGO_SCRIPT;
-	const min = MAP_MIN_CITY_SITES[atlasAnchor(entry)];
+	const min = POOL_BY_ANCHOR.get(atlasAnchor(entry))?.minSites;
 	const siteRisk = min != null && min <= LOW_CITY_SITES_THRESHOLD;
 	if (!landRisk && !siteRisk) return "";
 	const lowSites = `with ${LOW_CITY_SITES_THRESHOLD} or fewer city sites`;

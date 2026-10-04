@@ -53,7 +53,7 @@ export function resolvePinacotheca(): string {
 }
 
 // owtournamentatlas checkout (https://github.com/alcaras/owtournamentatlas) —
-// the community map atlas. bake-map-caveats.ts reads its generation-stats data
+// the community map atlas. bake-atlas-pool.ts reads its generation-stats data
 // (src/data/atlas-dist.json) and the published pool (src/pages/index.astro).
 export function resolveAtlas(): string {
 	return resolvePath({

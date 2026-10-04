@@ -166,8 +166,9 @@ export async function rebuildRatings(
 
 	const insertRecommendation = db.prepare(
 		`INSERT OR REPLACE INTO user_recommended_opponents
-		   (user_id, position, opponent_user_id, meetings, badges, computed_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		   (user_id, position, opponent_user_id, meetings, badges, map_anchor,
+		    computed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 	);
 	const recommendationStatements: D1PreparedStatement[] = [];
 	let recommended = 0;
@@ -182,6 +183,7 @@ export async function rebuildRatings(
 					rec.opponentUserId,
 					rec.meetings,
 					JSON.stringify(rec.badges),
+					rec.mapAnchor,
 					computedAt,
 				),
 			);
