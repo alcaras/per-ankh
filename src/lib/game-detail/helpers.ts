@@ -3,12 +3,14 @@ import type {
 	PlayerNationEntry,
 	CharacterInfo,
 	CharacterTraitInfo,
+	FullGameData,
 	PlayerGoalInfo,
 } from "$lib/parser/types";
 import type { YieldHistory } from "$lib/types/YieldHistory";
 import type { YieldDataPoint } from "$lib/types/YieldDataPoint";
 import type { PlayerHistory } from "$lib/types/PlayerHistory";
 import type { PlayerInfo } from "$lib/types/PlayerInfo";
+import type { GameDetails } from "$lib/types/GameDetails";
 import type { StoryEvent } from "$lib/types/StoryEvent";
 import type { TechDiscoveryDataPoint } from "$lib/types/TechDiscoveryDataPoint";
 import type { ChartOption, LineSeriesOption } from "$lib/echarts";
@@ -229,6 +231,23 @@ export const YIELD_CHART_CONFIG: YieldChartConfig[] = [
 	},
 ];
 
+/**
+ * Whether a yield's `cumulative` is the game's own lifetime total (true) or
+ * our running sum of the per-turn rate (false). The parser decides it per
+ * save and yield, so every player's series of one yield agree. Absent on
+ * blobs parsed before 2.18.0, where the two are mixed — that reads as the
+ * running sum, the claim the blob can't contradict.
+ */
+export function cumulativeIsGameTotal(
+	allYields: YieldHistory[],
+	yieldType: string,
+): boolean {
+	return (
+		allYields.find((y) => y.yield_type === yieldType)
+			?.cumulative_is_game_total ?? false
+	);
+}
+
 // ─── Shared data-table styling (game-detail data tabs) ───────────────
 // Visual tokens matching the player games table: a dark blue-gray frame
 // holding surface rounded card rows under a surface-sunken toolbar-style header
@@ -269,7 +288,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		getValue: (c) => c.city_name,
 		format: (v, city) => {
 			const name = formatEnum(v as string, "CITYNAME_");
-			return city.is_capital ? `${name} ★` : name;
+			return city.is_capital ? `★ ${name}` : name;
 		},
 	},
 	{
@@ -456,7 +475,8 @@ export type SpriteCategory =
 	| "portraits"
 	| "improvements"
 	| "specialists"
-	| "projects";
+	| "projects"
+	| "resources";
 
 // Known tech name corrections (game data typos or alternate names)
 const TECH_SPRITE_FIXES: Record<string, string> = {
@@ -959,6 +979,45 @@ export function resolveDetailPlayers(
 }
 
 /**
+ * A game's per-player iteration source, shared by both views of a game: the
+ * tabs and the map view's chrome. `player_roster` is the id source; a blob
+ * without one falls back to a roster synthesized from player_history (which
+ * carries player_id) to recover ids for its id-less game_details.players rows.
+ */
+export function resolveGamePlayers(
+	game: Pick<FullGameData, "game_details" | "player_roster" | "player_history">,
+): DetailPlayer[] {
+	const roster: RosterLike[] =
+		game.player_roster.length > 0
+			? game.player_roster
+			: game.player_history.map((h) => ({
+					player_index: h.player_id,
+					player_name: h.player_name,
+					nation: h.nation,
+				}));
+	return resolveDetailPlayers(game.game_details.players, roster);
+}
+
+/** Whether the game can be won on victory points, so points mean something. */
+export function hasVictoryPoints(
+	details: Pick<GameDetails, "victory_conditions">,
+): boolean {
+	return details.victory_conditions?.includes("VICTORY_POINTS") ?? false;
+}
+
+/**
+ * The save owner: the first player of the uploader's nation. A nation can't
+ * tell two players apart in a mirror match, so the first one wins. With no
+ * nation to go on (an observer upload), each caller picks its own fallback.
+ */
+export function saveOwnerPlayer<T extends { nation: string | null }>(
+	players: T[],
+	nation: string,
+): T | undefined {
+	return players.find((p) => p.nation === nation);
+}
+
+/**
  * Filter per-entity rows down to those owned by `player`. Prefers the entity's
  * owner-id field when present (reparsed ≥2.6.0 blobs), falling back to nation
  * when it's absent (older blobs, where same-nation owners can't be split).
@@ -1109,6 +1168,20 @@ export function rulerName(c: CharacterInfo): string | null {
  */
 export function rulerCognomen(c: CharacterInfo): string | null {
 	return c.cognomen ? cognomenName(c.cognomen) : null;
+}
+
+/**
+ * A ruler's portrait id when we ship the art, else null — what a caller gates
+ * the portrait slot on. The id itself isn't that gate: a save can name a
+ * portrait neither the Reference XML nor pinacotheca defines (2 of the 149
+ * reigning rulers across test-data/saves/ wear one), SpriteIcon renders nothing
+ * for those, and a slot gated on the id keeps its frame and its gap around an
+ * image that never arrives.
+ */
+export function rulerPortrait(c: CharacterInfo): string | null {
+	return c.portrait && getSpritePath("portraits", c.portrait)
+		? c.portrait
+		: null;
 }
 
 // ─── Build Comparison Panels ─────────────────────────────────────────
@@ -1295,10 +1368,17 @@ export function createYieldChartOption(
 	const resolved = resolvePlayers(yieldData);
 	const byId = new Map(resolved.map((p) => [p.playerId, p]));
 
+	// Title and axis name the same quantity: "Total" only when the series is
+	// the game's own total, "Cumulative" for our running sum.
+	const cumulativePrefix = cumulativeIsGameTotal(yieldData, yieldType)
+		? "Total"
+		: "Cumulative";
 	const fullTitle =
-		mode === "rate" ? `${title} per Turn` : `Cumulative ${title}`;
+		mode === "rate" ? `${title} per Turn` : `${cumulativePrefix} ${title}`;
 	const fullYAxisLabel =
-		mode === "rate" ? `${yAxisLabel} per Turn` : `Total ${yAxisLabel}`;
+		mode === "rate"
+			? `${yAxisLabel} per Turn`
+			: `${cumulativePrefix} ${yAxisLabel}`;
 
 	// Value x-axis with a small pad so the area fill doesn't clip at the edges.
 	const turns = yieldData[0]?.data.map((d: YieldDataPoint) => d.turn) ?? [];
@@ -1309,7 +1389,8 @@ export function createYieldChartOption(
 	return {
 		...CHART_THEME,
 		// Compact drops the chart title outright (the toggle above the plot names
-		// it); non-compact keeps the derived "Cumulative X" / "X per Turn" title.
+		// it); non-compact keeps the derived "Total X" / "Cumulative X" /
+		// "X per Turn" title.
 		title: compact
 			? { show: false }
 			: { ...CHART_THEME.title, text: fullTitle },

@@ -6,6 +6,10 @@ export type YieldDataPoint = { turn: number,
  */
 rate: number | null, 
 /**
- * Cumulative total (from yield_total_history or computed running sum, divided by 10)
+ * Cumulative total, divided by 10 — the game's lifetime total for the
+ * yield (yield_total_history) or a running sum of `rate`, per
+ * `YieldHistory.cumulative_is_game_total`. Null only on blobs parsed
+ * before PARSER_VERSION 2.18.0, which emitted null for the turns before a
+ * total series' first row.
  */
 cumulative: number | null, };

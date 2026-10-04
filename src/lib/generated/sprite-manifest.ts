@@ -444,6 +444,20 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 	"laws/LAW_VASSALAGE": "/sprites/laws/LAW_VASSALAGE.63ccf06b.png",
 	"laws/LAW_VOLUNTEERS": "/sprites/laws/LAW_VOLUNTEERS.6d3c96ef.png",
 	"laws/LAW_ZEALOTRY": "/sprites/laws/LAW_ZEALOTRY.d37409f3.png",
+	"portraits/ADAD_GUPPI":
+		"/sprites/portraits/HISTORICAL_PERSON_ADAD_GUPPI.d1cd489d.webp",
+	"portraits/AGRIPPINA":
+		"/sprites/portraits/HISTORICAL_PERSON_AGRIPPINA.0966f3fe.webp",
+	"portraits/AKHENATEN":
+		"/sprites/portraits/HISTORICAL_PERSON_AKHENATEN.a3fb2352.webp",
+	"portraits/AKSUM_EZANA":
+		"/sprites/portraits/HISTORICAL_PERSON_EZANA.57b2c6e4.webp",
+	"portraits/AKSUM_GADARAT":
+		"/sprites/portraits/HISTORICAL_PERSON_GADARAT.ecba15db.webp",
+	"portraits/AKSUM_GUDIT":
+		"/sprites/portraits/HISTORICAL_PERSON_GUDIT.8850682d.webp",
+	"portraits/AKSUM_KALEB":
+		"/sprites/portraits/HISTORICAL_PERSON_KALEB.3cc9e96c.webp",
 	"portraits/AKSUM_LEADER_FEMALE_01":
 		"/sprites/portraits/AKSUM_LEADER_FEMALE_01_ADULT.8ae8cb71.webp",
 	"portraits/AKSUM_LEADER_FEMALE_02":
@@ -504,6 +518,24 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/AKSUM_LEADER_MALE_14_ADULT.c4001287.webp",
 	"portraits/AKSUM_LEADER_MALE_15":
 		"/sprites/portraits/AKSUM_LEADER_MALE_15_ADULT.3d0973e4.webp",
+	"portraits/AKSUM_MAKEDA":
+		"/sprites/portraits/HISTORICAL_PERSON_MAKEDA.b424e84a.webp",
+	"portraits/ALCIBIADES":
+		"/sprites/portraits/HISTORICAL_PERSON_ALCIBIADES.ef59cdde.webp",
+	"portraits/ALLI":
+		"/sprites/portraits/HISTORICAL_PERSON_ALLI-RAANI.e1b7d897.webp",
+	"portraits/ANTIPATER":
+		"/sprites/portraits/HISTORICAL_PERSON_ANTIPATER.9230ecf4.webp",
+	"portraits/ARCHIMEDES":
+		"/sprites/portraits/HISTORICAL_PERSON_ARCHIMEDES.111669c6.webp",
+	"portraits/ARTAXERXES_II":
+		"/sprites/portraits/HISTORICAL_PERSON_ARTAXERXES_II.213ab319.webp",
+	"portraits/ASHOKA":
+		"/sprites/portraits/HISTORICAL_PERSON_ASHOKA.195f55ae.webp",
+	"portraits/ASHURBANIPAL":
+		"/sprites/portraits/ASSYRIA_LEADER_MALE_16_ADULT.2fea240b.webp",
+	"portraits/ASHUR_UBALLIT_I":
+		"/sprites/portraits/HISTORICAL_PERSON_ASHUR_UBALLIT_I.2f2e34e1.webp",
 	"portraits/ASSYRIA_LEADER_FEMALE_01":
 		"/sprites/portraits/ASSYRIA_LEADER_FEMALE_01_ADULT.979486f0.webp",
 	"portraits/ASSYRIA_LEADER_FEMALE_02":
@@ -564,6 +596,12 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/ASSYRIA_LEADER_MALE_14_ADULT.77563293.webp",
 	"portraits/ASSYRIA_LEADER_MALE_15":
 		"/sprites/portraits/ASSYRIA_LEADER_MALE_15_ADULT.bde8ea69.webp",
+	"portraits/ATOSSA":
+		"/sprites/portraits/HISTORICAL_PERSON_ATOSSA.79390e91.webp",
+	"portraits/AUGUSTINE":
+		"/sprites/portraits/HISTORICAL_PERSON_AUGUSTINE.c0cbf9e6.webp",
+	"portraits/AUGUSTUS":
+		"/sprites/portraits/HISTORICAL_PERSON_AUGUSTUS.80c07ebc.webp",
 	"portraits/BABYLONIA_LEADER_FEMALE_01":
 		"/sprites/portraits/BABYLONIA_LEADER_FEMALE_01_ADULT.df50487d.webp",
 	"portraits/BABYLONIA_LEADER_FEMALE_02":
@@ -626,6 +664,12 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/BABYLONIA_LEADER_MALE_15_ADULT.e55dce81.webp",
 	"portraits/BABYLONIA_LEADER_MALE_16":
 		"/sprites/portraits/BABYLONIA_LEADER_MALE_16_ADULT.33161e68.webp",
+	"portraits/BARDIYA":
+		"/sprites/portraits/HISTORICAL_PERSON_BARDIYA.e048053c.webp",
+	"portraits/BARDIYA_GAUMATA":
+		"/sprites/portraits/HISTORICAL_PERSON_BARDIYA.e048053c.webp",
+	"portraits/BOUDICEA":
+		"/sprites/portraits/HISTORICAL_PERSON_BOUTICA.61d32394.webp",
 	"portraits/CARTHAGE_LEADER_FEMALE_01":
 		"/sprites/portraits/CARTHAGE_LEADER_FEMALE_01_ADULT.4bebfc1d.webp",
 	"portraits/CARTHAGE_LEADER_FEMALE_02":
@@ -746,6 +790,50 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/CARTHAGE_LEADER_MALE_30_ADULT.c0f28eb2.webp",
 	"portraits/CARTHAGE_LEADER_MALE_31":
 		"/sprites/portraits/CARTHAGE_LEADER_MALE_31_ADULT.69187928.webp",
+	"portraits/CATO":
+		"/sprites/portraits/ROME_LEADER_MALE_08_ADULT.896acefd.webp",
+	"portraits/CENKUTTUVAN":
+		"/sprites/portraits/HISTORICAL_PERSON_CHENKUTTUVAN.c4614c59.webp",
+	"portraits/CHANDRAGUPTA":
+		"/sprites/portraits/HISTORICAL_PERSON_CHANDRAGUPTA_MAURYA.8f643d6e.webp",
+	"portraits/CIMON_THE_FOREIGNER":
+		"/sprites/portraits/HISTORICAL_PERSON_CIMON.1fc895dd.webp",
+	"portraits/CONFUCIUS":
+		"/sprites/portraits/HISTORICAL_PERSON_CONFUCIUS.fdafaad0.webp",
+	"portraits/CYAXARES":
+		"/sprites/portraits/HISTORICAL_PERSON_CYAXARES_ADULT.ed018a26.webp",
+	"portraits/CYRUS":
+		"/sprites/portraits/PERSIA_LEADER_MALE_16_ADULT.d3c921bc.webp",
+	"portraits/DANE_FEMALE_01":
+		"/sprites/portraits/DANE_FEMALE_01_ADULT.3ac8d671.webp",
+	"portraits/DANE_FEMALE_02":
+		"/sprites/portraits/DANE_FEMALE_02_ADULT.edc5923c.webp",
+	"portraits/DANE_FEMALE_03":
+		"/sprites/portraits/DANE_FEMALE_03_ADULT.61a3e5d6.webp",
+	"portraits/DANE_FEMALE_04":
+		"/sprites/portraits/DANE_FEMALE_04_ADULT.91140d66.webp",
+	"portraits/DANE_FEMALE_05":
+		"/sprites/portraits/DANE_FEMALE_05_ADULT.bd7d8e12.webp",
+	"portraits/DANE_FEMALE_06":
+		"/sprites/portraits/DANE_FEMALE_06_ADULT.fc064c33.webp",
+	"portraits/DANE_MALE_01":
+		"/sprites/portraits/DANE_MALE_01_ADULT.8c36aa80.webp",
+	"portraits/DANE_MALE_02":
+		"/sprites/portraits/DANE_MALE_02_ADULT.080d2632.webp",
+	"portraits/DANE_MALE_03":
+		"/sprites/portraits/DANE_MALE_03_ADULT.2afa268a.webp",
+	"portraits/DANE_MALE_04":
+		"/sprites/portraits/DANE_MALE_04_ADULT.1cbd6647.webp",
+	"portraits/DANE_MALE_05":
+		"/sprites/portraits/DANE_MALE_05_ADULT.08c4df9e.webp",
+	"portraits/DANE_MALE_06":
+		"/sprites/portraits/DANE_MALE_06_ADULT.0c327b6e.webp",
+	"portraits/DANE_MALE_07":
+		"/sprites/portraits/DANE_MALE_07_ADULT.6be059d3.webp",
+	"portraits/DARIUS_I":
+		"/sprites/portraits/HISTORICAL_PERSON_DARIUS_I.48daac71.webp",
+	"portraits/DIDO":
+		"/sprites/portraits/CARTHAGE_LEADER_FEMALE_16_ADULT.f9345897.webp",
 	"portraits/EGYPT_LEADER_FEMALE_01":
 		"/sprites/portraits/EGYPT_LEADER_FEMALE_01_ADULT.945814c9.webp",
 	"portraits/EGYPT_LEADER_FEMALE_03":
@@ -864,6 +952,36 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/EGYPT_LEADER_MALE_29_ADULT.7e8c0d93.webp",
 	"portraits/EGYPT_LEADER_MALE_30":
 		"/sprites/portraits/EGYPT_LEADER_MALE_30_ADULT.61b31cd8.webp",
+	"portraits/EPICTETUS":
+		"/sprites/portraits/HISTORICAL_PERSON_EPICTETUS.7de1b42d.webp",
+	"portraits/EUCLID":
+		"/sprites/portraits/HISTORICAL_PERSON_EUCLID.0cd021ac.webp",
+	"portraits/GAIUS_MARIUS":
+		"/sprites/portraits/HISTORICAL_PERSON_GAIUS_MARIUS.57fc57bc.webp",
+	"portraits/GAUL_FEMALE_01":
+		"/sprites/portraits/GAUL_FEMALE_01_ADULT.9139e342.webp",
+	"portraits/GAUL_FEMALE_02":
+		"/sprites/portraits/GAUL_FEMALE_02_ADULT.ea6292a4.webp",
+	"portraits/GAUL_FEMALE_03":
+		"/sprites/portraits/GAUL_FEMALE_03_ADULT.5c2d9728.webp",
+	"portraits/GAUL_FEMALE_04":
+		"/sprites/portraits/GAUL_FEMALE_04_ADULT.6ea14622.webp",
+	"portraits/GAUL_FEMALE_05":
+		"/sprites/portraits/GAUL_FEMALE_05_ADULT.29d360be.webp",
+	"portraits/GAUL_MALE_01":
+		"/sprites/portraits/GAUL_MALE_01_ADULT.d3af0590.webp",
+	"portraits/GAUL_MALE_02":
+		"/sprites/portraits/GAUL_MALE_02_ADULT.a9743f84.webp",
+	"portraits/GAUL_MALE_03":
+		"/sprites/portraits/GAUL_MALE_03_ADULT.78f05cfd.webp",
+	"portraits/GAUL_MALE_04":
+		"/sprites/portraits/GAUL_MALE_04_ADULT.d40b9cfc.webp",
+	"portraits/GAUL_MALE_05":
+		"/sprites/portraits/GAUL_MALE_05_ADULT.288a5e28.webp",
+	"portraits/GAUL_MALE_06":
+		"/sprites/portraits/GAUL_MALE_06_ADULT.0c69390d.webp",
+	"portraits/GAUL_MALE_07":
+		"/sprites/portraits/GAUL_MALE_07_ADULT.8eb4bbd8.webp",
 	"portraits/GREECE_LEADER_FEMALE_01":
 		"/sprites/portraits/GREECE_LEADER_FEMALE_01_ADULT.38e9f99e.webp",
 	"portraits/GREECE_LEADER_FEMALE_02":
@@ -934,6 +1052,24 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/GREECE_LEADER_MALE_20_ADULT.3a48d21a.webp",
 	"portraits/GREECE_LEADER_MALE_21":
 		"/sprites/portraits/GREECE_LEADER_MALE_21_ADULT.54802265.webp",
+	"portraits/HAMMURABI":
+		"/sprites/portraits/HISTORICAL_PERSON_HAMMURABI.3ab0eec5.webp",
+	"portraits/HANNIBAL_BARCA":
+		"/sprites/portraits/HISTORICAL_PERSON_HANNIBAL.8fc4e35e.webp",
+	"portraits/HANNO_II":
+		"/sprites/portraits/HISTORICAL_PERSON_HANNO_II.5bfb64c6.webp",
+	"portraits/HANNO_THE_NAVIGATOR":
+		"/sprites/portraits/HISTORICAL_PERSON_HANNO_THE_NAVIGATOR.9545b35d.webp",
+	"portraits/HANTILI_I":
+		"/sprites/portraits/HISTORICAL_PERSON_HANTILI_I.03c45038.webp",
+	"portraits/HASDRUBAL_BARCA":
+		"/sprites/portraits/HISTORICAL_PERSON_HASDRUBAL_BARCA.aff11cf8.webp",
+	"portraits/HATSHEPSUT":
+		"/sprites/portraits/EGYPT_LEADER_FEMALE_02_ADULT.cc84278f.webp",
+	"portraits/HATTUSILI":
+		"/sprites/portraits/HISTORICAL_PERSON_HATTUSILI.dc05623f.webp",
+	"portraits/HIARBAS":
+		"/sprites/portraits/HISTORICAL_PERSON_HIARBAS.d7c98b5e.webp",
 	"portraits/HITTITE_LEADER_FEMALE_01":
 		"/sprites/portraits/Hittite_LEADER_FEMALE_01_ADULT.eab02043.webp",
 	"portraits/HITTITE_LEADER_FEMALE_02":
@@ -1024,6 +1160,8 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/HITTITE_LEADER_MALE_22_ADULT.fcf223c6.webp",
 	"portraits/HITTITE_LEADER_MALE_23":
 		"/sprites/portraits/HITTITE_LEADER_MALE_23_ADULT.bf28cbe5.webp",
+	"portraits/HITTITE_MURSILI":
+		"/sprites/portraits/HISTORICAL_PERSON_MURSILI_ADULT.dcbf769b.webp",
 	"portraits/HUN_LEADER_FEMALE_01":
 		"/sprites/portraits/HUN_LEADER_FEMALE_01_ADULT.8386f57f.webp",
 	"portraits/HUN_LEADER_FEMALE_02":
@@ -1064,6 +1202,29 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/HUN_LEADER_MALE_09_ADULT.fbb08465.webp",
 	"portraits/HUN_LEADER_MALE_10":
 		"/sprites/portraits/HUN_LEADER_MALE_10_ADULT.2302922d.webp",
+	"portraits/HYPATIA":
+		"/sprites/portraits/HISTORICAL_PERSON_AGNODICE.b40f0757.webp",
+	"portraits/INCITATUS":
+		"/sprites/portraits/ANIMAL_PORTRAIT_HORSE.71ea5657.webp",
+	"portraits/JOSEPHUS":
+		"/sprites/portraits/HISTORICAL_PERSON_JOSEPHUS.c4031ee1.webp",
+	"portraits/JULIUS_CAESAR":
+		"/sprites/portraits/HISTORICAL_PERSON_JULIUS.c8e58d9c.webp",
+	"portraits/KANISHKA":
+		"/sprites/portraits/HISTORICAL_PERRSON_KANISHKA.24f22ea7.webp",
+	"portraits/KARIKALA":
+		"/sprites/portraits/HISTORICAL_PERSON_KARIKALA.fb7ba28c.webp",
+	"portraits/KHUFU": "/sprites/portraits/HISTORICAL_PERSON_KHUFU.72310b8c.webp",
+	"portraits/KUJULA":
+		"/sprites/portraits/HISTORICAL_PERSON_KUJULA_KADPHISES.b35171e2.webp",
+	"portraits/KURIGALZU_I":
+		"/sprites/portraits/HISTORICAL_PERSON_KURIGALZU_I.01421047.webp",
+	"portraits/KUSH_ALARA":
+		"/sprites/portraits/HISTORICAL_PERSON_ALARA.c9bf7208.webp",
+	"portraits/KUSH_AMANIRENAS":
+		"/sprites/portraits/HISTORICAL_PERSON_AMANIRENAS.85baaa39.webp",
+	"portraits/KUSH_AMANITORE":
+		"/sprites/portraits/HISTORICAL_PERSON_AMANITORE.f66497be.webp",
 	"portraits/KUSH_LEADER_FEMALE_01":
 		"/sprites/portraits/KUSH_LEADER_FEMALE_01_ADULT.4ab8f242.webp",
 	"portraits/KUSH_LEADER_FEMALE_02":
@@ -1124,6 +1285,18 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/KUSH_LEADER_MALE_14_ADULT.526e4247.webp",
 	"portraits/KUSH_LEADER_MALE_15":
 		"/sprites/portraits/KUSH_LEADER_MALE_15_ADULT.16349c6e.webp",
+	"portraits/KUSH_PIYE":
+		"/sprites/portraits/HISTORICAL_PERSON_PIYE.ea596d3f.webp",
+	"portraits/KUSH_SHANAKDAKHETE":
+		"/sprites/portraits/HISTORICAL_PERSON_SHANAKDAKHETE.085e1ee8.webp",
+	"portraits/LEONIDAS":
+		"/sprites/portraits/HISTORICAL_PERSON_LEONIDAS.7e656d7f.webp",
+	"portraits/LUO": "/sprites/portraits/HISTORICAL_PERSON_LUO.15a11b1e.webp",
+	"portraits/MAGO_BARCA":
+		"/sprites/portraits/HISTORICAL_PERSON_MAGO-BARCA.68cc7957.webp",
+	"portraits/MAHAPADMA":
+		"/sprites/portraits/HISTORICAL_PERSON_MAHAPADMA_NANDA.e79cd4eb.webp",
+	"portraits/MANI": "/sprites/portraits/HISTORICAL_PERSON_MANI.4631a8d6.webp",
 	"portraits/MAURYA_LEADER_FEMALE_01":
 		"/sprites/portraits/MAURYA_LEADER_FEMALE_01_ADULT.149a14f9.webp",
 	"portraits/MAURYA_LEADER_FEMALE_02":
@@ -1164,6 +1337,64 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/MAURYA_LEADER_MALE_09_ADULT.49e4479b.webp",
 	"portraits/MAURYA_LEADER_MALE_10":
 		"/sprites/portraits/MAURYA_LEADER_MALE_10_ADULT.28883293.webp",
+	"portraits/MENTUHOTEP_II":
+		"/sprites/portraits/HISTORICAL_PERSON_MENTUHOTEP_II.f6d148d7.webp",
+	"portraits/MERNEITH":
+		"/sprites/portraits/HISTORICAL_PERSON_MERENEITH.413cc3d4.webp",
+	"portraits/MURSILI_II":
+		"/sprites/portraits/HISTORICAL_PERSON_MURSILI_II.bb66b109.webp",
+	"portraits/NAME_TUTOR_CLEOPATRA_SELENE":
+		"/sprites/portraits/HISTORICAL_PERSON_SELENE.a04142b6.webp",
+	"portraits/NAME_TUTOR_ESAGIL_KIN_APLI":
+		"/sprites/portraits/BABYLONIA_LEADER_MALE_05_ADULT.c41362ae.webp",
+	"portraits/NAME_TUTOR_HARPAGUS":
+		"/sprites/portraits/HISTORICAL_PERSON_HARPAGUS.97915ea3.webp",
+	"portraits/NAME_TUTOR_PTAHHOTEP":
+		"/sprites/portraits/HISTORICAL_PERSON_PTAHHOTEP.c128ba47.webp",
+	"portraits/NAME_TUTOR_SENENMUT":
+		"/sprites/portraits/HISTORICAL_PERSON_SENEMUT.876a3de7.webp",
+	"portraits/NAME_TUTOR_SERUA_ETERAT":
+		"/sprites/portraits/BABYLONIA_LEADER_FEMALE_15_ADULT.77badade.webp",
+	"portraits/NAME_TUTOR_SIN_LEQI_UNNINNI":
+		"/sprites/portraits/HISTORICAL_PERSON_SIN_LEQI_UNNINNI.525923cb.webp",
+	"portraits/NAYANIKA":
+		"/sprites/portraits/HISTORICAL_PERSON_NAYANIKA.332c5d6e.webp",
+	"portraits/NEBUCHADNEZZAR_I":
+		"/sprites/portraits/HISTORICAL_PERSON_NEBUCHADNEZZAR_I.0ba1192d.webp",
+	"portraits/NEBUCHANEZZAR":
+		"/sprites/portraits/BABYLONIA_LEADER_MALE_17_ADULT.82d379dc.webp",
+	"portraits/NEDUM":
+		"/sprites/portraits/HISTORICAL_PERSON_NEDUM_CHERALATHAN.424bdf50.webp",
+	"portraits/NEDUNJELIYAN":
+		"/sprites/portraits/HISTORICAL_PERSON_NEDUNJELIYAN-II.7b10dcce.webp",
+	"portraits/NEFERTITI":
+		"/sprites/portraits/HISTORICAL_PERSON_NEFERTITI.fe0d0279.webp",
+	"portraits/NUMIDIAN_FEMALE_01":
+		"/sprites/portraits/NUMIDIAN_FEMALE_01_ADULT.63bf61e7.webp",
+	"portraits/NUMIDIAN_FEMALE_02":
+		"/sprites/portraits/NUMIDIAN_FEMALE_02_ADULT.95d107e1.webp",
+	"portraits/NUMIDIAN_FEMALE_03":
+		"/sprites/portraits/NUMIDIAN_FEMALE_03_ADULT.1fe7d4e6.webp",
+	"portraits/NUMIDIAN_FEMALE_04":
+		"/sprites/portraits/NUMIDIAN_FEMALE_04_ADULT.d42f73e0.webp",
+	"portraits/NUMIDIAN_FEMALE_05":
+		"/sprites/portraits/NUMIDIAN_FEMALE_05_ADULT.68fe2b20.webp",
+	"portraits/NUMIDIAN_MALE_01":
+		"/sprites/portraits/NUMIDIAN_MALE_01_ADULT.37d9e15c.webp",
+	"portraits/NUMIDIAN_MALE_02":
+		"/sprites/portraits/NUMIDIAN_MALE_02_ADULT.45899e38.webp",
+	"portraits/NUMIDIAN_MALE_03":
+		"/sprites/portraits/NUMIDIAN_MALE_03_ADULT.9fc25600.webp",
+	"portraits/NUMIDIAN_MALE_04":
+		"/sprites/portraits/NUMIDIAN_MALE_04_ADULT.5cf37102.webp",
+	"portraits/NUMIDIAN_MALE_05":
+		"/sprites/portraits/NUMIDIAN_MALE_05_ADULT.34c30788.webp",
+	"portraits/OSTANES":
+		"/sprites/portraits/HISTORICAL_PERSON_ORISTANES.7909471a.webp",
+	"portraits/PARTY":
+		"/sprites/portraits/HITTITE_LEADER_MALE_06_ADULT.93813eb8.webp",
+	"portraits/PERICLES":
+		"/sprites/portraits/HISTORICAL_PERSON_PERICLES.ab3c3e77.webp",
 	"portraits/PERSIA_LEADER_FEMALE_01":
 		"/sprites/portraits/PERSIA_LEADER_FEMALE_01_ADULT.cc244c7b.webp",
 	"portraits/PERSIA_LEADER_FEMALE_02":
@@ -1282,6 +1513,20 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/PERSIA_LEADER_MALE_29_ADULT.6a58f49f.webp",
 	"portraits/PERSIA_LEADER_MALE_30":
 		"/sprites/portraits/PERSIA_LEADER_MALE_30_ADULT.db4b26c3.webp",
+	"portraits/PHILIP":
+		"/sprites/portraits/GREECE_LEADER_MALE_16_ADULT.bab955e3.webp",
+	"portraits/PIEFACE":
+		"/sprites/portraits/HISTORICAL_PERSON_JESTER.40481995.webp",
+	"portraits/PRABHAVATIGUPTA":
+		"/sprites/portraits/HISTORICAL_PERSON_PRABHAVATIGUPTA.25fca71d.webp",
+	"portraits/PROPHET":
+		"/sprites/portraits/ASSYRIA_LEADER_MALE_12_ADULT.9c3f6e18.webp",
+	"portraits/PTOLEMY":
+		"/sprites/portraits/HISTORICAL_PERSON_PTOLEMY.f806fa5d.webp",
+	"portraits/PUDUHEPA":
+		"/sprites/portraits/HISTORICAL_PERSON_PUDUHEPA.9a11fddd.webp",
+	"portraits/RAMESSES_II":
+		"/sprites/portraits/HISTORICAL_PERSON_RAMSES_II.e7074445.webp",
 	"portraits/ROMAN_LEADER_MALE_01":
 		"/sprites/portraits/ROME_LEADER_MALE_01_ADULT.6ce66d85.webp",
 	"portraits/ROMAN_LEADER_MALE_02":
@@ -1350,6 +1595,47 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/ROME_LEADER_FEMALE_14_ADULT.1dcda156.webp",
 	"portraits/ROME_LEADER_FEMALE_15":
 		"/sprites/portraits/ROME_LEADER_FEMALE_15_ADULT.f4e2ab3c.webp",
+	"portraits/ROMULUS":
+		"/sprites/portraits/ROME_LEADER_MALE_17_ADULT.10eaa71f.webp",
+	"portraits/RUKHANA":
+		"/sprites/portraits/HISTORICAL_PERSON_RUKHANA.99dedb28.webp",
+	"portraits/SAPPHO":
+		"/sprites/portraits/HISTORICAL_PERSON_SAPPHO.f345a011.webp",
+	"portraits/SARGON_II":
+		"/sprites/portraits/HISTORICAL_PERSON_SARGON_II.9b790329.webp",
+	"portraits/SAUL": "/sprites/portraits/HISTORICAL_PERSON_SAUL.17d366f1.webp",
+	"portraits/SCIPIO":
+		"/sprites/portraits/HISTORICAL_PERSON_SCIPIO.479380ad.webp",
+	"portraits/SCYTHIAN_FEMALE_01":
+		"/sprites/portraits/SCYTHIAN_FEMALE_01_ADULT.d95c9b74.webp",
+	"portraits/SCYTHIAN_FEMALE_02":
+		"/sprites/portraits/SCYTHIAN_FEMALE_02_ADULT.7f5a89f7.webp",
+	"portraits/SCYTHIAN_FEMALE_03":
+		"/sprites/portraits/SCYTHIAN_FEMALE_03_ADULT.33fd3b0d.webp",
+	"portraits/SCYTHIAN_FEMALE_04":
+		"/sprites/portraits/SCYTHIAN_FEMALE_04_ADULT.9d3bfa1a.webp",
+	"portraits/SCYTHIAN_FEMALE_05":
+		"/sprites/portraits/SCYTHIAN_FEMALE_05_ADULT.634e0423.webp",
+	"portraits/SCYTHIAN_MALE_01":
+		"/sprites/portraits/SCYTHIAN_MALE_01_ADULT.bf77cd2b.webp",
+	"portraits/SCYTHIAN_MALE_02":
+		"/sprites/portraits/SCYTHIAN_MALE_02_ADULT.dfd2d36a.webp",
+	"portraits/SCYTHIAN_MALE_03":
+		"/sprites/portraits/SCYTHIAN_MALE_03_ADULT.b58503cf.webp",
+	"portraits/SCYTHIAN_MALE_04":
+		"/sprites/portraits/SCYTHIAN_MALE_04_ADULT.e8b57858.webp",
+	"portraits/SCYTHIAN_MALE_05":
+		"/sprites/portraits/SCYTHIAN_MALE_05_ADULT.a82dc24a.webp",
+	"portraits/SEER": "/sprites/portraits/THRACIAN_FEMALE_03_ADULT.55eb5f1f.webp",
+	"portraits/SHAMMURAMAT":
+		"/sprites/portraits/HISTORICAL_PERSON_SHAMMURAMAT.beeded14.webp",
+	"portraits/SHAPUR_I":
+		"/sprites/portraits/HISTORICAL_PERSON_SHAPUR_I_ADULT.e6aa5b09.webp",
+	"portraits/STATEIRA":
+		"/sprites/portraits/HISTORICAL_PERSON_STATEIRA.44aa2882.webp",
+	"portraits/SULLA": "/sprites/portraits/HISTORICAL_PERSON_SULLA.0de5eb5a.webp",
+	"portraits/SUPPILULIUMA_I":
+		"/sprites/portraits/HISTORICAL_PERSON_SUPPILULIUMA_I.38758967.webp",
 	"portraits/TAMIL_LEADER_FEMALE_01":
 		"/sprites/portraits/TAMIL_LEADER_FEMALE_01_ADULT.39de6f10.webp",
 	"portraits/TAMIL_LEADER_FEMALE_02":
@@ -1390,6 +1676,84 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/TAMIL_LEADER_MALE_09_ADULT.22b72fe1.webp",
 	"portraits/TAMIL_LEADER_MALE_10":
 		"/sprites/portraits/TAMIL_LEADER_MALE_10_ADULT.8beff8ff.webp",
+	"portraits/THE_ORPHAN_EATER":
+		"/sprites/portraits/HISTORICAL_PERSON_ORPHAN_EATER.1e3c707a.webp",
+	"portraits/THRACIAN_FEMALE_01":
+		"/sprites/portraits/THRACIAN_FEMALE_01_ADULT.a0d23300.webp",
+	"portraits/THRACIAN_FEMALE_02":
+		"/sprites/portraits/THRACIAN_FEMALE_02_ADULT.b255ffa6.webp",
+	"portraits/THRACIAN_FEMALE_03":
+		"/sprites/portraits/THRACIAN_FEMALE_03_ADULT.55eb5f1f.webp",
+	"portraits/THRACIAN_FEMALE_04":
+		"/sprites/portraits/THRACIAN_FEMALE_04_ADULT.b51dfba4.webp",
+	"portraits/THRACIAN_FEMALE_05":
+		"/sprites/portraits/THRACIAN_FEMALE_05_ADULT.80928744.webp",
+	"portraits/THRACIAN_MALE_01":
+		"/sprites/portraits/THRACIAN_MALE_01_ADULT.b21d4177.webp",
+	"portraits/THRACIAN_MALE_02":
+		"/sprites/portraits/THRACIAN_MALE_02_ADULT.13aba436.webp",
+	"portraits/THRACIAN_MALE_03":
+		"/sprites/portraits/THRACIAN_MALE_03_ADULT.fc17a03d.webp",
+	"portraits/THRACIAN_MALE_04":
+		"/sprites/portraits/THRACIAN_MALE_04_ADULT.6b66e2bb.webp",
+	"portraits/THRACIAN_MALE_05":
+		"/sprites/portraits/THRACIAN_MALE_05_ADULT.e61c84a1.webp",
+	"portraits/THRACIAN_MALE_06":
+		"/sprites/portraits/THRACIAN_MALE_06_ADULT.73eabecd.webp",
+	"portraits/TUKULTI_NINURTA_I":
+		"/sprites/portraits/HISTORICAL_PERSON_TUKULTI_NINURTA_I.f4f87995.webp",
+	"portraits/TUTOR_AGNODICE":
+		"/sprites/portraits/HISTORICAL_PERSON_AGNODICE.b40f0757.webp",
+	"portraits/TUTOR_ANACHARSIS":
+		"/sprites/portraits/SCYTHIAN_MALE_05_ADULT.a82dc24a.webp",
+	"portraits/TUTOR_ARISTOTLE":
+		"/sprites/portraits/HISTORICAL_PERSON_ARISTOTLE.b368c6a8.webp",
+	"portraits/TUTOR_AVICENNA":
+		"/sprites/portraits/HISTORICAL_PERSON_AVICENNA.4df59924.webp",
+	"portraits/TUTOR_BARDAISAN":
+		"/sprites/portraits/HISTORICAL_PERSON_BARDAISAN.fb4c54fd.webp",
+	"portraits/TUTOR_CLITOMACHUS":
+		"/sprites/portraits/CARTHAGE_LEADER_MALE_06_ADULT.9d7e4c33.webp",
+	"portraits/TUTOR_CORNELIA":
+		"/sprites/portraits/ROME_LEADER_FEMALE_02_ADULT.cc4d4620.webp",
+	"portraits/TUTOR_HANNO":
+		"/sprites/portraits/CARTHAGE_LEADER_MALE_12_ADULT.c63e78ce.webp",
+	"portraits/TUTOR_KARTIR":
+		"/sprites/portraits/HISTORICAL_PERSON_ KARTIR.7f177ced.webp",
+	"portraits/TUTOR_LIVIUS_ANDRONICUS":
+		"/sprites/portraits/ROME_LEADER_MALE_09_ADULT.833d3ded.webp",
+	"portraits/TUTOR_MAGO":
+		"/sprites/portraits/HISTORICAL_PERSON_MAGO.4aad1867.webp",
+	"portraits/TUTOR_OSTANES":
+		"/sprites/portraits/ASSYRIA_LEADER_MALE_11_ADULT.6d350bfa.webp",
+	"portraits/TUTOR_PLINY_THE_ELDER":
+		"/sprites/portraits/ROME_LEADER_MALE_03_ADULT.a0a8bcf4.webp",
+	"portraits/TUTOR_PYTHAGORAS":
+		"/sprites/portraits/GREECE_LEADER_MALE_05_ADULT.97b73a3a.webp",
+	"portraits/VANDAL_FEMALE_01":
+		"/sprites/portraits/VANDAL_FEMALE_01_ADULT.01baaa79.webp",
+	"portraits/VANDAL_FEMALE_02":
+		"/sprites/portraits/VANDAL_FEMALE_02_ADULT.8f236137.webp",
+	"portraits/VANDAL_FEMALE_03":
+		"/sprites/portraits/VANDAL_FEMALE_03_ADULT.d6b66e8b.webp",
+	"portraits/VANDAL_FEMALE_04":
+		"/sprites/portraits/VANDAL_FEMALE_04_ADULT.c36e4463.webp",
+	"portraits/VANDAL_FEMALE_05":
+		"/sprites/portraits/VANDAL_FEMALE_05_ADULT.cf1215b6.webp",
+	"portraits/VANDAL_MALE_01":
+		"/sprites/portraits/VANDAL_MALE_01_ADULT.d6b82742.webp",
+	"portraits/VANDAL_MALE_02":
+		"/sprites/portraits/VANDAL_MALE_02_ADULT.c1c6484e.webp",
+	"portraits/VANDAL_MALE_03":
+		"/sprites/portraits/VANDAL_MALE_03_ADULT.5478f989.webp",
+	"portraits/VANDAL_MALE_04":
+		"/sprites/portraits/VANDAL_MALE_04_ADULT.6aba68c6.webp",
+	"portraits/VANDAL_MALE_05":
+		"/sprites/portraits/VANDAL_MALE_05_ADULT.f94bee0b.webp",
+	"portraits/VIMA_TAKTO":
+		"/sprites/portraits/HISTORICAL_PERSON_VIMA_TAKTO.7bbcedc0.webp",
+	"portraits/XENOPHON":
+		"/sprites/portraits/HISTORICAL_PERSON_XENOPHON.f733851f.webp",
 	"portraits/YUEZHI_LEADER_FEMALE_01":
 		"/sprites/portraits/YUEZHI_LEADER_FEMALE_01_ADULT.00cf7ec8.webp",
 	"portraits/YUEZHI_LEADER_FEMALE_02":
@@ -1430,6 +1794,10 @@ export const SPRITE_MANIFEST: Readonly<Record<string, string>> = {
 		"/sprites/portraits/YUEZHI_LEADER_MALE_09_ADULT.de0e9759.webp",
 	"portraits/YUEZHI_LEADER_MALE_10":
 		"/sprites/portraits/YUEZHI_LEADER_MALE_10_ADULT.d6931637.webp",
+	"portraits/ZAMRA":
+		"/sprites/portraits/NUMIDIAN_FEMALE_01_ADULT.63bf61e7.webp",
+	"portraits/ZENOBIA":
+		"/sprites/portraits/HISTORICAL_PERSON_ZENOBIA.22b31132.webp",
 	"projects/PROJECT_AFRICA": "/sprites/projects/PROJECT_AFRICA.36431d31.png",
 	"projects/PROJECT_ARCHIVE_1":
 		"/sprites/projects/PROJECT_ARCHIVE_1.12e82c1c.png",

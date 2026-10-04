@@ -7,6 +7,7 @@
 import type { EventLog as ParsedEventLog } from "../parsers/events.js";
 import type { Player } from "../parsers/players.js";
 import type { Tile, TileOwnership } from "../parsers/tiles.js";
+import { ownershipChangeTurn } from "../types.js";
 import type { PlayerWonder } from "../types.js";
 import { playerByXmlId, strCmp } from "./_helpers.js";
 
@@ -54,10 +55,11 @@ export function derivePlayerWonders(
 
 	// Owner of each wonder's tile on the turn that wonder completed. Ownership
 	// history is sparse — one entry per change of hands — so the owner at turn
-	// T is the latest entry at or before T, however many times the tile moved.
-	// Same resolution the map's turn slider uses (reconstruct-map-tiles.ts).
-	// Scoped to the handful of wonder tiles: the full history runs to tens of
-	// thousands of rows.
+	// T is the latest entry that changed hands at or before T, however many
+	// times the tile moved; `ownershipChangeTurn` undoes the save's habit of
+	// keying an entry to the turn after its change. Same resolution the map's
+	// turn slider uses (reconstruct-map-tiles.ts). Scoped to the handful of
+	// wonder tiles: the full history runs to tens of thousands of rows.
 	const completionTurnByTile = new Map<number, number>();
 	for (const [wonder, completedTurn] of wonderTurns) {
 		const tile = tileByImprovement.get(wonder);
@@ -69,10 +71,11 @@ export function derivePlayerWonders(
 	for (const entry of tileOwnership) {
 		const completedTurn = completionTurnByTile.get(entry.tileXmlId);
 		if (completedTurn === undefined) continue;
-		if (entry.turn > completedTurn) continue;
+		const changedTurn = ownershipChangeTurn(entry.turn);
+		if (changedTurn > completedTurn) continue;
 		const prev = latestTurnSeen.get(entry.tileXmlId);
-		if (prev === undefined || entry.turn > prev) {
-			latestTurnSeen.set(entry.tileXmlId, entry.turn);
+		if (prev === undefined || changedTurn > prev) {
+			latestTurnSeen.set(entry.tileXmlId, changedTurn);
 			ownerAtCompletion.set(entry.tileXmlId, entry.ownerPlayerXmlId);
 		}
 	}

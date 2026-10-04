@@ -1,8 +1,8 @@
-// Capture the three screenshots used on the marketing home (/) — Overview,
-// Map, and Yields tabs — against the running dev server. Each tab is
-// driven in headless Chromium, the visible page area is screenshotted as
-// PNG, then re-encoded as WebP via sharp and written to
-// static/screenshots/{overview,map,yields}.webp.
+// Capture the three screenshots used on the marketing home (/) — a game's
+// Overview and Yields tabs, and its map view (/games/{id}/map) — against the
+// running dev server. Each is driven in headless Chromium, the visible page
+// area is screenshotted as PNG, then re-encoded as WebP via sharp and
+// written to static/screenshots/{overview,map,yields}.webp.
 //
 // Requirements:
 //   1. The local dev server is up (`./per-ankh` — http://localhost:1420).
@@ -29,12 +29,34 @@ const VIEWPORT = { width: 1440, height: 900 };
 
 // Tabs to capture. `selector` is the rendered button's accessible name
 // (bits-ui Tabs.Trigger emits a <button>); Playwright's `getByRole` matches
-// by accessible name and survives Tailwind class churn.
+// by accessible name and survives Tailwind class churn. The map isn't a tab:
+// it's captured from its own route after these.
 const TABS = [
 	{ key: "overview", label: "Overview" },
-	{ key: "map", label: "Map" },
 	{ key: "yields", label: "Yields" },
 ];
+
+// Settle the current view, screenshot the visible page area, and write it to
+// static/screenshots/{key}.webp.
+async function capture(page, key) {
+	// Charts/maps inside the view are async. networkidle isn't enough on its
+	// own because ECharts renders client-side after the fetch resolves; the
+	// 600ms settle is empirical for this app.
+	await page.waitForLoadState("networkidle");
+	await page.waitForTimeout(600);
+	await page.evaluate(() => window.scrollTo(0, 0));
+
+	const png = await page.screenshot({ type: "png", fullPage: false });
+	const webp = await sharp(png)
+		.resize({ width: 1280, withoutEnlargement: true })
+		.webp({ quality: 82 })
+		.toBuffer();
+	const outPath = path.join(OUT_DIR, `${key}.webp`);
+	await writeFile(outPath, webp);
+	console.log(
+		`  → ${path.relative(process.cwd(), outPath)} (${webp.length} bytes)`,
+	);
+}
 
 function parseArgs(argv) {
 	const out = {
@@ -116,24 +138,18 @@ try {
 	for (const tab of TABS) {
 		console.log(`Capturing ${tab.label}…`);
 		await page.getByRole("tab", { name: tab.label }).click();
-		// Charts/maps inside the tab content are async. networkidle isn't
-		// enough on its own because ECharts renders client-side after the
-		// fetch resolves; the 600ms settle is empirical for this app.
-		await page.waitForLoadState("networkidle");
-		await page.waitForTimeout(600);
-		await page.evaluate(() => window.scrollTo(0, 0));
+		await capture(page, tab.key);
+	}
 
-		const png = await page.screenshot({ type: "png", fullPage: false });
-		const webp = await sharp(png)
-			.resize({ width: 1280, withoutEnlargement: true })
-			.webp({ quality: 82 })
-			.toBuffer();
-		const outPath = path.join(OUT_DIR, `${tab.key}.webp`);
-		await writeFile(outPath, webp);
-		console.log(
-			`  → ${path.relative(process.cwd(), outPath)} (${webp.length} bytes)`,
+	const mapUrl = `${gameUrl}/map`;
+	console.log(`Capturing Map (${mapUrl})…`);
+	const mapResp = await page.goto(mapUrl, { waitUntil: "networkidle" });
+	if (!mapResp || !mapResp.ok()) {
+		throw new Error(
+			`Failed to load ${mapUrl}: status ${mapResp ? mapResp.status() : "no response"}.`,
 		);
 	}
+	await capture(page, "map");
 } finally {
 	await browser.close();
 }

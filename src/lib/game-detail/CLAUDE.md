@@ -1,11 +1,11 @@
 # Game Detail View (`src/lib/game-detail/`)
 
-Builds the `/games/[id]` page.
+Builds a game's two views: the analyst view at `/games/[id]` (the tab strip) and the map view at `/games/[id]/map` (the chrome over `SpriteMap`). Both mount `GameHeader` and render their tabs through `GameTab`.
 
 ## Adding to the view
 
 - **Adding a yield chart:** add one entry to `YIELD_CHART_CONFIG` in `helpers.ts`, and add the new key to `ChartFilterKey` and `PLAYER_CHART_KEYS` in the same file.
-- **Adding a tab:** create `FooTab.svelte` here, then add a `Tabs.Trigger` and `Tabs.Content` in `GameDetailView.svelte`.
+- **Adding a tab:** create `FooTab.svelte` here, add its id to `GameTabId` and an entry to `GAME_TABS` in `game-tabs.svelte.ts`, then add a branch rendering it in `GameTab.svelte`. The tab strip is built from `GAME_TABS`.
 
 ## Changes that need new backend data
 

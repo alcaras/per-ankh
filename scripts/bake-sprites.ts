@@ -12,7 +12,7 @@
 //                                                  incl. UNIT_*__ICON glyphs
 //   resources/                                   → RESOURCE_*.png minus the
 //                                                  RESOURCE_3D_* map renders
-//   portraits/                                   → leader ADULT portraits, keyed
+//   portraits/ (+ other/)                        → every ADULT portrait, keyed
 //                                                  by portrait zType (see below)
 //   improvements/IMPROVEMENT_FINISHED.png        → icons/IMPROVEMENT_FINISHED.png
 //   other/Cycle_Military_Normal.png              → icons/MILITARY.png
@@ -45,7 +45,17 @@
 // MALE_06 (ROMAN vs ROME), and one Hittite portrait → lowercase Hittite_* art.
 // The zType→art mapping is the entry's <azAgeGroupSpriteNames> (per age group),
 // so we key the manifest by zType base and the runtime's strip-prefix lookup
-// resolves every portrait id the game can emit.
+// resolves every portrait id the game can emit. Every zType with ADULT art
+// earns a key, not just the NATION_LEADER_* sets: a reigning ruler can wear a
+// historical person's portrait (CHARACTER_PORTRAIT_DARIUS_I → art
+// HISTORICAL_PERSON_DARIUS_I), one of the ethnic sets (SCYTHIAN_FEMALE_04), or
+// a named one-off (PIEFACE → HISTORICAL_PERSON_JESTER). 12 of the 149 reigning
+// rulers across test-data/saves/ wear one, which is what takes that corpus
+// from 135 resolved portraits to 147. Two of the art names land outside
+// portraits/ — ANIMAL_PORTRAIT_HORSE (Incitatus, a horse a save really can
+// seat on the throne) and HISTORICAL_PERRSON_KANISHKA, whose typo is the
+// game's own and identical in the zValue and the filename, so it needs no
+// correction — both in other/, which is why art resolution walks two dirs.
 //
 // OUTPUT:
 //   static/sprites/<category>/<basename>.<hash>.png
@@ -479,13 +489,11 @@ function isPortraitDefFile(name: string): boolean {
 	);
 }
 
-// Map every leader portrait zType (CHARACTER_PORTRAIT_ stripped) → its ADULT-age
-// art sprite name, from the Reference XML. Base file loads first so DLC files
+// Map every portrait zType (CHARACTER_PORTRAIT_ stripped) → its ADULT-age art
+// sprite name, from the Reference XML. Base file loads first so DLC files
 // override by zType. This is the bridge that lets us key the manifest by the
 // zType a save actually stores, instead of assuming it equals the art filename.
-async function loadLeaderPortraitArt(
-	infosDir: string,
-): Promise<Map<string, string>> {
+async function loadPortraitArt(infosDir: string): Promise<Map<string, string>> {
 	const defFiles = (await readdir(infosDir)).filter(isPortraitDefFile);
 	const ordered = [
 		...defFiles.filter((f) => f === "characterPortrait.xml"),
@@ -502,7 +510,7 @@ async function loadLeaderPortraitArt(
 		const entries = Array.isArray(entry) ? entry : entry ? [entry] : [];
 		for (const e of entries) {
 			const zType = e.zType;
-			if (!zType || !zType.includes("_LEADER_")) continue;
+			if (!zType) continue;
 			const group = e.azAgeGroupSpriteNames;
 			if (!group || typeof group === "string") continue;
 			const pairs = Array.isArray(group.Pair)
@@ -516,6 +524,18 @@ async function loadLeaderPortraitArt(
 		}
 	}
 	return artByZType;
+}
+
+// Where a portrait's art file lives: portraits/ holds all but two of them (see
+// the header), so the dirs are tried in that order and the first hit wins.
+const PORTRAIT_ART_DIRS = ["portraits", "other"];
+
+function findPortraitArt(artName: string): string | null {
+	for (const dir of PORTRAIT_ART_DIRS) {
+		const path = resolve(PINACOTHECA_SPRITES, dir, `${artName}.png`);
+		if (existsSync(path)) return path;
+	}
+	return null;
 }
 
 // Downscale + re-encode an art PNG to webp, content-hash the *output* bytes, and
@@ -537,15 +557,14 @@ async function bakePortrait(
 }
 
 // Loose webp files (like units/crests), NOT a packed atlas — a game page must
-// download only the handful of leader portraits it references, never all ~500.
+// download only the handful of portraits it references, never all ~660.
 // Keyed by portrait zType (resolved through the Reference XML, above), so e.g.
 // CHARACTER_PORTRAIT_ROMAN_LEADER_MALE_06 resolves to the ROME_* art it names.
 async function copyPortraits(sidecar: SpriteSidecar): Promise<number> {
-	const src = resolve(PINACOTHECA_SPRITES, "portraits");
 	const dst = resolve(SPRITES_OUT, "portraits");
 	await wipeAndRecreate(dst);
 
-	const artByZType = await loadLeaderPortraitArt(
+	const artByZType = await loadPortraitArt(
 		resolve(resolveReferenceXml(), "Infos"),
 	);
 
@@ -557,8 +576,8 @@ async function copyPortraits(sidecar: SpriteSidecar): Promise<number> {
 	for (const [zBase, artName] of artByZType) {
 		let url = urlByArt.get(artName);
 		if (url == null) {
-			const srcPath = resolve(src, `${artName}.png`);
-			if (!existsSync(srcPath)) {
+			const srcPath = findPortraitArt(artName);
+			if (srcPath == null) {
 				// zType names art not present in this pinacotheca build — skip it;
 				// the runtime falls back to no portrait. Reported in the summary.
 				missing.push(artName);

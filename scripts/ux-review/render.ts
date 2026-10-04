@@ -18,6 +18,7 @@ const PASS_LABELS = {
 const PAGE_LABELS: Record<string, string> = {
 	home: "Home",
 	"game-detail": "Game detail",
+	"game-map": "Map view",
 	"user-profile": "User profile",
 	account: "Account",
 	tournaments: "Tournaments",

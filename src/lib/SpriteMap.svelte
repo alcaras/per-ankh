@@ -14,7 +14,8 @@
 	import { familyCrestKey, familyForOwner } from "$lib/game-detail/helpers";
 	import { hexNeighbors } from "$lib/utils/hex";
 	import MapTooltip from "$lib/MapTooltip.svelte";
-	import Checkbox from "$lib/ui/Checkbox.svelte";
+	import MapCityBanners, { type CityBanner } from "$lib/MapCityBanners.svelte";
+	import { formatEnum } from "$lib/utils/formatting";
 
 	// Hex geometry from atlas reference (pointy-top, matching sprite masks).
 	// Atlases are pre-baked by scripts/bake-terrain-3d.ts (terrain),
@@ -129,17 +130,26 @@
 	}
 
 	// Returns the CAPITAL_<family> sprite key from improvements-base for a
-	// capital tile, or null if the tile isn't a capital or the resolved family
-	// has no capital render. Capital sprites include their own ground patch
-	// (pinacotheca 2.2.0+), so no URBAN underlay is drawn beneath them.
-	function capitalSpriteKeyFor(
+	// city-centre tile, or null if the tile isn't a centre or the resolved
+	// family has no city render. The key is named for nation.xml's
+	// <CapitalAsset>, but that asset is the city's head tile rather than the
+	// nation's capital: 32 of the 33 nation entries declaring either tag give
+	// <CityAsset> the same ASSET_VARIATION_CITY_<FAMILY>_CAPITAL value, and
+	// Tile.getUrbanAsset (Tile.cs:13105) hands back the urban asset only when
+	// the tile is NOT a revealed city. So every city centre draws it, and the
+	// capital is marked by the banner's star instead. (NATION_HYKSOS is the
+	// lone split — EGYPT capital, CARTHAGE cities — which the alias bake's
+	// urban+capital pair can't express; its centres all render CARTHAGE.)
+	// City sprites include their own ground patch (pinacotheca 2.2.0+), so no
+	// URBAN underlay is drawn beneath them.
+	function cityCenterSpriteKeyFor(
 		tile: MapTile,
 		aliases: Map<string, NationAliasEntry>,
 		baseManifest: AtlasManifest,
 		founderByCity: Map<string, string | null>,
 	): string | null {
 		const nation = renderNationFor(tile, founderByCity);
-		if (!tile.is_capital || !nation) return null;
+		if (!tile.is_city_center || !nation) return null;
 		const cf = capitalFamilyFor(nation, aliases);
 		if (!cf) return null;
 		const key = `CAPITAL_${cf}`;
@@ -266,10 +276,10 @@
 		tiles,
 		cities = [],
 		playerNations = [],
-		height = "600px",
-		totalTurns = null,
-		selectedTurn = null,
-		onTurnChange = null,
+		showPolitical = true,
+		showReligion = false,
+		isFinalTurn,
+		onCityClick,
 	}: {
 		tiles: MapTile[];
 		// Used to resolve owner_city → family for the tooltip's family crest.
@@ -279,11 +289,16 @@
 		// (CityInfo.first_owner_player_xml_id) for architecture rendering. Empty
 		// is fine — rendering then falls back to the tile's current owner_nation.
 		playerNations?: PlayerNationEntry[];
-		height?: string;
-		totalTurns?: number | null;
-		selectedTurn?: number | null;
-		// eslint-disable-next-line no-unused-vars -- Callback type signature
-		onTurnChange?: ((turn: number) => Promise<void> | void) | null;
+		// Layer visibility. The toggles live in the map view's chrome.
+		showPolitical?: boolean;
+		showReligion?: boolean;
+		// Whether `tiles` is the final turn. CityInfo.citizens is an
+		// end-of-game count, so the banners carry it only then.
+		isFinalTurn: boolean;
+		// A banner was clicked: the city, and the banner element the city
+		// popover anchors to.
+		// eslint-disable-next-line no-unused-vars -- parameter in callback signature
+		onCityClick: (cityName: string, element: HTMLElement) => void;
 	} = $props();
 
 	// city_name → the player owning the city's centre tile at the represented
@@ -366,39 +381,29 @@
 	let familyManifests: Record<string, AtlasManifest> = $state({});
 	let assetsLoaded = $state(false);
 
-	// Layer visibility toggles
-	let showPolitical = $state(true);
-	let showReligion = $state(false);
-
 	// ─── Tooltip state ────────────────────────────────────────────────
 	// Hover position is in canvas-local CSS pixels (deck.gl onHover already
-	// converts). Locked tooltips store world coords and reproject on every
-	// view-state change so they stay anchored to their tile when the user
-	// pans/zooms.
+	// converts).
 	interface HoverState {
 		tile: MapTile;
 		x: number;
 		y: number;
 	}
-	interface LockedTooltip {
-		key: string; // `${tile.x},${tile.y}` — used to dedupe & identify
-		tile: MapTile;
-		worldX: number;
-		worldY: number;
-	}
 	let hoverState = $state<HoverState | null>(null);
-	let lockedTooltips = $state<LockedTooltip[]>([]);
-	// Bumped from Deck.onViewStateChange to force re-derivation of locked
-	// tooltips' screen positions. Cheaper than tracking the full viewState
-	// object (we only ever need to read-only re-project, not the whole state).
-	let viewVersion = $state(0);
-	let containerEl: HTMLDivElement | null = $state(null);
-	let containerWidth = $state(0);
-	let containerHeight = $state(0);
 
-	// Camera-control state. Tracked here (in addition to viewVersion) so the
-	// overlay zoom buttons can read the current zoom and pan target and feed
-	// adjusted values back into the Deck via setProps.
+	// The box both overlays work in, in canvas-local CSS pixels: the hover
+	// panel clamps to its edges, and the city banners project into it. It is
+	// the CANVAS's size and not the container's — deck.gl pins
+	// `canvas.style.width`/`height` to the numbers the Deck is constructed
+	// with (`_setCanvasSize`), so the canvas keeps the size it had at init
+	// however the container is resized afterwards. A banner placed against the
+	// container's size slides off its tile by half the difference.
+	let deckWidth = $state(0);
+	let deckHeight = $state(0);
+
+	// Camera-control state. Tracked here so the overlay zoom buttons can read
+	// the current zoom and pan target and feed adjusted values back into the
+	// Deck via setProps.
 	type ViewState = { target: [number, number, number]; zoom: number };
 	const MIN_ZOOM = -6;
 	const MAX_ZOOM = 4;
@@ -417,63 +422,6 @@
 			target: [t[0] ?? 0, t[1] ?? 0, t[2] ?? 0],
 			zoom,
 		};
-	}
-
-	// ─── Fullscreen state (mirror of normal view) ─────────────────────
-	// Same dual-deck pattern as HexMap: WebGL contexts can't move between
-	// canvases, so a separate Deck instance is bound to the dialog's canvas
-	// and fed the same layers via the layer-build $effect. Hover + view
-	// version are tracked independently so the two views' tooltips don't
-	// fight each other; locked tooltips are shared (pinning persists).
-	let dialogRef: HTMLDialogElement | null = $state(null);
-	let isClosing = $state(false);
-	let fullscreenCanvas: HTMLCanvasElement;
-	let fullscreenDeck: Deck<OrthographicView> | null = $state(null);
-	let fullscreenHoverState = $state<HoverState | null>(null);
-	let fullscreenViewVersion = $state(0);
-	let fullscreenCurrentViewState = $state<ViewState | null>(null);
-	let fullscreenContainerEl: HTMLDivElement | null = $state(null);
-	let fullscreenContainerWidth = $state(0);
-	let fullscreenContainerHeight = $state(0);
-	const ANIMATION_DURATION = 200; // ms — keep in sync with CSS
-
-	function tileKey(t: MapTile): string {
-		return `${t.x},${t.y}`;
-	}
-
-	function toggleLockedTile(tile: MapTile) {
-		const key = tileKey(tile);
-		const existing = lockedTooltips.find((l) => l.key === key);
-		if (existing) {
-			lockedTooltips = lockedTooltips.filter((l) => l.key !== key);
-			return;
-		}
-		const [wx, wy] = hexToPixel(tile.x, tile.y);
-		lockedTooltips = [...lockedTooltips, { key, tile, worldX: wx, worldY: wy }];
-	}
-
-	function handleContextMenu(e: MouseEvent) {
-		e.preventDefault();
-		if (!deck || !deckCanvas) return;
-		const rect = deckCanvas.getBoundingClientRect();
-		const x = e.clientX - rect.left;
-		const y = e.clientY - rect.top;
-		const picked = deck.pickObject({ x, y, radius: 0 });
-		if (picked && picked.object) {
-			toggleLockedTile(picked.object as MapTile);
-		}
-	}
-
-	function handleFullscreenContextMenu(e: MouseEvent) {
-		e.preventDefault();
-		if (!fullscreenDeck || !fullscreenCanvas) return;
-		const rect = fullscreenCanvas.getBoundingClientRect();
-		const x = e.clientX - rect.left;
-		const y = e.clientY - rect.top;
-		const picked = fullscreenDeck.pickObject({ x, y, radius: 0 });
-		if (picked && picked.object) {
-			toggleLockedTile(picked.object as MapTile);
-		}
 	}
 
 	// Resolve owner_nation → crest sprite key with a 3-tier fallback:
@@ -502,76 +450,6 @@
 		return "TRIBE_GENERIC";
 	}
 
-	// Project a world-space tile center to canvas-local screen pixels via the
-	// current Deck viewport. Returns null if Deck or viewport isn't ready.
-	interface PickViewport {
-		// eslint-disable-next-line no-unused-vars -- arg name documents the call shape
-		project(coords: [number, number, number]): [number, number, number];
-	}
-	interface DeckWithViewports {
-		getViewports(): PickViewport[];
-	}
-	function projectWorld(
-		wx: number,
-		wy: number,
-		target: Deck<OrthographicView> | null = deck,
-	): [number, number] | null {
-		if (!target) return null;
-		// getViewports lives on Deck's runtime API but isn't on its public TS
-		// surface. Narrow via a local interface rather than `any`.
-		const viewports = (target as unknown as DeckWithViewports).getViewports?.();
-		if (!viewports || viewports.length === 0) return null;
-		const screen = viewports[0].project([wx, wy, 0]);
-		return [screen[0], screen[1]];
-	}
-
-	interface LockedScreen extends LockedTooltip {
-		sx: number;
-		sy: number;
-	}
-
-	// Re-project locked tooltips on every view-state change. Anchors that
-	// project off-canvas (e.g. extreme zoom-out) are dropped from the render.
-	const lockedScreen = $derived.by<LockedScreen[]>(() => {
-		// Track viewVersion so this re-derives when the camera moves.
-		void viewVersion;
-		const out: LockedScreen[] = [];
-		for (const l of lockedTooltips) {
-			const screen = projectWorld(l.worldX, l.worldY, deck);
-			if (!screen) continue;
-			out.push({ ...l, sx: screen[0], sy: screen[1] });
-		}
-		return out;
-	});
-
-	// Same logic, projected through the fullscreen deck so locked tooltips
-	// follow camera moves in the dialog independently of the normal view.
-	const lockedScreenFullscreen = $derived.by<LockedScreen[]>(() => {
-		void fullscreenViewVersion;
-		const out: LockedScreen[] = [];
-		for (const l of lockedTooltips) {
-			const screen = projectWorld(l.worldX, l.worldY, fullscreenDeck);
-			if (!screen) continue;
-			out.push({ ...l, sx: screen[0], sy: screen[1] });
-		}
-		return out;
-	});
-
-	// Suppress hover tooltip when the hovered tile is already pinned — avoids
-	// double-rendering on the same anchor. Deck still emits hover; we just
-	// don't render the floating one.
-	const showHover = $derived.by(() => {
-		if (!hoverState) return false;
-		const k = tileKey(hoverState.tile);
-		return !lockedTooltips.some((l) => l.key === k);
-	});
-
-	const showFullscreenHover = $derived.by(() => {
-		if (!fullscreenHoverState) return false;
-		const k = tileKey(fullscreenHoverState.tile);
-		return !lockedTooltips.some((l) => l.key === k);
-	});
-
 	/**
 	 * Convert hex grid coordinates to pixel position.
 	 * Pointy-top orientation with even-r offset, Y-flipped for screen coords.
@@ -586,6 +464,51 @@
 		const py = -y * HEX_V_SPACING;
 		return [px, py];
 	}
+
+	// One banner per city-centre tile that is OWNED at the represented turn,
+	// joined to CityInfo by name. Taking the per-turn tiles as the source of
+	// truth has two consequences, both measured across the 122 local blobs and
+	// both matching what the sprites already do (reconstructMapTiles nulls
+	// `improvement` on an unowned tile):
+	//   - a banner appears one turn AFTER founded_turn — the centre tile's
+	//     first ownership row lands at founded_turn + 1 in 3,601 of the 3,604
+	//     cities (2 at +0, 1 at −3);
+	//   - a city sitting unowned mid-capture has no banner until the capture
+	//     resolves. 573 cities, in 96 of the 122 games, have a capture or an
+	//     unowned span.
+	const cityBanners = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- locally-scoped Map, not reactive state
+		const byName = new Map<string, CityInfo>();
+		// Duplicate city names across players are rare in OW; first match wins,
+		// as reconstructMapTiles does on the same join.
+		for (const c of cities) {
+			if (!byName.has(c.city_name)) byName.set(c.city_name, c);
+		}
+		const out: CityBanner[] = [];
+		for (const t of tiles) {
+			if (!t.is_city_center || !t.owner_city) continue;
+			const [worldX, worldY] = hexToPixel(t.x, t.y);
+			out.push({
+				cityName: t.owner_city,
+				label: formatEnum(t.owner_city, "CITYNAME_"),
+				tile: t,
+				worldX,
+				worldY,
+				// Resolved as MapTooltip resolves it, so a tile's hover colour
+				// and its banner agree.
+				nationColor: t.owner_nation
+					? (getCivilizationColor(t.owner_nation) ?? "rgb(var(--color-tan))")
+					: "rgb(var(--color-tan))",
+				nationCrestKey: resolveNationCrestKey(t.owner_nation),
+				familyCrestKey: cityFamilyCrestByName.get(t.owner_city) ?? null,
+				isCapital: t.is_capital,
+				citizens: isFinalTurn
+					? (byName.get(t.owner_city)?.citizens ?? null)
+					: null,
+			});
+		}
+		return out;
+	});
 
 	/**
 	 * Generate pointy-top elliptical hex polygon vertices centered at a pixel position.
@@ -1341,35 +1264,11 @@
 		return result;
 	});
 
-	// Map's intrinsic aspect ratio (pixel width / height of the hex extent,
-	// incl. one cell of margin) — used to size the embedded map container so it
-	// fills with no letterboxing. Null until tiles/manifest are ready.
-	const mapAspectRatio = $derived.by(() => {
-		if (tiles.length === 0) return null;
-		let minPx = Infinity,
-			maxPx = -Infinity,
-			minPy = Infinity,
-			maxPy = -Infinity;
-		for (const tile of tiles) {
-			const [px, py] = hexToPixel(tile.x, tile.y);
-			minPx = Math.min(minPx, px);
-			maxPx = Math.max(maxPx, px);
-			minPy = Math.min(minPy, py);
-			maxPy = Math.max(maxPy, py);
-		}
-		const cellW = improvementsBaseManifest?.cellWidth ?? 211;
-		const cellH = improvementsBaseManifest?.cellHeight ?? 167;
-		const w = maxPx - minPx + cellW;
-		const h = maxPy - minPy + cellH;
-		return h > 0 ? w / h : null;
-	});
-
 	/**
 	 * Calculate initial view state to fit the map in the canvas.
 	 */
-	function calculateViewState(canvas?: HTMLCanvasElement) {
-		const target = canvas ?? deckCanvas;
-		if (!target || tiles.length === 0) {
+	function calculateViewState() {
+		if (!deckCanvas || tiles.length === 0) {
 			return { target: [0, 0, 0] as [number, number, number], zoom: -3 };
 		}
 
@@ -1407,8 +1306,8 @@
 		const mapHeight = maxPy - minPy + cellMarginH;
 
 		// Calculate zoom to fit map in canvas
-		const canvasWidth = target.clientWidth;
-		const canvasHeight = target.clientHeight;
+		const canvasWidth = deckCanvas.clientWidth;
+		const canvasHeight = deckCanvas.clientHeight;
 		const zoomX = Math.log2(canvasWidth / mapWidth);
 		const zoomY = Math.log2(canvasHeight / mapHeight);
 		const zoom = Math.min(zoomX, zoomY);
@@ -1420,33 +1319,20 @@
 	// re-applies initialViewState when a new object reference is passed via
 	// setProps, which jumps the camera without disturbing the controller's
 	// drag/wheel handling.
-	function applyViewState(isFullscreen: boolean, next: ViewState) {
-		const target = isFullscreen ? fullscreenDeck : deck;
-		if (!target) return;
-		target.setProps({
+	function applyViewState(next: ViewState) {
+		if (!deck) return;
+		deck.setProps({
 			initialViewState: { ...next, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM },
 		});
-		if (isFullscreen) {
-			fullscreenCurrentViewState = next;
-			fullscreenViewVersion++;
-		} else {
-			currentViewState = next;
-			viewVersion++;
-		}
+		currentViewState = next;
 	}
 
-	function adjustZoom(delta: number, isFullscreen: boolean) {
-		const cur = isFullscreen ? fullscreenCurrentViewState : currentViewState;
+	function adjustZoom(delta: number) {
+		const cur = currentViewState;
 		if (!cur) return;
 		const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cur.zoom + delta));
 		if (newZoom === cur.zoom) return;
-		applyViewState(isFullscreen, { ...cur, zoom: newZoom });
-	}
-
-	function fitView(isFullscreen: boolean) {
-		const canvas = isFullscreen ? fullscreenCanvas : deckCanvas;
-		if (!canvas) return;
-		applyViewState(isFullscreen, calculateViewState(canvas));
+		applyViewState({ ...cur, zoom: newZoom });
 	}
 
 	function initDeck() {
@@ -1455,6 +1341,9 @@
 		const width = deckCanvas.clientWidth;
 		const canvasHeight = deckCanvas.clientHeight;
 		if (width === 0 || canvasHeight === 0) return;
+
+		deckWidth = width;
+		deckHeight = canvasHeight;
 
 		// Clean up existing deck
 		if (deck) {
@@ -1480,12 +1369,8 @@
 				maxZoom: MAX_ZOOM,
 			},
 			controller: true,
-			// Bump viewVersion so locked tooltips re-project on every camera
-			// change. Locked screen positions are derived from worldX/worldY
-			// against the current viewport (see lockedScreen $derived).
 			onViewStateChange: ({ viewState: vs }) => {
 				currentViewState = normalizeViewState(vs);
-				viewVersion++;
 			},
 			// Hover dispatch: deck.gl returns the picked layer's data item.
 			// Our pickable PolygonLayer is fed the MapTile array directly,
@@ -1500,110 +1385,6 @@
 			// Layers populated by the $effect below as soon as derivatives resolve.
 			layers: [],
 		});
-	}
-
-	function initFullscreenDeck() {
-		if (!fullscreenCanvas || !assetsLoaded) return;
-
-		const width = fullscreenCanvas.clientWidth;
-		const canvasHeight = fullscreenCanvas.clientHeight;
-		if (width === 0 || canvasHeight === 0) return;
-
-		if (fullscreenDeck) {
-			fullscreenDeck.finalize();
-			fullscreenDeck = null;
-		}
-
-		fullscreenCanvas.width = width * window.devicePixelRatio;
-		fullscreenCanvas.height = canvasHeight * window.devicePixelRatio;
-
-		const viewState = calculateViewState(fullscreenCanvas);
-		fullscreenCurrentViewState = viewState;
-
-		fullscreenDeck = new Deck({
-			canvas: fullscreenCanvas,
-			width,
-			height: canvasHeight,
-			useDevicePixels: true,
-			views: new OrthographicView({ id: "ortho" }),
-			initialViewState: {
-				...viewState,
-				minZoom: MIN_ZOOM,
-				maxZoom: MAX_ZOOM,
-			},
-			controller: true,
-			onViewStateChange: ({ viewState: vs }) => {
-				fullscreenCurrentViewState = normalizeViewState(vs);
-				fullscreenViewVersion++;
-			},
-			onHover: (info: { object?: MapTile; x: number; y: number }) => {
-				if (info.object) {
-					fullscreenHoverState = {
-						tile: info.object,
-						x: info.x,
-						y: info.y,
-					};
-				} else {
-					fullscreenHoverState = null;
-				}
-			},
-			layers: [],
-		});
-	}
-
-	function openFullscreen() {
-		dialogRef?.showModal();
-		// `tick()` resolves on the microtask queue, before the browser commits
-		// layout for the dialog's display flip. At that point the canvas still
-		// reports clientWidth/Height === 0 and initFullscreenDeck bails out at
-		// its early-return guard, leaving the dialog with the bare container
-		// background visible. Poll on rAF until the canvas has been laid out.
-		const tryInit = () => {
-			if (!fullscreenCanvas || fullscreenDeck) return;
-			// Bail if the dialog was closed before layout completed —
-			// otherwise the rAF chain would keep polling against a hidden
-			// canvas forever.
-			if (!dialogRef?.open) return;
-			if (
-				fullscreenCanvas.clientWidth === 0 ||
-				fullscreenCanvas.clientHeight === 0
-			) {
-				requestAnimationFrame(tryInit);
-				return;
-			}
-			initFullscreenDeck();
-		};
-		requestAnimationFrame(tryInit);
-	}
-
-	function closeFullscreen() {
-		if (!dialogRef || isClosing) return;
-		isClosing = true;
-		setTimeout(() => {
-			dialogRef?.close();
-			isClosing = false;
-			// Tear down the fullscreen deck so we don't accumulate WebGL
-			// contexts on repeat open/close (browsers cap at ~16).
-			if (fullscreenDeck) {
-				fullscreenDeck.finalize();
-				fullscreenDeck = null;
-			}
-			fullscreenHoverState = null;
-		}, ANIMATION_DURATION);
-	}
-
-	function handleDialogClose() {
-		// Strip focus from whichever button triggered the close so the focus
-		// ring doesn't end up on the expand button.
-		if (document.activeElement instanceof HTMLElement) {
-			document.activeElement.blur();
-		}
-	}
-
-	function handleBackdropClick(event: MouseEvent) {
-		if (event.target === dialogRef) {
-			closeFullscreen();
-		}
 	}
 
 	// Lazy-load the urban-composite atlas for `family` if it isn't already
@@ -1648,12 +1429,7 @@
 		}
 	});
 
-	// Build the full layer set for a single Deck. Each Deck instance owns
-	// its own GL context, and a Layer instance binds GPU resources to the
-	// first context it draws into; sharing a Layer between two Decks
-	// silently breaks rendering in the second. So when both the inline and
-	// fullscreen decks are live we call this twice to get fresh instances
-	// per deck.
+	// Build the full layer set for the Deck.
 	function buildLayers() {
 		const t3d = terrain3dManifest;
 		const ibm = improvementsBaseManifest;
@@ -1739,17 +1515,18 @@
 				sizeBasis: "width",
 				pickable: false,
 			}),
-			// Per-nation tile render — capital city for capital tiles, the
-			// nation's urban backdrop everywhere else. Both come from
+			// Per-nation tile render — the nation's city for a city centre,
+			// its urban backdrop everywhere else. Both come from
 			// improvements-base, both fully cover the inscribed hex, and
-			// neither is ever overdrawn by a composite (capitals don't have
-			// composite-eligible improvements; urban-empty tiles already
-			// filter out composite-covered ones).
+			// neither is ever overdrawn by a composite: of the 3,662 centre
+			// tiles in the local corpus 3,660 carry no improvement and 2 carry
+			// IMPROVEMENT_MINOR_CITY, which no family atlas renders, while
+			// urban-empty tiles already filter out composite-covered ones.
 			new IconLayer<MapTile>({
 				id: "nation-tile-icons",
 				data: tiles.filter((t) => {
-					const cap = capitalSpriteKeyFor(t, al, ibm, founderByCity);
-					if (cap != null) return true;
+					const city = cityCenterSpriteKeyFor(t, al, ibm, founderByCity);
+					if (city != null) return true;
 					if (t.terrain !== "TERRAIN_URBAN") return false;
 					const family = urbanFamilyFor(renderNationFor(t, founderByCity), al);
 					if (family == null) return false;
@@ -1760,8 +1537,8 @@
 				iconAtlas: IMPROVEMENTS_BASE_ATLAS_URL,
 				iconMapping: ibm.sprites,
 				getIcon: (d: MapTile) => {
-					const cap = capitalSpriteKeyFor(d, al, ibm, founderByCity);
-					if (cap != null) return cap;
+					const city = cityCenterSpriteKeyFor(d, al, ibm, founderByCity);
+					if (city != null) return city;
 					return `URBAN_${urbanFamilyFor(renderNationFor(d, founderByCity), al)}`;
 				},
 				getPosition: (d: MapTile) => hexToPixel(d.x, d.y),
@@ -1819,7 +1596,7 @@
 			// mod content not vendored into Reference/XML — by extending
 			// the iconMapping with the manifest's fallbackSprite cell.
 			// Excludes tiles already covered by a composite layer or by
-			// the nation-tile layer (capitals).
+			// the nation-tile layer (city centres).
 			new IconLayer<MapTile>({
 				id: "improvement-icons",
 				data: tiles.filter((t) => {
@@ -1830,7 +1607,7 @@
 					) {
 						return false;
 					}
-					if (capitalSpriteKeyFor(t, al, ibm, founderByCity) != null)
+					if (cityCenterSpriteKeyFor(t, al, ibm, founderByCity) != null)
 						return false;
 					if (compositeFamilyFor(t, al, fms, founderByCity) != null)
 						return false;
@@ -1918,7 +1695,7 @@
 				capRounded: true,
 				pickable: false,
 			}),
-			// Invisible pickable layer so hover/right-click resolve to the
+			// Invisible pickable layer so hover resolves to the
 			// correct hex regardless of which sprite layer happens to draw
 			// on top. Uses the exact hexPolygon shape so picking matches
 			// the inscribed hex (no slop into neighboring tiles at corners).
@@ -1940,14 +1717,11 @@
 
 	$effect(() => {
 		const targetDeck = deck;
-		const targetFullscreenDeck = fullscreenDeck;
-		if (!targetDeck && !targetFullscreenDeck) return;
+		if (!targetDeck) return;
 		if (!assetsLoaded) return;
 
 		// Touch all reactive deps that buildLayers reads, so the effect
-		// re-runs when any of them change. buildLayers itself isn't called
-		// inside a tracked context for both decks (we call it twice), so we
-		// list the deps explicitly here.
+		// re-runs when any of them change.
 		void terrain3dManifest;
 		void improvementsBaseManifest;
 		void resourcesManifest;
@@ -1960,83 +1734,8 @@
 		void showPolitical;
 		void showReligion;
 
-		const inlineLayers = buildLayers();
-		if (inlineLayers) targetDeck?.setProps({ layers: inlineLayers });
-		// Fresh layer instances for the second deck — Layer objects bind GPU
-		// state to a single Deck's GL context, so reusing the same instances
-		// breaks rendering in the second one.
-		const fsLayers = buildLayers();
-		if (fsLayers) targetFullscreenDeck?.setProps({ layers: fsLayers });
-	});
-
-	// ─── Turn slider + playback ───────────────────────────────────────
-	// Same pattern as HexMap: debounce slider input so we don't fire a backend
-	// fetch on every intermediate value while the user drags.
-	let sliderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-	function handleSliderChange(event: Event) {
-		const target = event.target as HTMLInputElement;
-		const turn = parseInt(target.value, 10);
-		if (sliderDebounceTimer) clearTimeout(sliderDebounceTimer);
-		sliderDebounceTimer = setTimeout(() => {
-			void onTurnChange?.(turn);
-		}, 100);
-	}
-
-	const showTurnSlider = $derived(
-		totalTurns != null && selectedTurn != null && onTurnChange != null,
-	);
-
-	let isPlaying = $state(false);
-	let isFastPlaying = $state(false);
-	let playbackInterval: ReturnType<typeof setInterval> | null = null;
-	const PLAYBACK_SPEED_MS = 300;
-	const FAST_PLAYBACK_SPEED_MS = 150;
-
-	function startPlayback(fast: boolean) {
-		if (totalTurns == null || selectedTurn == null) return;
-		stopPlayback();
-		if (selectedTurn >= totalTurns) {
-			void onTurnChange?.(1);
-		}
-		isPlaying = !fast;
-		isFastPlaying = fast;
-		const speed = fast ? FAST_PLAYBACK_SPEED_MS : PLAYBACK_SPEED_MS;
-		playbackInterval = setInterval(() => {
-			if (selectedTurn != null && totalTurns != null) {
-				if (selectedTurn >= totalTurns) {
-					stopPlayback();
-				} else {
-					void onTurnChange?.(selectedTurn + 1);
-				}
-			}
-		}, speed);
-	}
-
-	function stopPlayback() {
-		isPlaying = false;
-		isFastPlaying = false;
-		if (playbackInterval) {
-			clearInterval(playbackInterval);
-			playbackInterval = null;
-		}
-	}
-
-	function togglePlayback() {
-		if (isPlaying) stopPlayback();
-		else startPlayback(false);
-	}
-
-	function toggleFastPlayback() {
-		if (isFastPlaying) stopPlayback();
-		else startPlayback(true);
-	}
-
-	$effect(() => {
-		return () => {
-			if (playbackInterval) clearInterval(playbackInterval);
-			if (sliderDebounceTimer) clearTimeout(sliderDebounceTimer);
-		};
+		const layers = buildLayers();
+		if (layers) targetDeck.setProps({ layers });
 	});
 
 	async function loadNationAliases(): Promise<Map<string, NationAliasEntry>> {
@@ -2111,197 +1810,23 @@
 			}
 		}, 100);
 
-		// Track container size for tooltip edge-flip clamping. ResizeObserver
-		// fires on initial mount too, so no separate initialization needed.
-		let resizeObserver: ResizeObserver | null = null;
-		if (containerEl) {
-			resizeObserver = new ResizeObserver(() => {
-				if (!containerEl) return;
-				containerWidth = containerEl.clientWidth;
-				containerHeight = containerEl.clientHeight;
-			});
-			resizeObserver.observe(containerEl);
-		}
-
 		return () => {
 			clearInterval(visibilityCheck);
-			resizeObserver?.disconnect();
 			if (deck) {
 				deck.finalize();
 				deck = null;
 			}
-			if (fullscreenDeck) {
-				fullscreenDeck.finalize();
-				fullscreenDeck = null;
-			}
 		};
-	});
-
-	// Track fullscreen container size for tooltip edge-clamping. The
-	// container only exists in the DOM after the first dialog open; bind
-	// reactivity to fullscreenContainerEl so the observer attaches as soon
-	// as it appears and tears down if the element is replaced.
-	$effect(() => {
-		const el = fullscreenContainerEl;
-		if (!el) return;
-		const ro = new ResizeObserver(() => {
-			fullscreenContainerWidth = el.clientWidth;
-			fullscreenContainerHeight = el.clientHeight;
-		});
-		ro.observe(el);
-		return () => ro.disconnect();
 	});
 </script>
 
-{#snippet controlsBar(trailingBtn: "expand" | "close" | "none")}
-	<div class="flex flex-wrap items-center gap-4 text-sm">
-		<div class="flex items-center gap-3">
-			<Checkbox bind:checked={showPolitical} labelClass="gap-1.5">
-				<span class="select-none text-tan">Political</span>
-			</Checkbox>
-			<Checkbox bind:checked={showReligion} labelClass="gap-1.5">
-				<span class="select-none text-tan">Religion</span>
-			</Checkbox>
-		</div>
-
-		<div class="ml-auto flex items-center gap-6">
-			{#if showTurnSlider}
-				<div class="flex items-center gap-3">
-					<span class="text-sm font-bold text-tan">Turn:</span>
-					<div class="flex items-center">
-						<button
-							onclick={togglePlayback}
-							class="rounded p-1.5 transition-colors {isPlaying
-								? 'bg-brown text-tan'
-								: 'bg-brown/30 hover:bg-brown/50'}"
-							aria-label={isPlaying ? "Pause" : "Play"}
-							title={isPlaying ? "Pause" : "Play (1x)"}
-						>
-							{#if isPlaying}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<rect x="6" y="4" width="4" height="16" />
-									<rect x="14" y="4" width="4" height="16" />
-								</svg>
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path d="M8 5v14l11-7z" />
-								</svg>
-							{/if}
-						</button>
-						<button
-							onclick={toggleFastPlayback}
-							class="rounded p-1.5 transition-colors {isFastPlaying
-								? 'bg-brown text-tan'
-								: 'bg-brown/30 hover:bg-brown/50'}"
-							aria-label={isFastPlaying ? "Pause" : "Fast Forward"}
-							title={isFastPlaying ? "Pause" : "Fast Forward (2x)"}
-						>
-							{#if isFastPlaying}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<rect x="6" y="4" width="4" height="16" />
-									<rect x="14" y="4" width="4" height="16" />
-								</svg>
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-tan"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path d="M4 5v14l8-7z" />
-									<path d="M12 5v14l8-7z" />
-								</svg>
-							{/if}
-						</button>
-					</div>
-					<input
-						type="range"
-						min="1"
-						max={totalTurns}
-						value={selectedTurn}
-						oninput={handleSliderChange}
-						class="turn-slider w-48"
-					/>
-					<span class="w-8 text-right text-sm font-bold text-tan"
-						>{selectedTurn}</span
-					>
-				</div>
-			{/if}
-
-			{#if trailingBtn === "expand"}
-				<!-- Expand button (chart-style: semi-transparent overlay icon) -->
-				<button
-					onclick={openFullscreen}
-					class="cursor-pointer rounded bg-black/20 p-1.5 transition-colors hover:bg-black/40 focus:outline-none"
-					aria-label="Expand map to fullscreen"
-					title="Expand to fullscreen"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-4 w-4 text-white"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-						/>
-					</svg>
-				</button>
-			{:else if trailingBtn === "close"}
-				<!-- Close button (matches expand styling so it slots into the same row) -->
-				<button
-					onclick={closeFullscreen}
-					class="cursor-pointer rounded bg-black/20 p-1.5 transition-colors hover:bg-black/40 focus:outline-none"
-					aria-label="Close fullscreen"
-					title="Close fullscreen (Esc)"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-4 w-4 text-white"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M6 18L18 6M6 6l12 12"
-						/>
-					</svg>
-				</button>
-			{/if}
-		</div>
-	</div>
-{/snippet}
-
-{#snippet zoomControls(isFullscreen: boolean)}
-	{@const cur = isFullscreen ? fullscreenCurrentViewState : currentViewState}
-	{@const zoom = cur?.zoom ?? 0}
+{#snippet zoomControls()}
+	{@const zoom = currentViewState?.zoom ?? 0}
 	<div class="zoom-controls">
 		<button
 			type="button"
 			class="zoom-btn"
-			onclick={() => adjustZoom(ZOOM_STEP, isFullscreen)}
+			onclick={() => adjustZoom(ZOOM_STEP)}
 			disabled={zoom >= MAX_ZOOM}
 			aria-label="Zoom in"
 			title="Zoom in"
@@ -2324,7 +1849,7 @@
 		<button
 			type="button"
 			class="zoom-btn"
-			onclick={() => adjustZoom(-ZOOM_STEP, isFullscreen)}
+			onclick={() => adjustZoom(-ZOOM_STEP)}
 			disabled={zoom <= MIN_ZOOM}
 			aria-label="Zoom out"
 			title="Zoom out"
@@ -2340,152 +1865,46 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
 			</svg>
 		</button>
-		<button
-			type="button"
-			class="zoom-btn"
-			onclick={() => fitView(isFullscreen)}
-			aria-label="Fit map to view"
-			title="Fit map to view"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M9 4H5a1 1 0 00-1 1v4m16 0V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4m6 0h4a1 1 0 001-1v-4"
-				/>
-			</svg>
-		</button>
 	</div>
 {/snippet}
 
-<div class="flex flex-col gap-3 rounded-lg bg-surface-deep p-3">
-	<!-- Layer toggles + turn controls + expand button -->
-	{@render controlsBar("expand")}
+<div class="sprite-map-container">
+	<canvas bind:this={deckCanvas} class="sprite-map-canvas"></canvas>
 
-	<div
-		class="sprite-map-container"
-		style={mapAspectRatio
-			? `aspect-ratio: ${mapAspectRatio}; max-height: 75vh;`
-			: `height: ${height};`}
-		bind:this={containerEl}
-	>
-		<canvas
-			bind:this={deckCanvas}
-			class="sprite-map-canvas"
-			oncontextmenu={handleContextMenu}
-		></canvas>
+	{@render zoomControls()}
 
-		{@render zoomControls(false)}
+	{#if currentViewState}
+		<MapCityBanners
+			banners={cityBanners}
+			viewState={currentViewState}
+			canvasWidth={deckWidth}
+			canvasHeight={deckHeight}
+			onBannerHover={(tile, x, y) => (hoverState = { tile, x, y })}
+			onBannerClick={onCityClick}
+		/>
+	{/if}
 
-		{#if showHover && hoverState}
-			<MapTooltip
-				tile={hoverState.tile}
-				cityFamily={hoverState.tile.owner_city
-					? (cityFamilyCrestByName.get(hoverState.tile.owner_city) ?? null)
-					: null}
-				nationCrestKey={resolveNationCrestKey(hoverState.tile.owner_nation)}
-				screenX={hoverState.x}
-				screenY={hoverState.y}
-				{containerWidth}
-				{containerHeight}
-			/>
-		{/if}
-
-		{#each lockedScreen as locked (locked.key)}
-			<MapTooltip
-				tile={locked.tile}
-				cityFamily={locked.tile.owner_city
-					? (cityFamilyCrestByName.get(locked.tile.owner_city) ?? null)
-					: null}
-				nationCrestKey={resolveNationCrestKey(locked.tile.owner_nation)}
-				pinned
-				screenX={locked.sx}
-				screenY={locked.sy}
-				{containerWidth}
-				{containerHeight}
-				onClose={() => toggleLockedTile(locked.tile)}
-			/>
-		{/each}
-	</div>
+	{#if hoverState}
+		<MapTooltip
+			tile={hoverState.tile}
+			cityFamily={hoverState.tile.owner_city
+				? (cityFamilyCrestByName.get(hoverState.tile.owner_city) ?? null)
+				: null}
+			nationCrestKey={resolveNationCrestKey(hoverState.tile.owner_nation)}
+			screenX={hoverState.x}
+			screenY={hoverState.y}
+			canvasWidth={deckWidth}
+			canvasHeight={deckHeight}
+		/>
+	{/if}
 </div>
-
-<!-- Fullscreen dialog (chart-style: native <dialog> in browser top layer) -->
-<dialog
-	bind:this={dialogRef}
-	onclick={handleBackdropClick}
-	onclose={handleDialogClose}
-	class="fullscreen-dialog {isClosing ? 'closing' : ''}"
->
-	<div class="dialog-content">
-		<!-- Mirrored controls bar with the close button slotted in the same
-		     position the expand button occupies in the normal view. -->
-		<div class="mb-4 flex-shrink-0 rounded-lg bg-black/90 px-4 py-3">
-			{@render controlsBar("close")}
-		</div>
-
-		<!-- Fullscreen sprite map -->
-		<div
-			class="sprite-map-container relative min-h-0 flex-1"
-			bind:this={fullscreenContainerEl}
-		>
-			<canvas
-				bind:this={fullscreenCanvas}
-				class="sprite-map-canvas"
-				oncontextmenu={handleFullscreenContextMenu}
-			></canvas>
-
-			{@render zoomControls(true)}
-
-			{#if showFullscreenHover && fullscreenHoverState}
-				<MapTooltip
-					tile={fullscreenHoverState.tile}
-					cityFamily={fullscreenHoverState.tile.owner_city
-						? (cityFamilyCrestByName.get(
-								fullscreenHoverState.tile.owner_city,
-							) ?? null)
-						: null}
-					nationCrestKey={resolveNationCrestKey(
-						fullscreenHoverState.tile.owner_nation,
-					)}
-					screenX={fullscreenHoverState.x}
-					screenY={fullscreenHoverState.y}
-					containerWidth={fullscreenContainerWidth}
-					containerHeight={fullscreenContainerHeight}
-				/>
-			{/if}
-
-			{#each lockedScreenFullscreen as locked (locked.key)}
-				<MapTooltip
-					tile={locked.tile}
-					cityFamily={locked.tile.owner_city
-						? (cityFamilyCrestByName.get(locked.tile.owner_city) ?? null)
-						: null}
-					nationCrestKey={resolveNationCrestKey(locked.tile.owner_nation)}
-					pinned
-					screenX={locked.sx}
-					screenY={locked.sy}
-					containerWidth={fullscreenContainerWidth}
-					containerHeight={fullscreenContainerHeight}
-					onClose={() => toggleLockedTile(locked.tile)}
-				/>
-			{/each}
-		</div>
-	</div>
-</dialog>
 
 <style>
 	.sprite-map-container {
 		position: relative;
 		width: 100%;
+		height: 100%;
 		overflow: hidden;
-		border-radius: 0.5rem;
 		background-color: rgb(var(--color-surface-deep));
 	}
 
@@ -2526,159 +1945,5 @@
 	.zoom-btn:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
-	}
-
-	.turn-slider {
-		-webkit-appearance: none;
-		appearance: none;
-		height: 6px;
-		background: rgb(var(--color-track));
-		border-radius: 3px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	.turn-slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 16px;
-		height: 16px;
-		background: rgb(var(--color-brown));
-		border-radius: 50%;
-		cursor: pointer;
-		transition: background 0.15s ease;
-	}
-
-	.turn-slider::-webkit-slider-thumb:hover {
-		background: rgb(var(--color-tan));
-	}
-
-	.turn-slider::-moz-range-thumb {
-		width: 16px;
-		height: 16px;
-		background: rgb(var(--color-brown));
-		border-radius: 50%;
-		cursor: pointer;
-		border: none;
-		transition: background 0.15s ease;
-	}
-
-	.turn-slider::-moz-range-thumb:hover {
-		background: rgb(var(--color-tan));
-	}
-
-	/* Fullscreen dialog — mirrors ChartContainer.svelte's behavior. */
-	.fullscreen-dialog {
-		border: none;
-		padding: 0;
-		background: transparent;
-		max-width: none;
-		max-height: none;
-		width: 100vw;
-		height: 100vh;
-		outline: none;
-	}
-
-	.fullscreen-dialog:not([open]) {
-		display: none;
-	}
-
-	.fullscreen-dialog[open] {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		animation: dialogFadeIn 0.2s ease-out;
-	}
-
-	.fullscreen-dialog[open] .dialog-content {
-		animation: dialogZoomIn 0.2s ease-out;
-	}
-
-	.fullscreen-dialog[open]::backdrop {
-		animation: backdropFadeIn 0.2s ease-out;
-	}
-
-	.fullscreen-dialog.closing {
-		animation: dialogFadeOut 0.2s ease-in forwards;
-	}
-
-	.fullscreen-dialog.closing .dialog-content {
-		animation: dialogZoomOut 0.2s ease-in forwards;
-	}
-
-	.fullscreen-dialog.closing::backdrop {
-		animation: backdropFadeOut 0.2s ease-in forwards;
-	}
-
-	@keyframes dialogFadeIn {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	@keyframes dialogFadeOut {
-		from {
-			opacity: 1;
-		}
-		to {
-			opacity: 0;
-		}
-	}
-
-	@keyframes dialogZoomIn {
-		from {
-			opacity: 0;
-			transform: scale(0.95);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
-	}
-
-	@keyframes dialogZoomOut {
-		from {
-			opacity: 1;
-			transform: scale(1);
-		}
-		to {
-			opacity: 0;
-			transform: scale(0.95);
-		}
-	}
-
-	@keyframes backdropFadeIn {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	@keyframes backdropFadeOut {
-		from {
-			opacity: 1;
-		}
-		to {
-			opacity: 0;
-		}
-	}
-
-	.fullscreen-dialog::backdrop {
-		background: rgb(var(--color-black) / 0.8);
-	}
-
-	.dialog-content {
-		position: relative;
-		width: 95vw;
-		height: 90vh;
-		max-width: 95vw;
-		max-height: 90vh;
-		display: flex;
-		flex-direction: column;
 	}
 </style>

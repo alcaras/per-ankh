@@ -16,7 +16,17 @@
 //     desktop applies a complex per-religion filter we'd need additional
 //     parser fields to reproduce.
 
+import { ownershipChangeTurn } from "$lib/parser/types";
 import type { FullGameData, MapTile } from "$lib/parser/types";
+
+/**
+ * The save's id for a grid position. The parser writes `xml_id = y * width + x`
+ * (parsers/tiles.ts:149–150), and `tile_ownership_history` keys off it — so any
+ * join from an (x, y) tile to its ownership rows goes through here.
+ */
+export function tileXmlId(x: number, y: number, mapWidth: number): number {
+	return y * mapWidth + x;
+}
 
 export function reconstructMapTiles(
 	data: FullGameData,
@@ -35,14 +45,17 @@ export function reconstructMapTiles(
 	}
 
 	// 1. owner_player_xml_id at the requested turn, per tile_xml_id.
-	//    Latest tile_ownership_history entry with entry.turn <= turn.
+	//    Latest tile_ownership_history entry that changed hands at or before
+	//    the turn — `ownershipChangeTurn`, because the save keys each entry to
+	//    the turn after the change.
 	const ownerAtTurn = new Map<number, number | null>();
 	const latestTurnSeen = new Map<number, number>();
 	for (const entry of data.tile_ownership_history) {
-		if (entry.turn > turn) continue;
+		const changedTurn = ownershipChangeTurn(entry.turn);
+		if (changedTurn > turn) continue;
 		const prev = latestTurnSeen.get(entry.tile_xml_id);
-		if (prev === undefined || entry.turn > prev) {
-			latestTurnSeen.set(entry.tile_xml_id, entry.turn);
+		if (prev === undefined || changedTurn > prev) {
+			latestTurnSeen.set(entry.tile_xml_id, changedTurn);
 			ownerAtTurn.set(entry.tile_xml_id, entry.owner_player_xml_id);
 		}
 	}
@@ -71,8 +84,8 @@ export function reconstructMapTiles(
 
 	// 4. Project each final-turn tile through the per-turn gate.
 	const out: MapTile[] = data.map_tiles.map((t) => {
-		const tileXmlId = t.y * mapWidth + t.x;
-		const ownerXmlId = ownerAtTurn.get(tileXmlId) ?? null;
+		const xmlId = tileXmlId(t.x, t.y, mapWidth);
+		const ownerXmlId = ownerAtTurn.get(xmlId) ?? null;
 		const owned = ownerXmlId !== null;
 
 		const cityInfo =

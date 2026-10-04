@@ -138,3 +138,29 @@ body {
 	-moz-appearance: textfield;
 	appearance: textfield;
 }
+
+/*
+ * The map chrome's label/value rows: a two-column grid whose labels are the
+ * small uppercase muted type the tile hover panel introduced. Shared by that
+ * panel, the yield strip's tooltips and the city popover so the chrome reads
+ * alike — CHROME_PANEL_CLASS (game-detail/map-chrome.ts) dresses their frames,
+ * which is also where the values' tan comes from.
+ */
+.chrome-rows {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	column-gap: 10px;
+	row-gap: 2px;
+	align-items: baseline;
+}
+
+.chrome-rows dt {
+	color: rgb(var(--color-muted));
+	font-size: 9.5px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.chrome-rows dd {
+	min-width: 0;
+}

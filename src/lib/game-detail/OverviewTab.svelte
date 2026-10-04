@@ -23,6 +23,7 @@
 		classifyUnit,
 		UNIT_CLASS_COLORS,
 		improvementDisplayName,
+		saveOwnerPlayer,
 	} from "./helpers";
 	import SpriteIcon from "./SpriteIcon.svelte";
 
@@ -89,12 +90,11 @@
 		wonders: PlayerWonderEntry[];
 	};
 
-	// Exactly one player is the save owner. In a mirror match `userNation`
-	// can't disambiguate two same-nation players, so pick the first matching
-	// human (or the first human when userNation is absent — the legacy path).
+	// Exactly one player is the save owner (see saveOwnerPlayer); the first
+	// human when userNation is absent — the legacy path.
 	const saveOwnerId = $derived(
 		(userNation != null
-			? players.find((p) => p.nation === userNation)
+			? saveOwnerPlayer(players, userNation)
 			: players.find((p) => p.is_human)
 		)?.playerId ?? null,
 	);

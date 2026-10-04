@@ -4,17 +4,16 @@
 	import { getCivilizationColor } from "$lib/config";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import { improvementDisplayName } from "$lib/game-detail/helpers";
+	import { CHROME_PANEL_CLASS } from "$lib/game-detail/map-chrome";
 
 	let {
 		tile,
 		cityFamily = null,
 		nationCrestKey = null,
-		pinned = false,
 		screenX,
 		screenY,
-		containerWidth,
-		containerHeight,
-		onClose,
+		canvasWidth,
+		canvasHeight,
 	}: {
 		tile: MapTile;
 		// Resolved family enum like "FAMILY_PTOLEMY", or null if unknown / not city.
@@ -23,12 +22,12 @@
 		// against nation-asset-aliases so variant nations (NATION_AMUN, NATION_ATHENS)
 		// fall back to their parent civ's crest (CREST_NATION_EGYPT, ...).
 		nationCrestKey?: string | null;
-		pinned?: boolean;
 		screenX: number;
 		screenY: number;
-		containerWidth: number;
-		containerHeight: number;
-		onClose?: () => void;
+		// The deck canvas the panel sits over, in CSS pixels — the box it
+		// edge-flips inside.
+		canvasWidth: number;
+		canvasHeight: number;
 	} = $props();
 
 	const nationColor = $derived.by(() => {
@@ -68,7 +67,7 @@
 	);
 
 	// Conservative size estimate for edge-flip clamping. Exact CSS size depends on
-	// content; over-estimating just biases toward flipping at container edges.
+	// content; over-estimating just biases toward flipping at the canvas edges.
 	const ESTIMATED_W = 200;
 	const ESTIMATED_H = 110;
 	const OFFSET = 12;
@@ -76,10 +75,10 @@
 	const positionStyle = $derived.by(() => {
 		let left = screenX + OFFSET;
 		let top = screenY + OFFSET;
-		if (containerWidth > 0 && left + ESTIMATED_W > containerWidth) {
+		if (canvasWidth > 0 && left + ESTIMATED_W > canvasWidth) {
 			left = screenX - OFFSET - ESTIMATED_W;
 		}
-		if (containerHeight > 0 && top + ESTIMATED_H > containerHeight) {
+		if (canvasHeight > 0 && top + ESTIMATED_H > canvasHeight) {
 			top = screenY - OFFSET - ESTIMATED_H;
 		}
 		if (left < 4) left = 4;
@@ -88,7 +87,12 @@
 	});
 </script>
 
-<div class="map-tooltip" class:pinned style={positionStyle} role="tooltip">
+<!-- In the chrome's frame, so the hover panel reads as part of it. -->
+<div
+	class="map-tooltip {CHROME_PANEL_CLASS}"
+	style={positionStyle}
+	role="tooltip"
+>
 	{#if headerLabel}
 		<div class="header">
 			<div class="crests">
@@ -100,65 +104,40 @@
 				{/if}
 			</div>
 			<span class="city-name" style="color: {nationColor};">
-				{headerLabel}
 				{#if tile.is_capital}<span class="capital-marker">★</span>{/if}
+				{headerLabel}
 			</span>
-			{#if pinned && onClose}
-				<button
-					type="button"
-					class="close-btn"
-					onclick={onClose}
-					aria-label="Close tooltip">×</button
-				>
-			{/if}
 		</div>
-	{:else if pinned && onClose}
-		<button
-			type="button"
-			class="close-btn floating"
-			onclick={onClose}
-			aria-label="Close tooltip">×</button
-		>
 	{/if}
 
-	<div class="rows">
-		<span class="label">Tile</span>
-		<span class="value">{tile.x}, {tile.y}</span>
+	<dl class="chrome-rows">
+		<dt>Tile</dt>
+		<dd>{tile.x}, {tile.y}</dd>
 		{#if terrainLabel}
-			<span class="label">Terrain</span>
-			<span class="value">{terrainLabel}</span>
+			<dt>Terrain</dt>
+			<dd>{terrainLabel}</dd>
 		{/if}
 		{#if improvementLabel}
-			<span class="label">Improvement</span>
-			<span class="value">{improvementLabel}</span>
+			<dt>Improvement</dt>
+			<dd>{improvementLabel}</dd>
 		{/if}
 		{#if specialistLabel}
-			<span class="label">Specialist</span>
-			<span class="value">{specialistLabel}</span>
+			<dt>Specialist</dt>
+			<dd>{specialistLabel}</dd>
 		{/if}
-	</div>
+	</dl>
 </div>
 
 <style>
 	.map-tooltip {
 		position: absolute;
-		background: rgb(var(--color-surface-deep) / 0.97);
-		border: 2px solid rgb(var(--color-black));
-		border-radius: 6px;
 		padding: 8px 10px;
-		color: rgb(var(--color-tan));
 		font-size: 11px;
 		line-height: 1.4;
 		pointer-events: none;
 		z-index: 100;
 		min-width: 160px;
 		max-width: 240px;
-		box-shadow: 0 4px 12px rgb(var(--color-black) / 0.5);
-	}
-	.map-tooltip.pinned {
-		pointer-events: auto;
-		border-color: rgb(var(--color-tan));
-		box-shadow: 0 4px 16px rgb(var(--color-black) / 0.7);
 	}
 	.header {
 		display: flex;
@@ -184,43 +163,8 @@
 		text-shadow: 0 1px 2px rgb(var(--color-black) / 0.6);
 	}
 	.capital-marker {
-		margin-left: 4px;
+		margin-right: 4px;
 		opacity: 0.85;
 		font-size: 10px;
-	}
-	.close-btn {
-		background: none;
-		border: none;
-		color: rgb(var(--color-brown));
-		cursor: pointer;
-		font-size: 16px;
-		line-height: 1;
-		padding: 0 2px;
-		transition: color 0.15s;
-		flex-shrink: 0;
-	}
-	.close-btn:hover {
-		color: rgb(var(--color-tan));
-	}
-	.close-btn.floating {
-		position: absolute;
-		top: 4px;
-		right: 6px;
-	}
-	.rows {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		column-gap: 10px;
-		row-gap: 2px;
-		align-items: baseline;
-	}
-	.label {
-		color: rgb(var(--color-muted));
-		font-size: 9.5px;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-	.value {
-		color: rgb(var(--color-tan));
 	}
 </style>

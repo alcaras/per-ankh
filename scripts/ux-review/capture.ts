@@ -30,12 +30,13 @@ interface GameTab {
 	optional?: boolean;
 }
 
-// Game-detail tabs in nav order, mirroring the Tabs.List in GameDetailView.
-// `label` is the trigger's accessible name (bits-ui Tabs.Trigger emits
+// Game-detail tabs in nav order, mirroring GAME_TABS in
+// src/lib/game-detail/game-tabs.svelte.ts, which GameDetailView's Tabs.List
+// renders. `label` is the trigger's accessible name (bits-ui Tabs.Trigger emits
 // role="tab"); getByRole matches by accessible name and survives Tailwind
 // churn. The Tabs.List uses flex-wrap, so every trigger stays a clickable
 // role="tab" even at mobile width (no dropdown collapse). "Timeline" is
-// commented out there ("hidden pending redesign") so it's omitted here.
+// commented out of GAME_TABS ("hidden pending redesign") so it's omitted here.
 const GAME_TABS: GameTab[] = [
 	{ label: "Overview" },
 	{ label: "Events" },
@@ -51,7 +52,6 @@ const GAME_TABS: GameTab[] = [
 	{ label: "Wonders" },
 	{ label: "Families" },
 	{ label: "Specialists" },
-	{ label: "Map" },
 	{ label: "Settings" },
 ];
 
@@ -305,6 +305,28 @@ async function captureGameDetail(
 	return recs;
 }
 
+// The game's other view (/games/[id]/map): the map under its chrome, one shot.
+// The chrome's lightboxes and the city popover are interaction states this
+// walkthrough doesn't drive, so what's captured is the view as it opens.
+async function captureGameMap(
+	page: Page,
+	baseUrl: string,
+	pass: Pass,
+	gameId: string,
+	state: string,
+): Promise<CaptureRecord> {
+	return captureSingle(page, baseUrl, {
+		id: `${pass}__game-map`,
+		pass,
+		page: "game-map",
+		tab: null,
+		title: "Map view",
+		route: `/games/${gameId}/map`,
+		state,
+		errorHint: "Map view failed — game may be private, missing, or redirected",
+	});
+}
+
 // User profile — URL-driven tabs (?tab=…). Yields one record per tab.
 async function captureUserProfile(
 	page: Page,
@@ -404,6 +426,7 @@ export async function captureAnon(
 	recs.push(
 		...(await captureGameDetail(page, baseUrl, "anon", ids.gameId, "visitor")),
 	);
+	recs.push(await captureGameMap(page, baseUrl, "anon", ids.gameId, "visitor"));
 	recs.push(
 		...(await captureUserProfile(page, baseUrl, "anon", ids.userId, "visitor")),
 	);
@@ -474,6 +497,15 @@ export async function captureAuth(
 			ids.gameId,
 			opts.ownsGame ? "owner" : "signed in",
 		)),
+	);
+	recs.push(
+		await captureGameMap(
+			page,
+			baseUrl,
+			"auth",
+			ids.gameId,
+			opts.ownsGame ? "owner" : "signed in",
+		),
 	);
 	recs.push(
 		await captureSingle(page, baseUrl, {
