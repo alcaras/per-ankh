@@ -125,12 +125,15 @@
 	});
 </script>
 
-<!-- Trail on the left, the view toggle in the middle, the actions and save
-     date on the right. On lg+ it's the tournament header's 2fr/auto/1fr grid
-     (tournaments/[slug]/+layout.svelte), so the toggle keeps its place
-     whatever the title's length; below lg it wraps as a flex row. -->
+<!-- Trail on the left, the view toggle centred, the actions and save date on
+     the right. On lg+ the side columns are equal fractions, so the auto middle
+     column sits on the page's centre line — the tournament header's
+     2fr/auto/1fr (tournaments/[slug]/+layout.svelte) buys its longer names
+     room on the left instead and lands the toggle right of centre. Either way
+     the toggle keeps its place whatever the title's length; below lg it wraps
+     as a flex row. -->
 <div
-	class="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:grid lg:grid-cols-[2fr_auto_1fr]"
+	class="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:grid lg:grid-cols-[1fr_auto_1fr]"
 >
 	<Breadcrumb {crumbs} class="min-w-0" />
 
