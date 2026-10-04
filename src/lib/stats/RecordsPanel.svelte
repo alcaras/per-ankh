@@ -239,14 +239,23 @@
 								<span class="text-xs text-tan">{card.note}</span>
 							{/if}
 						</div>
-						<ol class="text-xs">
+						<!-- One grid for the whole board, rows laid into it with
+						`contents`, so the rank, turn and value columns are as wide as
+						this card's widest row rather than each row's own. Sized per
+						card, not once for the panel: a cumulative board's values run
+						to six figures where a per-turn board's run to three. -->
+						<ol
+							class="grid items-baseline gap-x-2 gap-y-1 text-xs {fixedTurn ==
+							null
+								? 'grid-cols-[1rem_minmax(0,1fr)_auto_auto]'
+								: 'grid-cols-[1rem_minmax(0,1fr)_auto]'}"
+						>
 							{#each card.rows as row, i (row.game_id + row.player_index)}
 								{@const seat = holder(row.game_id, row.player_index)}
-								<li class="flex items-baseline gap-2 py-0.5">
-									<span class="w-4 shrink-0 text-right text-brown">{i + 1}</span
-									>
+								<li class="contents">
+									<span class="text-right text-brown">{i + 1}</span>
 									<a
-										class="flex min-w-0 flex-1 items-baseline gap-1.5 truncate text-tan hover:underline"
+										class="flex min-w-0 items-baseline gap-1.5 truncate text-tan hover:underline"
 										href={resolve("/games/[id]", { id: row.game_id })}
 										title="T{row.turn} of {payload.recordGames[row.game_id]
 											?.turns ?? '?'} — open the game"
@@ -262,11 +271,11 @@
 										<span class="truncate">{seat.label}</span>
 									</a>
 									{#if fixedTurn == null}
-										<span class="shrink-0 tabular-nums text-brown"
+										<span class="text-right tabular-nums text-brown"
 											>T{row.turn}</span
 										>
 									{/if}
-									<span class="shrink-0 font-bold tabular-nums text-tan"
+									<span class="text-right font-bold tabular-nums text-tan"
 										>{fmt(row.value)}</span
 									>
 								</li>
