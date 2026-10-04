@@ -156,7 +156,7 @@
 			{:else if section.id === "families"}
 				<FamilyStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "family-fielded"}
-				<FamilyKeepsPanel {bundle} />
+				<FamilyKeepsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "laws"}
 				<LawsStatsPanel {bundle} {showNationSelect} toolbarFlush />
 			{:else if section.id === "tech"}

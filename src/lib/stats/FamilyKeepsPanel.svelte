@@ -25,7 +25,21 @@
 	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
 	import type { ChartBundleCore } from "./types";
 
-	let { bundle }: { bundle: ChartBundleCore } = $props();
+	// showNationSelect — false where the page owns a nation control of its own
+	// (/stats); the panel then renders the cross-nation aggregate. Nothing is
+	// lost by hiding it there: the page's facet narrows the corpus this table is
+	// built from, so a faceted `overall` is the same table, gate included, that
+	// picking the nation here would have shown. StatsView decides it and says
+	// why, and passes toolbarFlush on to that selector.
+	let {
+		bundle,
+		showNationSelect = true,
+		toolbarFlush = false,
+	}: {
+		bundle: ChartBundleCore;
+		showNationSelect?: boolean;
+		toolbarFlush?: boolean;
+	} = $props();
 
 	// Only nations there is a table for — one that fields its whole pool never
 	// reaches the selector, having nothing to say about preference.
@@ -78,7 +92,14 @@
 {#if bundle.familyKeeps.overall.rows.length === 0}
 	<p class="p-8 text-center italic text-brown">No family data available.</p>
 {:else}
-	<NationSelect value={nation} {options} onChange={(v) => (chosen = v)} />
+	{#if showNationSelect}
+		<NationSelect
+			value={nation}
+			{options}
+			onChange={(v) => (chosen = v)}
+			{toolbarFlush}
+		/>
+	{/if}
 
 	<ChartContainer
 		option={familyKeepsOption(keeps.rows)}
