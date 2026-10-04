@@ -182,6 +182,23 @@ const cachedBundle = (
 const kvHas = async (name: string): Promise<boolean> =>
 	(await env.SESSIONS_KV.get(name)) !== null;
 
+// Clear an entry, so a case that needs one absent *establishes* that rather
+// than inheriting it.
+//
+// Storage is shared across the cases in an integration file — nothing here
+// isolates it per test — so a bare `toBeNull()` precondition asserts only that
+// no earlier case happened to write the key. That reserves a selection to one
+// case by a convention nothing enforces, and the day it is broken the case
+// fails as a confusing "expected {...} to be null" rather than as a statement
+// about caching. Deleting first costs one call and owes the rest of the file
+// nothing.
+const clearCached = async (
+	key: Parameters<typeof cacheKeyToString>[0],
+	payload?: Parameters<typeof cacheKeyToString>[1],
+): Promise<void> => {
+	await env.SESSIONS_KV.delete(cacheKeyToString(key, payload));
+};
+
 describe("GET /v1/stats selection", () => {
 	it("defaults to the duel slice", async () => {
 		// The corpus holds three public games and one public duel, so the
@@ -361,12 +378,14 @@ describe("GET /v1/stats recency window", () => {
 		// one is built on the first request that asks for it and then lives 24h
 		// like any other entry.
 		//
-		// Egypt in the "all" slice, because the two entries have to be observed
-		// from empty and no other case here asks for that selection — a
-		// precondition another case had already warmed would pass on its leavings
-		// rather than on what this request wrote.
+		// Egypt in the "all" slice, because it is seated in all three public
+		// games — so the two windows hold observably different payloads (3 and 2)
+		// and "beside, not over" is a claim the counts can carry. A selection
+		// both windows counted the same could not distinguish the entries.
 		const windowed = globalKey("all", [EGYPT], CURRENT_PARSER_VERSION, "12m");
 		const allTime = globalKey("all", [EGYPT]);
+		await clearCached(windowed);
+		await clearCached(allTime);
 		expect(await getCached<ChartBundleCore>(env, windowed)).toBeNull();
 		expect(await getCached<ChartBundleCore>(env, allTime)).toBeNull();
 
@@ -431,6 +450,7 @@ describe("GET /v1/stats/records honours the selection", () => {
 
 describe("GET /v1/stats caching", () => {
 	it("caches what it computed on a miss", async () => {
+		await clearCached(globalKey("ffa", [GREECE]));
 		expect(await cachedBundle("ffa", [GREECE])).toBeNull();
 		const served = await bundle(
 			"?slice=ffa&nation=NATION_GREECE",
@@ -463,6 +483,7 @@ describe("GET /v1/stats caching", () => {
 		});
 
 		const fresh = cacheKeyToString(globalKey("all", [GREECE]));
+		await clearCached(globalKey("all", [GREECE]));
 		expect(await kvHas(fresh)).toBe(false);
 
 		const res = await get("?slice=all&nation=NATION_GREECE", "203.0.113.22");
