@@ -1,5 +1,73 @@
 # Changelog
 
+## [2026-10-04-21ae85d] - 2026-10-04
+
+### Features
+
+- (games) the map moves to its own view at /games/[id]/map — [6057275](https://github.com/becked/per-ankh/commit/60572753ce630d8758ff8371019bf92d6fe8d82a)
+- (parser) yield_history says which quantity its cumulative holds — [b0b84e4](https://github.com/becked/per-ankh/commit/b0b84e4c3ae5cd67f4bbdecaa2b96e953661ec87)
+- (games) Yields and Techs say "Total" when cumulative is the game's total — [023b277](https://github.com/becked/per-ankh/commit/023b277fc62a6511de11ab84ed307c0e74800268)
+- (games) the map view gets its chrome — [22c4c2a](https://github.com/becked/per-ankh/commit/22c4c2a4086b22ce0efceecd5a75a546b3d8041c)
+- (games) the map chrome opens the game's tabs in lightboxes — [3ef171f](https://github.com/becked/per-ankh/commit/3ef171f6b0cbcddb213beb26d18a624400b28d18)
+- (games) the map view gets city banners and the city popover — [ad36689](https://github.com/becked/per-ankh/commit/ad36689230f7baac97ade0b798ffd42104dc56d2)
+- (games) the map chrome reads at the scale of the game's own screen — [c9a47a3](https://github.com/becked/per-ankh/commit/c9a47a3e12be7d3ff9ad71367f52ced24d269176)
+- (games) the map chrome's leader panel carries the player's whole view — [42772b9](https://github.com/becked/per-ankh/commit/42772b9ef14841fd1b7a34d0b76b13cd829b36c2)
+- (games) every city centre draws the nation's own city tile — [74b6a8c](https://github.com/becked/per-ankh/commit/74b6a8c9d1198834c6166354a74e39afdfabeb3c)
+- (opponents) suggest a map, and a message to send — [2a7da57](https://github.com/becked/per-ankh/commit/2a7da57dd6392227702bcbb0f372d2ce7a4a7484)
+- (stats) which families players refuse to field — [15dbef4](https://github.com/becked/per-ankh/commit/15dbef42b17462432591236a967a2e01700e06a1)
+- (stats) show what players keep, filterable by nation — [1827771](https://github.com/becked/per-ankh/commit/182777159634883172153f8b56dc5711c5a331f7)
+- (stats) label the columns and say what each one measures — [c9f7093](https://github.com/becked/per-ankh/commit/c9f7093f7065ca72eebd23f9be8de3329e37e59f)
+- (stats) the record boards, on their own endpoint and cache key — [7981b4b](https://github.com/becked/per-ankh/commit/7981b4b9d22c312f9b550bd30b7c1d9bd5e5cc3b)
+- (stats) a Records tab on every stats surface — [d040b08](https://github.com/becked/per-ankh/commit/d040b089c721ea0a4c07440d576669ab2462ea24)
+
+### Fixes
+
+- (games) the leader panel's border follows the portrait art, not the id — [14364f9](https://github.com/becked/per-ankh/commit/14364f99d22144c0f8b71cf38e00b6e3559ba658)
+- (games) the portrait bake covers every id a save can emit — [229a54d](https://github.com/becked/per-ankh/commit/229a54db33b37631194f930f92c15e3fa72456a3)
+- (games) portrait art resolves from both dirs, and the slot follows the art — [e1c7d4a](https://github.com/becked/per-ankh/commit/e1c7d4a67deff68328e6bb1a7de052a740926da8)
+- (games) the leader panel's rails keep both slots, filled or not — [fc2be0f](https://github.com/becked/per-ankh/commit/fc2be0f0589da80b41df263934395e22300e3dab)
+- (games) the leader panel's rail plates fit what they hold — [2ea39f5](https://github.com/becked/per-ankh/commit/2ea39f544f3c75a9656b82f4b82da134a26ed709)
+- (games) tile ownership reads the turn it changed, not the turn after — [ceb188a](https://github.com/becked/per-ankh/commit/ceb188a26ff8e7bfe44f8cdf04fabb91b7627e1a)
+- (games) the map's top-bar panels carry the chrome's own tooltip — [7cc41c6](https://github.com/becked/per-ankh/commit/7cc41c63b2748d2ad13eb0781c5bb321607bfb68)
+- (games) the map's overlays project into the canvas, not the container — [210a6f5](https://github.com/becked/per-ankh/commit/210a6f5c2b76506d198bf5213cf6de58a49f8e64)
+- (games) the map's yield strip drops when the save recorded no rates — [4ea9690](https://github.com/becked/per-ankh/commit/4ea96904f51911e61ab17d0ac15f3f8403edff60)
+- (opponents) say which DOTA — [22549ec](https://github.com/becked/per-ankh/commit/22549ec26c4fe69c371cc0eed7a21c8508354af1)
+- (bake) bake:all was leaving the Worker's atlas pool stale — [526ab9d](https://github.com/becked/per-ankh/commit/526ab9db680c32dea5c9b65813b1c421789915f7)
+- (opponents) act on the self-review — [5f248b8](https://github.com/becked/per-ankh/commit/5f248b8056474ee4a7cc41de25d1916b2d8a2e65)
+- (stats) the bar was making a claim the number declined to make — [fac4686](https://github.com/becked/per-ankh/commit/fac46864eeed5247e5a6ef2d47f013d959ab3457)
+- (stats) the chance tick draws above the bars, and the note says what colour means — [f91e0e1](https://github.com/becked/per-ankh/commit/f91e0e19a289f6a6c76d9e7522a2789a35ab41d1)
+- (stats) families fielded was a second nation control on /stats — [f8b445c](https://github.com/becked/per-ankh/commit/f8b445c77145cc958f8f2f2c5822fd1c71d026b1)
+- (stats) the families-fielded headings sit over the columns they name — [ca038f0](https://github.com/becked/per-ankh/commit/ca038f06aac1148b8b4772847084bfcbebe9325c)
+- (stats) an empty record board keeps its toolbar — [5d64e47](https://github.com/becked/per-ankh/commit/5d64e47609e82e463a0503def9053bfa14692619)
+- (stats) records rank deterministically, over slot-indexed accumulators — [ee2ffe2](https://github.com/becked/per-ankh/commit/ee2ffe26d618ed1b904453ed8ed3580d39a3bb60)
+- (stats) a record board's turns and values read as columns — [e567af7](https://github.com/becked/per-ankh/commit/e567af7b0084368974451fc53e6b604f7d701e4b)
+- (deps) override undici in cloud to clear the last 6 Dependabot alerts — [fd83679](https://github.com/becked/per-ankh/commit/fd8367936239d845fc3672e4f94aa43fffece201)
+- (tournament) bracket turn counts chunk under D1's param cap — [5b179a3](https://github.com/becked/per-ankh/commit/5b179a3e3d810f1c9d994fc93b05ce4d3bc49d40)
+- (deploy) unblock the staging preflight's format and audit gates — [21ae85d](https://github.com/becked/per-ankh/commit/21ae85d4f90c80fd79853b283a05780b4f0003d3)
+
+### Other
+
+- (test-data) say what the save corpus is for — [f25cab3](https://github.com/becked/per-ankh/commit/f25cab3c22bf5facc6df8c10d85d310693c16a40)
+- the guardrails the merge queue keeps re-teaching — [e544680](https://github.com/becked/per-ankh/commit/e544680a4e10e1af02e0db332511608d630e380d)
+- correct the guardrail claims a grep doesn't support — [e23a617](https://github.com/becked/per-ankh/commit/e23a617329e6a360c8eb2c6e6ef9d92c0afe2bba)
+- correct the claims the new guardrails make — [363f86d](https://github.com/becked/per-ankh/commit/363f86d351ae074046782c96d3a3d63bbd08370b)
+- give the design-system guidance checks a reviewer can run — [64ecfe3](https://github.com/becked/per-ankh/commit/64ecfe3f8c0756399e60dc55b5e6b4b8dcaaaee2)
+- the guardrails answer a reader who doesn't have the machine — [a36470a](https://github.com/becked/per-ankh/commit/a36470adabc56271ef0624d24a354b2d03a7b94c)
+- (cloud) sync the lock file with package.json — [b54de71](https://github.com/becked/per-ankh/commit/b54de71d485f8d7348f01fed6bda7d15b2854f71)
+- (games) the analyst view renders its tabs through a shared GameTab — [971a1ab](https://github.com/becked/per-ankh/commit/971a1ab2ebdf253b52be19a1ecdfc255b33d5e47)
+- (ui) ChartContainer's fullscreen dialog becomes FullscreenDialog — [3758e7a](https://github.com/becked/per-ankh/commit/3758e7ad535c8879607f2b2824382bb4304b7cf3)
+- (ui) the view switcher and the chrome's rows get one definition each — [67d9114](https://github.com/becked/per-ankh/commit/67d9114abe606a5d253722123f89bfbee9a78c81)
+- (bake) read the atlas pool once, for two bakers — [e68eaa9](https://github.com/becked/per-ankh/commit/e68eaa99e5917db482d44b6f38f032ed70bfd87e)
+- (opponents) one atlas pool module, one copy glyph, one setting trim — [056850c](https://github.com/becked/per-ankh/commit/056850cc4dbc01e194eed148c4360fef5197c827)
+- (stats) families kept gets its own tab — [0a7266f](https://github.com/becked/per-ankh/commit/0a7266f5d4ae37c3e361e60e11ac2c051f99f253)
+- (stats) families kept renders as a chart like its neighbours — [011b981](https://github.com/becked/per-ankh/commit/011b981ae34dd169ce310a5ca641dccbada69193)
+- (stats) the tab says fielded, which is what the game calls it — [5793b2c](https://github.com/becked/per-ankh/commit/5793b2c97110b91e0e52349de68692b6d5c53366)
+- (stats) thread familyKeeps through the two bundle fixtures — [eab7a35](https://github.com/becked/per-ankh/commit/eab7a350889c4cd504129d839d256c34cb6d8333)
+- (stats) one spelling of a stats selection per corpus — [e98061a](https://github.com/becked/per-ankh/commit/e98061a66662dfe9a4521d2196cebeb2f9f2bfa6)
+- (stats) what the record boards cost, where the costs are pinned — [7b02f54](https://github.com/becked/per-ankh/commit/7b02f542301b520713ac6049d1b1704d7ce2b58b)
+- (deps) clear 16 of 22 Dependabot alerts via lockfile bumps — [916984f](https://github.com/becked/per-ankh/commit/916984f3fa5be47ebffda39bb5e489a9c8cd923e)
+- (deps) take all in-range updates in both lockfiles — [772f85d](https://github.com/becked/per-ankh/commit/772f85d042becd7387370867741d6772530c6fc2)
+
 ## [2026-09-20-bd4f40e] - 2026-09-20
 
 ### Other
