@@ -1,9 +1,6 @@
 # Aggregate statistics
 
-The analysis surface at `/users/[user_id]` — a tabbed view (Overview / Games /
-Stats) over a single user's save library, with one scope selector driving every
-tab. The Stats tab renders ~22 charts across six categories (Yields, Nations,
-Families, Laws, Cities, Tech) from a single cached `ChartBundle`.
+The analysis surface at `/users/[user_id]` — a tabbed view (Overview / Games / Stats) over a single user's save library, with one scope selector driving every tab. The Stats tab's categories are `CATEGORIES` in `src/lib/stats/charts/registry.ts` and are not restated here — they sat three categories stale in this sentence, which is what a list copied out of the registry does. All but one render from a single cached `ChartBundle`; Records fetches its own payload (see "The record boards" below).
 
 This doc is the durable record of the feature as built. It supersedes the
 `aggregate-statistics-*-status.md` session docs (removed) and the
@@ -17,6 +14,7 @@ revised during the build (see "What changed from the original design").
 - **`GET /v1/users/:user_id/stats`** — the `ChartBundle` for one scoped corpus.
   `cloud/src/stats/handlers.ts` → `handleUserStats`.
 - **`GET /v1/stats`** — the `ChartBundleCore` for one **global** corpus: a composition slice of every `is_public = 1` game, optionally faceted to one nation. `handleGlobalStats`, same module. Frontend: `src/routes/stats/`. See "The global corpus" below.
+- **`GET /v1/users/:user_id/stats/records`**, **`GET /v1/stats/records`**, **`GET /v1/tournaments/:id/stats/records`** — the `RecordsBundle` for the same three corpora, on the same selection each bundle endpoint takes. One per surface because the Records tab is the only consumer and the payload is ~60–70 KB gzipped; see "The record boards" below.
 - Frontend: `src/routes/users/[user_id]/` (page + load). Tabs, scope, and
   Games-tab filters all live in the URL. `/dashboard` and the old
   `/users/[user_id]/stats` route 308/307-redirect here.
@@ -127,15 +125,17 @@ Aggregator (`cloud/src/stats/aggregate.ts`) notes:
 KV-backed, reusing the existing `SESSIONS_KV` binding under a `stats:` prefix
 (`cloud/src/stats/cache.ts`).
 
-**No client `Cache-Control` header on the per-viewer surfaces** — Worker-side only (a leaked `max-age` broke `invalidateAll` in the standings episode; the same mistake is available here). `GET /v1/stats` is the one exception, and the reason is the rule rather than a hole in it: its payload is byte-identical for every viewer, so it carries `public, max-age=0, s-maxage=60` — a *shared*-cache directive with the browser cache still at zero, the same header `channels.ts`/`featured.ts`/`tournament/public.ts` put on their public reads.
+**No client `Cache-Control` header on the per-viewer surfaces** — Worker-side only (a leaked `max-age` broke `invalidateAll` in the standings episode; the same mistake is available here). The two global endpoints — `GET /v1/stats` and `GET /v1/stats/records` — are the exceptions, and the reason is the rule rather than a hole in it: each payload is byte-identical for every viewer, so both carry `public, max-age=0, s-maxage=60` — a *shared*-cache directive with the browser cache still at zero, the same header `channels.ts`/`featured.ts`/`tournament/public.ts` put on their public reads. They share one `globalStatsResponse` helper, so the header cannot drift between them.
 
-Key shape — one variant per corpus:
+Key shape — one variant per corpus, each holding two payloads:
 
 ```
 stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:user:{user_id}:{viewerScope}:{scope}
 stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:tournament:{tournament_id}:{updated_at}
 stats:v{BUNDLE_SCHEMA_VERSION}-p{parser_version}:global:{slice}:{nations}
 ```
+
+The chart bundle lives at the key as written; the record boards live at that same key with a **`:records`** segment appended. The segment goes last rather than beside the version so the two suffixes stay disjoint — `getStaleGlobalCached` matches on a key's tail, and a marker in front of `global:` would have the bundle's serve-stale walk find a records entry. Everything ahead of the segment is shared, so both payloads expire on one TTL, drift on the same version bumps, and are caught by the single prefix walk in `invalidateStatsCache`.
 
 - `viewerScope` (`self` | `public`) keeps owner and visitor views in separate
   entries so a private upload can't leak into the public-scope cache.
@@ -155,7 +155,7 @@ when the bundle shape changes in the Worker, mirror it on the frontend.
 
 **Two shapes, a structural subtype rather than a union.** `ChartBundleCore` is every field whose aggregation is correct over either focal set; `ChartBundle` extends it with the fields that assume one focal player per game. The tournament and global endpoints return the core, the user endpoint the extension, and `buildChartBundle` is overloaded on the `focal` literal so the caller gets the right one without a runtime check. There is no discriminant field — which is the point, and the lesson of the removed `CorpusContext` union: a builder typed against the core renders either shape.
 
-What lives in the extension: `win_rate`, `games_with_outcome`, `summary.top_nation`, `summary.top_archetype` — and, since schema 9, `save_dates`. That last one is *not* there because the all-humans reading would be wrong (it is per-game, so it would be fine); it is there because only the profile Overview calendar renders it, and it was the one bundle field whose size grew with the corpus instead of with the turn axis — which a whole-site corpus is what makes matter. Its loader moved with it, so a core bundle costs eight chunked query loops where the user bundle costs nine. `favorite_day_of_week` was deleted outright at the same version: the profile card reads its own copy from `GET /v1/users/:user_id`, and the bundle's copy had no consumer anywhere.
+What lives in the extension: `win_rate`, `games_with_outcome`, `summary.top_nation`, `summary.top_archetype` — and, since schema 9, `save_dates`. That last one is *not* there because the all-humans reading would be wrong (it is per-game, so it would be fine); it is there because only the profile Overview calendar renders it, and it was the one bundle field whose size grew with the corpus instead of with the turn axis — which a whole-site corpus is what makes matter. Its loader moved with it, so a core bundle costs nine chunked query loops where the user bundle costs ten — ten queries per chunk and eleven, since `loadRecordIdentity` carries two in its one loop (see below). `favorite_day_of_week` was deleted outright at the same version: the profile card reads its own copy from `GET /v1/users/:user_id`, and the bundle's copy had no consumer anywhere.
 
 The frontend treats each named bundle field as an opaque slice for one chart's
 ECharts option builder. The catalog is declarative:
@@ -179,6 +179,24 @@ Law→class reference (used by the Laws/Families panels) is baked from
 `Reference/XML` by `scripts/bake-law-classes.ts` and emitted byte-identically to
 both `src/lib/generated/law-classes.ts` and `cloud/src/generated/law-classes.ts`
 via the two-emit pattern in `scripts/build-manifests.ts` (`npm run bake:finalize`).
+
+## The record boards
+
+The leaderboard behind the yield bands: per yield series, the biggest numbers posted and the seat that posted them. A `RecordsBundle` rather than a `ChartBundle` field, served by the three `/records` endpoints above.
+
+**Why it is a separate payload.** At 24 board keys x 7 boards x 10 rows the records are ~60-70 KB gzipped on top of a 154 KB bundle, only one tab of one surface reads them, and before the split every stats request on all three surfaces paid for them. They are **built together and stored apart**: `buildChartBundle` returns `{ bundle, records }` from the one pass over `game_player_turn`, and both payloads are written under the one cache key (the `:records` segment, under "Caching"). A miss on either key builds and writes both, which is what lets the nightly precompute go on deciding from the bundle key alone and makes the Records tab's fetch a KV read in the steady state.
+
+**"No new query" is about `game_player_turn` only.** The records ride the rows the bands already read, but `loadRecordIdentity` adds two queries of its own, in one chunked loop — `player_summaries` for the record holder's seat, `games` for the turn count and the save's own id. That is the `× 8` → `× 10` in `docs/global-stats-design.md` §4.1.
+
+**Ranking is per seat, not per row**, so a long game cannot take three adjacent turns of one board, and the two uploads of one duel collapse on the save's `xml_game_id` before anything is ranked — which is also what keeps each board's advertised population equal to the one it ranks. The survivor of that collapse is the upload that saw more turns, and on the tie the lower `game_id`: both uploads of a finished duel saw all of it (192 of 202 multi-upload seats in the 2026-09-22 snapshot), so without the second rule the survivor would be D1's row order and the cached payload would not be a function of the corpus. The ranking sort carries the same tiebreak for the same reason — `Array.sort` is stable, so equal values would otherwise keep the order the rows arrived in, which at an early checkpoint decides which of several tied seats make the top ten.
+
+**A row names the record holder's seat and nobody else** — a duel, an FFA and a single-player game render identically, with no per-mode branch. `recordGames[].seats` therefore carries holders only: the five AI a single-player game was won against are payload nothing would read. Its seat fields are `nation` and `player_name`, deliberately not `online_id`.
+
+**Three series get no board at all** — maintenance, happiness and discontent. A leaderboard asserts "biggest is best" and for those the biggest number is a burden; they keep their bands, which make no such claim. Military power and legitimacy are levels rather than flows, so they ship a rate board and no cumulative one, and the panel drops a card on an absent board rather than keeping its own list of which series are levels.
+
+**What the cumulative column means** differs by series — lifetime production for one set, the stockpile held at that turn for the other — and which is which is the `cumulative` field on `YIELD_SERIES` (`src/lib/stats/charts/yields.ts`), read by the card's own badge. It was settled by counting decreases over the local `game_player_turn` rows, not from the manual. Prose elsewhere points at that field instead of restating the list, which had already drifted across four copies once.
+
+**Memory.** The per-seat accumulators are live for the whole aggregation pass, so they are part of the bound `docs/global-stats-design.md` §7 denominates; its Built note has the measurement and what the shape costs.
 
 ## Known limitations / caveats
 
