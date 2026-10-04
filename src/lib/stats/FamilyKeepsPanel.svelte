@@ -22,7 +22,7 @@
 	import ChartContainer from "$lib/ChartContainer.svelte";
 	import { familyKeepsOption } from "./charts/families";
 	import { barChartHeight } from "./charts/helpers";
-	import { ALL_NATIONS, nationLabel } from "./charts/helpers";
+	import { ALL_NATIONS } from "./charts/helpers";
 	import type { ChartBundleCore } from "./types";
 
 	// showNationSelect — false where the page owns a nation control of its own
@@ -106,25 +106,40 @@
 		height={barChartHeight(keeps.rows.length + 1)}
 		title="Families fielded"
 	/>
-	<!-- What each column is. Three definitions rather than a paragraph: the
-	     chart is legible without them, and this is for the reader who wants to
-	     know what "vs chance" is measured against. -->
+	<!-- The games column's total, under the games column. The grid reserves 162px
+	     on the right and the value block occupies 148 of it — the 8px axisLabel
+	     margin plus the 48/52/40 column widths — so the column's right edge sits
+	     14px in from the chart's own right edge at any chart width, which is what
+	     the inset is spelled out for. -->
 	<p
-		class="-mt-4 mb-1 text-center text-xs text-muted"
+		class="-mt-4 mb-1 pr-[14px] text-right text-xs text-muted"
 		title={skipped > 0
 			? `${skipped} more left out: ${skippedReason}`
 			: undefined}
 	>
-		Based on {keeps.player_games} player-games{nation === ALL_NATIONS
-			? ""
-			: ` of ${nationLabel(nation)}`}.
+		Total: {keeps.player_games} games
 	</p>
-	<p class="mx-auto mb-6 max-w-3xl px-4 text-center text-xs text-muted">
-		<span class="text-tan">fielded</span> — how often the family was fielded in
-		the games its nation could have fielded it.
-		<span class="text-tan">vs chance</span> — how far that sits from fielding
-		three of the pool at random, which is the tick on each bar.
-		<span class="text-tan">color</span> — the gap is further from chance than this
-		many games could produce by luck.
-	</p>
+	<!-- What each column is. A definition list rather than a paragraph: the
+	     chart is legible without these, and whoever reads them is looking one
+	     term up rather than reading three. On the term-column grid, so the terms
+	     can be scanned for the one being looked up and the definitions start on
+	     a shared edge instead of each one after its own term. -->
+	<dl
+		class="mx-auto mb-6 grid max-w-2xl grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 px-4 text-xs text-muted"
+	>
+		<dt class="text-tan">fielded</dt>
+		<dd>
+			how often the family was fielded in the games its nation could have
+			fielded it.
+		</dd>
+		<dt class="text-tan">vs chance</dt>
+		<dd>
+			how far that sits from fielding three of the pool at random, which is the
+			tick on each bar.
+		</dd>
+		<dt class="text-tan">color</dt>
+		<dd>
+			the gap is further from chance than this many games could produce by luck.
+		</dd>
+	</dl>
 {/if}

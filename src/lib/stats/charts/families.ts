@@ -267,13 +267,19 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 				data: keys,
 				// Column headings, sat at the top of the value column. The axis
 				// `name` is the only thing ECharts anchors to the end of an axis,
-				// and giving it the same rich-text widths as the labels below is
-				// what lines the three headings up over the three columns instead
-				// of floating them somewhere near.
+				// but it is anchored by a different rule than the labels beneath it:
+				// centred on the axis line, and without the margin that holds those
+				// labels off it. Matching rich-text widths therefore lines the three
+				// headings up with each other and still leaves the block as a whole a
+				// column and a half left of what it names — `align` and `padding` are
+				// what re-anchor it onto the label track. The 8 is axisLabel's own
+				// default margin, the offset the name doesn't get.
 				name: "{hk|fielded}{hc|vs chance}{hg|games}",
 				nameLocation: "end",
 				nameGap: 16,
 				nameTextStyle: {
+					align: "left",
+					padding: [0, 0, 0, 8],
 					rich: {
 						// Widths match the value columns below exactly, so the
 						// headings sit over what they name. A point smaller than the
@@ -292,7 +298,7 @@ export function familyKeepsOption(rows: FamilyKeepRow[]): ChartOption {
 						if (!r) return "";
 						const tone = !r.significant ? "dim" : r.delta >= 0 ? "up" : "down";
 						const sign = r.delta >= 0 ? "+" : "";
-						return `{pct|${r.kept_pct.toFixed(0)}%}{${tone}|${sign}${r.delta.toFixed(0)}}{n|${r.eligible}g}`;
+						return `{pct|${r.kept_pct.toFixed(0)}%}{${tone}|${sign}${r.delta.toFixed(0)}}{n|${r.eligible}}`;
 					},
 					rich: {
 						// Widths are shared with the headings above (nameTextStyle
