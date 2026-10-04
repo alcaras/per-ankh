@@ -30,10 +30,15 @@
 	// $derived.by reading the selection *eagerly*: that is what gives this a
 	// dependency on the facet row. An arrow that read data.slice when called
 	// would be a closure this page never rebuilds, and the panel would keep
-	// showing the records of the slice you arrived on.
+	// showing the records of the selection you arrived on.
+	//
+	// All three facets, not just the two that narrow the nation rows: the window
+	// is as much a part of which corpus this is, and a facet missing here fails
+	// twice over — the request goes out without the param, and the closure it
+	// isn't read in never rebuilds, so the panel doesn't even refetch.
 	const loadRecords = $derived.by(() => {
-		const { slice, nation } = data;
-		return () => cloudApi.getGlobalRecords({ slice, nation });
+		const { slice, nation, period } = data;
+		return () => cloudApi.getGlobalRecords({ slice, nation, period });
 	});
 
 	// Not displayed — this is the empty-state gate. A selection narrows the

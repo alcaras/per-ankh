@@ -46,7 +46,8 @@
 	//
 	// loadRecords — the Records tab's own fetch, since its payload is not in the
 	// bundle. The caller owns it because only the caller knows which corpus it
-	// is looking at (a slice + nation on /stats, a user + scope on the profile).
+	// is looking at (a slice + nation + recency window on /stats, a user + scope
+	// on the profile).
 	// Build it with $derived.by reading that selection eagerly, so a change
 	// hands the panel a new closure and it refetches.
 	let {
