@@ -2448,7 +2448,10 @@ export interface SuggestedMap {
 	// What to call it — the script, plus the variant where the pool holds
 	// several of one script: "Coastal Rain Basin", "DOTA Jungle".
 	name: string;
-	// How it is set up: "Duel · wide · point-sym off · mirror".
+	// How it is set up, trimmed by the Worker to the part that tells this map
+	// apart from its siblings in the pool: "Duel · wide". With `name` it
+	// identifies the map, which is what a pasted message needs; the atlas link
+	// answers point symmetry and mirroring.
 	setting: string;
 	// Deep link into owtournamentatlas.
 	url: string;

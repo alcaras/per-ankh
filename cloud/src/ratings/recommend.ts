@@ -119,10 +119,12 @@ export interface Recommendation {
 }
 
 // A duel, plus the map script it was played on where the record knows it. The
-// rating engine takes plain Duels; the map suggestion needs this one field, and
-// it is optional so a test can leave it out.
+// rating engine takes plain Duels; the map suggestion needs this one field.
+// Required rather than optional: every caller already has it — extractDuels
+// fills it on every ResolvedDuel — so making a test's convenience the reason a
+// field is absent would hide a caller that genuinely forgot to pass one.
 export interface RecommendationDuel extends Duel {
-	script?: string | null;
+	script: string | null;
 }
 
 // One shared empty map for players with no recent games, rather than a fresh

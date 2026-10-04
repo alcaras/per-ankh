@@ -18,6 +18,8 @@
 	import DiscordMark from "$lib/ui/DiscordMark.svelte";
 	import ProfileLink from "$lib/ProfileLink.svelte";
 	import CopyButton from "$lib/tournament/CopyButton.svelte";
+	import CopyMark from "$lib/ui/CopyMark.svelte";
+	import CheckMark from "$lib/ui/CheckMark.svelte";
 	import type {
 		OpponentBadge,
 		RecommendedOpponent,
@@ -46,6 +48,28 @@
 		new_here: "New here",
 	};
 
+	// The message to send them, ready to paste. The point of the whole card is
+	// to get from "here is someone to play" to a game being arranged, and the
+	// step that actually stalls is composing the opening line — so it is written
+	// here, map and all, and the viewer only has to paste it.
+	//
+	// `map.setting` is already the part that identifies the map — the Worker
+	// trims it (ratings/pick-map.ts), so the name and setting here are the same
+	// pair its test pins as unambiguous across the whole pool.
+	function dmFor(o: RecommendedOpponent): string {
+		if (!o.map) return "Fancy a game?";
+		return `Fancy a game? Per-Ankh suggests ${o.map.name} (${o.map.setting}) — ${o.map.url}`;
+	}
+
+	// What the button says it will do, as a sentence — the `title` half of the
+	// app's icon copy buttons, `label` being the accessible name. It names the
+	// map because the message does, so hovering tells the viewer what they are
+	// about to propose without copying it first.
+	function copyTitleFor(o: RecommendedOpponent): string {
+		const game = o.map ? `a game on ${o.map.name}` : "a game";
+		return `Copy a ready-to-paste message inviting ${o.display_name} to ${game}`;
+	}
+
 	// The card's badge row: the pair's history first, then the opponent's own
 	// badges.
 	//
@@ -53,20 +77,6 @@
 	// a stranger's name reads as a fact about them — that they have never played
 	// at all — which is both wrong and the opposite of a recommendation.
 	// "First meeting" can only be about the two of you.
-	// The message to send them, ready to paste. The point of the whole card is
-	// to get from "here is someone to play" to a game being arranged, and the
-	// step that actually stalls is composing the opening line — so it is written
-	// here, map and all, and the viewer only has to paste it.
-	//
-	// The setting is trimmed to its first two parts ("Duel · wide"): the full
-	// string carries point-symmetry and mirror flags that the atlas link answers
-	// better than a chat message can.
-	function dmFor(o: RecommendedOpponent): string {
-		if (!o.map) return "Fancy a game?";
-		const setting = o.map.setting.split(" · ").slice(0, 2).join(" · ");
-		return `Fancy a game? Per-Ankh suggests ${o.map.name} (${setting}) — ${o.map.url}`;
-	}
-
 	function labelsFor(o: RecommendedOpponent): string[] {
 		const history =
 			o.meetings === 0
@@ -79,44 +89,6 @@
 		return [history, ...o.badges.map((b) => BADGE_LABELS[b])];
 	}
 </script>
-
-<!-- The copy/copied pair, drawn the way every other copy affordance in the app
-     draws it — same path, same 3.5 — so a reader who has used the one in the
-     account settings or a match popover recognises this one. The glyphs are
-     inline here because that is this repo's idiom for chrome icons; they are
-     now the third copy, which is worth extracting, but not from inside a
-     change about suggesting maps. -->
-{#snippet copyMark()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		class="h-3.5 w-3.5"
-		fill="none"
-		viewBox="0 0 24 24"
-		stroke="currentColor"
-		stroke-width="2"
-		aria-hidden="true"
-	>
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-		/>
-	</svg>
-{/snippet}
-
-{#snippet checkMark()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		class="h-3.5 w-3.5"
-		fill="none"
-		viewBox="0 0 24 24"
-		stroke="currentColor"
-		stroke-width="2"
-		aria-hidden="true"
-	>
-		<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-	</svg>
-{/snippet}
 
 {#snippet opponentCard(o: RecommendedOpponent)}
 	<!-- Bottom-aligned, not centred: the badge row is the last thing in the
@@ -157,6 +129,16 @@
 					{o.display_name}
 				</ProfileLink>
 
+				<!-- The suggested map, above the badges so the badge row stays the
+				     last thing in this column — the card is `items-end`, so whatever
+				     ends the column is what the Discord chip lines up with. Name and
+				     setting exactly as the copied message says them. -->
+				{#if o.map}
+					<div class="mt-1 truncate text-xs text-tan opacity-70">
+						{o.map.name} · {o.map.setting}
+					</div>
+				{/if}
+
 				<div class="mt-1 flex flex-wrap items-center gap-1.5">
 					{#each labelsFor(o) as label (label)}
 						<span
@@ -166,27 +148,23 @@
 						</span>
 					{/each}
 				</div>
-
-				{#if o.map}
-					<div class="mt-1 truncate text-xs text-tan opacity-70">
-						{o.map.name}
-						<span class="opacity-70"
-							>· {o.map.setting.split(" · ").slice(0, 2).join(" · ")}</span
-						>
-					</div>
-				{/if}
 			</div>
 		</div>
 
-		<!-- Copy the opening message, map and link included. -->
+		<!-- Copy the opening message, map and link included. Drawn like every
+		     other icon copy button in the app (the account page, the match
+		     popover): `title` is the sentence saying what lands on the clipboard.
+		     `label` names the opponent, where its siblings' labels don't need to —
+		     theirs are one to a page, and there is one of these per card, so a
+		     bare "Copy message" would read out ten identical buttons. -->
 		<CopyButton
 			text={() => dmFor(o)}
-			label="Copy a message to {o.display_name}"
-			title="Copy a message to {o.display_name}"
-			class="inline-flex shrink-0 items-center rounded border border-tan p-1.5 text-tan transition-colors hover:border-orange hover:text-orange"
+			label="Copy message to {o.display_name}"
+			title={copyTitleFor(o)}
+			class="inline-flex shrink-0 items-center justify-center rounded border border-surface p-1 text-tan transition-colors hover:bg-surface-hover hover:text-orange"
 		>
 			{#snippet children(copied)}
-				{#if copied}{@render checkMark()}{:else}{@render copyMark()}{/if}
+				{#if copied}<CheckMark />{:else}<CopyMark />{/if}
 			{/snippet}
 		</CopyButton>
 

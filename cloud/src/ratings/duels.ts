@@ -30,6 +30,7 @@
 import type { QueryableD1 } from "../d1";
 import { COMPOSITION_GAME_IDS_SQL, remoteGameModeSql } from "../games-scope";
 import { UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL } from "../online-ids";
+import { resolveScriptSpelling } from "../tournament/canonical-maps";
 import type { Duel } from "./glicko2";
 
 export interface ResolvedDuel extends Duel {
@@ -41,13 +42,14 @@ export interface ResolvedDuel extends Duel {
 	// badge must not be derived from a game nobody outside the pair can see
 	// (recommend.ts).
 	isPublic: boolean;
-	// The map script they played it on, as the record carries it. The two
+	// The map script they played it on, as the current zType spells it. The two
 	// sources read it from different columns — tournament_matches.map_script and
 	// games.map_class — and since migration 0045 both hold the zType Old World
 	// declares, which is also what the baked atlas pool stores, so the three
-	// compare directly. Null when the record doesn't say: an old game row, or a
-	// tournament match with no map set. Read by the map suggestion, not by the
-	// rating engine.
+	// compare directly. A save written before a script was replaced carries the
+	// superseded spelling instead, so the casual read folds it (see there).
+	// Null when the record doesn't say: an old game row, or a tournament match
+	// with no map set. Read by the map suggestion, not by the rating engine.
 	script: string | null;
 }
 
@@ -221,7 +223,15 @@ async function casualDuels(
 			p2: resolved[1].userId,
 			winner: winner.userId,
 			isPublic: slots[0].is_public === 1,
-			script: slots[0].map_class || null,
+			// Folded to the current zType: games.map_class is whatever the save
+			// said, and a game played before a script was replaced carries the
+			// superseded spelling, which would otherwise read as a map nobody has
+			// ever played. The tournament read needs no fold — an alias is not a
+			// value a pool may hold (canonical-maps.test.ts pins that), so a match
+			// row can't carry one.
+			script: slots[0].map_class
+				? resolveScriptSpelling(slots[0].map_class)
+				: null,
 		});
 	}
 	return out;

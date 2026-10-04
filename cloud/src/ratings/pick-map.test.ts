@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ATLAS_POOL, ATLAS_BASE_URL } from "../generated/atlas-pool";
-import { pickMap } from "./pick-map";
+import { identifyingSetting, pickMap } from "./pick-map";
 
 const rng = () => 0;
 
@@ -13,7 +13,7 @@ describe("the baked atlas pool", () => {
 		// the name carries the variant ("DOTA Jungle"); where it holds two of one
 		// variant, the setting is what separates them (the two Archipelagos).
 		const said = ATLAS_POOL.map(
-			(m) => `${m.name} (${m.setting.split(" · ").slice(0, 2).join(" · ")})`,
+			(m) => `${m.name} (${identifyingSetting(m.setting)})`,
 		);
 		expect(new Set(said).size).toBe(said.length);
 	});
@@ -34,9 +34,7 @@ describe("pickMap", () => {
 
 	it("falls back to whatever they have played least", () => {
 		// Everything played, one script less than the rest.
-		const heavy = new Map<string, number>(
-			ATLAS_POOL.map((m) => [m.script, 5]),
-		);
+		const heavy = new Map<string, number>(ATLAS_POOL.map((m) => [m.script, 5]));
 		const light = ATLAS_POOL[3].script;
 		heavy.set(light, 1);
 		const picked = pickMap(heavy, new Map(), rng)!;

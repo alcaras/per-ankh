@@ -21,6 +21,7 @@ import {
 	getClientIp,
 	jsonResponse,
 } from "../util";
+import { identifyingSetting } from "./pick-map";
 import { rebuildLogFields, rebuildRatings } from "./rebuild";
 import type { OpponentBadge } from "./recommend";
 
@@ -57,7 +58,10 @@ function mapFor(anchor: string | null) {
 	if (!m) return null;
 	return {
 		name: m.name,
-		setting: m.setting,
+		// Trimmed here, once: `name` plus this is what identifies a map in a
+		// chat message, and the page should render the string the pool's own
+		// test pinned rather than re-deriving it.
+		setting: identifyingSetting(m.setting),
 		url: `${ATLAS_BASE_URL}#${m.anchor}`,
 	};
 }

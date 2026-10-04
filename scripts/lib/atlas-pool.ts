@@ -1,13 +1,12 @@
 // The community map atlas' published pool, read from a local
 // owtournamentatlas checkout (resolveAtlas in ./paths).
 //
-// Two bakers consume this — bake-map-caveats (city-site caveats, frontend) and
-// bake-atlas-pool (the Worker's copy, for suggesting a map to a pair of
-// players) — and both need the same three things the atlas doesn't hand over
-// directly: which configs are in the published pool, what each one's URL anchor
-// is, and which Old World map script it runs. Extracted rather than copied
-// because the label rules below mirror the atlas' own index.astro, and two
-// copies of a mirror drift in different directions.
+// bake-atlas-pool consumes this, and it is kept separate from that baker
+// because what it does is read a foreign repo: the atlas doesn't hand over the
+// three things a pool entry needs — which configs are published, what each
+// one's URL anchor is, and which Old World map script it runs — so the label
+// rules below mirror the atlas' own index.astro, and a mirror belongs on its
+// own where it can be read against the thing it mirrors.
 //
 // Everything here fails loudly. A silent miss would bake a pool that is quietly
 // missing a map, or worse, one whose anchors don't resolve.

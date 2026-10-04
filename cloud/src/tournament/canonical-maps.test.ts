@@ -22,6 +22,7 @@ import { CANONICAL_SCRIPT_OPTIONS } from "./canonical-map-options";
 import {
 	CANONICAL_MAP_SCRIPTS,
 	CANONICAL_MAP_SCRIPTS_SET,
+	resolveScriptSpelling,
 	scriptOptionsKey,
 } from "./canonical-maps";
 import { MAP_SCRIPT_OPTIONS } from "../../../src/lib/generated/map-script-options";
@@ -102,6 +103,27 @@ describe("cross-package mirror", () => {
 			expect(CANONICAL_MAP_SCRIPTS_SET.has(alias), alias).toBe(false);
 			expect(scriptOptionsKey(alias), alias).toBe(alias);
 			expect(mapScriptOptionsKey(alias), alias).toBe(alias);
+		}
+	});
+
+	it("resolves every superseded spelling to the zType that replaced it", () => {
+		// The one thing an alias IS good for: comparing a record written under
+		// the old spelling against one written under the new. Nothing in the
+		// game maps the two together (map-scripts-table's header), so this copy
+		// of KNOWN_MAP_SCRIPTS' `aliases` is the only thing that does, and
+		// without this assertion it is a second opinion rather than a copy.
+		const aliases = KNOWN_MAP_SCRIPTS.flatMap((s) =>
+			(s.aliases ?? []).map((a) => [a, s.value] as const),
+		);
+		expect(aliases.length).toBeGreaterThan(0);
+		for (const [alias, value] of aliases) {
+			expect(resolveScriptSpelling(alias), alias).toBe(value);
+		}
+	});
+
+	it("leaves a current zType alone", () => {
+		for (const script of CANONICAL_MAP_SCRIPTS) {
+			expect(resolveScriptSpelling(script), script).toBe(script);
 		}
 	});
 });

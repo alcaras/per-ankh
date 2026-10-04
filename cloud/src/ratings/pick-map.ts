@@ -24,6 +24,26 @@ import { ATLAS_POOL, type AtlasPoolMap } from "../generated/atlas-pool";
 // scene, short enough that the pool doesn't collapse.
 export const MAP_MEMORY_DAYS = 180;
 
+// The part of a pool entry's setting that tells it apart from its siblings:
+// the first two fields the atlas writes, which are the game size and the
+// aspect ratio ("Duel · wide"). The rest — point symmetry, mirroring — is
+// what the atlas link answers better than a name can, and carrying it would
+// make the pasted message longer without making it more specific.
+//
+// One definition, because this string is an identity: `name` plus this
+// identifies all eighteen maps in the pool, which is what lets two people
+// agree on a map from a chat message alone. pick-map.test.ts pins that over
+// the whole pool, and the API ships the result (ratings/handlers.ts) so the
+// page renders the same string the test checked rather than re-trimming it.
+const SETTING_FIELDS_THAT_IDENTIFY = 2;
+
+export function identifyingSetting(setting: string): string {
+	return setting
+		.split(" · ")
+		.slice(0, SETTING_FIELDS_THAT_IDENTIFY)
+		.join(" · ");
+}
+
 // Play counts by map script, for one player. The key is the zType Old World
 // declares — the same string the pool, a save's map_class and a match's
 // map_script all carry since migration 0045.
