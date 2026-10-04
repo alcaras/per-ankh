@@ -10,11 +10,16 @@
 // is still the whole visibility rule, and a signed-in caller sees exactly that
 // and nothing of their own.
 //
-// The selection cases matter because both params are parsed forgivingly. A
-// slice or nation that doesn't parse degrades to a neighbouring view rather
-// than 400ing, which is the right behaviour for a bookmark that outlived a
-// deploy — and also the behaviour that would hide a parser wired to the wrong
+// The selection cases matter because all three params are parsed forgivingly.
+// A slice, nation or period that doesn't parse degrades to a neighbouring view
+// rather than 400ing, which is the right behaviour for a bookmark that outlived
+// a deploy — and also the behaviour that would hide a parser wired to the wrong
 // param, since every answer still looks like a bundle.
+//
+// Both of the endpoint's payloads are read here, not just the bundle: the
+// selection is parsed once for the two of them (handleGlobalStatsPayload), so a
+// facet that reached one and not the other would put the Records tab on a
+// different corpus from the charts beside it.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -30,11 +35,13 @@ import type {
 	ChartBundleCore,
 	GlobalPeriod,
 	GlobalSlice,
+	RecordsBundle,
 } from "../../../src/stats/types";
 import { makeUser, type TestUser } from "../../helpers/builders";
 import { postMultipart } from "../../helpers/requests";
 import {
 	buildUploadFormData,
+	daysAgo,
 	type UploadFixtureOpts,
 } from "../../helpers/save-blob";
 
@@ -51,17 +58,36 @@ const turnsFor = (seats: number): UploadFixtureOpts["turns"] =>
 		values: Array.from({ length: TURNS }, (_, t) => 10 + player * 5 + t),
 	}));
 
+// Each fixture is dated explicitly, because the recency window cuts on
+// save_date and DEFAULT_SAVE_DATE is a literal whose vintage would decide the
+// window cases (helpers/save-blob.ts — daysAgo).
+//
+// Three bands, one per window, so each window is observably its own rather than
+// agreeing with its neighbour by accident: RECENT is inside both, MIDDLE inside
+// 12m only, ANCIENT outside both. Each clears its boundary by nearly three
+// months, so nothing here turns on which month the suite runs in.
+const RECENT = daysAgo(30);
+const MIDDLE = daysAgo(270);
+const ANCIENT = daysAgo(540);
+
 const CORPUS = {
 	// Egypt against Rome — the corpus's only public duel, and so the whole of
-	// the slice this endpoint defaults to.
-	duel: { winnerIndex: 0, turns: turnsFor(2) },
+	// the slice this endpoint defaults to. Recent, so every case that reads the
+	// default slice reads the same one game whatever window it asks for.
+	duel: { winnerIndex: 0, turns: turnsFor(2), saveDate: RECENT },
 	// The same composition, made private below. Nothing here should ever see
 	// it: is_public = 1 is the endpoint's whole visibility rule.
-	duel_private: { winnerIndex: 1, turns: turnsFor(2) },
+	duel_private: { winnerIndex: 1, turns: turnsFor(2), saveDate: RECENT },
 	// Egypt, Rome and Greece.
-	ffa: { winnerIndex: 0, humans: 3, turns: turnsFor(3) },
+	ffa: { winnerIndex: 0, humans: 3, turns: turnsFor(3), saveDate: MIDDLE },
 	// One human Egypt against an AI Rome.
-	ai_rome: { winnerIndex: 0, humans: 1, aiPlayer: true, turns: turnsFor(1) },
+	ai_rome: {
+		winnerIndex: 0,
+		humans: 1,
+		aiPlayer: true,
+		turns: turnsFor(1),
+		saveDate: ANCIENT,
+	},
 } satisfies Record<string, UploadFixtureOpts>;
 
 // The corpus's uploader, and the signed-in viewer every read below is made as.
@@ -69,12 +95,24 @@ const CORPUS = {
 // existence, so who is holding it makes no difference to the payload.
 let viewer: TestUser;
 
+// game_id per fixture, so a case can say which games a selection kept rather
+// than only how many — which is the difference between pinning the window and
+// pinning a count two different windows could both produce.
+type Label = keyof typeof CORPUS;
+const gameIds = new Map<Label, string>();
+const idOf = (label: Label): string => {
+	const id = gameIds.get(label);
+	if (id === undefined) throw new Error(`no fixture uploaded for ${label}`);
+	return id;
+};
+
 beforeAll(async () => {
 	await applyD1Migrations(env.SHARE_DB, env.TEST_MIGRATIONS);
 	const user = await makeUser();
 	viewer = user;
-	const ids: string[] = [];
-	for (const opts of Object.values(CORPUS) as UploadFixtureOpts[]) {
+	for (const [label, opts] of Object.entries(CORPUS) as Array<
+		[Label, UploadFixtureOpts]
+	>) {
 		const res = await postMultipart({
 			path: "/v1/games",
 			form: await buildUploadFormData(opts),
@@ -82,12 +120,12 @@ beforeAll(async () => {
 		});
 		expect(res.status).toBe(201);
 		const { game_id } = await res.json<{ game_id: string }>();
-		ids.push(game_id);
+		gameIds.set(label, game_id);
 	}
 	// A first upload takes its visibility from users.default_game_public, which
-	// defaults to public; the second fixture opts back out.
+	// defaults to public; this fixture opts back out.
 	await env.SHARE_DB.prepare("UPDATE games SET is_public = 0 WHERE game_id = ?")
-		.bind(ids[1])
+		.bind(idOf("duel_private"))
 		.run();
 });
 
@@ -111,6 +149,20 @@ const get = (query: string, ip: string): Promise<Response> =>
 
 const bundle = async (query: string, ip: string): Promise<ChartBundleCore> =>
 	expectOk<ChartBundleCore>(await get(query, ip));
+
+// The records sibling. Same preamble, same selection parse, its own payload and
+// its own key — so reading it here is how a facet is shown to reach both halves
+// of what one page renders.
+const records = async (query: string, ip: string): Promise<RecordsBundle> =>
+	expectOk<RecordsBundle>(
+		await SELF.fetch(`http://test/v1/stats/records${query}`, {
+			headers: {
+				"CF-Connecting-IP": ip,
+				"CF-RAY": "test-ray",
+				Cookie: `session=${viewer.sessionToken}`,
+			},
+		}),
+	);
 
 const globalKey = (
 	slice: GlobalSlice,
@@ -222,6 +274,158 @@ describe("GET /v1/stats selection", () => {
 			"203.0.113.10",
 		);
 		expect(body.meta.game_count).toBe(0);
+	});
+});
+
+describe("GET /v1/stats recency window", () => {
+	// The corpus holds three public games, one in each date band, so the three
+	// windows read 3 / 2 / 1 over the "all" slice. Distinct counts rather than a
+	// shared one: a window wired to the wrong token, or to no token at all,
+	// would still answer every request with a plausible-looking bundle.
+	it("narrows the corpus to the games played inside the window", async () => {
+		expect((await bundle("?slice=all", "203.0.113.50")).meta.game_count).toBe(
+			3,
+		);
+		expect(
+			(await bundle("?slice=all&period=12m", "203.0.113.51")).meta.game_count,
+		).toBe(2);
+		expect(
+			(await bundle("?slice=all&period=6m", "203.0.113.52")).meta.game_count,
+		).toBe(1);
+	});
+
+	it("keeps the seats of the games it kept", async () => {
+		// The window narrows the games and nothing else (design §4.4), so the
+		// surviving duel contributes both of its seats. A window that had
+		// narrowed the focal set too would band one row here and report 1.
+		const six = await bundle("?slice=all&period=6m", "203.0.113.53");
+		expect(six.yieldCurves.counts).toEqual(Array(TURNS).fill(2));
+		expect(six.nations.map((n) => n.nation).sort()).toEqual([EGYPT, ROME]);
+	});
+
+	it("falls back to all time on a period it doesn't know", async () => {
+		// Same forgiveness as ?slice= and ?nation=: a bookmark that outlived a
+		// rename degrades to the widest window rather than 400ing.
+		expect(
+			(await bundle("?slice=all&period=6mo", "203.0.113.54")).meta.game_count,
+		).toBe(3);
+	});
+
+	it("ANDs the window with the slice and the nation", async () => {
+		// Greece is seated only in the FFA, which is inside the 12-month window
+		// and outside the 6-month one — so the same selection is one game under
+		// the wider window and none under the narrower.
+		expect(
+			(
+				await bundle(
+					"?slice=ffa&nation=NATION_GREECE&period=12m",
+					"203.0.113.55",
+				)
+			).meta.game_count,
+		).toBe(1);
+		expect(
+			(
+				await bundle(
+					"?slice=ffa&nation=NATION_GREECE&period=6m",
+					"203.0.113.56",
+				)
+			).meta.game_count,
+		).toBe(0);
+	});
+
+	it("does not serve the all-time entry to a narrowed window", async () => {
+		// The windows are separate keys (stats/cache.ts), and this is that
+		// separation seen from outside: a sentinel under the all-time key must
+		// not answer a ?period= request, or the facet would read as a control
+		// that does nothing for up to a cache lifetime.
+		await env.SESSIONS_KV.put(
+			cacheKeyToString(globalKey("single_player", [])),
+			JSON.stringify({ tag: "all time" }),
+			{ expirationTtl: 3600 },
+		);
+		expect(
+			await expectOk(await get("?slice=single_player", "203.0.113.57")),
+		).toEqual({ tag: "all time" });
+
+		const windowed = await bundle(
+			"?slice=single_player&period=12m",
+			"203.0.113.58",
+		);
+		expect(windowed.meta.parser_version).toBe(CURRENT_PARSER_VERSION);
+		// ai_rome is the only single-player game and it is outside both windows.
+		expect(windowed.meta.game_count).toBe(0);
+	});
+
+	it("caches a narrowed window beside the all-time entry, not over it", async () => {
+		// The crons warm the all-time window only (precompute.ts), so a narrowed
+		// one is built on the first request that asks for it and then lives 24h
+		// like any other entry.
+		//
+		// Egypt in the "all" slice, because the two entries have to be observed
+		// from empty and no other case here asks for that selection — a
+		// precondition another case had already warmed would pass on its leavings
+		// rather than on what this request wrote.
+		const windowed = globalKey("all", [EGYPT], CURRENT_PARSER_VERSION, "12m");
+		const allTime = globalKey("all", [EGYPT]);
+		expect(await getCached<ChartBundleCore>(env, windowed)).toBeNull();
+		expect(await getCached<ChartBundleCore>(env, allTime)).toBeNull();
+
+		// Egypt is seated in all three public games, one per date band.
+		expect(
+			(
+				await bundle(
+					"?slice=all&nation=NATION_EGYPT&period=12m",
+					"203.0.113.59",
+				)
+			).meta.game_count,
+		).toBe(2);
+		expect(
+			(await bundle("?slice=all&nation=NATION_EGYPT", "203.0.113.60")).meta
+				.game_count,
+		).toBe(3);
+
+		expect(
+			(await getCached<ChartBundleCore>(env, windowed))?.meta.game_count,
+		).toBe(2);
+		expect(
+			(await getCached<ChartBundleCore>(env, allTime))?.meta.game_count,
+		).toBe(3);
+	});
+});
+
+describe("GET /v1/stats/records honours the selection", () => {
+	// The records are a second payload off one preamble, so the window has to
+	// reach them as well — a Records tab on the all-time corpus under a
+	// six-month heading is the charts beside it disagreeing with it.
+	it("narrows the record boards by the same window", async () => {
+		const all = await records("?slice=all", "203.0.113.70");
+		expect(Object.keys(all.recordGames).sort()).toEqual(
+			[idOf("duel"), idOf("ffa"), idOf("ai_rome")].sort(),
+		);
+
+		const six = await records("?slice=all&period=6m", "203.0.113.71");
+		expect(Object.keys(six.recordGames)).toEqual([idOf("duel")]);
+	});
+
+	it("falls back to all time on a period it doesn't know", async () => {
+		const body = await records("?slice=all&period=6mo", "203.0.113.72");
+		expect(Object.keys(body.recordGames).sort()).toEqual(
+			[idOf("duel"), idOf("ffa"), idOf("ai_rome")].sort(),
+		);
+	});
+
+	it("keys its own payload per window", async () => {
+		// The records live at the bundle's key plus a ":records" segment, so the
+		// period has to be in the part they share — otherwise the two windows'
+		// boards collide on one entry.
+		const six = cacheKeyToString(
+			globalKey("all", [], CURRENT_PARSER_VERSION, "6m"),
+			"records",
+		);
+		const allTime = cacheKeyToString(globalKey("all", []), "records");
+		expect(six).not.toBe(allTime);
+		await records("?slice=all&period=6m", "203.0.113.73");
+		expect(await kvHas(six)).toBe(true);
 	});
 });
 

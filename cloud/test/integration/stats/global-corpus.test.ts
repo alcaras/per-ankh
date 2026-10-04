@@ -24,6 +24,7 @@ import { makeUser } from "../../helpers/builders";
 import { postMultipart } from "../../helpers/requests";
 import {
 	buildUploadFormData,
+	daysAgo,
 	type UploadFixtureOpts,
 } from "../../helpers/save-blob";
 
@@ -114,15 +115,9 @@ const setSaveDate = (label: Label, date: string | null) =>
 		.bind(date, idOf(label))
 		.run();
 
-// Whole days back, not months. Subtracting months is the arithmetic
-// periodCutoff exists to get right — setUTCMonth alone rolls 31 February
-// forward to 3 March — and a fixture helper that reproduced the very defect
-// the code under test guards against would be testing the window with a date
-// it had quietly moved. Days have no such edge, and the offsets below clear
-// both window boundaries by nearly three months, so nothing here turns on
-// which month the suite runs in.
-const daysAgo = (n: number): string =>
-	new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+// The offsets below are daysAgo (test/helpers/save-blob.ts) and clear both
+// window boundaries by nearly three months, so nothing here turns on which
+// month the suite runs in.
 
 describe("global corpus", () => {
 	it("takes every public game and no private one", async () => {
