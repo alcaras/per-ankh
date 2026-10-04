@@ -22,13 +22,30 @@ const POSITIONAL_LISTS = [
 const INDEX_LISTS = ["Humans", "StartingPlayerOptions"];
 
 /**
- * The save with the creator's `Email` and `OnlineID` blanked on every seat.
- * The map is a public download, and the game tolerates the empty
- * attributes (an unclaimed hotseat seat is written that way).
+ * The save with every seat's `Name`, `Email` and `OnlineID` blanked. The map
+ * is a public download, and the game tolerates the empty attributes (an
+ * unclaimed hotseat seat is written that way).
+ *
+ * `Name` is blanked rather than replaced, because empty is what a seat in a
+ * solo game already looks like: across the 13 saves in `test-data/saves/`,
+ * all 5 single-player ones carry an empty name on every seat, human and AI,
+ * while the 7 network and cloud ones name both humans. The 13th is the one
+ * that settles it — a turn-1 `HOTSEAT` map, the authoring path this module
+ * exists for, which names its human seat and leaves its AI seat empty, and
+ * whose `Email` and `OnlineID` the scrub was already taking. A map only
+ * carries a name because it was authored in a hotseat or network session —
+ * `ClientManager.startGame` fills an empty seat name from the local default
+ * only while a multiplayer session is live (`ClientManager.cs:379`), and the
+ * `PLAYER_INFORMATION` action it sends is the one other writer
+ * (`Game.handleAction`, `Game.cs:16711`). Runs are played solo, so nothing
+ * refills it and nothing overwrites it: whatever stands here is written back
+ * out of every run (`Player.writeGameXML`, `Player.cs:2444`) and read as that
+ * run's player name, which would be the creator's handle on a game they did
+ * not play.
  */
 export function scrubIdentity(xml: string): string {
 	return xml.replace(/<Player\s[^>]*>/g, (tag) =>
-		tag.replace(/\b(Email|OnlineID)="[^"]*"/g, '$1=""'),
+		tag.replace(/\b(Name|Email|OnlineID)="[^"]*"/g, '$1=""'),
 	);
 }
 
