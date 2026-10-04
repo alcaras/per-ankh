@@ -7,7 +7,13 @@
 import { techName, improvementDisplayName } from "$lib/game-detail/helpers";
 import { specialistName } from "$lib/game-detail/specialists";
 import { DIFFICULTY_NAMES } from "$lib/generated/difficulty-names";
-import { formatEnum, formatMapClass, nationName } from "$lib/utils/formatting";
+import { mapScriptLabel, mapSizeLabel } from "$lib/map-settings";
+import {
+	characterName,
+	cognomenName,
+	formatEnum,
+	nationName,
+} from "$lib/utils/formatting";
 import {
 	ANY_RELIGION,
 	ANY_WONDER,
@@ -133,7 +139,7 @@ export function describeObjective(o: Objective): string {
 			return `Found ${name}${parts.length ? ` and ${parts.join(" and ")}` : ""}${byTurn(o.by_turn)}`;
 		}
 		case "cognomen":
-			return `Earn the cognomen ${formatEnum(o.target, "COGNOMEN_")}`;
+			return `Earn the cognomen ${cognomenName(o.target)}`;
 		case "metric": {
 			const measure =
 				o.measure === "cumulative"
@@ -190,13 +196,13 @@ export function describeCriterion(c: Criterion): string {
 export function describeSetup(s: ChallengeSetup): string[] {
 	const parts: string[] = [];
 	if (s.nation) parts.push(nationName(s.nation));
-	if (s.leader_name)
-		parts.push(
-			s.leader_is_custom ? `${s.leader_name} (custom)` : s.leader_name,
-		);
+	if (s.leader_name) {
+		const leader = characterName(s.leader_name);
+		parts.push(s.leader_is_custom ? `${leader} (custom)` : leader);
+	}
 	const map = [
-		s.map_size ? formatEnum(s.map_size, "MAPSIZE_") : null,
-		s.map_class ? formatMapClass(s.map_class) : null,
+		s.map_size ? mapSizeLabel(s.map_size) : null,
+		s.map_class ? mapScriptLabel(s.map_class) : null,
 	].filter(Boolean);
 	if (map.length) parts.push(map.join(" "));
 	if (s.difficulty)
