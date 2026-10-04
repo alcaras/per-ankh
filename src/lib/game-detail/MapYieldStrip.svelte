@@ -139,7 +139,18 @@
 								sideOffset={6}
 								class="z-50 min-w-40 px-3 py-2 text-xs {CHROME_PANEL_CLASS}"
 							>
-								<p class="mb-1.5 font-bold text-bright">{slot.title}</p>
+								<p
+									class="mb-1.5 flex items-center gap-1.5 font-bold text-bright"
+								>
+									<!-- 14 against the header's 12px type, the pairing the
+									     ratings row and the city popover's rows already use. -->
+									<SpriteIcon
+										category="yields"
+										value={slot.yieldType}
+										size={14}
+									/>
+									{slot.title}
+								</p>
 								<dl class="chrome-rows">
 									<dt>Per turn</dt>
 									<dd class="text-right tabular-nums">{rate(slot.rate)}</dd>

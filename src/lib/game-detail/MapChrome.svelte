@@ -6,6 +6,7 @@
 	// which sits atop the leader panel because everything below it is that
 	// player's, changes whose. Its panels, yields and menu icons open the
 	// game's analysis tabs, each in a lightbox the page renders (onOpenTab).
+	import { Tooltip } from "bits-ui";
 	import type { cloudApi } from "$lib/api-cloud";
 	import Select from "$lib/ui/Select.svelte";
 	import {
@@ -194,25 +195,39 @@
 	<!-- Top bar: a menu icon per tab, then the yield strip, the way the game's
 	     own bar leads with its menu cluster and carries the yields after it. -->
 	<div class="flex flex-wrap items-start gap-3">
-		<div
-			class="pointer-events-auto flex h-8 items-center gap-0.5 px-1.5 {CHROME_PANEL_CLASS}"
-		>
-			{#each tabs as tab (tab.id)}
-				<button
-					type="button"
-					onclick={() => onOpenTab(tab.id)}
-					class="flex cursor-pointer rounded p-1 transition-colors hover:bg-tan/15"
-					title={tab.label}
-				>
-					<SpriteIcon
-						category={tab.icon.category}
-						value={tab.icon.value}
-						size={16}
-						alt={tab.label}
-					/>
-				</button>
-			{/each}
-		</div>
+		<!-- A glyph alone doesn't say which tab it opens, and the native title's
+		     delay and OS styling read as outside the chrome, so the cluster
+		     carries the yield strip's tooltip instead. -->
+		<Tooltip.Provider delayDuration={200} disableHoverableContent>
+			<div
+				class="pointer-events-auto flex h-8 items-center gap-0.5 px-1.5 {CHROME_PANEL_CLASS}"
+			>
+				{#each tabs as tab (tab.id)}
+					<Tooltip.Root>
+						<Tooltip.Trigger
+							class="flex cursor-pointer rounded p-1 transition-colors hover:bg-tan/15"
+							onclick={() => onOpenTab(tab.id)}
+						>
+							<SpriteIcon
+								category={tab.icon.category}
+								value={tab.icon.value}
+								size={16}
+								alt={tab.label}
+							/>
+						</Tooltip.Trigger>
+						<Tooltip.Portal>
+							<Tooltip.Content
+								side="bottom"
+								sideOffset={6}
+								class="z-50 px-2 py-1 text-xs font-bold text-bright {CHROME_PANEL_CLASS}"
+							>
+								{tab.label}
+							</Tooltip.Content>
+						</Tooltip.Portal>
+					</Tooltip.Root>
+				{/each}
+			</div>
+		</Tooltip.Provider>
 		{#if player}
 			<div class="pointer-events-auto">
 				<MapYieldStrip
