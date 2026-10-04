@@ -33,7 +33,7 @@
 	} from "$lib/parser/upload-helpers";
 	import { INPUT_CLASS, PRIMARY_BTN } from "$lib/ui/classes";
 	import { toast } from "$lib/ui/toast";
-	import { formatEnum } from "$lib/utils/formatting";
+	import { nationName } from "$lib/utils/formatting";
 	import { strToU8, zipSync } from "fflate";
 
 	type MapState =
@@ -127,7 +127,7 @@
 									(p) => p.player_id === seat.player_index,
 								);
 								const nation = seat.nation
-									? formatEnum(seat.nation, "NATION_")
+									? nationName(seat.nation)
 									: "no nation yet";
 								return `${details?.player_name || `Seat ${seat.player_index + 1}`} (${nation}, ${seat.is_human ? "human" : "AI"})`;
 							}),
