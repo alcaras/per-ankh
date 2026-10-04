@@ -17,6 +17,7 @@
 // save's state satisfies it.
 
 import { isDynastyTrait } from "../generated/dynasty-traits";
+import { IMPROVEMENT_BUILDS } from "../generated/improvement-builds";
 import { THEOLOGY_TIER } from "../generated/theology-tiers";
 import { UNIT_STATS } from "../generated/unit-stats";
 import { WONDER_CULTURE_PREREQ, cultureRank } from "../generated/wonders";
@@ -461,14 +462,22 @@ function isUnderConstruction(i: { build_turns_left?: number | null }): boolean {
 /**
  * Tiered improvements upgrade in place — a Library tile becomes
  * `IMPROVEMENT_LIBRARY_2` (Academy) and then `_3` (University) — so "build a
- * Library" is met by any tier at or above the target's. An untiered target
- * (a wonder, a shrine) matches exactly.
+ * Library" is met by anything the target upgrades into. The chain is the
+ * game's own `<UpgradeImprovement>`, baked into `IMPROVEMENT_BUILDS`, and not
+ * the `_N` suffix: the three Aksum steles are three separate buildables that
+ * coexist on their own tiles, so a Grand Stele is not also a Stele.
+ * A target that upgrades into nothing — a wonder, a shrine, a stele — matches
+ * exactly, as does one the table doesn't know.
  */
 function matchesImprovement(tile: string, target: string): boolean {
-	const m = /^(.*)_(\d+)$/.exec(target);
-	if (!m) return tile === target;
-	const t = /^(.*)_(\d+)$/.exec(tile);
-	return t != null && t[1] === m[1] && Number(t[2]) >= Number(m[2]);
+	let cursor: string | undefined = target;
+	const seen = new Set<string>();
+	while (cursor != null && !seen.has(cursor)) {
+		if (tile === cursor) return true;
+		seen.add(cursor);
+		cursor = IMPROVEMENT_BUILDS[cursor]?.upgradesTo;
+	}
+	return false;
 }
 
 function scoreTech(

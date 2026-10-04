@@ -356,6 +356,36 @@ describe("scoreChallenge", () => {
 		).toBe(true);
 	});
 
+	it("does not tier the Aksum steles, which coexist rather than upgrade", () => {
+		// improvement.xml gives the steles no <UpgradeImprovement> — they are
+		// three separate buildables chained by <ImprovementPrereq>, and a city
+		// holds two tiers side by side. Measured on
+		// test-data/saves/OW-Aksum-Year117: 3 stele tiles at tier 1 and 2 at
+		// tier 2, cities 0 and 21 each holding one of each.
+		const tile = { owner_player_xml_id: 0, city_xml_id: 1, specialist: null };
+		const run = runBlob(30, {
+			improvement_data: {
+				improvements: [
+					{ ...tile, improvement: "IMPROVEMENT_AKSUM_STELE_1" },
+					{ ...tile, improvement: "IMPROVEMENT_AKSUM_STELE_2" },
+					{ ...tile, improvement: "IMPROVEMENT_AKSUM_STELE_3" },
+				],
+			},
+		});
+		const two = scoreChallenge(
+			rules([{ kind: "build", target: "IMPROVEMENT_AKSUM_STELE_1", count: 2 }]),
+			run,
+		);
+		expect(two.met).toBe(false);
+		expect(two.objectives[0].observed).toMatch(/1 of 2 completed/);
+		expect(
+			scoreChallenge(
+				rules([{ kind: "build", target: "IMPROVEMENT_AKSUM_STELE_3" }]),
+				run,
+			).met,
+		).toBe(true);
+	});
+
 	it("holds an undatable build to the save's turn", () => {
 		const library = {
 			improvement_data: {

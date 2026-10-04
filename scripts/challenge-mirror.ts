@@ -21,6 +21,7 @@ export const CHALLENGE_MIRRORS = ["scoring", "types"] as const;
 // resolves. Anything else is a bundle break.
 const ALLOWED_IMPORTS = new Set([
 	"../generated/dynasty-traits",
+	"../generated/improvement-builds",
 	"../generated/theology-tiers",
 	"../generated/unit-stats",
 	"../generated/wonders",
