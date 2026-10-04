@@ -916,12 +916,14 @@ const ROUTES: RouteSpec[] = [
 		handler: (r, e, m) => handleUserStats(m![1], r, e),
 		// One of two routes with no D1 write anywhere in its call graph:
 		// stats/resolve.ts and stats/aggregate.ts are SELECT-only and the
-		// bundle cache lives in KV (stats/cache.ts), not D1. Its 11 query
+		// bundle cache lives in KV (stats/cache.ts), not D1. Its 13 query
 		// sites all ride the one session: two sequential in resolveUserCorpus,
 		// then eight loaders in a single Promise.all (loadYieldCurves is
-		// itself two). The KV cache is a reason for care rather than
-		// comfort: a bundle is stored for 24h, so whatever this route reads is
-		// served for a day, which is why the session anchors first-primary.
+		// itself four queries in three chunked loops — the decided-games set,
+		// the turn rows, and loadRecordIdentity's two, which share a loop).
+		// The KV cache is a reason for care rather than comfort: a bundle is
+		// stored for 24h, so whatever this route reads is served for a day,
+		// which is why the session anchors first-primary.
 		staleTolerant: true,
 	},
 	// The record boards over the same corpus — the profile's Records tab, which

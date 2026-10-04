@@ -68,6 +68,8 @@ A faceted selection is a subset of its slice, so it costs `ceil(N/50) × 9` agai
 
 **Built: eight loops, not nine, so every figure above is 8/9 of what the plan projected.** §8.1's drop took `loadSaveDates` off the all-humans path — the field it fed is now user-only — so a global bundle costs `ceil(N/50) × 8`. The table becomes 96 / 232 / **328** for all-public, 88 / 216 / **304** for duels, and 8 / ≤ 104 / **≤ 112** for each thin slice: **~856 nightly, not ~963.** Nothing downstream changes its shape — the margin against the 1,000 ceiling widens, and the paragraph below still decides the same way for the same reason.
 
+**Built: ten queries per chunk with the records.** `loadRecordIdentity` adds one chunked loop inside `loadYieldCurves` carrying two queries — `player_summaries` for the holder's seat, `games` for the turn count and the save's own id — so the loop count goes to nine while the arithmetic goes to `ceil(N/50) × 10`. Queries are what the ceiling counts, which is why the two are worth keeping apart now that they have come apart. "No new query" is true of `game_player_turn`, which the records fold into the pass that already reads it, and not of the handler. The table becomes 120 / 290 / **410** for all-public, 110 / 270 / **380** for duels, and 10 / ≤ 130 / **≤ 140** for each thin slice: **~1,070 nightly.** The ceiling is per invocation and the cron is a pattern per slice, so the largest invocation is all-public's 410 against 1,000 — the decision below is unchanged, and it is the reason this growth is affordable at all.
+
 **One cron pattern per slice.** 963 queries in a single invocation would run against the 1,000 ceiling with no headroom. `crons` is an array and the handler dispatches on `controller.cron`, so a pattern per slice gives each a fresh query budget *and* a fresh isolate, and a fifth slice later adds a pattern instead of eating another's margin. Keep every pattern at an interval ≥ 1 hour to stay on the 15-minute CPU tier.
 
 Within an invocation the bundles are built and written **sequentially, each released before the next**, so peak memory is one bundle rather than fourteen. The unfaceted slice is the largest of them (§7).
@@ -134,6 +136,8 @@ Verified against Cloudflare docs, 2026-08-28.
 
 **Built: eight loops.** `loadSaveDates` is the ninth, and §8.1's drop made it uploader-only, so the arithmetic above holds with a `× 8` for any corpus the global surface builds — 96 for the all-public slice, 200 for the four unfaceted together, ~856 nightly. The user path still runs all nine. The ceiling moves out to roughly 6,000 games in a single slice (§14).
 
+**Built: ten per chunk, with the records' two.** `loadRecordIdentity` is one more loop than the count above but two more queries, so the global path is nine loops at `× 10` and the user path ten at `× 11` — 120 for the all-public slice, 250 for the four unfaceted together, ~1,070 nightly (§4.1 has the per-slice split, which is the number the 1,000 ceiling is measured against). `× 8` → `× 10` is a fifth off whatever the query ceiling admits, so §14's predicate-corpus trigger comes back in from ~6,000 games in a single slice to **~5,000**.
+
 **Both the query ceiling and the memory ceiling are per invocation**, which is what the per-slice cron pattern in §4.1 buys: each pattern gets a fresh 1,000-query budget *and* a fresh isolate.
 
 ### 6.1 Cost of one aggregation
@@ -147,7 +151,7 @@ Baseline, established by driving the real `buildChartBundle(env, corpus, version
 | FFA (19) | 9 | ~0.09 s | 19.6 MB | 419 KB | 112 KB |
 | Single-player (10) | 9 | ~0.02 s | 2.8 MB | 385 KB | 94 KB |
 
-**Built: measured before §8.1's drop, and left as measured.** The Queries column is arithmetic and is now 96 / 88 / 8 / 8 (`× 8`, above). The other three columns are a measurement of code that still loaded and returned `save_dates`, so each is now an overstatement by whatever that field cost — a per-game array, so the overstatement grows with the slice and is largest for all-public. They are not re-derived here rather than guessed at: §15's harness is what re-derives them.
+**Built: measured before §8.1's drop, and left as measured.** The Queries column is arithmetic and is now 120 / 110 / 10 / 10 (`× 10`, above — 96 / 88 / 8 / 8 before the records' two loops). The other three columns are a measurement of code that still loaded and returned `save_dates`, so each is now an overstatement by whatever that field cost — a per-game array, so the overstatement grows with the slice and is largest for all-public. They are not re-derived here rather than guessed at: §15's harness is what re-derives them.
 
 Read these as an order of magnitude, not a contract, in two directions. SQLite runs in-process, so its time is excluded from JS CPU exactly as D1's would be — but workerd charges result deserialization the shim does not, so the deployed figure is some multiple of this rather than equal to it. And Node's `heapUsed` is not workerd's 128 MB accounting; what transfers is the ratio between slices and the slope in §7, not the third digit.
 
@@ -158,6 +162,12 @@ Read these as an order of magnitude, not a contract, in two directions. SQLite r
 The rate is **~890 bytes of live heap per focal row**, over a ~17 MB floor for the other eight loaders — a slope confirmed across corpus subsets from 143 to 572 games. `loadYieldCurves` is ~83% of the peak: holding the corpus fixed at 572 games and halving the focal set (`focal: "uploader"`) takes the peak from 97.7 MB to 57.3 MB.
 
 At 90,406 focal rows that puts the all-public slice at **97.7 MB against a 128 MB isolate** — 76% of the ceiling in live objects, before allocation churn. §7.1 is what buys the headroom back, which is why it is a prerequisite rather than a tidy-up.
+
+**Built: the records add a second live term, and it moves §7.2's trigger.** The record boards fold into this same pass (§4.1), so each seat's accumulators — peak value and peak turn per slot, the end-of-game row, and one row per checkpoint reached — are live for its duration, concurrent with the band samples. The term is denominated in **seats**, not rows: on the 740-game public corpus of 2026-09-22 that is 1,529 focal seats, 24 slots and 3.27 checkpoint rows per seat. Measured at that shape in isolation (node, `--expose-gc`, the accumulators alone rather than §15's harness against the Worker): **~1.5 KB per focal seat, ~2.3 MB on the all-public slice** — about 20 bytes per focal row against the ~450 the halved samples cost, so the slope rises ~4% and the §7.2 trigger comes in from ~250,000 focal rows to **~235,000, about 1,490 public games.**
+
+That the term is this small is a consequence of the shape and not of the feature: a seat holds typed arrays indexed by slot (`RECORD_SLOTS` in `aggregate.ts`). The first cut keyed Maps by series name instead, which measured **~8.1 KB per seat and ~11.8 MB** at the same corpus — a ~23% slope increase, pulling the trigger to ~199,000 rows / ~1,260 games, with ~100 ms of per-row `Map` churn on top against §6's ~1 s budget. **The trigger is a seat count as much as a row count now, so a corpus that gets longer games moves it differently from one that gets more of them.**
+
+**§7.2 cannot chunk this term away.** A seat's peak spans every turn of its game, so its accumulator has to stay live across every window — the records are the irreducible part of the peak under the contingency, and the windows shrink only the samples beside them.
 
 ### 7.1 Required: disjoint cohorts
 
@@ -354,7 +364,7 @@ A snapshot rather than a digest of the payload, because the test has two jobs an
 
 Not in scope; each records the condition that would change that.
 
-- **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~6,000 games, where `ceil(N/50) × 8` nears the 1,000-query ceiling. (**Built:** ~5,500 as planned, at nine loops; §8.1's drop took the global path to eight and the trigger out with it.) It would also make the *user* path marginally slower, so it is worth doing only for the global case.
+- **Predicate corpus** (resolvers return a `SELECT game_id` predicate that loaders inline as a subquery, making query count independent of corpus size, instead of materializing an id list). Trigger: a slice approaching ~5,000 games, where `ceil(N/50) × 10` nears the 1,000-query ceiling. (**Built:** ~5,500 as planned, at nine loops; §8.1's drop took the global path to eight queries per chunk and the trigger out to ~6,000, and the records' two brought it back to ~5,000 — §4.1.) It would also make the *user* path marginally slower, so it is worth doing only for the global case.
 - **Turn-window chunking** (§7.2). Trigger: ~250,000 focal rows in one slice — about 1,600 public games.
 - **A map-size facet.** 395 of 538 public duels are `MAPSIZE_SMALLEST`, and crossing map size with nations gives 68 non-empty cells of which 47 hold fewer than 10 players. Trigger: enough corpus that a representative nation × map-size cell holds a usable sample. No bundle field is keyed by map size, so this facet is the only route by which map size reaches this surface.
 - **Multi-select nations.** The eight nation-keyed fields already serve comparison (§4), so multi-select buys combination space for a job the unfaceted bundle does. It also takes the selection space from 52 to 4 × 2¹³, past what §4.1 precomputes, trading the nightly table for the on-demand path §5 keeps alive. Trigger: a question the nation-keyed fields demonstrably cannot answer.
