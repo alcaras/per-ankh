@@ -9,6 +9,50 @@ import type { ChartBundleCore } from "./types";
 function bundle(over: Partial<ChartBundleCore> = {}): ChartBundleCore {
 	return {
 		meta: { game_count: 603, parser_version: "2.15.0" },
+		// Rome's pool is four, so chance alone fields a class 75% of the time —
+		// the row's baseline, not zero. Skip counters are non-zero for the same
+		// reason the rest of this fixture is.
+		familyKeeps: {
+			overall: {
+				rows: [
+					{
+						family_class: "FAMILYCLASS_CHAMPIONS",
+						eligible: 180,
+						kept: 150,
+						kept_pct: 83.333,
+						baseline_pct: 75,
+						delta: 8.333,
+						z: 2.582,
+						significant: true,
+					},
+				],
+				player_games: 180,
+				skipped_incomplete: 4,
+				skipped_forced_pool: 2,
+				skipped_unknown_pool: 0,
+			},
+			byNation: [
+				{
+					nation: "NATION_ROME",
+					rows: [
+						{
+							family_class: "FAMILYCLASS_CHAMPIONS",
+							eligible: 180,
+							kept: 150,
+							kept_pct: 83.333,
+							baseline_pct: 75,
+							delta: 8.333,
+							z: 2.582,
+							significant: true,
+						},
+					],
+					player_games: 180,
+					skipped_incomplete: 4,
+					skipped_forced_pool: 2,
+					skipped_unknown_pool: 0,
+				},
+			],
+		},
 		summary: { total_games: 603, avg_total_turns: 118 },
 		nations: [{ nation: "NATION_ROME", games_played: 200 }],
 		nationWinRate: [

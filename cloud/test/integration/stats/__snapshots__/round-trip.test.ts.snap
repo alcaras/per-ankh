@@ -129,6 +129,16 @@ exports[`chart bundle round-trip > builds the all-humans bundle from the same co
       "wins": 1,
     },
   ],
+  "familyKeeps": {
+    "byNation": [],
+    "overall": {
+      "player_games": 0,
+      "rows": [],
+      "skipped_forced_pool": 0,
+      "skipped_incomplete": 4,
+      "skipped_unknown_pool": 2,
+    },
+  },
   "lawTiming": [
     {
       "count": 1,
@@ -2423,6 +2433,16 @@ exports[`chart bundle round-trip > builds the user bundle from the fixture corpu
       "wins": 1,
     },
   ],
+  "familyKeeps": {
+    "byNation": [],
+    "overall": {
+      "player_games": 0,
+      "rows": [],
+      "skipped_forced_pool": 0,
+      "skipped_incomplete": 2,
+      "skipped_unknown_pool": 1,
+    },
+  },
   "games_with_outcome": 3,
   "lawTiming": [
     {
