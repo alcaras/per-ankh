@@ -339,19 +339,59 @@ const RECORD_EXCLUDED = new Set([
 	"discontent_per_turn",
 ]);
 
+// One slot per board, in YIELD_COLUMNS order — each series' rate column
+// followed by its cumulative one — paired with the D1 column that fills it.
+// This is the index space every accumulator below is denominated in: a seat
+// holds a typed array indexed by slot rather than a Map keyed by the name,
+// because the Maps were the aggregation's largest live object and its largest
+// source of per-row garbage (docs/global-stats-design.md §7's Built note has
+// the measurement). The names are needed once, at ranking time, to label the
+// boards; the fold never touches them.
+//
+// A level has no cumulative column, so it gets one slot rather than two. The
+// bands mirror the level into the cumulative series to keep their shape
+// uniform; a record board can't borrow that, because mirroring would ship a
+// second leaderboard identical to the first under a name that claims
+// otherwise.
+const RECORD_SLOTS: ReadonlyArray<readonly [key: string, column: string]> =
+	YIELD_COLUMNS.flatMap(([key, rateCol, cumCol]) =>
+		RECORD_EXCLUDED.has(key)
+			? []
+			: cumCol
+				? ([
+						[key, rateCol],
+						[`${key}:cum`, cumCol],
+					] as const)
+				: ([[key, rateCol]] as const),
+	);
+
+export const RECORD_KEYS: readonly string[] = RECORD_SLOTS.map(([key]) => key);
+const RECORD_COLUMNS: readonly string[] = RECORD_SLOTS.map(([, col]) => col);
+
+// A slot with no value in a row — the column was NULL, or the series is a
+// level and has no cumulative column. NaN rather than a parallel presence
+// bitmap because every comparison and copy below already has to skip it, and
+// it survives a typed-array copy for free.
+const ABSENT = NaN;
+
 type RecordWhen = "peak" | "final" | `t${(typeof RECORD_CHECKPOINTS)[number]}`;
 
-// One seat's whole run through one game, folded turn by turn.
+// One seat's whole run through one game, folded turn by turn. Every array is
+// RECORD_KEYS-indexed and allocated once, at the seat's first row: these are
+// live for the whole pass, concurrent with the band samples, so their size is
+// part of the memory bound §7 of docs/global-stats-design.md denominates.
 export interface SeatRecord {
 	gameId: string;
 	playerIndex: number;
-	// Per series key: the best value seen and the turn it happened.
-	peak: Map<string, { value: number; turn: number }>;
+	// The best value seen per slot, and the turn it happened on. ABSENT until
+	// the slot has had a value.
+	peakValue: Float64Array;
+	peakTurn: Int32Array;
 	// The latest turn seen, and that turn's values — the end-of-game board.
 	lastTurn: number;
-	final: Map<string, number>;
+	final: Float64Array;
 	// Values at each checkpoint turn, when the game reached it.
-	at: Map<number, Map<string, number>>;
+	at: Map<number, Float64Array>;
 }
 
 export function emptySeatRecord(
@@ -361,29 +401,41 @@ export function emptySeatRecord(
 	return {
 		gameId,
 		playerIndex,
-		peak: new Map(),
+		peakValue: new Float64Array(RECORD_KEYS.length).fill(ABSENT),
+		peakTurn: new Int32Array(RECORD_KEYS.length),
 		lastTurn: -1,
-		final: new Map(),
+		final: new Float64Array(RECORD_KEYS.length).fill(ABSENT),
 		at: new Map(),
 	};
 }
 
-// Fold one row into its seat's accumulator, for one measure.
+// Fold one row into its seat's accumulator. `values` is RECORD_KEYS-indexed
+// and is the caller's scratch buffer — read, never retained, so one buffer
+// serves every row of the pass.
 export function foldRecordRow(
 	acc: SeatRecord,
 	turn: number,
-	values: Map<string, number>,
+	values: Float64Array,
 ): void {
-	for (const [key, value] of values) {
-		const best = acc.peak.get(key);
-		if (!best || value > best.value) acc.peak.set(key, { value, turn });
+	for (let i = 0; i < values.length; i++) {
+		const value = values[i];
+		if (Number.isNaN(value)) continue;
+		// `>` is false against an ABSENT incumbent, so the first value a slot
+		// sees has to be taken explicitly.
+		if (Number.isNaN(acc.peakValue[i]) || value > acc.peakValue[i]) {
+			acc.peakValue[i] = value;
+			acc.peakTurn[i] = turn;
+		}
 	}
 	if (turn > acc.lastTurn) {
 		acc.lastTurn = turn;
-		acc.final = new Map(values);
+		// Copy into the array the seat already holds, rather than allocating a
+		// replacement: rows arrive in ascending turn order, so this branch is
+		// taken on nearly every row of the corpus.
+		acc.final.set(values);
 	}
 	if ((RECORD_CHECKPOINTS as readonly number[]).includes(turn)) {
-		acc.at.set(turn, new Map(values));
+		acc.at.set(turn, values.slice());
 	}
 }
 
@@ -393,7 +445,13 @@ export function foldRecordRow(
 // and its "final" from the other, and would leave recordCounts advertising a
 // population twice the size of the one the boards actually rank.
 //
-// The survivor is the upload that saw more turns — same match, more of it.
+// The survivor is the upload that saw more turns — same match, more of it —
+// and on the tie, which is the normal outcome rather than the edge case (both
+// uploads of a finished duel saw all of it: 192 of the 202 multi-upload seats
+// in the 2026-09-22 snapshot), the lower game_id. Any total order does; what
+// matters is that it is a property of the corpus. First-seen would be D1's row
+// order under a query with no ORDER BY, which would let the game a record row
+// links to flip between two rebuilds over the same rows.
 export function dedupeSeatRecords(
 	accs: Map<string, SeatRecord>,
 	xmlGameId: Map<string, string>,
@@ -402,7 +460,13 @@ export function dedupeSeatRecords(
 	for (const acc of accs.values()) {
 		const key = `${xmlGameId.get(acc.gameId) ?? acc.gameId}|${acc.playerIndex}`;
 		const held = best.get(key);
-		if (!held || acc.lastTurn > held.lastTurn) best.set(key, acc);
+		if (
+			!held ||
+			acc.lastTurn > held.lastTurn ||
+			(acc.lastTurn === held.lastTurn && acc.gameId < held.gameId)
+		) {
+			best.set(key, acc);
+		}
 	}
 	return [...best.values()];
 }
@@ -432,16 +496,22 @@ export function rankRecords(
 		for (const cp of RECORD_CHECKPOINTS) {
 			if (acc.at.has(cp)) counts[`t${cp}`] = (counts[`t${cp}`] ?? 0) + 1;
 		}
-		for (const [key, best] of acc.peak) {
-			push(key, "peak", {
+		// Slot → name happens here and nowhere else in the pass: it is once
+		// per seat per board, against once per row in the fold.
+		for (let i = 0; i < RECORD_KEYS.length; i++) {
+			const value = acc.peakValue[i];
+			if (Number.isNaN(value)) continue;
+			push(RECORD_KEYS[i], "peak", {
 				game_id: acc.gameId,
 				player_index: acc.playerIndex,
-				turn: best.turn,
-				value: best.value,
+				turn: acc.peakTurn[i],
+				value,
 			});
 		}
-		for (const [key, value] of acc.final) {
-			push(key, "final", {
+		for (let i = 0; i < RECORD_KEYS.length; i++) {
+			const value = acc.final[i];
+			if (Number.isNaN(value)) continue;
+			push(RECORD_KEYS[i], "final", {
 				game_id: acc.gameId,
 				player_index: acc.playerIndex,
 				turn: acc.lastTurn,
@@ -451,8 +521,10 @@ export function rankRecords(
 		for (const cp of RECORD_CHECKPOINTS) {
 			const at = acc.at.get(cp);
 			if (!at) continue;
-			for (const [key, value] of at) {
-				push(key, `t${cp}` as RecordWhen, {
+			for (let i = 0; i < RECORD_KEYS.length; i++) {
+				const value = at[i];
+				if (Number.isNaN(value)) continue;
+				push(RECORD_KEYS[i], `t${cp}` as RecordWhen, {
 					game_id: acc.gameId,
 					player_index: acc.playerIndex,
 					turn: cp,
@@ -461,10 +533,22 @@ export function rankRecords(
 			}
 		}
 	}
+	// Biggest first, and on equal values the seat — which is what makes the
+	// board a function of the corpus. Array.sort is stable, so without the
+	// tiebreak equal values would keep the order `accs` arrived in, and that is
+	// D1's row order under a query with no ORDER BY: at an early checkpoint,
+	// where the field is tight and the values are small, which tied seats make
+	// the top ten would depend on it. Dedupe leaves one accumulator per
+	// (game, seat), so this order is total.
 	for (const series of Object.values(boards)) {
 		for (const when of Object.keys(series)) {
 			series[when] = series[when]
-				.sort((a, b) => b.value - a.value)
+				.sort(
+					(a, b) =>
+						b.value - a.value ||
+						(a.game_id < b.game_id ? -1 : a.game_id > b.game_id ? 1 : 0) ||
+						a.player_index - b.player_index,
+				)
 				.slice(0, RECORD_TOP_N);
 		}
 	}
@@ -617,6 +701,10 @@ async function loadYieldCurves(
 	const decided = await loadDecidedGames(env, gameIds);
 	// One accumulator per seat, folded in the same pass as the bands.
 	const bySeat = new Map<string, SeatRecord>();
+	// One row's values, RECORD_KEYS-indexed. Allocated once for the whole pass
+	// and refilled per row: foldRecordRow reads it without retaining it, so a
+	// fresh buffer per row would be ~116k allocations for nothing.
+	const recordScratch = new Float64Array(RECORD_KEYS.length);
 
 	// Fold one row into one cohort, creating the turn's bucket on first sight.
 	const accumulate = (cohort: Cohort, turn: number, row: YieldRawRow) => {
@@ -660,21 +748,12 @@ async function loadYieldCurves(
 				seat = emptySeatRecord(row.game_id, row.player_index);
 				bySeat.set(seatKey, seat);
 			}
-			const values = new Map<string, number>();
-			for (const [key, rateCol, cumCol] of YIELD_COLUMNS) {
-				if (RECORD_EXCLUDED.has(key)) continue;
-				const rateVal = row[rateCol];
-				if (typeof rateVal === "number") values.set(key, rateVal);
-				// A level has no cumulative column. The bands mirror the level
-				// into the cumulative series to keep their shape uniform; a
-				// record board can't borrow that, because mirroring would ship
-				// a second leaderboard identical to the first under a name that
-				// claims otherwise.
-				if (!cumCol) continue;
-				const cumVal = row[cumCol];
-				if (typeof cumVal === "number") values.set(`${key}:cum`, cumVal);
+			recordScratch.fill(ABSENT);
+			for (let i = 0; i < RECORD_COLUMNS.length; i++) {
+				const value = row[RECORD_COLUMNS[i]];
+				if (typeof value === "number") recordScratch[i] = value;
 			}
-			foldRecordRow(seat, row.turn, values);
+			foldRecordRow(seat, row.turn, recordScratch);
 
 			// Undecided games stay out of the outcome split — their all-zero
 			// is_winner would read as a clean sweep of losses — but they are

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LAW_CLASSES } from "../generated/law-classes";
 import {
 	OPENING_LAWS_TOP_N,
+	RECORD_KEYS,
 	type SeatRecord,
 	boundOpeningLaws,
 	dedupeSeatRecords,
@@ -78,15 +79,24 @@ describe("boundOpeningLaws", () => {
 });
 
 describe("records", () => {
-	// One seat's rows, folded in turn order the way loadYieldCurves does.
+	// The accumulators are RECORD_KEYS-indexed, so a test that wants to talk
+	// about one series has to say which slot it is.
+	const SCIENCE = RECORD_KEYS.indexOf("science_per_turn");
+
+	// One seat's rows, folded in turn order the way loadYieldCurves does —
+	// through one scratch buffer, as the real pass does, which is also what
+	// pins that foldRecordRow doesn't retain it.
 	function play(
 		gameId: string,
 		playerIndex: number,
 		turns: Array<[turn: number, science: number]>,
 	): SeatRecord {
 		const acc = emptySeatRecord(gameId, playerIndex);
+		const row = new Float64Array(RECORD_KEYS.length);
 		for (const [turn, science] of turns) {
-			foldRecordRow(acc, turn, new Map([["science_per_turn", science]]));
+			row.fill(NaN);
+			row[SCIENCE] = science;
+			foldRecordRow(acc, turn, row);
 		}
 		return acc;
 	}
@@ -103,7 +113,23 @@ describe("records", () => {
 				[20, 9],
 				[30, 7],
 			]);
-			expect(acc.peak.get("science_per_turn")).toEqual({ value: 9, turn: 20 });
+			expect(acc.peakValue[SCIENCE]).toBe(9);
+			expect(acc.peakTurn[SCIENCE]).toBe(20);
+		});
+
+		it("takes the first value a slot sees, negative or not", () => {
+			// The incumbent starts absent, and `>` is false against it — so a
+			// slot whose only values are below zero still has to record one.
+			const acc = play("a", 0, [[10, -4]]);
+			expect(acc.peakValue[SCIENCE]).toBe(-4);
+			expect(acc.peakTurn[SCIENCE]).toBe(10);
+		});
+
+		it("leaves a slot no row filled absent", () => {
+			const acc = play("a", 0, [[10, 5]]);
+			const untouched = RECORD_KEYS.indexOf("money_per_turn");
+			expect(acc.peakValue[untouched]).toBeNaN();
+			expect(acc.final[untouched]).toBeNaN();
 		});
 
 		it("takes the last turn seen as the end of the game", () => {
@@ -113,7 +139,7 @@ describe("records", () => {
 				[20, 9],
 			]);
 			expect(acc.lastTurn).toBe(30);
-			expect(acc.final.get("science_per_turn")).toBe(7);
+			expect(acc.final[SCIENCE]).toBe(7);
 		});
 
 		it("captures a checkpoint only on the checkpoint turn", () => {
@@ -122,7 +148,7 @@ describe("records", () => {
 				[20, 2],
 				[21, 3],
 			]);
-			expect(acc.at.get(20)?.get("science_per_turn")).toBe(2);
+			expect(acc.at.get(20)?.[SCIENCE]).toBe(2);
 			expect(acc.at.has(40)).toBe(false);
 		});
 	});
@@ -161,6 +187,24 @@ describe("records", () => {
 			expect(dedupeSeatRecords(uneven, xml)[0].gameId).toBe("a");
 		});
 
+		it("picks the same upload whichever order the rows arrived in", () => {
+			// Both uploads of a finished duel saw every turn, so the
+			// more-turns rule doesn't decide — the common case, not the edge
+			// one. Insertion order here is D1's row order under a query with
+			// no ORDER BY, so a survivor that depended on it would make the
+			// cached payload a function of the row order rather than of the
+			// corpus.
+			const forwards = dedupeSeatRecords(twoUploads, xml);
+			const backwards = dedupeSeatRecords(
+				new Map([...twoUploads].reverse()),
+				xml,
+			);
+			expect(forwards.map((k) => k.gameId)).toEqual(
+				backwards.map((k) => k.gameId),
+			);
+			expect(new Set(forwards.map((k) => k.gameId))).toEqual(new Set(["a"]));
+		});
+
 		it("leaves distinct matches alone", () => {
 			const kept = dedupeSeatRecords(
 				twoUploads,
@@ -183,6 +227,22 @@ describe("records", () => {
 				turns,
 			);
 			expect(records.science_per_turn.peak.map((r) => r.value)).toEqual([9, 5]);
+		});
+
+		it("breaks a tie on the seat, whichever order the seats arrived in", () => {
+			// Three seats tied at the top — the shape of an early checkpoint,
+			// where the field is tight and the values are small integers.
+			const tied = [
+				play("c", 1, [[10, 7]]),
+				play("a", 0, [[10, 7]]),
+				play("b", 0, [[10, 7]]),
+			];
+			const order = (accs: SeatRecord[]) =>
+				rankRecords(accs, seats, turns).records.science_per_turn.peak.map(
+					(r) => `${r.game_id}|${r.player_index}`,
+				);
+			expect(order(tied)).toEqual(["a|0", "b|0", "c|1"]);
+			expect(order([...tied].reverse())).toEqual(["a|0", "b|0", "c|1"]);
 		});
 
 		it("counts the population each board drew on, not the rows it kept", () => {
