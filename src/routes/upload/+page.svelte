@@ -99,7 +99,13 @@
 							})
 						: (data.fromPath ?? undefined)}
 			/>
-		{:else}
+		{:else if !data.challengeError}
+			<!--
+				A failed challenge fetch is terminal: the modal can't score a run
+				without the rules, so the error line above is the whole answer and
+				there is nothing left to wait for. "Loading…" under it promised a
+				resolution that never came.
+			-->
 			<p class="text-sm text-gray-400">Loading…</p>
 		{/if}
 	</div>
