@@ -102,6 +102,11 @@
 	let measure = $state<"rate" | "cum">("rate");
 	let when = $state<(typeof WHENS)[number]["key"]>("peak");
 
+	// Seats the selected board could draw on. Zero is a real answer — nobody
+	// in this corpus reached T100 — and it is the per-board empty state's to
+	// report, not a reason to take the toolbar away: `when` outlives the
+	// payload, so a branch that unmounted the selector would leave no way back
+	// to a board that does have rows.
 	const boardCount = $derived(payload?.recordCounts[when] ?? 0);
 	// On a checkpoint board every row shares the same turn, so it belongs in
 	// the card's header once rather than down the whole column. Peak and
@@ -158,7 +163,7 @@
 	<p class="p-8 text-center italic text-brown">Couldn't load records.</p>
 {:else if payload === null}
 	<p class="p-8 text-center italic text-brown">Loading records…</p>
-{:else if cards.length === 0 && boardCount === 0}
+{:else if Object.keys(payload.records).length === 0}
 	<p class="p-8 text-center italic text-brown">No record data available.</p>
 {:else}
 	<section class="mb-6">
