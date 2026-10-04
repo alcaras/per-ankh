@@ -587,6 +587,30 @@ function adminFilterParams(filter?: AdminGameFilterParams): URLSearchParams {
 	return qs;
 }
 
+// How a stats selection is spelled, for the two endpoints each corpus serves:
+// the chart bundle and its record boards. One spelling rather than two,
+// because the Worker answers both from one cache key — a divergence here would
+// be a second spelling of one entry, and the kind that only shows up as a
+// doubled aggregation.
+//
+// Each component is omitted at its default, so the default view has one
+// canonical URL and therefore one edge-cache entry rather than several
+// spellings of one bundle.
+function userStatsQuery(scope?: UserScope): string {
+	return scope != null && scope !== "all"
+		? `?scope=${encodeURIComponent(String(scope))}`
+		: "";
+}
+
+function globalStatsQuery(slice?: GlobalSlice, nation?: string | null): string {
+	const params = new URLSearchParams();
+	if (slice != null && slice !== DEFAULT_GLOBAL_SLICE)
+		params.set("slice", slice);
+	if (nation) params.set("nation", nation);
+	const qs = params.toString();
+	return qs ? `?${qs}` : "";
+}
+
 export const cloudApi = {
 	// --- Auth ---
 	discordStart: (redirectUri: string, next: string | null, opts?: CallOpts) =>
@@ -1139,11 +1163,10 @@ export const cloudApi = {
 		userId: string,
 		opts?: CallOpts & { scope?: UserScope },
 	): Promise<ChartBundle> => {
-		const qs =
-			opts?.scope != null && opts.scope !== "all"
-				? `?scope=${encodeURIComponent(String(opts.scope))}`
-				: "";
-		const res = await request(`/users/${userId}/stats${qs}`, opts);
+		const res = await request(
+			`/users/${userId}/stats${userStatsQuery(opts?.scope)}`,
+			opts,
+		);
 		return res.json() as Promise<ChartBundle>;
 	},
 
@@ -1155,11 +1178,10 @@ export const cloudApi = {
 		userId: string,
 		opts?: CallOpts & { scope?: UserScope },
 	): Promise<RecordsBundle> => {
-		const qs =
-			opts?.scope != null && opts.scope !== "all"
-				? `?scope=${encodeURIComponent(String(opts.scope))}`
-				: "";
-		const res = await request(`/users/${userId}/stats/records${qs}`, opts);
+		const res = await request(
+			`/users/${userId}/stats/records${userStatsQuery(opts?.scope)}`,
+			opts,
+		);
 		return res.json() as Promise<RecordsBundle>;
 	},
 
@@ -1168,38 +1190,29 @@ export const cloudApi = {
 	// credentialed `request` rather than a bare fetch. The payload is still the
 	// same bytes for every viewer (which is what lets the Worker put an
 	// s-maxage on a cookie-gated response).
-	// The selection is a composition slice plus an optional nation; each is
-	// omitted at its default so the default view has one canonical URL, and
-	// so one edge-cache entry rather than several spellings of one bundle.
-	// Served from the nightly precompute in the steady state; a miss computes
-	// in the request, so a cold key is slower and never a failure.
+	// The selection is a composition slice plus an optional nation, spelled by
+	// globalStatsQuery. Served from the nightly precompute in the steady state;
+	// a miss computes in the request, so a cold key is slower and never a
+	// failure.
 	getGlobalStats: async (
 		opts?: CallOpts & { slice?: GlobalSlice; nation?: string | null },
 	): Promise<ChartBundleCore> => {
-		const params = new URLSearchParams();
-		if (opts?.slice != null && opts.slice !== DEFAULT_GLOBAL_SLICE) {
-			params.set("slice", opts.slice);
-		}
-		if (opts?.nation) params.set("nation", opts.nation);
-		const qs = params.toString();
-		const res = await request(`/stats${qs ? `?${qs}` : ""}`, opts);
+		const res = await request(
+			`/stats${globalStatsQuery(opts?.slice, opts?.nation)}`,
+			opts,
+		);
 		return res.json() as Promise<ChartBundleCore>;
 	},
 
 	// The same selection's record boards, fetched when /stats' Records tab
-	// opens. The selection is spelled exactly as getGlobalStats spells it — the
-	// two share a cache key on the Worker, so a divergence here would be a
-	// second spelling of one entry.
+	// opens.
 	getGlobalRecords: async (
 		opts?: CallOpts & { slice?: GlobalSlice; nation?: string | null },
 	): Promise<RecordsBundle> => {
-		const params = new URLSearchParams();
-		if (opts?.slice != null && opts.slice !== DEFAULT_GLOBAL_SLICE) {
-			params.set("slice", opts.slice);
-		}
-		if (opts?.nation) params.set("nation", opts.nation);
-		const qs = params.toString();
-		const res = await request(`/stats/records${qs ? `?${qs}` : ""}`, opts);
+		const res = await request(
+			`/stats/records${globalStatsQuery(opts?.slice, opts?.nation)}`,
+			opts,
+		);
 		return res.json() as Promise<RecordsBundle>;
 	},
 
