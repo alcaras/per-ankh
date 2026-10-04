@@ -70,8 +70,24 @@ const LEGITIMACY_OFFSET = 200;
 // city_id range so a mis-keyed lookup can't land on a real row.
 const RULER_XML_ID_BASE = 1000;
 
-// games.save_date when a fixture doesn't ask for one.
+// games.save_date when a fixture doesn't ask for one. A fixed date, so a
+// fixture that cares when it was played has to say — see daysAgo below.
 const DEFAULT_SAVE_DATE = "2026-01-01";
+
+// A `saveDate` relative to now, for the fixtures the recency window cuts on
+// (cloud/src/games-scope.ts — periodCutoff). The window is measured from the
+// clock, so a fixture dated by a literal passes or fails by its own vintage:
+// DEFAULT_SAVE_DATE falls inside the 12-month window today and outside it next
+// year, with nothing in the suite to say so.
+//
+// Whole days back, not months. Subtracting months is the arithmetic
+// periodCutoff exists to get right — setUTCMonth alone rolls 31 February
+// forward to 3 March — and a fixture helper reproducing the very defect the
+// code under test guards against would be dating the window with a date it had
+// quietly moved. Days have no such edge, so a caller clears a boundary by
+// choosing an offset well away from it rather than by trusting the arithmetic.
+export const daysAgo = (days: number): string =>
+	new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 export interface UploadFixtureOpts {
 	// player_index of the winning human. Restricted to the first two seats,

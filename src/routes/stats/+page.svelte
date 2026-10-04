@@ -14,7 +14,11 @@
 	import { autohideScroll } from "$lib/actions/autohideScroll";
 	import { cloudApi } from "$lib/api-cloud";
 	import GlobalFacetRow from "$lib/stats/GlobalFacetRow.svelte";
-	import { parseGlobalSlice, parseNationFacet } from "$lib/stats/global-facets";
+	import {
+		parseGlobalPeriod,
+		parseGlobalSlice,
+		parseNationFacet,
+	} from "$lib/stats/global-facets";
 	import StatsView from "$lib/stats/StatsView.svelte";
 	import type { PageData } from "./$types";
 
@@ -26,10 +30,15 @@
 	// $derived.by reading the selection *eagerly*: that is what gives this a
 	// dependency on the facet row. An arrow that read data.slice when called
 	// would be a closure this page never rebuilds, and the panel would keep
-	// showing the records of the slice you arrived on.
+	// showing the records of the selection you arrived on.
+	//
+	// All three facets, not just the two that narrow the nation rows: the window
+	// is as much a part of which corpus this is, and a facet missing here fails
+	// twice over — the request goes out without the param, and the closure it
+	// isn't read in never rebuilds, so the panel doesn't even refetch.
 	const loadRecords = $derived.by(() => {
-		const { slice, nation } = data;
-		return () => cloudApi.getGlobalRecords({ slice, nation });
+		const { slice, nation, period } = data;
+		return () => cloudApi.getGlobalRecords({ slice, nation, period });
 	});
 
 	// Not displayed — this is the empty-state gate. A selection narrows the
@@ -57,7 +66,8 @@
 		if (!to) return false;
 		return (
 			parseGlobalSlice(to.url.searchParams.get("slice")) !== data.slice ||
-			parseNationFacet(to.url.searchParams.get("nation")) !== data.nation
+			parseNationFacet(to.url.searchParams.get("nation")) !== data.nation ||
+			parseGlobalPeriod(to.url.searchParams.get("period")) !== data.period
 		);
 	});
 </script>
@@ -71,7 +81,11 @@
 			<div class="mx-auto max-w-screen-2xl">
 				<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 					<h1 class="text-2xl font-bold text-gray-200">Global Stats</h1>
-					<GlobalFacetRow slice={data.slice} nation={data.nation} />
+					<GlobalFacetRow
+						slice={data.slice}
+						nation={data.nation}
+						period={data.period}
+					/>
 				</div>
 
 				<div

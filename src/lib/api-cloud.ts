@@ -5,10 +5,14 @@
 // Configure via VITE_API_URL (see .env.example).
 
 import type { FullGameData } from "$lib/parser/types";
-import { DEFAULT_GLOBAL_SLICE } from "$lib/stats/global-facets";
+import {
+	DEFAULT_GLOBAL_PERIOD,
+	DEFAULT_GLOBAL_SLICE,
+} from "$lib/stats/global-facets";
 import type {
 	ChartBundle,
 	ChartBundleCore,
+	GlobalPeriod,
 	GlobalSlice,
 	RecordsBundle,
 	UserScope,
@@ -600,11 +604,17 @@ function userStatsQuery(scope?: UserScope): string {
 		: "";
 }
 
-function globalStatsQuery(slice?: GlobalSlice, nation?: string | null): string {
+function globalStatsQuery(
+	slice?: GlobalSlice,
+	nation?: string | null,
+	period?: GlobalPeriod,
+): string {
 	const params = new URLSearchParams();
 	if (slice != null && slice !== DEFAULT_GLOBAL_SLICE)
 		params.set("slice", slice);
 	if (nation) params.set("nation", nation);
+	if (period != null && period !== DEFAULT_GLOBAL_PERIOD)
+		params.set("period", period);
 	const qs = params.toString();
 	return qs ? `?${qs}` : "";
 }
@@ -1188,15 +1198,19 @@ export const cloudApi = {
 	// credentialed `request` rather than a bare fetch. The payload is still the
 	// same bytes for every viewer (which is what lets the Worker put an
 	// s-maxage on a cookie-gated response).
-	// The selection is a composition slice plus an optional nation, spelled by
-	// globalStatsQuery. Served from the nightly precompute in the steady state;
-	// a miss computes in the request, so a cold key is slower and never a
-	// failure.
+	// The selection is a composition slice plus an optional nation and recency
+	// window, spelled by globalStatsQuery. Served from the nightly precompute
+	// in the steady state; a miss computes in the request, so a cold key is
+	// slower and never a failure.
 	getGlobalStats: async (
-		opts?: CallOpts & { slice?: GlobalSlice; nation?: string | null },
+		opts?: CallOpts & {
+			slice?: GlobalSlice;
+			nation?: string | null;
+			period?: GlobalPeriod;
+		},
 	): Promise<ChartBundleCore> => {
 		const res = await request(
-			`/stats${globalStatsQuery(opts?.slice, opts?.nation)}`,
+			`/stats${globalStatsQuery(opts?.slice, opts?.nation, opts?.period)}`,
 			opts,
 		);
 		return res.json() as Promise<ChartBundleCore>;
@@ -1205,10 +1219,14 @@ export const cloudApi = {
 	// The same selection's record boards, fetched when /stats' Records tab
 	// opens.
 	getGlobalRecords: async (
-		opts?: CallOpts & { slice?: GlobalSlice; nation?: string | null },
+		opts?: CallOpts & {
+			slice?: GlobalSlice;
+			nation?: string | null;
+			period?: GlobalPeriod;
+		},
 	): Promise<RecordsBundle> => {
 		const res = await request(
-			`/stats/records${globalStatsQuery(opts?.slice, opts?.nation)}`,
+			`/stats/records${globalStatsQuery(opts?.slice, opts?.nation, opts?.period)}`,
 			opts,
 		);
 		return res.json() as Promise<RecordsBundle>;
