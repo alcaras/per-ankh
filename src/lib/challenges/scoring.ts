@@ -37,6 +37,16 @@ import {
  * it, which on such a blob would score an unfinished improvement as built and
  * a captured unit as trained. The verdict is persisted, so a run parsed by a
  * stale tab is refused rather than scored wrong.
+ *
+ * Measured across the 13 saves in `test-data/saves/` at this version:
+ * `tile_xml_id` on 282/282 cities, with the ownership-log join `capturedTurn`
+ * makes resolving for 31/31 captured cities — the join that silently falls
+ * back to the save's own turn on a miss; `build_turns_left` non-null on
+ * 218/5433 improvements and every one of those > 0, the parser nulling it once
+ * the improvement stands, which is what `isUnderConstruction`'s `?? 0` rests
+ * on; `original_tribe` on 256/1976 units across 11 of the 13. Those are counts
+ * over blobs this PARSER_VERSION wrote, not over what D1 holds — stored blobs
+ * came from older parsers, which is the floor's whole reason for existing.
  */
 export const CHALLENGE_MIN_PARSER_VERSION = "2.20.0";
 
