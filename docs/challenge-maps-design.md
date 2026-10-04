@@ -102,7 +102,7 @@ The scorer reads the blob, so what the blob does not carry has to be added first
 - `THEOLOGY_TIERS` — `<iTier>` from `theology.xml`, new generated table, for `religion.min_theology_tier`.
 - `player_wonders[].completed_turn` already means completion: `derivePlayerWonders` keeps only the `WONDER_ACTIVITY` entries whose text says "completed" (the log also carries a "has begun construction" entry per wonder, indistinguishable by `Data1–3`). The filter is on English log text, so a non-English save records no wonders and `build … by_turn` on a wonder cannot be met from it — the same limitation the Wonders tab has today. Nothing to add for v1; the language-independent form (completion = latest entry for a wonder that stands finished on the map) is a follow-up.
 
-Because each is optional on the blob type (older blobs lack it) and the scorer would read its absence as "not under construction" / "trained", the Worker refuses a challenge map or run parsed before `CHALLENGE_MIN_PARSER_VERSION` (2.16.0, `400 STALE_PARSER`) rather than persist a verdict scored on missing fields — the case is a tab left open across a deploy.
+Because each is optional on the blob type (older blobs lack it) and the scorer would read its absence as "not under construction" / "trained", the Worker refuses a challenge map or run parsed before `CHALLENGE_MIN_PARSER_VERSION` (2.20.0, `400 STALE_PARSER`) rather than persist a verdict scored on missing fields — the case is a tab left open across a deploy.
 
 ### 3.5 Stress test: the 26 that already ran
 
@@ -196,7 +196,7 @@ Unit tests beside the module, fixture-driven, one per row of the objective table
 
 ## 6. Data model
 
-### 6.1 Migration `00xx_challenges.sql`
+### 6.1 Migration `0049_challenges.sql`
 
 ```sql
 CREATE TABLE challenges (
@@ -204,10 +204,11 @@ CREATE TABLE challenges (
     number        INTEGER NOT NULL UNIQUE,                -- #27, #28, … the public identity
     title         TEXT NOT NULL,
     description   TEXT,                                   -- plain text; the creator's flavour and any house rules
-    created_by    TEXT NOT NULL REFERENCES users(user_id),
+    created_by    TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     closes_at     TEXT NOT NULL,                          -- ISO; submissions are refused after this. Creator's choice, default 30 days
     setup         TEXT NOT NULL,                          -- JSON, §3.1: nation, leader, traits, map, difficulty, options, xml_game_id, player_index
     objectives    TEXT NOT NULL,                          -- JSON array, §3.2
+    criteria      TEXT NOT NULL,                          -- JSON array, §3.3 — the restrictions, locked with the objectives
     map_r2_key    TEXT NOT NULL,                          -- challenges/{challenge_id}/map.zip
     map_file_hash TEXT NOT NULL,                          -- SHA-256 of the ZIP, for the download ETag and duplicate detection
     map_size_bytes INTEGER NOT NULL,
@@ -219,12 +220,15 @@ CREATE TABLE challenge_submissions (
     submission_id TEXT PRIMARY KEY,                       -- nanoid(21)
     challenge_id  TEXT NOT NULL REFERENCES challenges(challenge_id) ON DELETE CASCADE,
     game_id       TEXT NOT NULL UNIQUE REFERENCES games(game_id) ON DELETE CASCADE,
-    user_id       TEXT NOT NULL REFERENCES users(user_id),
+    user_id       TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     score_turn    INTEGER NOT NULL,                       -- the save's total_turns; only met runs are stored
     verdict       TEXT NOT NULL,                          -- JSON, the Verdict the Worker computed
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX idx_challenges_closes_at ON challenges(closes_at);
+CREATE INDEX idx_challenges_created_by ON challenges(created_by);
 CREATE INDEX idx_challenge_submissions_board ON challenge_submissions(challenge_id, score_turn, created_at);
+CREATE INDEX idx_challenge_submissions_user ON challenge_submissions(user_id);
 ```
 
 **Only met runs are stored.** An unmet upload is refused at the same gate that refuses an incomplete game today (`400 CHALLENGE_NOT_MET`, verdict in the body) and nothing is written — not the game either. The modal's preview means this is a defence, not the normal path.
@@ -285,7 +289,7 @@ Routes, mirroring `tournaments/`:
 
 - `/challenges` — browse. Open challenges, then closed. Cards: `#27 · Title · by creator · Egypt, custom leader · Small Arid Plateau · The Great · closes in 9 days · 12 runs · best T38`. Public.
 - `/challenges/new` — create. Session-gated like `/upload`. Drop the turn-1 save → parse in the browser (§7.1: the parser worker takes a `mode` that skips `validateCompletedGame` and instead requires `total_turns === 1` and one human) → the setup renders as a fact card (a map with seats after the creator's gets a one-click strip, §3.1; anything else it refuses, saying why) → title, description, duration (default 30 days) → objective rows → Create → `/challenges/27`.
-- `/challenges/[number]` — the challenge: header (`Challenge #27 — Title`), the fact card, **Download map** (session-gated; anonymous sees a sign-in prompt), objectives with their deadlines, the three criteria, the leaderboard, **Submit a run** (replaced by "Closed on {date}" once closed), and the creator's edit controls (a popover in the `SettingsPopover` pattern; objectives greyed with "locked — 12 runs submitted" once locked).
+- `/challenges/[number]` — the challenge: header (`Challenge #27 — Title`), the fact card, **Download map** (session-gated; anonymous sees a sign-in prompt), objectives with their deadlines, the three criteria, the leaderboard, **Submit a run** (replaced by "Closed on {date}" once closed), and the creator's edit controls (an inline `Panel` titled "Edit challenge", not a popover: it holds prose-length fields — title, description and the whole `RulesEditor` — that a popover can't. `SettingsPopover`'s pattern is followed by the map download's export button instead. Once a run is scored the editor is replaced by a sentence saying the rules are locked, title and description staying editable beside it).
 - Submit → `/upload?challenge_id=X&return_number=27`, the exact shape of `?tournament_match_id=X&return_slug=Y`. `BulkUploadModal` gains a challenge mode beside its tournament mode: single file, no completed-game gate, and after the parse the verdict preview (§5.1) — each objective and criterion as a ✓/✗ line with what was observed. The Upload button is disabled while unmet. On success it returns to the challenge with the new row highlighted, as a tournament upload returns to its match.
 
 Components in `src/lib/challenges/`: `ChallengeCard`, `SetupFacts`, `ObjectiveEditor` (kind select; target picker from the baked name tables — `tech-names`, `improvement-names` + `wonders`, `unit-stats`, `YIELD_SERIES`, religion/cognomen/culture enums; the per-kind fields of §3.2; deadline where allowed), `CriteriaEditor` (the §3.3 rows, standard set pre-filled), `ObjectiveList`, `CriteriaList`, `VerdictList` (shared by the modal preview and the result), `Leaderboard`.
