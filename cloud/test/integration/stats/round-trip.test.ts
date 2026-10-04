@@ -303,10 +303,12 @@ describe("chart bundle round-trip", () => {
 	});
 
 	// The records are no longer in the bundle snapshot, so their own shape is
-	// asserted here rather than inferred from it. 24 keys: 16 series, less the
-	// three with no board at all (maintenance, happiness, discontent), plus a
-	// ":cum" board for the 11 of the remaining 13 that have a cumulative column
-	// — the two levels have none.
+	// asserted here rather than inferred from it. 24 keys: 17 series, less the
+	// three with no board at all (maintenance, happiness, discontent), and less
+	// GDP — a board is seats, and GDP's band is all-null here because the
+	// fixture blobs carry no prices to value it. That leaves 13, plus a ":cum"
+	// board for the 11 of them that have a cumulative column — the two levels
+	// have none.
 	it("boards every series that has a record board, and only those", async () => {
 		const records = await recordsFor("humans");
 		const keys = Object.keys(records.records);

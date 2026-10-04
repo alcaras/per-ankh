@@ -105,9 +105,15 @@ export interface GdpComponent {
  * interpolated, so the curve starts where the save's history does. A zero row
  * is dropped — it is not a contribution to explain.
  *
- * Maintenance is NOT a term: yield.xml files YIELD_MAINTENANCE with
- * `<SubtractFromYield>YIELD_MONEY</SubtractFromYield>`, so the money rate read
- * here is already net of it. Subtracting it would charge the bill twice.
+ * Maintenance is NOT a term: the money rate read here is already net of it, so
+ * subtracting it would charge the bill twice. yield.xml files YIELD_MAINTENANCE
+ * with `<SubtractFromYield>YIELD_MONEY</SubtractFromYield>`, and the method that
+ * honours that tag is `City.calculateModifiedYieldGovernor` (`City.cs:4678`),
+ * which subtracts any yield whose `meSubtractFromYield` is the one being
+ * computed. It is reached from `Player.updateHistoryRates` (`Player.cs:17020`)
+ * — the writer of the per-turn rate history this prices — through
+ * `Player.calculateYield` (`Player.cs:18085`); unit upkeep arrives on the same
+ * sign through `getYieldUpkeepNet` (`Player.cs:18228`).
  */
 export function gdpComponents(
 	turn: number,

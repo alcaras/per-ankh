@@ -2,7 +2,7 @@
 // YieldsTab). Each chart shows the corpus median line with an optional
 // P25–P75 band and an optional sample-size overlay, in either per-turn-rate
 // or cumulative mode, pooled or split into winners vs losers. The bundle
-// ships every band for all 16 series so the page-level toggles are instant.
+// ships every band for all 17 series so the page-level toggles are instant.
 //
 // Typed against ChartBundleCore (only reads yieldCurves) so it renders
 // unchanged at tournament scope, where the bundle has no Overview — same

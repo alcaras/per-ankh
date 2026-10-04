@@ -229,10 +229,9 @@ export interface EmpireSeries {
 // reads.
 
 /**
- * Upkeep. NOT a GDP term: yield.xml files YIELD_MAINTENANCE with
- * `<SubtractFromYield>YIELD_MONEY</SubtractFromYield>`, so the money rate GDP
- * already reads is net of it. Charting it separately shows the bill; taking it
- * off GDP would charge it twice.
+ * Upkeep. NOT a GDP term — the money rate GDP reads is already net of it, cited
+ * from the game on `gdpComponents` (./gdp-basket). Charting it separately shows
+ * the bill; taking it off GDP would charge it twice.
  */
 export const YIELD_MAINTENANCE = "YIELD_MAINTENANCE";
 
