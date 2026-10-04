@@ -4,6 +4,7 @@
 	// rule can only be authored one way. The parent owns the arrays (bindable,
 	// deep $state) and this component mutates them in place.
 	import Checkbox from "$lib/ui/Checkbox.svelte";
+	import { INPUT_CLASS } from "$lib/ui/classes";
 	import Select from "$lib/ui/Select.svelte";
 	import { WONDER_CULTURE_PREREQ } from "$lib/generated/wonders";
 	import {
@@ -207,8 +208,10 @@
 		return Object.keys(rest).length > 0 ? rest : undefined;
 	}
 
-	const inputClass =
-		"w-20 rounded border border-input bg-surface-raised p-1 text-xs focus:border-input-focus focus:outline-none";
+	// The narrow number input the snippets below render — the shared input
+	// class, sized for a two-or-three-digit figure, as the create page and the
+	// challenge page's own number fields do it.
+	const inputClass = `w-20 text-xs ${INPUT_CLASS}`;
 </script>
 
 {#snippet numberField(
@@ -281,6 +284,10 @@
 	onAdd: (key: string) => void,
 	// eslint-disable-next-line no-unused-vars -- parameter in callback signature
 	onRemove: (key: string) => void,
+	// A map a criterion requires at least one entry in: Remove is redundant
+	// with the criterion's own checkbox once one entry is left, so only offer
+	// it while there's something to thin out — BulkUploadModal's shape.
+	keepLast = false,
 )}
 	<div class="flex flex-col gap-1">
 		{#each Object.keys(map ?? {}) as key (key)}
@@ -299,14 +306,16 @@
 						class={inputClass}
 					/>
 				</label>
-				<button
-					type="button"
-					class="text-gray-400 hover:text-danger"
-					aria-label="Remove"
-					onclick={() => onRemove(key)}
-				>
-					×
-				</button>
+				{#if !keepLast || Object.keys(map ?? {}).length > 1}
+					<button
+						type="button"
+						class="text-gray-400 hover:text-danger"
+						aria-label="Remove"
+						onclick={() => onRemove(key)}
+					>
+						×
+					</button>
+				{/if}
 			</div>
 		{/each}
 		<Select
@@ -728,9 +737,9 @@
 									"≥",
 									(k) => (c.min_rates[k] = 0),
 									(k) => {
-										if (Object.keys(c.min_rates).length > 1)
-											delete c.min_rates[k];
+										delete c.min_rates[k];
 									},
+									true,
 								)}
 							{:else if c.kind === "max_cities"}
 								{@render numberField(

@@ -22,7 +22,12 @@
 	import StatTile from "$lib/StatTile.svelte";
 	import PlayerAvatar from "$lib/tournament/PlayerAvatar.svelte";
 	import { confirmDialog } from "$lib/ui/confirm";
-	import { INPUT_CLASS, PRIMARY_BTN, SECONDARY_BTN } from "$lib/ui/classes";
+	import {
+		DESTRUCTIVE_BTN,
+		INPUT_CLASS,
+		PRIMARY_BTN,
+		SECONDARY_BTN,
+	} from "$lib/ui/classes";
 	import Panel from "$lib/ui/Panel.svelte";
 	import { toast } from "$lib/ui/toast";
 	import { saveBlobAs } from "$lib/utils/download";
@@ -193,7 +198,7 @@
 						{#if canDelete}
 							<button
 								type="button"
-								class="whitespace-nowrap rounded border border-red-400 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-400 hover:text-black disabled:opacity-50"
+								class={DESTRUCTIVE_BTN}
 								disabled={removing}
 								onclick={remove}
 							>
