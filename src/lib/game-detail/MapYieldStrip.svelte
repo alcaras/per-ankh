@@ -19,7 +19,8 @@
 		cumulativeIsGameTotal,
 		type DetailPlayer,
 	} from "./helpers";
-	import { STOCKPILE_SCALE, pricesByTurn } from "./economy";
+	import { STOCKPILE_SCALE } from "./economy";
+	import { pricesByTurn } from "./gdp-basket";
 	import {
 		CHROME_PANEL_CLASS,
 		TOP_BAR_YIELD_GROUPS,

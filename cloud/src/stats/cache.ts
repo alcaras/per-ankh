@@ -58,6 +58,7 @@ const BUNDLE_SCHEMA_CHANGELOG: Record<number, string> = {
 	9: "favorite_day_of_week dropped (no consumer — the profile card reads its own copy from GET /v1/users/:user_id), and save_dates moved from ChartBundleCore to the user-only ChartBundle: only the profile Overview calendar renders it, and it was the one field whose size grew with the corpus rather than with the turn axis",
 	10: "familyKeeps — per-family-class keep rate against the pool's chance baseline, overall and per nation",
 	11: "records moved to their own entry — per yield series, the top seats on each of seven boards (peak, end-of-game, and the T20/T40/T60/T80/T100 checkpoints), for both the rate and the cumulative column. Folded into the pass that already builds the bands, so no new query, but stored and served separately (the ':records' payload segment above) because only the Records tab reads them",
+	12: "gdp — a per-turn GDP series on yieldCurves and a GDP record board, from the game_player_turn columns migration 0048 adds. A new key inside an existing Record rather than a new declared field, so nothing dereferences it blind, but a bundle cached before the deploy would draw an empty GDP chart on the Yields tab for up to a TTL. A flush is cheaper than that",
 };
 
 export const BUNDLE_SCHEMA_VERSION = Math.max(
@@ -237,32 +238,47 @@ export async function putCached<T>(
 	);
 }
 
-// Invalidate every cache entry for the given user. Every viewerScope
-// (self/public) × scope-selection variant is nuked — invalidation paths
-// can't reliably predict which slice changed, and the recompute cost is
-// low.
+// Invalidate cached entries — one user's, or every corpus's.
+//
+// `user` nukes every viewerScope (self/public) × scope-selection variant for
+// that user: invalidation paths can't reliably predict which slice changed,
+// and the recompute cost is low.
+//
+// `all` is for a writer that moves rows any corpus might be counting. A
+// reindexed game sits in its owner's bundle, in the bundle of whatever
+// tournament linked it, and in every global slice that counts it — and none of
+// those keys drift on a re-derivation at the same parser version, because the
+// tournament segment is `tournaments.updated_at` (a tournament mutation, which
+// a reindex is not) and the global keys carry no per-game segment at all. The
+// walk is already paginating the whole prefix, so matching every key costs
+// nothing over working out which corpora to spare. One thing is given up: the
+// global serve-stale entries go with the rest, so the next /stats read rebuilds
+// on the request rather than answering from a previous parser version.
 //
 // We list keys by prefix so we don't have to enumerate every variant
 // manually (and so new scope values Just Work).
 export async function invalidateStatsCache(
 	env: StatsCacheEnv,
-	target: { kind: "user"; user_id: string },
+	target: { kind: "user"; user_id: string } | { kind: "all" },
 ): Promise<void> {
 	// Both payloads: the records entry is the bundle's key with ":records"
-	// appended, so it carries the same `:user:{id}:` anchor and this walk
+	// appended, so it carries the same anchor as its bundle and this walk
 	// catches it without knowing it exists.
 	const prefix = `stats:v${BUNDLE_SCHEMA_VERSION}-p`;
+	const matches =
+		target.kind === "all"
+			? () => true
+			: (name: string) => name.includes(`:user:${target.user_id}:`);
+
 	// Walk the prefix; KV list paginates implicitly via cursor. Volume
 	// here is tiny (one entry per corpus) so we don't worry about cursor
 	// loops in practice.
-	const suffix = `:user:${target.user_id}:`;
-
 	let cursor: string | undefined;
 	do {
 		const res = await env.SESSIONS_KV.list({ prefix, cursor });
 		await Promise.all(
 			res.keys
-				.filter((k) => k.name.includes(suffix))
+				.filter((k) => matches(k.name))
 				.map((k) => env.SESSIONS_KV.delete(k.name)),
 		);
 		cursor = res.list_complete ? undefined : res.cursor;

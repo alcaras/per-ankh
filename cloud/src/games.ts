@@ -27,6 +27,15 @@ import {
 	jsonResponse,
 	sha256Hex,
 } from "./util";
+// Reaching across the package boundary, which cloud/ does only for a module
+// that drags nothing with it — gdp-basket.ts is deliberately dependency-free
+// (no $lib aliases) so the Worker bundle can hold the one definition of the
+// basket rather than a mirror of it that drifts.
+import {
+	gdpForTurn,
+	type PricePoint,
+	pricesByTurn,
+} from "../../src/lib/game-detail/gdp-basket";
 import { NATION_NAMES } from "./generated/nation-names";
 import { WONDER_CULTURE_PREREQ } from "./generated/wonders";
 import { sessionFromRequest } from "./session";
@@ -535,6 +544,7 @@ function buildSummaryStatements(
 //   YieldDataPoint    = { turn, rate, cumulative }   ← both columns per point
 //   PlayerHistory     = { player_id, history: PlayerHistoryPoint[] }
 //   PlayerHistoryPoint= { turn, points, military_power, legitimacy }
+//   YieldPriceEntry   = { turn, yield_type, price }   ← the GDP basket's prices
 //
 // Pivot into rows keyed by (player_index, turn). Each yield entry fills two
 // columns per turn (rate → *_per_turn, cumulative → *_cumulative). Each
@@ -543,6 +553,13 @@ function buildSummaryStatements(
 //
 // Yield name mapping: XML `YIELD_FOOD` → `food` → columns `food_per_turn`
 // and `food_cumulative`.
+//
+// GDP is the one derived column here: the save does not report it, so it is
+// priced from yield_price_history against the rates above, through the same
+// module the Economy tab charts from (src/lib/game-detail/gdp-basket.ts) so a
+// game page and that game's record can't disagree. gdp_cumulative is the
+// running sum of the rate — GDP is a flow, so its total is lifetime output and
+// never a stockpile.
 function buildGamePlayerTurnStatements(
 	db: QueryableD1,
 	gameId: string,
@@ -603,6 +620,45 @@ function buildGamePlayerTurnStatements(
 	}
 
 	if (rowsByKey.size === 0) return [];
+
+	// ── GDP, priced per player from the rates already pivoted above.
+	//
+	// A game whose save recorded no prices gets no GDP at all rather than a
+	// curve priced at some assumed base: NULL means "not known here", and a
+	// reader that treats it as zero would be inventing a claim about the game.
+	const priceCurves = pricesByTurn(
+		(blob.yield_price_history ?? []) as PricePoint[],
+		Math.max(0, ...[...rowsByKey.values()].map((r) => Number(r.turn))),
+	);
+	if (priceCurves.size > 0) {
+		// Per player, in turn order, so the running sum is a running sum.
+		const byPlayer = new Map<number, Row[]>();
+		for (const row of rowsByKey.values()) {
+			const idx = Number(row.player_index);
+			const list = byPlayer.get(idx);
+			if (list) list.push(row);
+			else byPlayer.set(idx, [row]);
+		}
+		for (const rows of byPlayer.values()) {
+			rows.sort((a, b) => Number(a.turn) - Number(b.turn));
+			let running = 0;
+			for (const row of rows) {
+				const turn = Number(row.turn);
+				const gdp = gdpForTurn(
+					turn,
+					(yieldType) => {
+						const col = `${yieldType.replace(/^YIELD_/, "").toLowerCase()}_per_turn`;
+						const v = row[col];
+						return typeof v === "number" ? v : undefined;
+					},
+					priceCurves,
+				);
+				running += gdp;
+				row.gdp_per_turn = gdp;
+				row.gdp_cumulative = running;
+			}
+		}
+	}
 
 	// Momentum: score the fitted win-probability model for finished duels —
 	// exactly two humans, known winner — and attach p to each player's turn
@@ -675,6 +731,8 @@ function buildGamePlayerTurnStatements(
 		"military_power",
 		"legitimacy",
 		"points",
+		"gdp_per_turn",
+		"gdp_cumulative",
 		"momentum",
 		"momentum_version",
 	];
@@ -3396,6 +3454,16 @@ export async function handleAdminReindex(
 			game_id: gameId,
 		});
 	}
+
+	// Stats cache invalidation, every corpus — the rebuild above rewrote
+	// game_player_turn, which is what all three bundles aggregate, and this
+	// game is counted by its owner's, by whatever tournament linked it, and by
+	// the global slices. None of those keys drift on a reindex (see
+	// invalidateStatsCache), so without this a column backfilled by a sweep
+	// stays invisible for the full 24h TTL: the pre-sweep entry keeps being
+	// served, and a band that is all-null only because the sweep hasn't landed
+	// reads as a corpus with nothing to show.
+	await invalidateStatsCache(env, { kind: "all" });
 
 	return jsonResponse({ reindexed: true }, 200, cors);
 }

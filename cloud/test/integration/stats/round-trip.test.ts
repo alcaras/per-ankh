@@ -303,10 +303,12 @@ describe("chart bundle round-trip", () => {
 	});
 
 	// The records are no longer in the bundle snapshot, so their own shape is
-	// asserted here rather than inferred from it. 24 keys: 16 series, less the
-	// three with no board at all (maintenance, happiness, discontent), plus a
-	// ":cum" board for the 11 of the remaining 13 that have a cumulative column
-	// — the two levels have none.
+	// asserted here rather than inferred from it. 24 keys: 17 series, less the
+	// three with no board at all (maintenance, happiness, discontent), and less
+	// GDP — a board is seats, and GDP's band is all-null here because the
+	// fixture blobs carry no prices to value it. That leaves 13, plus a ":cum"
+	// board for the 11 of them that have a cumulative column — the two levels
+	// have none.
 	it("boards every series that has a record board, and only those", async () => {
 		const records = await recordsFor("humans");
 		const keys = Object.keys(records.records);
@@ -384,7 +386,12 @@ describe("chart bundle round-trip", () => {
 					: await bundleFor("humans");
 			expect(b.yieldCurves.turns, focal).toHaveLength(SEEDED_TURNS);
 			expect(b.yieldCurves.outcome, focal).not.toBeNull();
-			expect(Object.keys(b.yieldCurves.series), focal).toHaveLength(16);
+			// 17: the 14 yields, the two stock levels, and GDP. GDP's band is
+			// present but all-null here — the fixture blobs carry no
+			// yield_price_history, so there is nothing to price — which is the
+			// ordinary state the Yields panel drops a card for rather than
+			// drawing an empty axis.
+			expect(Object.keys(b.yieldCurves.series), focal).toHaveLength(17);
 			for (const field of [
 				"nations",
 				"nationWinRate",
