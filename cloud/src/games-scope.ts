@@ -207,8 +207,10 @@ export function parseSliceParam(raw: string | null): GlobalSlice {
 // the question the window answers is "what does the game look like now".
 //
 // save_date is an ISO date string, so the comparison is a plain string one —
-// lexicographic order is chronological. A game with no save_date (three of the
-// 816 in the local corpus) is not datable and drops out of every window; the
+// lexicographic order is chronological, which is measured rather than assumed:
+// 802 of the 803 public games in the 2026-10-04 snapshot carry a 10-character
+// YYYY-MM-DD, and the one that doesn't carries nothing at all. A game with no
+// save_date (that one) is not datable and drops out of every window; the
 // all-time view is where it still counts.
 export const DEFAULT_GLOBAL_PERIOD: GlobalPeriod = "all";
 
