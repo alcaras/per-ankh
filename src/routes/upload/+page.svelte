@@ -8,6 +8,7 @@
 	import Breadcrumb, { type Crumb } from "$lib/Breadcrumb.svelte";
 	import BulkUploadModal from "$lib/BulkUploadModal.svelte";
 	import HieroglyphParade from "$lib/HieroglyphParade.svelte";
+	import { loginBounce } from "$lib/utils/safe-next";
 	import type { PageData } from "./$types";
 
 	// Every mode's context — the challenge rules, the tournament name and
@@ -51,9 +52,11 @@
 	onMount(async () => {
 		const me = await cloudApi.getMe();
 		if (!me) {
-			const next = encodeURIComponent(page.url.pathname);
+			// loginBounce carries pathname + search, so a challenge or tournament
+			// link survives the round trip through OAuth — bouncing on the
+			// pathname alone landed the reader back on a context-less /upload.
 			// eslint-disable-next-line svelte/no-navigation-without-resolve -- dynamic next-query construction; resolve()'s branded types don't admit dynamic search strings
-			await goto(`/?next=${next}`, { replaceState: true });
+			await goto(loginBounce(page.url), { replaceState: true });
 			return;
 		}
 		ready = true;

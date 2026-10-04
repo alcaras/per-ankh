@@ -25,6 +25,7 @@
 	import { toast } from "$lib/ui/toast";
 	import { saveBlobAs } from "$lib/utils/download";
 	import { profileHref } from "$lib/utils/profile-href";
+	import { loginBounce } from "$lib/utils/safe-next";
 
 	interface Props {
 		gameId: string;
@@ -178,9 +179,10 @@
 			saveBlobAs(blob, filename);
 		} catch (err) {
 			if (err instanceof UnauthorizedError) {
-				const next = encodeURIComponent(page.url.pathname);
+				// loginBounce carries pathname + search, so the tab the reader was
+				// on survives the round trip through OAuth.
 				// eslint-disable-next-line svelte/no-navigation-without-resolve -- dynamic next-query construction; resolve()'s branded types don't admit dynamic search strings
-				await goto(`/?next=${next}`);
+				await goto(loginBounce(page.url));
 				return;
 			}
 			if (err instanceof ApiError && err.status === 429) {
