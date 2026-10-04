@@ -345,9 +345,6 @@ export function compareSemver(a: string, b: string): number {
 	return 0;
 }
 
-// A challenge map or run parsed before CHALLENGE_MIN_PARSER_VERSION — a tab
-// left open across a deploy — would be scored on fields it doesn't carry
-// (see the constant), and the verdict is persisted; refuse it instead.
 // The audit row for a dedup hit that still did something — relinked a
 // tournament match or rescored a challenge run against the save already on
 // file. The storage side was a no-op, so this is the only record of it.
@@ -383,6 +380,9 @@ function openChallengeRunResponse(cors: Record<string, string>): Response {
 	);
 }
 
+// A challenge map or run parsed before CHALLENGE_MIN_PARSER_VERSION — a tab
+// left open across a deploy — would be scored on fields it doesn't carry
+// (see the constant), and the verdict is persisted; refuse it instead.
 export function staleParserResponse(
 	parserVersion: string,
 	cors: Record<string, string>,
