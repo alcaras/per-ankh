@@ -475,8 +475,7 @@ interface PortraitAgePair {
 interface PortraitEntry {
 	zType?: string;
 	azAgeGroupSpriteNames?:
-		| { Pair?: PortraitAgePair | PortraitAgePair[] }
-		| string;
+		{ Pair?: PortraitAgePair | PortraitAgePair[] } | string;
 }
 
 // The portrait-definition files: the base table plus hyphenated DLC variants

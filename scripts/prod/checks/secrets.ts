@@ -43,8 +43,7 @@ interface SecretEntry {
 // the same question of a second Worker, and two copies of the banner-slicing
 // and parse handling would be two places to fix when wrangler's output shifts.
 type SecretListing =
-	| { ok: true; names: Set<string> }
-	| { ok: false; reason: string };
+	{ ok: true; names: Set<string> } | { ok: false; reason: string };
 
 async function listSecrets(env: CloudEnv, cwd: string): Promise<SecretListing> {
 	const r = await runCaptured(

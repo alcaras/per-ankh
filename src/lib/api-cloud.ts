@@ -99,9 +99,7 @@ export interface YouTubeAttributedVideo extends RecentVideo {
 // channel as a YouTubeAttributedVideo (raw channel name/link); a feed that
 // omitted the uploader as a plain RecentVideo.
 export type TournamentVideo =
-	| RecentVideo
-	| CreatorVideo
-	| YouTubeAttributedVideo;
+	RecentVideo | CreatorVideo | YouTubeAttributedVideo;
 
 // One video in the site-admin featured set — the public feed
 // (GET /v1/featured-videos) and the admin list (GET /v1/admin/featured-videos).

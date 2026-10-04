@@ -150,9 +150,7 @@ export interface TestSlot {
 //   auto-advance this implicitly closes Round 1 and generates Round 2 for both
 //   divisions.
 export type TournamentPhase =
-	| "setup"
-	| "swiss-round-1-generated"
-	| "swiss-round-1-complete";
+	"setup" | "swiss-round-1-generated" | "swiss-round-1-complete";
 
 export interface TestTournament {
 	readonly tournamentId: string;

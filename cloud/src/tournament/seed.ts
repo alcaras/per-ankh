@@ -126,10 +126,7 @@ export interface SeedPlan {
 }
 
 export type FillStage =
-	| "mid-swiss"
-	| "swiss-done"
-	| "mid-championship"
-	| "complete";
+	"mid-swiss" | "swiss-done" | "mid-championship" | "complete";
 
 export interface SeedOptions {
 	slug: string;

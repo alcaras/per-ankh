@@ -67,12 +67,7 @@ export type TableState = {
 };
 
 export type TableName =
-	| "events"
-	| "cities"
-	| "improvements"
-	| "specialists"
-	| "laws"
-	| "units";
+	"events" | "cities" | "improvements" | "specialists" | "laws" | "units";
 
 // The display row for the cities table: a CityInfo augmented with the resolved
 // founding nation (see resolveCityRows). founder_nation is derived from the
@@ -794,12 +789,7 @@ export const UNIT_CLASS_COLORS: Record<UnitClass, string> = {
 // ─── Timeline Types ─────────────────────────────────────────────────
 
 export type TimelineCategory =
-	| "tech"
-	| "law"
-	| "city"
-	| "religion"
-	| "wonder"
-	| "battle";
+	"tech" | "law" | "city" | "religion" | "wonder" | "battle";
 
 // The timeline table buckets by nation, so `nation` is the whole of a row's
 // attribution — hence no player name here. The one it used to carry was a

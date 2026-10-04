@@ -73,7 +73,13 @@ interface AuditException {
 	ghsa: string;
 	reason: string;
 }
-const AUDIT_EXCEPTIONS: AuditException[] = [];
+const AUDIT_EXCEPTIONS: AuditException[] = [
+	{
+		ghsa: "GHSA-vfj7-8cjw-p6xm",
+		reason:
+			"braces <=3.0.3 — no patched release exists; 3.0.3 is the latest published version, so no override or bump clears it. Reached only through tailwindcss 3.4.19, via its chokidar 3.6.0 and micromatch 4.0.8. Dev tooling only: Tailwind's build-time file watcher and globber, never shipped to the browser bundle or the Worker — `npm audit --omit=dev` reports zero vulnerabilities. npm's only suggested fix is tailwindcss 4.3.3, a semver-major migration (v4 is CSS-first config and drops both deps). Retire when braces ships a patched release, or when the Tailwind 4 upgrade lands.",
+	},
+];
 
 async function npmAudit(cwd: string, resultName: string): Promise<CheckResult> {
 	const start = Date.now();

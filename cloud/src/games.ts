@@ -615,8 +615,7 @@ function buildGamePlayerTurnStatements(
 	const humans = roster.filter((r) => r.is_human);
 	const winner = (
 		blob.match_metadata as
-			| { winner?: { winner_player_xml_id?: number | null } | null }
-			| undefined
+			{ winner?: { winner_player_xml_id?: number | null } | null } | undefined
 	)?.winner?.winner_player_xml_id;
 	const finalTurn = (blob.game_details as { total_turns?: number } | undefined)
 		?.total_turns;

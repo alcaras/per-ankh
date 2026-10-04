@@ -21,6 +21,9 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { format as prettierFormat, resolveConfig } from "prettier";
+
 import { readFamilyPools } from "./lib/family-pools";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +56,16 @@ async function main(): Promise<void> {
 		`\tRecord<string, readonly string[]>\n` +
 		`> = {\n${rows}\n};\n`;
 
-	writeFileSync(OUT, out);
+	// Formatted the way the other bakers format theirs: the emitted source is
+	// hand-built, so prettier is what keeps it identical to what format:check
+	// expects after a re-bake.
+	const config = await resolveConfig(OUT);
+	const formatted = await prettierFormat(out, {
+		...config,
+		parser: "typescript",
+		filepath: OUT,
+	});
+	writeFileSync(OUT, formatted);
 	console.log(
 		`wrote ${OUT} (${nations.length} nations, ` +
 			`${nations.map((n) => pools.get(n)!.size).join("/")} families)`,

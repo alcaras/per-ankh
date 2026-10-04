@@ -383,12 +383,7 @@ export interface RecordsBundle {
 // "tournament" = derived game-type buckets (they partition the library);
 // a number = a stored collection_id.
 export type UserScope =
-	| "all"
-	| "public"
-	| "vs_ai"
-	| "mp"
-	| "tournament"
-	| number;
+	"all" | "public" | "vs_ai" | "mp" | "tournament" | number;
 
 // The single slice selection for the global corpus — one composition of the
 // player roster, the /stats sibling of UserScope's game-type buckets. "all" is

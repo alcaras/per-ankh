@@ -89,14 +89,12 @@
 			cells: byPlayer.map(({ techs }) =>
 				techs
 					.filter((t) => t.completed_turn === turn)
-					.map(
-						(t): Cell => ({
-							tech: t.tech,
-							bonus: t.tech.includes("_BONUS"),
-							laws: TECH_LAWS[t.tech] ?? [],
-							shared: (ownerCounts.get(t.tech) ?? 0) === players.length,
-						}),
-					),
+					.map((t): Cell => ({
+						tech: t.tech,
+						bonus: t.tech.includes("_BONUS"),
+						laws: TECH_LAWS[t.tech] ?? [],
+						shared: (ownerCounts.get(t.tech) ?? 0) === players.length,
+					})),
 			),
 		}));
 	});

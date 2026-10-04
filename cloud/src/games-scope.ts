@@ -227,8 +227,7 @@ export interface AdminGameFilter {
 }
 
 export type AdminGameFilterResult =
-	| { ok: true; filter: AdminGameFilter }
-	| { ok: false; message: string };
+	{ ok: true; filter: AdminGameFilter } | { ok: false; message: string };
 
 const NANOID_RE = /^[A-Za-z0-9_-]{21}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;

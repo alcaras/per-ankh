@@ -36,10 +36,7 @@ export function partInstant(part: TournamentMatchPart): number | null {
 //   unscheduled  — pending, no part scheduled at all.
 // Byes return null (auto-resolved, nothing to show).
 export type MatchDisplayStatus =
-	| "completed"
-	| "in_progress"
-	| "scheduled"
-	| "unscheduled";
+	"completed" | "in_progress" | "scheduled" | "unscheduled";
 
 // Shared chip wording for the display statuses. Unscheduled matches don't get
 // a chip (absence of a schedule isn't worth a badge), so it's not listed.

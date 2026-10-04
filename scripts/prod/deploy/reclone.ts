@@ -43,8 +43,7 @@ export interface R2SyncCreds {
 }
 
 export type CredsResult =
-	| { ok: true; creds: R2SyncCreds }
-	| { ok: false; missing: string[] };
+	{ ok: true; creds: R2SyncCreds } | { ok: false; missing: string[] };
 
 const CRED_KEYS = [
 	"CF_ACCOUNT_ID",

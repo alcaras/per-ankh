@@ -39,9 +39,7 @@ beforeAll(async () => {
 });
 
 type ReadEventType =
-	| "tournament_view"
-	| "tournament_list_view"
-	| "tournament_link_view";
+	"tournament_view" | "tournament_list_view" | "tournament_link_view";
 
 // Fill an IP's hourly bucket for one event type without firing N real reads.
 //
