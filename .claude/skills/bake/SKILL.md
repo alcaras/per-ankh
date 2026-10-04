@@ -56,7 +56,9 @@ npm run bake:family-pools      # cloud/src/generated/family-pools.ts — each na
 npm run bake:owtt              # owtt.ts (needs a local owtt checkout, OWTT_DIR)
 npm run bake:momentum          # momentum.ts (src/ AND cloud/src/; fits on a local blob corpus)
 npm run bake:family-opinion    # family-opinion.ts (opinion bands + their city-upkeep effect)
-npm run bake:improvement-builds # improvement-builds.ts (worker-turn build cost per improvement)
+npm run bake:improvement-builds # improvement-builds.ts (src/ AND cloud/src/; worker-turn build
+                               # cost per improvement, plus the in-place upgrade chains the
+                               # challenge scorer reads)
 npm run bake:starting-techs    # starting-techs.ts (each nation's starting techs)
 npm run bake:family-colors     # family-colors.ts (each family's in-game colour)
 npm run bake:yield-colors      # yield-colors.ts (each yield's chart colour)
@@ -64,6 +66,15 @@ npm run bake:orders-sources    # orders-sources.ts (orders-per-turn + legitimacy
 npm run bake:power-tiers       # power-tiers.ts (military-power comparison tiers)
 npm run bake:cognomens         # cognomens.ts (cognomen → legitimacy + display string)
 npm run bake:wonders           # wonders.ts (src/ AND cloud/src/)
+npm run bake:dynasty-traits    # dynasty-traits.ts (src/ AND cloud/src/; the traits the game
+                               # ties to a historical ruler) + leader-traits.ts (frontend only)
+npm run bake:theology-tiers    # theology-tiers.ts (src/ AND cloud/src/; each theology's tier)
+```
+
+Not a table baker at all — `bake:challenge-mirror` regenerates the Worker's copy of the challenge scorer from the frontend source, the way `bake:momentum -- --mirror-only` does for momentum. It reads no XML, and it is in `bake:all`, so a full bake leaves no mirror stale; `cloud/src/challenges/mirror.test.ts` fails when an on-disk mirror isn't what the transform produces:
+
+```bash
+npm run bake:challenge-mirror  # cloud/src/challenges/{scoring,types}.ts from src/lib/challenges/
 ```
 
 Then:
@@ -73,7 +84,7 @@ npm run bake:finalize          # Emits committed manifest TS modules + reconcile
 npm run bake:all               # Every baker above except unit-stats, owtt + momentum, then finalize
 ```
 
-`bake:all` runs 28 of the 31 bakers above, in the order listed, then `finalize`. It deliberately omits `bake:unit-stats`, `bake:owtt` and `bake:momentum` — rerun those by hand when their sources change. Membership doesn't follow from what a baker reads: `bake:atlas-pool` needs an owtournamentatlas checkout and is in `bake:all`, while `bake:unit-stats` reads only `Reference/XML` and isn't — so a new baker records its choice here either way. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
+`bake:all` runs 32 of the 35 bakers above, in the order listed, then `finalize`. It deliberately omits `bake:unit-stats`, `bake:owtt` and `bake:momentum` — rerun those by hand when their sources change. Membership doesn't follow from what a baker reads: `bake:atlas-pool` needs an owtournamentatlas checkout and is in `bake:all`, while `bake:unit-stats` reads only `Reference/XML` and isn't — so a new baker records its choice here either way. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
 
 ## Adding a name-override table
 
