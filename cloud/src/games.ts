@@ -3455,5 +3455,15 @@ export async function handleAdminReindex(
 		});
 	}
 
+	// Stats cache invalidation, every corpus — the rebuild above rewrote
+	// game_player_turn, which is what all three bundles aggregate, and this
+	// game is counted by its owner's, by whatever tournament linked it, and by
+	// the global slices. None of those keys drift on a reindex (see
+	// invalidateStatsCache), so without this a column backfilled by a sweep
+	// stays invisible for the full 24h TTL: the pre-sweep entry keeps being
+	// served, and a band that is all-null only because the sweep hasn't landed
+	// reads as a corpus with nothing to show.
+	await invalidateStatsCache(env, { kind: "all" });
+
 	return jsonResponse({ reindexed: true }, 200, cors);
 }
