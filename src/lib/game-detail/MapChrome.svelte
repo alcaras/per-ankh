@@ -14,6 +14,7 @@
 		formatArchetype,
 		formatEnum,
 		nationName,
+		turnCount,
 	} from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import MapYieldStrip from "./MapYieldStrip.svelte";
@@ -263,7 +264,7 @@
 							{techName(research.tech)}
 						</span>
 						<span class="block text-[10px] tabular-nums"
-							>{research.turns} turns</span
+							>{turnCount(research.turns)}</span
 						>
 					</span>
 				</button>

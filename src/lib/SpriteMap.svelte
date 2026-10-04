@@ -390,9 +390,16 @@
 		y: number;
 	}
 	let hoverState = $state<HoverState | null>(null);
-	let containerEl: HTMLDivElement | null = $state(null);
-	let containerWidth = $state(0);
-	let containerHeight = $state(0);
+
+	// The box both overlays work in, in canvas-local CSS pixels: the hover
+	// panel clamps to its edges, and the city banners project into it. It is
+	// the CANVAS's size and not the container's — deck.gl pins
+	// `canvas.style.width`/`height` to the numbers the Deck is constructed
+	// with (`_setCanvasSize`), so the canvas keeps the size it had at init
+	// however the container is resized afterwards. A banner placed against the
+	// container's size slides off its tile by half the difference.
+	let deckWidth = $state(0);
+	let deckHeight = $state(0);
 
 	// Camera-control state. Tracked here so the overlay zoom buttons can read
 	// the current zoom and pan target and feed adjusted values back into the
@@ -1335,6 +1342,9 @@
 		const canvasHeight = deckCanvas.clientHeight;
 		if (width === 0 || canvasHeight === 0) return;
 
+		deckWidth = width;
+		deckHeight = canvasHeight;
+
 		// Clean up existing deck
 		if (deck) {
 			deck.finalize();
@@ -1800,21 +1810,8 @@
 			}
 		}, 100);
 
-		// Track container size for tooltip edge-flip clamping. ResizeObserver
-		// fires on initial mount too, so no separate initialization needed.
-		let resizeObserver: ResizeObserver | null = null;
-		if (containerEl) {
-			resizeObserver = new ResizeObserver(() => {
-				if (!containerEl) return;
-				containerWidth = containerEl.clientWidth;
-				containerHeight = containerEl.clientHeight;
-			});
-			resizeObserver.observe(containerEl);
-		}
-
 		return () => {
 			clearInterval(visibilityCheck);
-			resizeObserver?.disconnect();
 			if (deck) {
 				deck.finalize();
 				deck = null;
@@ -1871,7 +1868,7 @@
 	</div>
 {/snippet}
 
-<div class="sprite-map-container" bind:this={containerEl}>
+<div class="sprite-map-container">
 	<canvas bind:this={deckCanvas} class="sprite-map-canvas"></canvas>
 
 	{@render zoomControls()}
@@ -1880,8 +1877,8 @@
 		<MapCityBanners
 			banners={cityBanners}
 			viewState={currentViewState}
-			canvasWidth={containerWidth}
-			canvasHeight={containerHeight}
+			canvasWidth={deckWidth}
+			canvasHeight={deckHeight}
 			onBannerHover={(tile, x, y) => (hoverState = { tile, x, y })}
 			onBannerClick={onCityClick}
 		/>
@@ -1896,8 +1893,8 @@
 			nationCrestKey={resolveNationCrestKey(hoverState.tile.owner_nation)}
 			screenX={hoverState.x}
 			screenY={hoverState.y}
-			{containerWidth}
-			{containerHeight}
+			canvasWidth={deckWidth}
+			canvasHeight={deckHeight}
 		/>
 	{/if}
 </div>

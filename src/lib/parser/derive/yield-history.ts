@@ -63,9 +63,11 @@ function earliestTurn(rows: { turn: number }[]): number | null {
  * rows do: after an upgrade every series of every player starts together, at
  * a turn well past the first. A game that recorded totals from the start has
  * its earliest total row within a turn of its earliest rate row. (A single
- * series can still start late, because the game writes no row while a total
- * is zero — `setTurnYieldTotal`, Player.cs:7969 — but not all of them at
- * once.)
+ * series can still start late, and can skip turns in the middle, because
+ * `setTurnYieldTotal` (Player.cs:7969) writes a row only when the total
+ * differs from the previous turn's — which is why forward-filling the last
+ * row is the right read, and why a total that stays at zero has no rows at
+ * all. But a whole save's series don't start late at once.)
  *
  * Across the 122 local saves this splits 68 with no totals, 49 complete
  * (earliest total row on turn 1 or 2, against an earliest rate row of 1 or

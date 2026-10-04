@@ -12,8 +12,8 @@
 		nationCrestKey = null,
 		screenX,
 		screenY,
-		containerWidth,
-		containerHeight,
+		canvasWidth,
+		canvasHeight,
 	}: {
 		tile: MapTile;
 		// Resolved family enum like "FAMILY_PTOLEMY", or null if unknown / not city.
@@ -24,8 +24,10 @@
 		nationCrestKey?: string | null;
 		screenX: number;
 		screenY: number;
-		containerWidth: number;
-		containerHeight: number;
+		// The deck canvas the panel sits over, in CSS pixels — the box it
+		// edge-flips inside.
+		canvasWidth: number;
+		canvasHeight: number;
 	} = $props();
 
 	const nationColor = $derived.by(() => {
@@ -65,7 +67,7 @@
 	);
 
 	// Conservative size estimate for edge-flip clamping. Exact CSS size depends on
-	// content; over-estimating just biases toward flipping at container edges.
+	// content; over-estimating just biases toward flipping at the canvas edges.
 	const ESTIMATED_W = 200;
 	const ESTIMATED_H = 110;
 	const OFFSET = 12;
@@ -73,10 +75,10 @@
 	const positionStyle = $derived.by(() => {
 		let left = screenX + OFFSET;
 		let top = screenY + OFFSET;
-		if (containerWidth > 0 && left + ESTIMATED_W > containerWidth) {
+		if (canvasWidth > 0 && left + ESTIMATED_W > canvasWidth) {
 			left = screenX - OFFSET - ESTIMATED_W;
 		}
-		if (containerHeight > 0 && top + ESTIMATED_H > containerHeight) {
+		if (canvasHeight > 0 && top + ESTIMATED_H > canvasHeight) {
 			top = screenY - OFFSET - ESTIMATED_H;
 		}
 		if (left < 4) left = 4;

@@ -15,7 +15,12 @@
 	import { ownershipChangeTurn } from "$lib/parser/types";
 	import { getCivilizationColor } from "$lib/config";
 	import { IMPROVEMENT_BUILDS } from "$lib/generated/improvement-builds";
-	import { characterName, formatEnum, nationName } from "$lib/utils/formatting";
+	import {
+		characterName,
+		formatEnum,
+		nationName,
+		turnCount,
+	} from "$lib/utils/formatting";
 	import SpriteIcon from "./SpriteIcon.svelte";
 	import { tileXmlId } from "./reconstruct-map-tiles";
 	import {
@@ -406,7 +411,7 @@
 						<dd>
 							{city.assimilate_turns === 0
 								? "Complete"
-								: `${city.assimilate_turns} turns left`}
+								: `${turnCount(city.assimilate_turns)} left`}
 						</dd>
 					{/if}
 					{#if governor}

@@ -1,6 +1,6 @@
 # Game Detail View (`src/lib/game-detail/`)
 
-Builds the `/games/[id]` page.
+Builds a game's two views: the analyst view at `/games/[id]` (the tab strip) and the map view at `/games/[id]/map` (the chrome over `SpriteMap`). Both mount `GameHeader` and render their tabs through `GameTab`.
 
 ## Adding to the view
 

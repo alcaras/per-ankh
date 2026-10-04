@@ -144,6 +144,19 @@ export function toRomanNumeral(value: number): string {
 }
 
 /**
+ * A number of turns with its noun, so a one-turn span doesn't read "1 turns".
+ * The game has no plural-aware string of its own — its own turn counts carry a
+ * label instead ("Turns: {0}", TEXT_HOF_TOOLTIP_TURNS) — so the plural is ours.
+ *
+ * @example
+ * turnCount(1) // "1 turn"
+ * turnCount(4) // "4 turns"
+ */
+export function turnCount(turns: number): string {
+	return `${turns} ${turns === 1 ? "turn" : "turns"}`;
+}
+
+/**
  * Formats map class values by removing the MAPCLASS prefix and splitting PascalCase.
  *
  * @param value - The map class value (e.g., "MAPCLASS_MapScriptContinent", "MAPCLASS_AridPlateau")
