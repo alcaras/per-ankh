@@ -1338,19 +1338,23 @@ export async function handleTournamentBracket(
 
 	// Linked-game turn counts for matches that have a reported game. The
 	// complete-tournament header renders "won the final … in N turns" off the
-	// championship final's count; one batched lookup covers every match here.
+	// championship final's count; this covers every match here. Chunked under
+	// D1's 100-param cap like the sibling reads — the list grows with reported
+	// matches, so binding it whole fails the read once a tournament passes 100
+	// distinct linked games, and that takes down the whole tournament page:
+	// the detail route loads the bracket alongside the other three.
 	const gameIds = [
 		...new Set(
 			matches.map((m) => m.game_id).filter((id): id is string => id !== null),
 		),
 	];
 	const turnsByGame = new Map<string, number>();
-	if (gameIds.length > 0) {
+	for (const ids of chunk(gameIds, CHUNK_SIZE)) {
 		const res = await env.SHARE_DB.prepare(
 			`SELECT game_id, total_turns FROM games
-			 WHERE game_id IN (${gameIds.map(() => "?").join(",")})`,
+			 WHERE game_id IN (${ids.map(() => "?").join(",")})`,
 		)
-			.bind(...gameIds)
+			.bind(...ids)
 			.all<{ game_id: string; total_turns: number }>();
 		for (const row of res.results ?? []) {
 			turnsByGame.set(row.game_id, row.total_turns);
