@@ -20,6 +20,7 @@ import type { CityInfo } from "$lib/types/CityInfo";
 import type { EventLog } from "$lib/types/EventLog";
 import type { ImprovementInfo } from "$lib/types/ImprovementInfo";
 import type { YieldHistory } from "$lib/types/YieldHistory";
+import { ownershipChangeTurn } from "$lib/parser/types";
 import type {
 	PlayerResourceInfo,
 	TileOwnershipEntry,
@@ -481,6 +482,8 @@ function cumulative(deltas: number[], finalTurn: number): number[] {
  * Tiles held, turn by turn. `tile_ownership_history` records every change of
  * ownership, so a tile counts for its owner from the turn they took it until
  * the turn someone else does — losses included, unlike the other two curves.
+ * Each entry is keyed to the turn after its change, which `ownershipChangeTurn`
+ * undoes.
  */
 export function territorySeries(
 	history: TileOwnershipEntry[],
@@ -506,9 +509,16 @@ export function territorySeries(
 			if (owner == null) continue;
 			const d = deltas.get(owner);
 			if (d == null) continue;
-			const from = Math.max(0, Math.min(rows[i].turn, finalTurn + 1));
+			const from = Math.max(
+				0,
+				Math.min(ownershipChangeTurn(rows[i].turn), finalTurn + 1),
+			);
 			// Held until the next change, or to the end of the game.
-			const until = Math.min(rows[i + 1]?.turn ?? finalTurn + 1, finalTurn + 1);
+			const next = rows[i + 1];
+			const until = Math.min(
+				next !== undefined ? ownershipChangeTurn(next.turn) : finalTurn + 1,
+				finalTurn + 1,
+			);
 			d[from] += 1;
 			if (until <= finalTurn) d[until] -= 1;
 		}

@@ -115,8 +115,8 @@
 			<SpriteIcon category="crests" value={banner.familyCrestKey} size={10} />
 		{/if}
 		<span class="banner-name" style="color: {banner.nationColor};">
-			{banner.label}{#if banner.isCapital}<span class="capital-marker">★</span
-				>{/if}
+			{#if banner.isCapital}<span class="capital-marker">★</span
+				>{/if}{banner.label}
 		</span>
 		{#if full && banner.citizens != null}
 			<span class="citizens">{banner.citizens}</span>
@@ -179,7 +179,7 @@
 	}
 
 	.capital-marker {
-		margin-left: 2px;
+		margin-right: 2px;
 		font-size: 8px;
 		opacity: 0.85;
 	}

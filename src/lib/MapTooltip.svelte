@@ -102,8 +102,8 @@
 				{/if}
 			</div>
 			<span class="city-name" style="color: {nationColor};">
-				{headerLabel}
 				{#if tile.is_capital}<span class="capital-marker">★</span>{/if}
+				{headerLabel}
 			</span>
 		</div>
 	{/if}
@@ -161,7 +161,7 @@
 		text-shadow: 0 1px 2px rgb(var(--color-black) / 0.6);
 	}
 	.capital-marker {
-		margin-left: 4px;
+		margin-right: 4px;
 		opacity: 0.85;
 		font-size: 10px;
 	}

@@ -316,6 +316,28 @@ export interface TileOwnershipEntry {
 }
 
 /**
+ * The turn an ownership entry's change actually happened on.
+ *
+ * `<OwnerHistory>` is not written when a tile changes hands. `updateHistory`
+ * (`Tile.cs:10889`) records `getOwner()` under `game().getTurn()`, and it runs
+ * from `Tile.doTurn` (`Tile.cs:10979`) — reached from `Game.doTurn`, which
+ * `incrementTurn` (`Game.cs:3180`) calls only after `setTurn(getTurn() + 1)`.
+ * So a capture or a border expansion during turn N is first observed, and
+ * written, under key N+1. Every reader of `turn` has to undo that, which is
+ * what this is for.
+ *
+ * Measured over `test-data/saves/` (12 saves): all 282 cities' centre tiles
+ * first appear at exactly `founded_turn + 1`, with no exceptions, and the
+ * lowest key in any of them is 2 — so the shift never reaches turn 0. The
+ * sibling terrain and vegetation histories need no such correction:
+ * `setTerrain` writes `setTerrainTurn(game().getTurn(), …)` at change time
+ * (`Tile.cs:3420`).
+ */
+export function ownershipChangeTurn(recordedTurn: number): number {
+	return recordedTurn - 1;
+}
+
+/**
  * Player xml_id → nation lookup, sparse. Cloud-only sidecar consumed by the
  * runtime map-turn-slider reconstruction (see
  * `src/lib/game-detail/reconstruct-map-tiles.ts`) to resolve
@@ -410,4 +432,4 @@ export interface FullGameData {
  * fixes, MINOR for additive fields, MAJOR for breaking schema changes.
  * Initial value `2.0.0` mirrors `FullGameData.version: 2`.
  */
-export const PARSER_VERSION = "2.18.0";
+export const PARSER_VERSION = "2.19.0";

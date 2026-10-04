@@ -182,6 +182,23 @@ export const MAX_DISABLED_IMPROVEMENTS = 1_000;
 //         total now read 0 before their first row, as the game does, where
 //         the old shape emitted null. Reparsed games carry those 0s into
 //         game_player_turn.*_cumulative, whose writer skips nulls today.
+// 2.19.0 — player_wonders[].player_id/player_name/nation, reattributed by a
+//         corrected reading of tile_ownership_history. The save does not key
+//         an ownership entry to the turn the tile changed hands: `updateHistory`
+//         (`Tile.cs:10889`) records the owner under `game().getTurn()` from
+//         `Tile.doTurn`, which `incrementTurn` (`Game.cs:3180`) reaches only
+//         after `setTurn(getTurn() + 1)`, so a change during turn N is written
+//         under key N+1. Every reader now goes through `ownershipChangeTurn`
+//         (`src/lib/parser/types.ts`), this derivation included, so a wonder
+//         finishing on the turn its tile changed hands is credited to the
+//         player who actually held it. Measured over `test-data/saves/`
+//         (12 saves, 69 wonders with a resolvable tile): the correction
+//         reattributes 0 of them — a wonder completing on exactly the turn its
+//         tile turned over does not occur in the corpus — so the bump's
+//         practical effect is to orphan the stats caches, not to move a value
+//         anyone has seen. The same correction is applied at read time to the
+//         map turn slider and the Economy tab's territory curve, which need no
+//         reparse.
 export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.0.0",
 	"2.1.0",
@@ -207,13 +224,14 @@ export const KNOWN_PARSER_VERSIONS = new Set([
 	"2.16.0",
 	"2.17.0",
 	"2.18.0",
+	"2.19.0",
 ]);
 
 // The latest accepted version. Echoed back on stats responses and
 // embedded in stats cache keys so a parser bump (after the matching
 // extraction code lands) naturally orphans every old entry. Bump in
 // lockstep with the `KNOWN_PARSER_VERSIONS` addition above.
-export const CURRENT_PARSER_VERSION = "2.18.0";
+export const CURRENT_PARSER_VERSION = "2.19.0";
 
 // ----- Reusable atoms -----
 

@@ -288,7 +288,7 @@ export const CITY_COLUMNS: CityColumn[] = [
 		getValue: (c) => c.city_name,
 		format: (v, city) => {
 			const name = formatEnum(v as string, "CITYNAME_");
-			return city.is_capital ? `${name} ★` : name;
+			return city.is_capital ? `★ ${name}` : name;
 		},
 	},
 	{

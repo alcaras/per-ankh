@@ -205,7 +205,7 @@
 		updatePositionStrategy="always"
 		side="top"
 		align="center"
-		contentClass="w-[min(92vw,26rem)]"
+		contentClass="w-[min(94vw,44rem)]"
 		frameClass="{CHROME_PANEL_CLASS} p-3"
 		ariaLabel="City detail"
 	>

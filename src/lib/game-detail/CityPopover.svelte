@@ -7,11 +7,12 @@
 	//
 	// Most of CityInfo describes the city at the END of the game; only its
 	// ownership (and whether it exists at all) is reconstructible per turn. So
-	// the card is three zones, each under its own heading, and nothing crosses
-	// between them: an identity header, what's true at the selected turn, and
-	// the end-of-game record.
+	// the card is three zones and nothing crosses between them: an identity
+	// header, what's true at the selected turn, and the end-of-game record —
+	// the last split into two columns, its statistics beside its territory.
 	import type { cloudApi } from "$lib/api-cloud";
 	import type { MapTile } from "$lib/types/MapTile";
+	import { ownershipChangeTurn } from "$lib/parser/types";
 	import { getCivilizationColor } from "$lib/config";
 	import { IMPROVEMENT_BUILDS } from "$lib/generated/improvement-builds";
 	import { characterName, formatEnum, nationName } from "$lib/utils/formatting";
@@ -81,8 +82,11 @@
 			.filter((e) => e.tile_xml_id === id)
 			.sort((a, b) => a.turn - b.turn);
 		return rows.map((e, i) => ({
-			from: e.turn,
-			to: i + 1 < rows.length ? rows[i + 1].turn - 1 : finalTurn,
+			from: ownershipChangeTurn(e.turn),
+			to:
+				i + 1 < rows.length
+					? ownershipChangeTurn(rows[i + 1].turn) - 1
+					: finalTurn,
 			playerXmlId: e.owner_player_xml_id,
 		}));
 	});
@@ -100,6 +104,21 @@
 	}
 
 	const ownerAtTurn = $derived(playerAt(spanAtTurn?.playerXmlId ?? null));
+
+	// The whole ownership record as one line of comma-separated range/holder
+	// pairs, reading like the founded line it sits under.
+	const ownerSpanLine = $derived(
+		ownerSpans
+			.map((span) => {
+				const held = playerAt(span.playerXmlId);
+				const range =
+					span.from === span.to
+						? `Turn ${span.from}`
+						: `Turns ${span.from}–${span.to}`;
+				return `${range} · ${held ? held.label : "Unowned, mid-capture"}`;
+			})
+			.join(", "),
+	);
 	const familyAtTurn = $derived(
 		city ? familyForOwner(city, spanAtTurn?.playerXmlId ?? null) : null,
 	);
@@ -300,16 +319,15 @@
 			</div>
 			<div class="min-w-0">
 				<h2 class="text-sm font-bold" style="color: {nationColor};">
-					{formatEnum(city.city_name, "CITYNAME_")}{#if city.is_capital}<span
-							class="ml-1 opacity-85">★</span
-						>{/if}
+					{#if city.is_capital}<span class="mr-1 opacity-85">★</span
+						>{/if}{formatEnum(city.city_name, "CITYNAME_")}
 				</h2>
 				<p class="text-[11px] text-muted">{foundedLine}</p>
 			</div>
 		</header>
 
 		<!-- Zone 2: the only things reconstructible at the selected turn. -->
-		<section>
+		<section class="zone-rule">
 			<h3 class="section-heading">At turn {turn}</h3>
 			<dl class="chrome-rows">
 				<dt>Owner</dt>
@@ -346,196 +364,207 @@
 					</dd>
 				{/if}
 			</dl>
-			{#if ownerSpans.length > 0}
-				<ul class="mt-1.5 space-y-0.5">
-					{#each ownerSpans as span (span.from)}
-						{@const held = playerAt(span.playerXmlId)}
-						<li
-							class="flex items-baseline gap-1.5 {span === spanAtTurn
-								? 'text-bright'
-								: 'text-muted'}"
-						>
-							<span class="w-6 flex-none text-center"
-								>{span === spanAtTurn ? "▸" : ""}</span
-							>
-							<span class="flex-none tabular-nums"
-								>{span.from === span.to
-									? `Turn ${span.from}`
-									: `Turns ${span.from}–${span.to}`}</span
-							>
-							<span>·</span>
-							<span>{held ? held.label : "Unowned, mid-capture"}</span>
-						</li>
-					{/each}
-				</ul>
+			{#if ownerSpanLine}
+				<p class="mt-1 text-[11px] text-muted">{ownerSpanLine}</p>
 			{/if}
 		</section>
 
 		<!-- Zone 3: CityInfo's end-of-game snapshot, plus the territory, which
-		     is only readable at the end of the game. -->
-		<section>
-			<h3 class="section-heading">End of game · turn {finalTurn}</h3>
-			<dl class="chrome-rows">
-				{#each STATE_COLUMNS as col (col.key)}
-					{@const iconValue = col.iconValue
-						? col.iconValue(city)
-						: col.getValue(city)}
-					<dt>{col.label}</dt>
-					<dd>
-						<span class="inline-flex items-center gap-1">
-							{#if col.iconCategory && iconValue != null}
-								<SpriteIcon
-									category={col.iconCategory}
-									value={String(iconValue)}
-									size={14}
-								/>
-							{/if}
-							{formatCityCell(col, city)}
-						</span>
-					</dd>
-				{/each}
-				{#if happiness}
-					<dt>{happiness.label}</dt>
-					<dd>{happiness.value}</dd>
-				{/if}
-				{#if city.damage != null}
-					<dt>Damage</dt>
-					<dd>{city.damage}</dd>
-				{/if}
-				{#if city.assimilate_turns != null}
-					<dt>Assimilation</dt>
-					<dd>
-						{city.assimilate_turns === 0
-							? "Complete"
-							: `${city.assimilate_turns} turns left`}
-					</dd>
-				{/if}
-				{#if governor}
-					<dt>Governor</dt>
-					<dd>{governor}</dd>
-				{/if}
-				{#if city.religions && city.religions.length > 0}
-					<dt>Religions</dt>
-					<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						{#each city.religions as religion (religion)}
+		     is only readable at the end of the game. Two columns, so the card
+		     stays short enough not to reposition under the pointer. -->
+		<div class="grid gap-x-5 gap-y-3 sm:grid-cols-2">
+			<section>
+				<dl class="chrome-rows record-rows">
+					{#each STATE_COLUMNS as col (col.key)}
+						{@const iconValue = col.iconValue
+							? col.iconValue(city)
+							: col.getValue(city)}
+						<dt>{col.label}</dt>
+						<dd>
 							<span class="inline-flex items-center gap-1">
-								<SpriteIcon
-									category="religions"
-									value={religion}
-									size={14}
-									alt={formatEnum(religion, "RELIGION_")}
-								/>
-								{formatEnum(religion, "RELIGION_")}
+								{#if col.iconCategory && iconValue != null}
+									<SpriteIcon
+										category={col.iconCategory}
+										value={String(iconValue)}
+										size={14}
+									/>
+								{/if}
+								{formatCityCell(col, city)}
 							</span>
-						{/each}
-					</dd>
-				{/if}
-				{#if city.project_counts && city.project_counts.length > 0}
-					<dt>Projects</dt>
-					<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						{#each city.project_counts as entry (entry.project)}
-							<span class="inline-flex items-center gap-1">
-								<SpriteIcon
-									category="projects"
-									value={entry.project}
-									size={14}
-									alt={projectDisplayName(entry.project)}
-								/>
-								{projectDisplayName(entry.project)}{times(entry.count)}
-							</span>
-						{/each}
-					</dd>
-				{/if}
-				{#each COUNT_COLUMNS as col (col.key)}
-					<dt>{col.label}</dt>
-					<dd>{formatCityCell(col, city)}</dd>
-				{/each}
-			</dl>
+						</dd>
+					{/each}
+					{#if happiness}
+						<dt>{happiness.label}</dt>
+						<dd>{happiness.value}</dd>
+					{/if}
+					{#if city.damage != null}
+						<dt>Damage</dt>
+						<dd>{city.damage}</dd>
+					{/if}
+					{#if city.assimilate_turns != null}
+						<dt>Assimilation</dt>
+						<dd>
+							{city.assimilate_turns === 0
+								? "Complete"
+								: `${city.assimilate_turns} turns left`}
+						</dd>
+					{/if}
+					{#if governor}
+						<dt>Governor</dt>
+						<dd>{governor}</dd>
+					{/if}
+					{#if city.religions && city.religions.length > 0}
+						<dt>Religions</dt>
+						<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+							{#each city.religions as religion (religion)}
+								<span class="inline-flex items-center gap-1">
+									<SpriteIcon
+										category="religions"
+										value={religion}
+										size={14}
+										alt={formatEnum(religion, "RELIGION_")}
+									/>
+									{formatEnum(religion, "RELIGION_")}
+								</span>
+							{/each}
+						</dd>
+					{/if}
+					{#if city.project_counts && city.project_counts.length > 0}
+						<dt>Projects</dt>
+						<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+							{#each city.project_counts as entry (entry.project)}
+								<span class="inline-flex items-center gap-1">
+									<SpriteIcon
+										category="projects"
+										value={entry.project}
+										size={14}
+										alt={projectDisplayName(entry.project)}
+									/>
+									{projectDisplayName(entry.project)}{times(entry.count)}
+								</span>
+							{/each}
+						</dd>
+					{/if}
+					{#each COUNT_COLUMNS as col (col.key)}
+						<dt>{col.label}</dt>
+						<dd>{formatCityCell(col, city)}</dd>
+					{/each}
+				</dl>
+			</section>
 
-			<h4 class="mt-2 text-[10px] font-bold uppercase tracking-wide text-muted">
-				Territory
-			</h4>
-			<dl class="chrome-rows">
-				<dt>Tiles</dt>
-				<dd>{cityTiles.length}</dd>
-				{#if wonders.length > 0}
-					<dt>Wonders</dt>
-					<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						{#each wonders as tally (tally.key)}
-							<span class="inline-flex items-center gap-1">
-								<SpriteIcon
-									category="improvements"
-									value={tally.key}
-									size={14}
-									alt={improvementDisplayName(tally.key)}
-								/>
-								{improvementDisplayName(tally.key)}
-							</span>
-						{/each}
-					</dd>
-				{/if}
-				{#if improvements.length > 0}
-					<dt>Improvements</dt>
-					<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						{#each improvements as tally (tally.key)}
-							<span class="inline-flex items-center gap-1">
-								<SpriteIcon
-									category="improvements"
-									value={tally.key}
-									size={14}
-									alt={improvementDisplayName(tally.key)}
-								/>
-								{improvementDisplayName(tally.key)}{times(
-									tally.count,
-								)}{#if tally.pillaged > 0}<span class="text-muted">
-										({tally.pillaged} pillaged)</span
-									>{/if}{#if tally.unfinished > 0}<span class="text-muted">
-										({tally.unfinished} unfinished)</span
-									>{/if}
-							</span>
-						{/each}
-					</dd>
-				{/if}
-				{#each specialistGroups as group (group.kind)}
-					<dt>{KIND_LABELS[group.kind]} specialists</dt>
-					<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						{#each group.entries as entry (entry.key)}
-							<span class="inline-flex items-center gap-1">
-								<SpriteIcon
-									category="specialists"
-									value={entry.key}
-									size={14}
-									alt={specialistName(entry.key)}
-								/>
-								{specialistName(entry.key)}{times(entry.count)}
-							</span>
-						{/each}
-					</dd>
-				{/each}
-				{#if resources.length > 0}
-					<dt>Resources</dt>
-					<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						{#each resources as entry (entry.key)}
-							<span class="inline-flex items-center gap-1">
-								<SpriteIcon
-									category="resources"
-									value={entry.key}
-									size={14}
-									alt={formatEnum(entry.key, "RESOURCE_")}
-								/>
-								{formatEnum(entry.key, "RESOURCE_")}{times(entry.count)}
-							</span>
-						{/each}
-					</dd>
-				{/if}
-				<dt>Roads</dt>
-				<dd>{roadCount}</dd>
-			</dl>
-		</section>
+			<section>
+				<h4 class="text-[10px] font-bold uppercase tracking-wide text-muted">
+					Territory
+				</h4>
+				<dl class="chrome-rows record-rows">
+					<dt>Tiles</dt>
+					<dd>{cityTiles.length}</dd>
+					{#if wonders.length > 0}
+						<dt>Wonders</dt>
+						<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+							{#each wonders as tally (tally.key)}
+								<span class="inline-flex items-center gap-1">
+									<SpriteIcon
+										category="improvements"
+										value={tally.key}
+										size={14}
+										alt={improvementDisplayName(tally.key)}
+									/>
+									{improvementDisplayName(tally.key)}
+								</span>
+							{/each}
+						</dd>
+					{/if}
+					{#if improvements.length > 0}
+						<dt>Improvements</dt>
+						<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+							{#each improvements as tally (tally.key)}
+								<span class="inline-flex items-center gap-1">
+									<SpriteIcon
+										category="improvements"
+										value={tally.key}
+										size={14}
+										alt={improvementDisplayName(tally.key)}
+									/>
+									{improvementDisplayName(tally.key)}{times(
+										tally.count,
+									)}{#if tally.pillaged > 0}<span class="text-muted">
+											({tally.pillaged} pillaged)</span
+										>{/if}{#if tally.unfinished > 0}<span class="text-muted">
+											({tally.unfinished} unfinished)</span
+										>{/if}
+								</span>
+							{/each}
+						</dd>
+					{/if}
+					{#each specialistGroups as group (group.kind)}
+						<dt>{KIND_LABELS[group.kind]} specialists</dt>
+						<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+							{#each group.entries as entry (entry.key)}
+								<span class="inline-flex items-center gap-1">
+									<SpriteIcon
+										category="specialists"
+										value={entry.key}
+										size={14}
+										alt={specialistName(entry.key)}
+									/>
+									{specialistName(entry.key)}{times(entry.count)}
+								</span>
+							{/each}
+						</dd>
+					{/each}
+					{#if resources.length > 0}
+						<dt>Resources</dt>
+						<dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+							{#each resources as entry (entry.key)}
+								<span class="inline-flex items-center gap-1">
+									<SpriteIcon
+										category="resources"
+										value={entry.key}
+										size={14}
+										alt={formatEnum(entry.key, "RESOURCE_")}
+									/>
+									{formatEnum(entry.key, "RESOURCE_")}{times(entry.count)}
+								</span>
+							{/each}
+						</dd>
+					{/if}
+					<dt>Roads</dt>
+					<dd>{roadCount}</dd>
+				</dl>
+			</section>
+		</div>
 	</div>
 {/if}
 
 <style>
+	/* The rule that closes the per-turn zone off from the two columns below
+	   it, drawn like the one under a section heading. */
+	.zone-rule {
+		border-bottom: 1px solid rgb(var(--color-border-tooltip));
+		padding-bottom: 0.75rem;
+	}
+
+	/* The two end-of-game columns: the value lit against the muted label
+	   rather than both sitting in the panel's tan, and the rows closed up so
+	   the card stays short enough not to reposition under the pointer.
+	   Specific enough to beat `.chrome-rows` in app.css. */
+	.chrome-rows.record-rows {
+		/* Enough to keep the 14px sprites on consecutive rows apart; the rows
+		   are still tighter than `.chrome-rows`' 16px line box and 2px gap. */
+		row-gap: 3px;
+	}
+
+	.chrome-rows.record-rows dt {
+		font-size: 9px;
+	}
+
+	.chrome-rows.record-rows dd {
+		font-size: 11px;
+		line-height: 1.3;
+		color: rgb(var(--color-bright));
+	}
+
 	.section-heading {
 		margin-bottom: 0.25rem;
 		border-bottom: 1px solid rgb(var(--color-border-tooltip));
