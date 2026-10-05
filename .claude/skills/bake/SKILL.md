@@ -49,7 +49,9 @@ Self-contained bakers — each writes its `src/lib/generated/` module directly, 
 
 ```bash
 npm run bake:science-yields    # science-yields.ts (from Reference/XML)
-npm run bake:unit-stats        # unit-stats.ts (from Reference/XML)
+npm run bake:unit-stats        # unit-stats.ts (src/ AND cloud/src/; unit strength/tech/naval/
+                               # cycle + bonus-card grants — the Worker copy is what the
+                               # challenge scorer reads)
 npm run bake:atlas-pool        # atlas-pool.ts (src/ AND cloud/src/; needs an owtournamentatlas checkout)
 npm run bake:family-pools      # cloud/src/generated/family-pools.ts — each nation's
                                # family pool, the baseline every cut rate is measured against
@@ -81,10 +83,10 @@ Then:
 
 ```bash
 npm run bake:finalize          # Emits committed manifest TS modules + reconciles orphans
-npm run bake:all               # Every baker above except unit-stats, owtt + momentum, then finalize
+npm run bake:all               # Every baker above except owtt + momentum, then finalize
 ```
 
-`bake:all` runs 32 of the 35 bakers above, in the order listed, then `finalize`. It deliberately omits `bake:unit-stats`, `bake:owtt` and `bake:momentum` — rerun those by hand when their sources change. Membership doesn't follow from what a baker reads: `bake:atlas-pool` needs an owtournamentatlas checkout and is in `bake:all`, while `bake:unit-stats` reads only `Reference/XML` and isn't — so a new baker records its choice here either way. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
+`bake:all` runs 33 of the 35 bakers above, in the order listed, then `finalize`. It deliberately omits `bake:owtt` and `bake:momentum` — rerun those by hand when their sources change. Membership doesn't follow from what a baker reads: `bake:atlas-pool` needs an owtournamentatlas checkout and is in `bake:all`, while `bake:owtt` needs one of its own and isn't — so a new baker records its choice here either way. Separately, `bake:favicon` / `bake:og` generate site icons and OG images, `bake:screenshots` drives Playwright capture for the home-page shots, and the UX-review bundle under `docs/ux-review/` is captured by `./per-ankh ux-review` (a CLI command, not an npm script).
 
 ## Adding a name-override table
 
