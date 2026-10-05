@@ -16,6 +16,10 @@
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import {
+		matchSlotNation,
+		matchSlotOutcome,
+	} from "$lib/tournament/match-occupant";
+	import {
 		formatRuntime,
 		type ArchiveAngle,
 		type ArchiveMatch,
@@ -28,6 +32,7 @@
 	let nation = $state("");
 	let round = $state("");
 	const open = new SvelteSet<string>();
+	let showUnattributed = $state(false);
 
 	const rounds = $derived(
 		[...new Set(data.archive.matches.map((a) => a.round_number))].sort(
@@ -40,7 +45,10 @@
 	const nations = $derived(
 		[
 			...new Set(
-				data.archive.matches.flatMap((a) => [a.slot_a_nation, a.slot_b_nation]),
+				data.archive.matches.flatMap((a) => [
+					matchSlotNation(a, "a"),
+					matchSlotNation(a, "b"),
+				]),
 			),
 		]
 			.filter((n): n is string => n != null)
@@ -63,7 +71,9 @@
 			a.slot_b_display_name,
 			`match ${a.match_number}`,
 			a.map_script,
-			...[a.slot_a_nation, a.slot_b_nation].filter(Boolean).map(nationName),
+			...[matchSlotNation(a, "a"), matchSlotNation(a, "b")]
+				.filter(Boolean)
+				.map(nationName),
 			...a.parts.flatMap((p) =>
 				p.angles.map((g) => `${g.channel} ${g.video.title}`),
 			),
@@ -78,7 +88,9 @@
 		return data.archive.matches.filter(
 			(a) =>
 				(!round || String(a.round_number) === round) &&
-				(!nation || a.slot_a_nation === nation || a.slot_b_nation === nation) &&
+				(!nation ||
+					matchSlotNation(a, "a") === nation ||
+					matchSlotNation(a, "b") === nation) &&
 				(!q || haystack(a).includes(q)),
 		);
 	});
@@ -123,6 +135,25 @@
 		else open.add(id);
 	}
 </script>
+
+{#snippet chevron(expanded: boolean)}
+	<!-- The app's disclosure affordance, as TournamentMapsPanel and
+	     MatchPopover draw it: one chevron, rotated when open. -->
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		class="h-3.5 w-3.5 shrink-0 text-tan opacity-70 transition-transform"
+		class:rotate-90={expanded}
+		viewBox="0 0 20 20"
+		fill="currentColor"
+		aria-hidden="true"
+	>
+		<path
+			fill-rule="evenodd"
+			d="M7.21 14.77a.75.75 0 010-1.06L10.94 10 7.21 6.29a.75.75 0 111.06-1.06l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-.02z"
+			clip-rule="evenodd"
+		/>
+	</svg>
+{/snippet}
 
 {#snippet tile(
 	video: ArchiveAngle["video"],
@@ -205,15 +236,6 @@
 		</div>
 	</div>
 {:else}
-	{#if data.archive.source === "feed"}
-		<!-- The keyless read: recent playlist entries only, none with a runtime,
-		     dated by when the VOD went up. Say so, or "0 h" and undated parts
-		     read as a broken archive. -->
-		<p class="mb-3 text-xs text-muted">
-			Showing the playlist's most recent entries. Runtimes and the full history
-			need the server's YouTube API key.
-		</p>
-	{/if}
 	<div
 		class="mb-3 flex flex-wrap items-center gap-3 rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface-sunken));"
@@ -255,6 +277,20 @@
 		class="flex flex-col gap-2 rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface-sunken));"
 	>
+		{#if data.archive.source === "feed"}
+			<!-- The keyless read: recent playlist entries only, none with a runtime,
+			     dated by when the VOD went up. Say so, or "0 h" and undated parts
+			     read as a broken archive. A band in the list beside the parts it
+			     describes, like the gap and unattributed notes below — not a
+			     subtitle over the whole page. -->
+			<div
+				class="rounded-lg border border-dashed border-border-subtle px-3 py-2 text-xs text-muted"
+			>
+				Showing the playlist's most recent entries. Runtimes and the full
+				history need the server's YouTube API key.
+			</div>
+		{/if}
+
 		{#if shown.length === 0}
 			<div class="py-8 text-center text-sm text-gray-400">
 				No match fits that filter.
@@ -262,14 +298,12 @@
 		{/if}
 
 		{#each shown as a (a.match_id)}
-			{@const wonA =
-				a.winner_slot_id != null && a.winner_slot_id === a.slot_a_id}
-			{@const wonB =
-				a.winner_slot_id != null && a.winner_slot_id === a.slot_b_id}
-			{@const natA = a.slot_a_nation}
-			{@const natB = a.slot_b_nation}
-			{@const colorA = getCivilizationColor(natA ?? "")}
-			{@const colorB = getCivilizationColor(natB ?? "")}
+			{@const wonA = matchSlotOutcome(a, "a") === "won"}
+			{@const wonB = matchSlotOutcome(a, "b") === "won"}
+			{@const natA = matchSlotNation(a, "a")}
+			{@const natB = matchSlotNation(a, "b")}
+			{@const colorA = natA ? getCivilizationColor(natA) : undefined}
+			{@const colorB = natB ? getCivilizationColor(natB) : undefined}
 			<div
 				class="overflow-hidden rounded-lg"
 				style="background-color: rgb(var(--color-surface));"
@@ -291,13 +325,14 @@
 						type="button"
 						onclick={() => toggle(a.match_id)}
 						aria-expanded={open.has(a.match_id)}
-						class="grid flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-hover lg:grid-cols-[5rem_minmax(0,1fr)_auto]"
+						class="grid flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-hover lg:grid-cols-[6rem_minmax(0,1fr)_auto]"
 					>
 						<span
-							class="w-20 flex-none text-[11px] font-bold tracking-wider text-muted"
+							class="flex w-24 flex-none items-center gap-1 text-[11px] font-bold tracking-wider text-muted"
 						>
+							{@render chevron(open.has(a.match_id))}
 							{#if a.match_number != null}
-								MATCH {padMatchNumber(a.match_number)}
+								<span>MATCH {padMatchNumber(a.match_number)}</span>
 							{/if}
 						</span>
 						<span class="flex min-w-0 flex-wrap items-center gap-2">
@@ -422,33 +457,43 @@
 			<!-- The point of the server returning these rather than dropping them: a
 		     video the matcher could not place is a hole in the archive, and a
 		     silent hole is indistinguishable from a video that does not exist. -->
-			<details
+			<div
 				class="mt-3 rounded-lg p-4"
 				style="background-color: rgb(var(--color-surface-sunken));"
 			>
-				<summary class="cursor-pointer text-sm text-muted">
-					{data.archive.unattributed.length} video{data.archive.unattributed
-						.length === 1
-						? ""
-						: "s"} on the playlist we could not match to a game
-				</summary>
-				<p class="mt-2 max-w-prose text-xs text-muted">
-					Usually a title that names a player by something other than their
-					handle. Attaching the video to its match under Schedule fixes it for
-					good.
-				</p>
-				<ul class="mt-3 flex flex-col gap-1">
-					{#each data.archive.unattributed as v (v.id)}
-						<li class="truncate text-xs">
-							<!-- eslint-disable svelte/no-navigation-without-resolve -->
-							<a href={v.url} target="_blank" rel="noopener noreferrer"
-								>{v.title}</a
-							>
-							<!-- eslint-enable svelte/no-navigation-without-resolve -->
-						</li>
-					{/each}
-				</ul>
-			</details>
+				<button
+					type="button"
+					onclick={() => (showUnattributed = !showUnattributed)}
+					aria-expanded={showUnattributed}
+					class="flex cursor-pointer items-center gap-1.5 text-left text-sm text-muted transition-colors hover:text-tan"
+				>
+					{@render chevron(showUnattributed)}
+					<span
+						>{data.archive.unattributed.length} video{data.archive.unattributed
+							.length === 1
+							? ""
+							: "s"} on the playlist we could not match to a game</span
+					>
+				</button>
+				{#if showUnattributed}
+					<p class="mt-2 max-w-prose text-xs text-muted">
+						Usually a title that names a player by something other than their
+						handle. Attaching the video to its match under Schedule fixes it for
+						good.
+					</p>
+					<ul class="mt-3 flex flex-col gap-1">
+						{#each data.archive.unattributed as v (v.id)}
+							<li class="truncate text-xs">
+								<!-- eslint-disable svelte/no-navigation-without-resolve -->
+								<a href={v.url} target="_blank" rel="noopener noreferrer"
+									>{v.title}</a
+								>
+								<!-- eslint-enable svelte/no-navigation-without-resolve -->
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
 		{/if}
 	</div>
 {/if}
