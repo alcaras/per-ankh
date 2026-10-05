@@ -442,7 +442,7 @@
 								<span>MATCH {padMatchNumber(a.match_number)}</span>
 							{/if}
 						</span>
-						<span class="flex min-w-0 flex-wrap items-center gap-2">
+						<span class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
 							<span class="flex items-center gap-1.5">
 								{#if natA}
 									<SpriteIcon
@@ -452,11 +452,7 @@
 										alt={nationName(natA)}
 									/>
 								{/if}
-								<span
-									class="font-semibold"
-									class:text-success={wonA}
-									style={wonA ? "" : "color: rgb(var(--color-bright));"}
-								>
+								<span class="font-bold {wonA ? 'text-orange' : 'text-tan'}">
 									{a.slot_a_display_name ?? "—"}
 								</span>
 							</span>
@@ -470,11 +466,7 @@
 										alt={nationName(natB)}
 									/>
 								{/if}
-								<span
-									class="font-semibold"
-									class:text-success={wonB}
-									style={wonB ? "" : "color: rgb(var(--color-bright));"}
-								>
+								<span class="font-bold {wonB ? 'text-orange' : 'text-tan'}">
 									{a.slot_b_display_name ?? "—"}
 								</span>
 							</span>
@@ -512,7 +504,7 @@
 				</div>
 
 				{#if open.has(a.match_id)}
-					<div class="flex flex-col gap-2 px-4 pb-3">
+					<div class="flex flex-col gap-2 px-4 pb-3 pt-2">
 						{#if a.parts.length === 0}
 							<div
 								class="rounded-lg border border-dashed border-border-subtle px-3 py-2 text-xs text-muted"
@@ -527,12 +519,13 @@
 							>
 								<div class="w-24 flex-none">
 									<div class="text-[11px] font-bold tracking-wider text-muted">
-										PART {p.n}{#if p.angles.length > 1}<span
-												class="text-orange"
-											>
-												·{p.angles.length}</span
-											>{/if}
+										PART {p.n}
 									</div>
+									{#if p.angles.length > 1}
+										<div class="mt-0.5 text-xs text-muted">
+											{p.angles.length} videos
+										</div>
+									{/if}
 									<div class="mt-0.5 text-xs text-muted">
 										{formatShortDate(p.aired)}{#if p.seconds > 0}
 											· {formatRuntime(p.seconds)}{/if}
