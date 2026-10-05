@@ -617,47 +617,11 @@ export async function handleTournamentDetail(
 	);
 }
 
-// GET /v1/tournaments/:id/videos — public. The uploads from the tournament's
-// admin-set YouTube playlist, newest first, KV-cached (SWR) like the profile
-// videos read. Same view gate + rate-limit as the other per-tournament reads.
-// Returns an empty list when no playlist is configured (or a stored value that
-// no longer parses) — the Videos tab is normally hidden in that case, but a
-// direct visit still gets a clean empty payload rather than an error.
-//
-// The whole (capped) playlist is returned so the tab's client-side search can
-// reach every video, not just the recent ones on screen: with a Data API key we
-// enumerate the full playlist; without one we fall back to the free RSS feed's
-// ~15 most-recent entries (search then only spans those). Both produce the same
-// PlaylistVideo shape, so the cache and attribution below are identical.
-export async function handleTournamentPlaylistVideos(
-	tournamentId: string,
-	request: Request,
-	env: TournamentPublicEnv,
-	ctx: ExecutionContext,
-): Promise<Response> {
-	const cors = cloudCorsHeaders(env, request);
-	const session = await sessionFromRequest(env, request);
-	const tournament = await loadViewableTournament(
-		env,
-		request,
-		tournamentId,
-		cors,
-		session,
-	);
-	if (tournament instanceof Response) return tournament;
-	const parsed = tournament.youtube_playlist_url
-		? parseYouTubePlaylistUrl(tournament.youtube_playlist_url)
-		: null;
-	if (!parsed) return jsonResponse({ videos: [] }, 200, cors);
-	const videos = await getPlaylistVideosCached(env, parsed.playlistId, ctx);
-	const usersByChannel = await loadPlaylistUploaders(env, videos);
-	return jsonResponse(
-		{ videos: attributePlaylistVideos(videos, usersByChannel) },
-		200,
-		cors,
-	);
-}
-
+// GET /v1/tournaments/:id/video-archive — public. The tournament's playlist
+// videos, attributed to matches and grouped match → part → angle (see
+// video-archive.ts). Same view gate + rate-limit as the other per-tournament
+// reads. The playlist itself is the same KV-cached (SWR) read the home feed
+// makes; the attribution and grouping run per request on top of it.
 export async function handleTournamentVideoArchive(
 	tournamentId: string,
 	request: Request,
