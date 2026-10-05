@@ -11,9 +11,15 @@
 	import SearchInput from "$lib/SearchInput.svelte";
 	import SpriteIcon from "$lib/game-detail/SpriteIcon.svelte";
 	import FeaturedStar from "$lib/FeaturedStar.svelte";
+	import Select from "$lib/ui/Select.svelte";
+	import type { SelectOption } from "$lib/ui/types";
 	import { getCivilizationColor } from "$lib/config";
 	import { formatShortDate, nationName } from "$lib/utils/formatting";
-	import { matchBracketLabel } from "$lib/tournament/bracket-label";
+	import {
+		distinguishingOptions,
+		mapPoolLabel,
+		poolEntryById,
+	} from "$lib/tournament/map-script-options";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import {
@@ -56,6 +62,19 @@
 			.sort((a, b) => nationName(a).localeCompare(nationName(b))),
 	);
 
+	// Option lists for the shared Select. "" is its placeholder value, which
+	// it hands back as null on pick — the same empty string these filters
+	// already mean by "no filter".
+	const nationOptions = $derived<SelectOption[]>([
+		{ value: "", label: "All nations" },
+		...nations.map((n) => ({ value: n, label: nationName(n) })),
+	]);
+
+	const roundOptions = $derived<SelectOption[]>([
+		{ value: "", label: "All rounds" },
+		...rounds.map((r) => ({ value: String(r), label: `Round ${r}` })),
+	]);
+
 	// A runtime the Worker could not price: on the keyed read that is a
 	// broadcast still running; on the keyless feed it is every video, and
 	// saying "live" about all of them would be false.
@@ -65,6 +84,98 @@
 			: data.archive.source === "api"
 				? "live"
 				: "";
+
+	const totalSeconds = (a: ArchiveMatch) =>
+		a.parts.reduce((t, p) => t + p.seconds, 0);
+
+	// --- The match row's right-hand metadata, as aligned columns ------
+	//
+	// A cell is a run of segments joined by ", ". A measurement emphasises its
+	// value and may name a unit after it ("123" + "turns"); a `plain` segment
+	// (the map) is label text.
+	type MetaSegment = { value: string; unit?: string; plain?: boolean };
+	type MetaCell = MetaSegment[];
+
+	const META_KEYS = ["map", "turns", "hours", "counts"] as const;
+	type MetaKey = (typeof META_KEYS)[number];
+
+	// The map names its pool instance, not just its script — MatchTable's
+	// compact label ("Sq Duel CRB PS"), which is how every other match surface
+	// reads. That needs the instance, and the archive row carries only
+	// map_script; the match list the tournament layout loads for every page
+	// under /tournaments/[slug] carries map_pool_id, and covers the archive —
+	// all 91 of the live tournament's archive rows resolve in it, each with a
+	// pool id.
+	const poolIdByMatch = $derived(
+		new Map(data.matches.map((m) => [m.match_id, m.map_pool_id])),
+	);
+	const distinguishing = $derived(
+		distinguishingOptions(data.tournament.map_pool),
+	);
+
+	// An instance dropped from the pool mid-tournament leaves the script as all
+	// anything knows about the map — the label this page showed throughout, so
+	// it stays the fallback rather than the blank MatchTable renders there.
+	function mapLabel(a: ArchiveMatch): string {
+		const entry = poolEntryById(
+			data.tournament.map_pool,
+			poolIdByMatch.get(a.match_id),
+		);
+		if (entry) return mapPoolLabel(entry, distinguishing, true);
+		return a.map_script ? mapScriptLabel(a.map_script) : "";
+	}
+
+	function metaCells(a: ArchiveMatch): Record<MetaKey, MetaCell> {
+		const videos = a.parts.reduce((n, p) => n + p.angles.length, 0);
+		const parts = a.parts.length;
+		const seconds = totalSeconds(a);
+		const map = mapLabel(a);
+		return {
+			map: map ? [{ value: map, plain: true }] : [],
+			turns: a.total_turns
+				? [{ value: String(a.total_turns), unit: "turns" }]
+				: [],
+			// formatRuntime already names its own units ("5h 26m").
+			hours: seconds > 0 ? [{ value: formatRuntime(seconds) }] : [],
+			counts: [
+				{ value: String(videos), unit: videos === 1 ? "video" : "videos" },
+				{ value: String(parts), unit: parts === 1 ? "part" : "parts" },
+			],
+		};
+	}
+
+	// Characters the cell renders, separator included — enough to rank two
+	// labels from the same column against each other.
+	const cellLength = (cell: MetaCell): number =>
+		cell.reduce(
+			(n, g) => n + g.value.length + (g.unit ? g.unit.length + 1 : 0),
+			Math.max(0, cell.length - 1) * 2,
+		);
+
+	// Each row is its own grid, and sibling grids can't share a `max-content`
+	// track, so the columns line up only if every row sizes its tracks off the
+	// same content. Every row therefore carries a zero-height copy of the
+	// longest cell the archive holds in each column, drawn through the same
+	// snippet as the real one: `max-content` then resolves identically
+	// everywhere, with no slack. A width counted in `ch` instead left the
+	// columns visibly loose — `ch` is the digit advance and these labels are
+	// mostly lowercase. A column no match fills — "hours" on the keyless
+	// feed, which prices nothing — drops out rather than leaving a dead
+	// track.
+	const metaWidest = $derived.by(() => {
+		const widest = Object.fromEntries(
+			META_KEYS.map((k) => [k, [] as MetaCell]),
+		) as Record<MetaKey, MetaCell>;
+		for (const a of data.archive.matches) {
+			const cells = metaCells(a);
+			for (const k of META_KEYS)
+				if (cellLength(cells[k]) > cellLength(widest[k])) widest[k] = cells[k];
+		}
+		return widest;
+	});
+
+	const metaKeys = $derived(META_KEYS.filter((k) => metaWidest[k].length > 0));
+	const metaTemplate = $derived(metaKeys.map(() => "max-content").join(" "));
 
 	function haystack(a: ArchiveMatch): string {
 		return [
@@ -95,9 +206,6 @@
 				(!q || haystack(a).includes(q)),
 		);
 	});
-
-	const totalSeconds = (a: ArchiveMatch) =>
-		a.parts.reduce((t, p) => t + p.seconds, 0);
 
 	const filtering = $derived(
 		query.trim() !== "" || nation !== "" || round !== "",
@@ -154,6 +262,12 @@
 			clip-rule="evenodd"
 		/>
 	</svg>
+{/snippet}
+
+{#snippet metaCell(cell: MetaCell)}
+	{#each cell as seg, j (j)}{#if j > 0},&nbsp;{/if}{#if seg.plain}{seg.value}{:else}<b
+				class="text-tan">{seg.value}</b
+			>{#if seg.unit}&nbsp;{seg.unit}{/if}{/if}{/each}
 {/snippet}
 
 {#snippet tile(
@@ -242,26 +356,22 @@
 		style="background-color: rgb(var(--color-surface-sunken));"
 	>
 		<SearchInput bind:value={query} variant="dark" class="w-64" />
-		<select
-			bind:value={nation}
-			aria-label="Filter by nation"
-			class="rounded-lg border-2 border-surface bg-surface-raised px-3 py-2 text-sm text-tan"
-		>
-			<option value="">All nations</option>
-			{#each nations as n (n)}
-				<option value={n}>{nationName(n)}</option>
-			{/each}
-		</select>
-		<select
-			bind:value={round}
-			aria-label="Filter by round"
-			class="rounded-lg border-2 border-surface bg-surface-raised px-3 py-2 text-sm text-tan"
-		>
-			<option value="">All rounds</option>
-			{#each rounds as r (r)}
-				<option value={String(r)}>Round {r}</option>
-			{/each}
-		</select>
+		<Select
+			value={nation}
+			onChange={(v) => (nation = v ?? "")}
+			options={nationOptions}
+			ariaLabel="Filter by nation"
+			class="w-40"
+			matchTriggerWidth
+		/>
+		<Select
+			value={round}
+			onChange={(v) => (round = v ?? "")}
+			options={roundOptions}
+			ariaLabel="Filter by round"
+			class="w-32"
+			matchTriggerWidth
+		/>
 		<span class="ml-auto text-xs text-muted">
 			{totals.matches} matches · {totals.parts} parts · {totals.videos} videos · {Math.round(
 				totals.hours,
@@ -296,7 +406,7 @@
 		{#each shown as a (a.match_id)}
 			{@const wonA = matchSlotOutcome(a, "a") === "won"}
 			{@const wonB = matchSlotOutcome(a, "b") === "won"}
-			{@const bracket = matchBracketLabel(data.tournament, a)}
+			{@const cells = metaCells(a)}
 			{@const natA = matchSlotNation(a, "a")}
 			{@const natB = matchSlotNation(a, "b")}
 			{@const colorA = natA ? getCivilizationColor(natA) : undefined}
@@ -369,34 +479,34 @@
 								</span>
 							</span>
 						</span>
+						<!-- Columns from `lg` up, where the row has the width to hold
+						     them; below it the cells stay a wrapping flex list, as
+						     fixed tracks would overflow a phone. A cell names its own
+						     track, so an empty one leaves its column standing instead
+						     of pulling the rest left. -->
 						<span
-							class="col-span-2 flex flex-wrap gap-x-3 text-xs text-muted lg:col-span-1 lg:justify-end"
+							class="col-span-2 flex flex-wrap gap-x-3 text-xs text-muted lg:col-span-1 lg:grid lg:justify-end"
+							style="grid-template-columns: {metaTemplate}; grid-template-rows: auto 0;"
 						>
-							<!-- Bracket before the map, the pairing MatchTable puts under
-							     every matchup: with two divisions playing the same round
-							     numbers, "Round 3" alone names two brackets. -->
-							{#if bracket}<span>{bracket}</span>{/if}
-							{#if a.map_script}<span>{mapScriptLabel(a.map_script)}</span>{/if}
-							{#if a.total_turns}<span
-									><b class="text-tan">{a.total_turns}</b> turns</span
-								>{/if}
-							{#if totalSeconds(a) > 0}<span
-									><b class="text-tan">{formatRuntime(totalSeconds(a))}</b> filmed</span
-								>{/if}
-							<span
-								><b class="text-tan">{a.parts.length}</b> part{a.parts
-									.length === 1
-									? ""
-									: "s"}</span
-							>
-							<span
-								><b class="text-tan"
-									>{a.parts.reduce((n, p) => n + p.angles.length, 0)}</b
+							{#each metaKeys as k, i (k)}
+								{#if cells[k].length > 0}
+									<span
+										class="whitespace-nowrap"
+										style="grid-column: {i + 1}; grid-row: 1;"
+										>{@render metaCell(cells[k])}</span
+									>
+								{/if}
+							{/each}
+							<!-- The sizing row: see metaWidest. Clipped to nothing, and out
+							     of the button's accessible name. -->
+							{#each metaKeys as k, i (k)}
+								<span
+									aria-hidden="true"
+									class="invisible hidden overflow-hidden whitespace-nowrap lg:block"
+									style="grid-column: {i + 1}; grid-row: 2;"
+									>{@render metaCell(metaWidest[k])}</span
 								>
-								video{a.parts.reduce((n, p) => n + p.angles.length, 0) === 1
-									? ""
-									: "s"}</span
-							>
+							{/each}
 						</span>
 					</button>
 				</div>
