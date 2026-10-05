@@ -25,7 +25,9 @@
 //
 // Beside the three, the vocabulary they are built from is exported where a
 // second surface has to ask the same question in the same words:
-// COMPOSITION_GAME_IDS_SQL and remoteGameModeSql.
+// COMPOSITION_GAME_IDS_SQL, remoteGameModeSql, and CHALLENGE_GAME_IDS_SQL —
+// which the home page's discovery feed (handlePublicRecentGames) reads to keep
+// runs out of a list it narrows by visibility alone.
 
 import type { GlobalPeriod, GlobalSlice, UserScope } from "./stats/types";
 

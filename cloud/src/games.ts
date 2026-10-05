@@ -42,6 +42,7 @@ import { sessionFromRequest } from "./session";
 import {
 	buildAdminGameFilterWhere,
 	buildUserScopeWhere,
+	CHALLENGE_GAME_IDS_SQL,
 	parseAdminGameFilter,
 	parseNationParam,
 	parseScopeParam,
@@ -2464,6 +2465,12 @@ export async function handleGameList(
 // so the home cards can render an in-place VP sparkline without N follow-up
 // fetches.
 //
+// Challenge runs are out of the feed, on the same predicate the /stats slices
+// use (buildGlobalSliceWhere). An accepted run is forced public on upload
+// (assignToNamedCollection), so a busy board would otherwise be the newest
+// public games there are — and every one of them is the same fixed map played
+// to the same rule set, which is what the challenge page itself shows.
+//
 // PII stance mirrors anonymous /v1/games/:id: only display_name (already
 // public on /games/[id] pages) and player_name (the in-game character) are
 // returned. No online_ids, no email.
@@ -2527,6 +2534,7 @@ export async function handlePublicRecentGames(
 		 FROM games g
 		 JOIN users u ON g.user_id = u.user_id
 		 WHERE g.is_public = 1
+		   AND g.game_id NOT IN (${CHALLENGE_GAME_IDS_SQL})
 		 ORDER BY g.save_date DESC NULLS LAST, g.created_at DESC
 		 LIMIT ?`,
 	)

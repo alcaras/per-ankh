@@ -2,7 +2,8 @@
 // posts a map, a runner submits saves against it, and the guards around a
 // live leaderboard hold. Scoring itself is covered on the unit project
 // (src/challenges/scoring.test.ts); this file pins what the handlers do with
-// the verdict — what is stored, what is refused, and what the row locks.
+// the verdict — what is stored, what is refused, what the row locks, and
+// which lists the run stays out of.
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -128,6 +129,27 @@ async function closeChallenge(challengeId: string): Promise<void> {
 	)
 		.bind(challengeId)
 		.run();
+}
+
+// A challenge with one accepted run on its board — the state both the lock
+// guards and the feed exclusion are about.
+async function challengeWithRun(): Promise<{
+	creator: TestUser;
+	runner: TestUser;
+	challenge: ChallengeBody["challenge"];
+	gameId: string;
+}> {
+	const creator = await makeUser();
+	const runner = await makeUser();
+	const { xmlGameId, challenge } = await createChallenge(creator);
+	const run = await expectOk<{ game_id: string }>(
+		await submitRun(
+			runner,
+			challenge.challenge_id,
+			await runForm({ xmlGameId, totalTurns: 25, techTurn: 20 }),
+		),
+	);
+	return { creator, runner, challenge, gameId: run.game_id };
 }
 
 describe("creating a challenge", () => {
@@ -356,20 +378,6 @@ describe("submitting a run", () => {
 });
 
 describe("what a run on the board locks", () => {
-	async function challengeWithRun() {
-		const creator = await makeUser();
-		const runner = await makeUser();
-		const { xmlGameId, challenge } = await createChallenge(creator);
-		const run = await expectOk<{ game_id: string }>(
-			await submitRun(
-				runner,
-				challenge.challenge_id,
-				await runForm({ xmlGameId, totalTurns: 25, techTurn: 20 }),
-			),
-		);
-		return { creator, runner, challenge, gameId: run.game_id };
-	}
-
 	it("the rules, but not the title or the duration", async () => {
 		const { creator, challenge } = await challengeWithRun();
 		const path = `/v1/challenges/${challenge.number}`;
@@ -432,5 +440,35 @@ describe("what a run on the board locks", () => {
 		await closeChallenge(challenge.challenge_id);
 		const res = await request.delete({ path, as: runner });
 		expect(res.status).toBe(204);
+	});
+});
+
+describe("where a run doesn't appear", () => {
+	it("not in the home page's discovery feed, public though it is", async () => {
+		const { runner, gameId } = await challengeWithRun();
+		// An ordinary game by the same uploader, so that an empty feed can't
+		// pass for an exclusion.
+		const ordinary = await expectOk<{ game_id: string }>(
+			await postMultipart({
+				path: "/v1/games",
+				form: await buildUploadFormData({ winnerIndex: 0 }),
+				as: runner,
+			}),
+		);
+		// The run is forced public on upload, which is why the feed needs the
+		// predicate — g.is_public = 1 alone would list it.
+		const row = await env.SHARE_DB.prepare(
+			"SELECT is_public FROM games WHERE game_id = ?",
+		)
+			.bind(gameId)
+			.first<{ is_public: number }>();
+		expect(row?.is_public).toBe(1);
+
+		const feed = await expectOk<{ games: Array<{ game_id: string }> }>(
+			await request.get({ path: "/v1/games/public-recent" }),
+		);
+		const ids = feed.games.map((g) => g.game_id);
+		expect(ids).toContain(ordinary.game_id);
+		expect(ids).not.toContain(gameId);
 	});
 });
