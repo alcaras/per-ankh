@@ -67,12 +67,13 @@ describe("buildRecommendations", () => {
 		// would seat it; only the band keeps it off.
 		const viewer = player("viewer");
 		const peers = pool(RECOMMENDATION_COUNT, "peer");
-		const duels: Duel[] = peers.flatMap((p) =>
+		const duels: RecommendationDuel[] = peers.flatMap((p) =>
 			Array.from({ length: 3 }, (_, i) => ({
 				date: `2026-0${6 + i}-01`,
 				p1: viewer.userId,
 				p2: p.userId,
 				winner: viewer.userId,
+				script: null,
 			})),
 		);
 		const lists = buildRecommendations({
@@ -350,17 +351,29 @@ describe("buildRecommendations", () => {
 		// The pool holds several configurations of some scripts and one of
 		// others, so picking per pair in isolation returns the popular scripts
 		// over and over. Nobody here has played anything, so every row is free
-		// to be a fresh script and they should all differ.
-		const players = [player("me"), ...pool(12)];
+		// to take a fresh script, and the page should spend every script the
+		// pool declares before it repeats one.
+		//
+		// "It can" is the pool's limit, not the page's: the pool declares fewer
+		// scripts than the page has rows, so the last rows repeat a script no
+		// matter what this function does. What is being pinned is that the
+		// repeat starts only once the pool is exhausted — derive the ceiling
+		// rather than write the number, or this test pins the pool's current
+		// contents instead of the spread rule.
+		const poolScripts = new Set(ATLAS_POOL.map((m) => m.script));
+		const players = [player("me"), ...pool(RECOMMENDATION_COUNT)];
 		const lists = buildRecommendations({ players, duels: [], today: TODAY });
 
 		const mine = lists.get("me") ?? [];
+		expect(mine).toHaveLength(RECOMMENDATION_COUNT);
 		expect(mine.every((r) => r.mapAnchor !== null)).toBe(true);
 
 		const scripts = mine.map(
 			(r) => ATLAS_POOL.find((m) => m.anchor === r.mapAnchor)!.script,
 		);
-		expect(new Set(scripts).size).toBe(scripts.length);
+		expect(new Set(scripts).size).toBe(
+			Math.min(scripts.length, poolScripts.size),
+		);
 	});
 
 	it("avoids a map either of them has played lately", () => {

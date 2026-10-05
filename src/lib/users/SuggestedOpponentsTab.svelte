@@ -179,7 +179,8 @@
 		     popover): `title` is the sentence saying what lands on the clipboard.
 		     `label` names the opponent, where its siblings' labels don't need to —
 		     theirs are one to a page, and there is one of these per card, so a
-		     bare "Copy message" would read out ten identical buttons. -->
+		     bare "Copy message" would read out a column of identical
+		     buttons. -->
 		<CopyButton
 			text={() => dmFor(o)}
 			label="Copy message to {o.display_name}"

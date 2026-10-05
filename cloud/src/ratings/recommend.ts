@@ -293,7 +293,7 @@ export function buildRecommendations(args: {
 					opponentUserId: candidateId,
 					meetings: meetings.get(key) ?? 0,
 					badges,
-					// Filled in below, once this list's ten are known.
+					// Filled in below, once this list is settled.
 					mapAnchor: null,
 				},
 			});
@@ -374,9 +374,10 @@ export function buildRecommendations(args: {
 		// who didn't make it shouldn't have used up a script. `used` spreads the
 		// scripts across the page, which is worth more than the symmetry it
 		// costs: two players comparing pages may find their matchup listed under
-		// different maps, where a page of nine DOTAs is wrong in front of
-		// everyone, every time. The per-pair seed decides the pick wherever the
-		// spread rule leaves a choice, so a reload doesn't reroll anything.
+		// different maps, where a page that is nothing but DOTA is wrong in
+		// front of everyone, every time. The per-pair seed decides the pick
+		// wherever the spread rule leaves a choice, so a reload doesn't reroll
+		// anything.
 		const used = new Set<string>();
 		for (const rec of list) {
 			const map = pickMap(
