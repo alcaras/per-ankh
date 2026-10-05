@@ -23,7 +23,9 @@
 		type CollectionInfo,
 	} from "$lib/api-cloud";
 	import { toast } from "$lib/ui/toast";
+	import { saveBlobAs } from "$lib/utils/download";
 	import { profileHref } from "$lib/utils/profile-href";
+	import { loginBounce } from "$lib/utils/safe-next";
 
 	interface Props {
 		gameId: string;
@@ -174,23 +176,13 @@
 		downloading = true;
 		try {
 			const { blob, filename } = await cloudApi.downloadGame(gameId);
-			// Synthetic anchor click — the standard pattern for
-			// authenticated downloads. A plain `<a href>` can't carry
-			// cookie auth and the response needs to land with the right
-			// filename.
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.href = url;
-			a.download = filename;
-			document.body.appendChild(a);
-			a.click();
-			a.remove();
-			URL.revokeObjectURL(url);
+			saveBlobAs(blob, filename);
 		} catch (err) {
 			if (err instanceof UnauthorizedError) {
-				const next = encodeURIComponent(page.url.pathname);
+				// loginBounce carries pathname + search, so the tab the reader was
+				// on survives the round trip through OAuth.
 				// eslint-disable-next-line svelte/no-navigation-without-resolve -- dynamic next-query construction; resolve()'s branded types don't admit dynamic search strings
-				await goto(`/?next=${next}`);
+				await goto(loginBounce(page.url));
 				return;
 			}
 			if (err instanceof ApiError && err.status === 429) {

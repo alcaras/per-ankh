@@ -25,7 +25,11 @@
 //
 // Beside the three, the vocabulary they are built from is exported where a
 // second surface has to ask the same question in the same words:
-// COMPOSITION_GAME_IDS_SQL and remoteGameModeSql.
+// COMPOSITION_GAME_IDS_SQL, remoteGameModeSql, and noChallengeRunsSql — the
+// last read by every surface that counts games as games played and so has to
+// leave challenge runs out: the home page's discovery feed
+// (handlePublicRecentGames), the played-games board (stats/handlers.ts) and the
+// profile header (users.ts), none of which narrows by game type otherwise.
 
 import type { GlobalPeriod, GlobalSlice, UserScope } from "./stats/types";
 
@@ -37,6 +41,33 @@ export interface UserScopeOpts {
 	// must not leak via 0-count splits).
 	viewerOwnsTarget: boolean;
 }
+
+// The game-type buckets a user's library is cut into. One fragment each,
+// shared with the scope-count SQL in collections.ts so the dropdown's counts
+// and its filter can't disagree on what a bucket holds.
+//
+// A game is a tournament match, a challenge run, or neither; the neither
+// bucket splits by human count into vs_ai / mp. Challenge runs are excluded
+// from vs_ai even though they are single-human by construction — they're
+// played to a rule set, not to the end, and belong on their own shelf.
+export const TOURNAMENT_LINKED_GAME_IDS_SQL =
+	"SELECT game_id FROM tournament_matches WHERE game_id IS NOT NULL";
+const CHALLENGE_GAME_IDS_SQL = "SELECT game_id FROM challenge_submissions";
+const SOLO_GAME_IDS_SQL =
+	"SELECT game_id FROM player_summaries WHERE is_human = 1 GROUP BY game_id HAVING COUNT(*) = 1";
+const MULTI_HUMAN_GAME_IDS_SQL =
+	"SELECT game_id FROM player_summaries WHERE is_human = 1 GROUP BY game_id HAVING COUNT(*) > 1";
+
+// The predicate for each game-type bucket, over a bare `game_id` column.
+export const GAME_TYPE_PREDICATES: Record<
+	Extract<UserScope, "tournament" | "challenge" | "vs_ai" | "mp">,
+	string
+> = {
+	tournament: `game_id IN (${TOURNAMENT_LINKED_GAME_IDS_SQL})`,
+	challenge: `game_id IN (${CHALLENGE_GAME_IDS_SQL})`,
+	vs_ai: `game_id NOT IN (${TOURNAMENT_LINKED_GAME_IDS_SQL}) AND game_id NOT IN (${CHALLENGE_GAME_IDS_SQL}) AND game_id IN (${SOLO_GAME_IDS_SQL})`,
+	mp: `game_id NOT IN (${TOURNAMENT_LINKED_GAME_IDS_SQL}) AND game_id NOT IN (${CHALLENGE_GAME_IDS_SQL}) AND game_id IN (${MULTI_HUMAN_GAME_IDS_SQL})`,
+};
 
 // Returns the SQL fragment to append after `user_id = ?` (begins with
 // " AND " when non-empty, else "") plus the positional binds it adds
@@ -64,26 +95,8 @@ export function buildUserScopeWhere(opts: UserScopeOpts): {
 			parts.push("collection_id = ?");
 			binds.push(scope);
 		}
-	} else if (scope === "tournament") {
-		parts.push(
-			"game_id IN (SELECT game_id FROM tournament_matches WHERE game_id IS NOT NULL)",
-		);
-	} else if (scope === "vs_ai") {
-		// Not tournament-linked AND exactly one human.
-		parts.push(
-			"game_id NOT IN (SELECT game_id FROM tournament_matches WHERE game_id IS NOT NULL)",
-		);
-		parts.push(
-			"game_id IN (SELECT game_id FROM player_summaries WHERE is_human = 1 GROUP BY game_id HAVING COUNT(*) = 1)",
-		);
-	} else if (scope === "mp") {
-		// Not tournament-linked AND ≥2 humans (freeform multiplayer).
-		parts.push(
-			"game_id NOT IN (SELECT game_id FROM tournament_matches WHERE game_id IS NOT NULL)",
-		);
-		parts.push(
-			"game_id IN (SELECT game_id FROM player_summaries WHERE is_human = 1 GROUP BY game_id HAVING COUNT(*) > 1)",
-		);
+	} else if (scope !== "all") {
+		parts.push(GAME_TYPE_PREDICATES[scope]);
 	}
 	// scope === "all" → no additional predicate.
 
@@ -98,7 +111,8 @@ export function parseScopeParam(raw: string | null): UserScope {
 		raw === "public" ||
 		raw === "vs_ai" ||
 		raw === "mp" ||
-		raw === "tournament"
+		raw === "tournament" ||
+		raw === "challenge"
 	) {
 		return raw;
 	}
@@ -168,12 +182,39 @@ export function remoteGameModeSql(alias: string): string {
 	return `${alias}.game_mode IN ('NETWORK', 'PLAY_BY_CLOUD')`;
 }
 
+// Whether a game is not a challenge run, as a predicate over `games` under the
+// caller's alias — or over a bare `game_id` when the alias is omitted.
+//
+// Both forms exist because the callers are split down the middle: the board and
+// the discovery feed select `FROM games g`, while buildGlobalSliceWhere below
+// and the profile header's three reads query an unaliased `games`. One helper
+// rather than two, because the question is one question — an alias is a detail
+// of the query that asks it.
+//
+// A run is out wherever a surface counts games as *games played*: it is one
+// fixed map replayed to a rule set, every run on a challenge carrying that
+// map's GameId (checkIdentity, challenges/scoring.ts) and stopping when the
+// rule is met. Ranking runs against each other is what the challenge page is
+// for; on a board or a header that counts matches they displace the thing being
+// counted. GAME_TYPE_PREDICATES is the deliberate exception — its `challenge`
+// bucket is the user library's own shelf for them, which is why it asks for
+// runs with IN rather than excluding them here.
+export function noChallengeRunsSql(alias?: string): string {
+	const column = alias === undefined ? "game_id" : `${alias}.game_id`;
+	return `${column} NOT IN (${CHALLENGE_GAME_IDS_SQL})`;
+}
+
 // Returns the SQL fragment to append after the global corpus's base clause
 // (begins with " AND " when non-empty, else ""). No binds — every fragment is
 // constant SQL.
+//
+// Challenge runs are out of every slice, "all" included: they're played to a
+// rule set on a fixed map and stop when it's met, so their yields, techs and
+// turn counts describe the challenge, not how the game is played.
 export function buildGlobalSliceWhere(slice: GlobalSlice): string {
-	if (slice === "all") return "";
-	return ` AND game_id IN (${COMPOSITION_GAME_IDS_SQL[slice]})`;
+	const noRuns = ` AND ${noChallengeRunsSql()}`;
+	if (slice === "all") return noRuns;
+	return `${noRuns} AND game_id IN (${COMPOSITION_GAME_IDS_SQL[slice]})`;
 }
 
 // Parse the ?slice= query param into a GlobalSlice, the /stats sibling of

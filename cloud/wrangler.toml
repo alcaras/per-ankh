@@ -247,6 +247,15 @@ SEASON_VIEW_PER_HOUR = "600"
 # and 1 season_view per load, so anon_read stays what actually bounds it.
 HOME_SUMMARY_VIEW_PER_HOUR = "600"
 
+# === Challenge read limits ===
+# Per-IP hourly ceilings on the two challenge read budgets
+# (cloud/src/challenges/handlers.ts), on the tournament lever above. Two, by
+# the surface that spends them: _VIEW_ is the challenge pages (list + detail,
+# one read each), _LINK_ is GET /v1/games/:id/challenge-link, which every
+# game-page render calls — the tournament-link split, for the same incident.
+CHALLENGE_VIEW_PER_HOUR = "600"
+CHALLENGE_LINK_VIEW_PER_HOUR = "600"
+
 # === Cloud rewrite (/v1/auth/*, /v1/games/*) ===
 # CORS allowlist for new routes — comma-separated origins. Cookie-based
 # auth requires Access-Control-Allow-Credentials: true, which forbids the
@@ -356,6 +365,8 @@ TOURNAMENT_LINK_VIEW_PER_HOUR = "600"
 GLOBAL_STATS_VIEW_PER_HOUR = "600"
 SEASON_VIEW_PER_HOUR = "600"
 HOME_SUMMARY_VIEW_PER_HOUR = "600"
+CHALLENGE_VIEW_PER_HOUR = "600"
+CHALLENGE_LINK_VIEW_PER_HOUR = "600"
 ALLOWED_ORIGINS = "https://staging.per-ankh.app"
 # Separate staging Discord OAuth app — paste its client ID:
 DISCORD_CLIENT_ID = "1512545079493922927"

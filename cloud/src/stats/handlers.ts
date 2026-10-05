@@ -27,6 +27,7 @@ import { displayNameSql } from "../identity";
 import { UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL } from "../online-ids";
 import {
 	DEFAULT_GLOBAL_PERIOD,
+	noChallengeRunsSql,
 	parseNationParam,
 	parsePeriodParam,
 	parseScopeParam,
@@ -583,6 +584,26 @@ export async function handlePlayerLeaderboard(
 	// another stays public — the public upload classifies it, and both
 	// players are credited once.
 	//
+	// Every arm also carries noChallengeRunsSql, for a reason the query itself
+	// can't show. The board's unit is a match — one xml_game_id — and a save is
+	// a run of a challenge only if it carries that challenge map's own GameId
+	// (checkIdentity, challenges/scoring.ts). So every run on a challenge, by
+	// every runner in the field, collapses into a *single* match here:
+	// n_humans = 1, since the scorer accepts exactly one human seat, and
+	// first_at = MIN(created_at) over the whole field's runs. That match fits
+	// no format bucket, so it would count in COUNT(*) AS total and reach the
+	// frontend's `other` column through it — and its one shared first_at would
+	// become every runner's total_reach, which is what orders the board when
+	// totals tie. A challenge with fifty runs on it would hand fifty players
+	// the same tiebreak instant and let the match they were tied by be a game
+	// none of them played against anyone.
+	//
+	// All four arms carry it, not the subset that moves the numbers: the inner
+	// joins would make a partial application look right, and a predicate that
+	// holds only because of where a join narrows is right by accident — the
+	// same reason the visibility rule above is spelled in every arm rather than
+	// rested on join semantics.
+	//
 	// The online-id arm credits an id only while it resolves to exactly one
 	// user — UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL (online-ids.ts), which is where
 	// that judgement is argued and where the rating model reads it from too.
@@ -676,6 +697,7 @@ export async function handlePlayerLeaderboard(
 		   FROM player_summaries ps
 		   JOIN games g ON g.game_id = ps.game_id
 		   WHERE g.is_public = 1
+		     AND ${noChallengeRunsSql("g")}
 		     AND (?1 IS NULL OR g.created_at >= ?1)
 		     AND (?2 IS NULL OR g.created_at < ?2)
 		   GROUP BY ps.game_id
@@ -688,6 +710,7 @@ export async function handlePlayerLeaderboard(
 		     JOIN player_summaries ps
 		       ON ps.game_id = g.game_id AND ps.is_uploader = 1 AND ps.is_human = 1
 		     WHERE g.is_public = 1
+		       AND ${noChallengeRunsSql("g")}
 		       AND (?1 IS NULL OR g.created_at >= ?1)
 		       AND (?2 IS NULL OR g.created_at < ?2)
 		     UNION
@@ -699,6 +722,7 @@ export async function handlePlayerLeaderboard(
 		     JOIN (${UNAMBIGUOUS_ONLINE_ID_OWNERS_SQL}) uo
 		       ON uo.online_id = ps.online_id
 		     WHERE g.is_public = 1
+		       AND ${noChallengeRunsSql("g")}
 		       AND (?1 IS NULL OR g.created_at >= ?1)
 		       AND (?2 IS NULL OR g.created_at < ?2)
 		   ) credited
@@ -715,6 +739,7 @@ export async function handlePlayerLeaderboard(
 		   FROM games g
 		   JOIN humans h ON h.game_id = g.game_id
 		   WHERE g.is_public = 1
+		     AND ${noChallengeRunsSql("g")}
 		     AND (?1 IS NULL OR g.created_at >= ?1)
 		     AND (?2 IS NULL OR g.created_at < ?2)
 		   GROUP BY g.xml_game_id

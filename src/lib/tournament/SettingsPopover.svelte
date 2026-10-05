@@ -8,9 +8,11 @@
 		type TournamentDetail,
 		type UserMe,
 	} from "$lib/api-cloud";
+	import { DESTRUCTIVE_BTN } from "$lib/ui/classes";
 	import { confirmDialog } from "$lib/ui/confirm";
 	import Popover from "$lib/ui/Popover.svelte";
 	import { toast } from "$lib/ui/toast";
+	import { saveBlobAs } from "$lib/utils/download";
 	import TournamentAdminManager from "./TournamentAdminManager.svelte";
 	import TournamentMapPoolAdder from "./TournamentMapPoolAdder.svelte";
 	import TournamentMapPoolSummary from "./TournamentMapPoolSummary.svelte";
@@ -39,14 +41,7 @@
 		exporting = true;
 		try {
 			const blob = await cloudApi.exportTournament(tournament.tournament_id);
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.href = url;
-			a.download = `${tournament.slug}-export.zip`;
-			document.body.appendChild(a);
-			a.click();
-			a.remove();
-			URL.revokeObjectURL(url);
+			saveBlobAs(blob, `${tournament.slug}-export.zip`);
 		} catch (err) {
 			let message = "Couldn't export tournament";
 			if (err instanceof ApiError) {
@@ -213,7 +208,7 @@
 			</div>
 			<button
 				type="button"
-				class="whitespace-nowrap rounded border border-red-400 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-400 hover:text-black disabled:opacity-50"
+				class={DESTRUCTIVE_BTN}
 				onclick={handleDelete}
 				disabled={deleting}
 			>

@@ -26,7 +26,13 @@ const TABS = new Set([
 	"tournaments",
 	"suggested",
 ]);
-const SCOPE_KEYWORDS = new Set(["public", "vs_ai", "mp", "tournament"]);
+const SCOPE_KEYWORDS = new Set([
+	"public",
+	"vs_ai",
+	"mp",
+	"tournament",
+	"challenge",
+]);
 
 // The shape a stored slug has. Mirrors the Worker's by-slug route regex
 // (cloud/src/index.ts) — which is the claim format from

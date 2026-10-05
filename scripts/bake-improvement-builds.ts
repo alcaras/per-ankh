@@ -26,8 +26,11 @@
 // parser carries the per-tile figure, the ledger should read it instead of
 // these and this table becomes the fallback for older blobs.
 //
-// OUTPUT: src/lib/generated/improvement-builds.ts (checked in, self-contained —
-// no .bake sidecar, so bake:finalize never wipes it when this hasn't run).
+// OUTPUT: src/lib/generated/improvement-builds.ts (frontend) and
+// cloud/src/generated/improvement-builds.ts (Worker — the challenge scorer's
+// generated mirror reads the upgrade chains; the unit-stats dual-emit
+// pattern). Checked in, self-contained — no .bake sidecar, so bake:finalize
+// never wipes them when this hasn't run.
 //
 // Run: npm run bake:improvement-builds
 
@@ -43,7 +46,10 @@ import { resolveReferenceXml } from "./lib/paths.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const OUTPUT_TS = resolve(REPO_ROOT, "src/lib/generated/improvement-builds.ts");
+const OUTPUTS = [
+	resolve(REPO_ROOT, "src/lib/generated/improvement-builds.ts"),
+	resolve(REPO_ROOT, "cloud/src/generated/improvement-builds.ts"),
+];
 
 // improvement.xml plus the event/DLC adds that follow the same shape.
 const IMPROVEMENT_FILE = /^improvement(-event.*)?\.xml$/;
@@ -56,6 +62,7 @@ interface ImprovementEntry {
 	bUrban?: string;
 	bWonder?: string;
 	DevelopImprovement?: string;
+	UpgradeImprovement?: string;
 }
 
 type Kind = "rural" | "urban" | "wonder";
@@ -64,6 +71,9 @@ interface BuildInfo {
 	turns: number;
 	class: string | null;
 	kind: Kind;
+	/** Set when the game upgrades this improvement in place (improvement.xml
+	 * <UpgradeImprovement>) — a Library becomes an Academy on the same tile. */
+	upgradesTo?: string;
 	/** Set when this improvement is what a built one matured into. */
 	developedFrom?: string;
 }
@@ -107,6 +117,7 @@ async function main(): Promise<void> {
 			if (imp.bBuild !== "1") continue;
 			const turns = Number(imp.iBuildTurns ?? 0);
 			if (!Number.isFinite(turns) || turns <= 0) continue;
+			const upgradesTo = imp.UpgradeImprovement;
 			builds[zType] = {
 				turns,
 				class: imp.Class ?? null,
@@ -116,6 +127,7 @@ async function main(): Promise<void> {
 						: imp.bUrban === "1"
 							? "urban"
 							: "rural",
+				...(upgradesTo != null && upgradesTo !== "" ? { upgradesTo } : {}),
 			};
 		}
 	}
@@ -149,7 +161,15 @@ async function main(): Promise<void> {
 			seen.add(cursor);
 			// A target that's buildable in its own right keeps its own price.
 			if (builds[cursor] == null) {
-				builds[cursor] = { ...info, developedFrom: zType };
+				// Cost and class are inherited; `upgradesTo` is not — what a tile
+				// upgrades into is that entry's own property, and no matured
+				// improvement carries one today.
+				builds[cursor] = {
+					turns: info.turns,
+					class: info.class,
+					kind: info.kind,
+					developedFrom: zType,
+				};
 				inherited += 1;
 			}
 			cursor = byType.get(cursor)?.DevelopImprovement;
@@ -172,6 +192,20 @@ async function main(): Promise<void> {
 	);
 	lines.push("\treadonly class: string | null;");
 	lines.push('\treadonly kind: "rural" | "urban" | "wonder";');
+	lines.push(
+		"\t/** The improvement this one upgrades into in place (improvement.xml",
+	);
+	lines.push(
+		"\t * <UpgradeImprovement>) — Library → Academy → University. Absent on an",
+	);
+	lines.push(
+		"\t * improvement that upgrades into nothing, which includes the Aksum",
+	);
+	lines.push(
+		"\t * steles: Stele, Grand Stele and Legendary Stele are three separate",
+	);
+	lines.push("\t * buildables that coexist on their own tiles. */");
+	lines.push("\treadonly upgradesTo?: string;");
 	lines.push(
 		"\t/** Set when this is what a built improvement matured into (Hamlet → Village → Town). */",
 	);
@@ -197,23 +231,31 @@ async function main(): Promise<void> {
 	lines.push("};");
 	lines.push("");
 
-	const config = await resolveConfig(OUTPUT_TS);
-	const formatted = await prettierFormat(lines.join("\n"), {
-		...config,
-		parser: "typescript",
-		filepath: OUTPUT_TS,
-	});
-	await mkdir(dirname(OUTPUT_TS), { recursive: true });
-	if (existsSync(OUTPUT_TS)) {
-		const existing = await readFile(OUTPUT_TS, "utf-8");
-		if (existing === formatted) {
-			console.log("bake-improvement-builds: no changes");
-			return;
+	let wrote = 0;
+	for (const output of OUTPUTS) {
+		const config = await resolveConfig(output);
+		const formatted = await prettierFormat(lines.join("\n"), {
+			...config,
+			parser: "typescript",
+			filepath: output,
+		});
+		await mkdir(dirname(output), { recursive: true });
+		if (existsSync(output)) {
+			const existing = await readFile(output, "utf-8");
+			if (existing === formatted) continue;
 		}
+		await writeFile(output, formatted);
+		wrote += 1;
 	}
-	await writeFile(OUTPUT_TS, formatted);
+	if (wrote === 0) {
+		console.log("bake-improvement-builds: no changes");
+		return;
+	}
+	const upgrades = Object.values(builds).filter(
+		(b) => b.upgradesTo != null,
+	).length;
 	console.log(
-		`bake-improvement-builds: ${Object.keys(builds).length} priced improvements (${inherited} inherited through develop chains, of ${scanned} scanned across ${files.length} files) → ${OUTPUT_TS.replace(REPO_ROOT + "/", "")}`,
+		`bake-improvement-builds: ${Object.keys(builds).length} priced improvements (${inherited} inherited through develop chains, ${upgrades} with an in-place upgrade, of ${scanned} scanned across ${files.length} files) → ${OUTPUTS.map((o) => o.replace(REPO_ROOT + "/", "")).join(", ")}`,
 	);
 }
 

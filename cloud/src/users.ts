@@ -26,6 +26,7 @@
 import * as v from "valibot";
 import { buildAvatarUrl } from "./auth";
 import { countEventsSince } from "./games";
+import { noChallengeRunsSql } from "./games-scope";
 import { displayNameSql } from "./identity";
 import { logError } from "./log";
 import { UserSearchQuerySchema } from "./schemas/tournament";
@@ -440,11 +441,28 @@ async function buildUserProfile(
 	const userId = row.user_id;
 
 	// All-time profile summary for the profile-header card. Deliberately
-	// over ALL the user's saves (no collection / game-type scope) — the
-	// header sits above the scope selector and shouldn't move with it.
-	// Visibility-scoped only: owner sees private+public, others public-only.
+	// over ALL the user's saves — no collection scope, and no game-type scope
+	// but one: the header sits above the scope selector and shouldn't move
+	// with it, yet challenge runs are out of all three reads below.
+	// Visibility is the only other narrowing: owner sees private+public,
+	// others public-only.
+	//
+	// Runs are the exception because a run is not a game the user sat down to
+	// play — a challenge fixes its map's nation and seat, so a handful of runs
+	// on one map can take over the modal nation the card calls a favourite,
+	// and they do it on a map every runner shares. win_rate needs nothing of
+	// its own (a run's save has no winner, so user_won is NULL and the
+	// denominator skips it already) but shares the query with total.
+	//
+	// Two consequences. The header's total no longer equals the sum of the
+	// scope selector's buckets underneath it, whose `challenge` bucket counts
+	// runs on purpose (GAME_TYPE_PREDICATES, games-scope.ts) — that shelf is
+	// where runs are meant to be countable. And the home page's "all-time
+	// games" line reads this same number (yourSeason, src/routes/+page.ts), so
+	// it narrows along with it.
 	const session = await sessionFromRequest(env, request);
 	const vis = session?.data.user_id === userId ? "" : " AND is_public = 1";
+	const noRuns = ` AND ${noChallengeRunsSql()}`;
 	const [countsRow, nationRow, dayRow, channelsRes, participationRow] =
 		await Promise.all([
 			env.SHARE_DB.prepare(
@@ -452,13 +470,13 @@ async function buildUserProfile(
 				        CAST(SUM(CASE WHEN user_won = 1 THEN 1 ELSE 0 END) AS REAL)
 				          / NULLIF(SUM(CASE WHEN user_won IS NOT NULL THEN 1 ELSE 0 END), 0)
 				          AS win_rate
-				 FROM games WHERE user_id = ?${vis}`,
+				 FROM games WHERE user_id = ?${vis}${noRuns}`,
 			)
 				.bind(userId)
 				.first<{ total: number; win_rate: number | null }>(),
 			env.SHARE_DB.prepare(
 				`SELECT user_nation FROM games
-				 WHERE user_id = ? AND user_nation IS NOT NULL${vis}
+				 WHERE user_id = ? AND user_nation IS NOT NULL${vis}${noRuns}
 				 GROUP BY user_nation
 				 ORDER BY COUNT(*) DESC, user_nation ASC
 				 LIMIT 1`,
@@ -467,7 +485,7 @@ async function buildUserProfile(
 				.first<{ user_nation: string }>(),
 			env.SHARE_DB.prepare(
 				`SELECT CAST(strftime('%w', save_date) AS INTEGER) AS weekday
-				 FROM games WHERE user_id = ? AND save_date IS NOT NULL${vis}
+				 FROM games WHERE user_id = ? AND save_date IS NOT NULL${vis}${noRuns}
 				 GROUP BY weekday
 				 ORDER BY COUNT(*) DESC, weekday ASC
 				 LIMIT 1`,
