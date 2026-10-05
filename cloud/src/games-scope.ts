@@ -25,9 +25,11 @@
 //
 // Beside the three, the vocabulary they are built from is exported where a
 // second surface has to ask the same question in the same words:
-// COMPOSITION_GAME_IDS_SQL, remoteGameModeSql, and CHALLENGE_GAME_IDS_SQL —
-// which the home page's discovery feed (handlePublicRecentGames) reads to keep
-// runs out of a list it narrows by visibility alone.
+// COMPOSITION_GAME_IDS_SQL, remoteGameModeSql, and noChallengeRunsSql — the
+// last read by every surface that counts games as games played and so has to
+// leave challenge runs out: the home page's discovery feed
+// (handlePublicRecentGames), the played-games board (stats/handlers.ts) and the
+// profile header (users.ts), none of which narrows by game type otherwise.
 
 import type { GlobalPeriod, GlobalSlice, UserScope } from "./stats/types";
 
@@ -50,8 +52,7 @@ export interface UserScopeOpts {
 // played to a rule set, not to the end, and belong on their own shelf.
 export const TOURNAMENT_LINKED_GAME_IDS_SQL =
 	"SELECT game_id FROM tournament_matches WHERE game_id IS NOT NULL";
-export const CHALLENGE_GAME_IDS_SQL =
-	"SELECT game_id FROM challenge_submissions";
+const CHALLENGE_GAME_IDS_SQL = "SELECT game_id FROM challenge_submissions";
 const SOLO_GAME_IDS_SQL =
 	"SELECT game_id FROM player_summaries WHERE is_human = 1 GROUP BY game_id HAVING COUNT(*) = 1";
 const MULTI_HUMAN_GAME_IDS_SQL =
@@ -181,6 +182,28 @@ export function remoteGameModeSql(alias: string): string {
 	return `${alias}.game_mode IN ('NETWORK', 'PLAY_BY_CLOUD')`;
 }
 
+// Whether a game is not a challenge run, as a predicate over `games` under the
+// caller's alias — or over a bare `game_id` when the alias is omitted.
+//
+// Both forms exist because the callers are split down the middle: the board and
+// the discovery feed select `FROM games g`, while buildGlobalSliceWhere below
+// and the profile header's three reads query an unaliased `games`. One helper
+// rather than two, because the question is one question — an alias is a detail
+// of the query that asks it.
+//
+// A run is out wherever a surface counts games as *games played*: it is one
+// fixed map replayed to a rule set, every run on a challenge carrying that
+// map's GameId (checkIdentity, challenges/scoring.ts) and stopping when the
+// rule is met. Ranking runs against each other is what the challenge page is
+// for; on a board or a header that counts matches they displace the thing being
+// counted. GAME_TYPE_PREDICATES is the deliberate exception — its `challenge`
+// bucket is the user library's own shelf for them, which is why it asks for
+// runs with IN rather than excluding them here.
+export function noChallengeRunsSql(alias?: string): string {
+	const column = alias === undefined ? "game_id" : `${alias}.game_id`;
+	return `${column} NOT IN (${CHALLENGE_GAME_IDS_SQL})`;
+}
+
 // Returns the SQL fragment to append after the global corpus's base clause
 // (begins with " AND " when non-empty, else ""). No binds — every fragment is
 // constant SQL.
@@ -189,7 +212,7 @@ export function remoteGameModeSql(alias: string): string {
 // rule set on a fixed map and stop when it's met, so their yields, techs and
 // turn counts describe the challenge, not how the game is played.
 export function buildGlobalSliceWhere(slice: GlobalSlice): string {
-	const noRuns = ` AND game_id NOT IN (${CHALLENGE_GAME_IDS_SQL})`;
+	const noRuns = ` AND ${noChallengeRunsSql()}`;
 	if (slice === "all") return noRuns;
 	return `${noRuns} AND game_id IN (${COMPOSITION_GAME_IDS_SQL[slice]})`;
 }

@@ -14,6 +14,11 @@
 // no public counter, down neither credit path. Windows are caller-supplied to
 // the day, so a counter that moved would be an activity log for a game its
 // owner never published.
+//
+// And the one game type the board drops: a challenge run. Every run on a
+// challenge carries that map's own GameId, so the whole field's runs would
+// reach the board as a single one-human match with one shared timestamp — see
+// the comment on the query for what that does to the tiebreak.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -94,6 +99,38 @@ async function linkOnlineId(user: TestUser, onlineId: string): Promise<void> {
 		`INSERT INTO user_online_ids (user_id, online_id) VALUES (?, ?)`,
 	)
 		.bind(user.userId, onlineId)
+		.run();
+}
+
+// Turns an already-seeded game into an accepted run on a challenge of its own.
+// Direct INSERT for seedPlayedGame's reason, and global-slices.test.ts seeds
+// its run fixture the same way: the real submit path wants a published map and
+// a scorable save, and what's under test here is the predicate, not the scorer.
+// challenges.number is UNIQUE, so each call takes the next one.
+let nextChallengeNumber = 27;
+async function seedChallengeRun(user: TestUser, gameId: string): Promise<void> {
+	const challengeId = `ch_${nanoid(18)}`;
+	await env.SHARE_DB.prepare(
+		`INSERT INTO challenges (
+			challenge_id, number, title, created_by, closes_at,
+			setup, objectives, criteria,
+			map_r2_key, map_file_hash, map_size_bytes
+		) VALUES (?, ?, 'Leaderboard fixture', ?, datetime('now', '+30 days'),
+		          '{}', '[]', '[]', ?, 'hash', 1)`,
+	)
+		.bind(
+			challengeId,
+			nextChallengeNumber++,
+			user.userId,
+			`challenges/${challengeId}/map.zip`,
+		)
+		.run();
+	await env.SHARE_DB.prepare(
+		`INSERT INTO challenge_submissions (
+			submission_id, challenge_id, game_id, user_id, score_turn, verdict
+		) VALUES (?, ?, ?, ?, 50, '{}')`,
+	)
+		.bind(nanoid(21), challengeId, gameId, user.userId)
 		.run();
 }
 
@@ -591,6 +628,48 @@ describe("GET /v1/stats/players", () => {
 			expect(row!.duels_network).toBe(1);
 			expect(row!.total).toBe(1);
 		}
+	});
+
+	it("counts no challenge run, in `other` least of all", async () => {
+		const runner = await makeUser();
+		// An ordinary network duel first, so `other` is 0 with the predicate
+		// and 1 without it. A run is single-human and matches no format
+		// bucket, so `total` is the only count it can reach — and the board
+		// derives `other` from total minus the three buckets
+		// (routes/players/+page.svelte), which is where it would surface.
+		await seedPlayedGame({
+			uploader: runner,
+			gameMode: "NETWORK",
+			seats: [{ is_uploader: true }, {}],
+		});
+		const runGame = await seedPlayedGame({
+			uploader: runner,
+			gameMode: null,
+			seats: [{ is_uploader: true }, { is_human: false }],
+		});
+		await seedChallengeRun(runner, runGame);
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		const row = rowFor(body, runner)!;
+		expect(row.total).toBe(1);
+		expect(row.duels_network).toBe(1);
+		expect(row.total - row.duels_network - row.duels_cloud - row.ffas).toBe(0);
+	});
+
+	it("seats nobody whose only game is a run", async () => {
+		const runner = await makeUser();
+		const runGame = await seedPlayedGame({
+			uploader: runner,
+			gameMode: null,
+			seats: [{ is_uploader: true }, { is_human: false }],
+		});
+		await seedChallengeRun(runner, runGame);
+
+		const body = (await (await get("")).json()) as LeaderboardBody;
+		// Absent, not zeroed, for the private save's reason above: a row of
+		// zeroes would still seat an account on the played-games board on the
+		// strength of a game the board doesn't count.
+		expect(rowFor(body, runner)).toBeUndefined();
 	});
 
 	it("windows on created_at with until exclusive, and 400s malformed dates", async () => {
