@@ -13,6 +13,7 @@
 	import FeaturedStar from "$lib/FeaturedStar.svelte";
 	import { getCivilizationColor } from "$lib/config";
 	import { formatShortDate, nationName } from "$lib/utils/formatting";
+	import { matchBracketLabel } from "$lib/tournament/bracket-label";
 	import { mapScriptLabel } from "$lib/tournament/map-scripts";
 	import { padMatchNumber } from "$lib/tournament/match-numbers";
 	import {
@@ -240,12 +241,7 @@
 		class="mb-3 flex flex-wrap items-center gap-3 rounded-lg p-4"
 		style="background-color: rgb(var(--color-surface-sunken));"
 	>
-		<SearchInput
-			bind:value={query}
-			variant="dark"
-			placeholder="Player, caster or video"
-			class="w-64"
-		/>
+		<SearchInput bind:value={query} variant="dark" class="w-64" />
 		<select
 			bind:value={nation}
 			aria-label="Filter by nation"
@@ -300,6 +296,7 @@
 		{#each shown as a (a.match_id)}
 			{@const wonA = matchSlotOutcome(a, "a") === "won"}
 			{@const wonB = matchSlotOutcome(a, "b") === "won"}
+			{@const bracket = matchBracketLabel(data.tournament, a)}
 			{@const natA = matchSlotNation(a, "a")}
 			{@const natB = matchSlotNation(a, "b")}
 			{@const colorA = natA ? getCivilizationColor(natA) : undefined}
@@ -375,6 +372,10 @@
 						<span
 							class="col-span-2 flex flex-wrap gap-x-3 text-xs text-muted lg:col-span-1 lg:justify-end"
 						>
+							<!-- Bracket before the map, the pairing MatchTable puts under
+							     every matchup: with two divisions playing the same round
+							     numbers, "Round 3" alone names two brackets. -->
+							{#if bracket}<span>{bracket}</span>{/if}
 							{#if a.map_script}<span>{mapScriptLabel(a.map_script)}</span>{/if}
 							{#if a.total_turns}<span
 									><b class="text-tan">{a.total_turns}</b> turns</span

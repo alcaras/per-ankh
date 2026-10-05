@@ -8,7 +8,11 @@
 // briefly during development and must not again: two copies of a rule this
 // fiddly drift within a day, and they did.
 
-import type { TournamentVideo } from "$lib/api-cloud";
+import type {
+	Division,
+	TournamentPhase,
+	TournamentVideo,
+} from "$lib/api-cloud";
 
 /** Who held the camera: a player filming their own game, or anyone else. */
 export type Angle = "cast" | "pov";
@@ -35,8 +39,8 @@ export interface ArchiveMatch {
 	match_id: string;
 	match_number: number | null;
 	round_number: number;
-	phase: string;
-	division: string | null;
+	phase: TournamentPhase;
+	division: Division | null;
 	status: string;
 	slot_a_id: string;
 	slot_b_id: string | null;
