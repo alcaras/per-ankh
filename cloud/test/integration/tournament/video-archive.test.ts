@@ -6,10 +6,16 @@
 // come out of D1, which matches are included at all, and that a video no match
 // claims still reaches the caller.
 //
-// No YOUTUBE_API_KEY here, and none is needed: the playlist read goes through
-// the SWR cache, so seeding that KV entry is how the test supplies videos. The
-// key is built by the cache module's own cacheKey, never spelled here — a
-// CACHE_VERSION bump must move the seed with it, not orphan it.
+// The playlist read goes through the SWR cache, so seeding that KV entry is how
+// the test supplies videos — no YOUTUBE_API_KEY is needed for that. The key is
+// built by the cache module's own cacheKey, never spelled here: a CACHE_VERSION
+// bump must move the seed with it, not orphan it.
+//
+// Whether the key is BOUND is a different matter, and not this file's to assume:
+// the isolate takes its vars from wrangler.toml (vitest.config.mts), which loads
+// cloud/.dev.vars, so a checkout that develops the videos feature locally has
+// one and a fresh checkout does not. The one case that turns on its absence
+// unsets it explicitly, the way ssr-trust.test.ts does for SSR_TRUSTED_KEY.
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -128,16 +134,42 @@ describe("GET /v1/tournaments/:id/video-archive", () => {
 	});
 
 	it("names the keyless feed as its source", async () => {
-		// This isolate has no YOUTUBE_API_KEY, so the read is the RSS fallback:
-		// the tab must be able to tell that from a keyed read with no footage.
-		const t = await makeTournament({ advanceTo: "swiss" });
-		await env.SHARE_DB.prepare(
-			`UPDATE tournaments SET youtube_playlist_url=? WHERE tournament_id=?`,
-		)
-			.bind(PLAYLIST_URL, t.tournamentId)
-			.run();
-		await seedPlaylist([]);
-		expect((await archive(t.tournamentId)).source).toBe("feed");
+		// Without a key the read is the RSS fallback, and the tab must be able to
+		// tell that from a keyed read with no footage. Unset the binding rather
+		// than assume it: .dev.vars supplies one on a developer's checkout.
+		const configured = env.YOUTUBE_API_KEY;
+		try {
+			delete env.YOUTUBE_API_KEY;
+			const t = await makeTournament({ advanceTo: "swiss" });
+			await env.SHARE_DB.prepare(
+				`UPDATE tournaments SET youtube_playlist_url=? WHERE tournament_id=?`,
+			)
+				.bind(PLAYLIST_URL, t.tournamentId)
+				.run();
+			await seedPlaylist([]);
+			expect((await archive(t.tournamentId)).source).toBe("feed");
+		} finally {
+			env.YOUTUBE_API_KEY = configured;
+		}
+	});
+
+	it("names the keyed Data API as its source", async () => {
+		// The other half of the pair: `source` must follow the binding, not a
+		// constant. Set it rather than assume it, for the same reason.
+		const configured = env.YOUTUBE_API_KEY;
+		try {
+			env.YOUTUBE_API_KEY = "test-key";
+			const t = await makeTournament({ advanceTo: "swiss" });
+			await env.SHARE_DB.prepare(
+				`UPDATE tournaments SET youtube_playlist_url=? WHERE tournament_id=?`,
+			)
+				.bind(PLAYLIST_URL, t.tournamentId)
+				.run();
+			await seedPlaylist([]);
+			expect((await archive(t.tournamentId)).source).toBe("api");
+		} finally {
+			env.YOUTUBE_API_KEY = configured;
+		}
 	});
 
 	it("lists a broadcast still running as an angle with no runtime", async () => {
@@ -413,5 +445,65 @@ describe("GET /v1/tournaments/:id/video-archive", () => {
 		const body = await archive(t.tournamentId);
 		const m = body.matches.find((x) => x.match_number === match.match_number);
 		expect(m?.slot_a_display_name).toBe("NewName");
+	});
+
+	it("calls a recorded caster's upload a cast, against the channel name", async () => {
+		// The part says who cast it, so the archive must not fall back to
+		// comparing the channel name with the players' handles — which is the
+		// rule that gets this wrong. Staged to make that fallback fire: the
+		// channel reads as "Old World" and a player is "OldWorldEnjoyer", a
+		// prefix match, which on its own reads as that player's point of view.
+		//
+		// The caster's DISPLAY NAME is what has to be "Old World", not just the
+		// seeded uploader_name: a linked uploader is attributed through their
+		// account, so that is the string classifyAngle compares. Without it this
+		// test passes whatever the rule does, because a random display name
+		// prefix-matches no handle and lands on "cast" by accident.
+		const t = await makeTournament({ advanceTo: "swiss" });
+		await env.SHARE_DB.prepare(
+			`UPDATE tournaments SET youtube_playlist_url=? WHERE tournament_id=?`,
+		)
+			.bind(PLAYLIST_URL, t.tournamentId)
+			.run();
+		const caster = await makeUser({ displayName: "Old World" });
+		await env.SHARE_DB.prepare(
+			`INSERT INTO user_video_channels (user_id, platform, channel_url, channel_id)
+			 VALUES (?, 'youtube', 'https://youtube.com/@oldworld', 'UCOld World')`,
+		)
+			.bind(caster.userId)
+			.run();
+		const [match] = await t.matches();
+		await reportWithTurns(match, 70, t.admin.userId);
+		await env.SHARE_DB.prepare(
+			`UPDATE tournament_matches
+			    SET slot_a_username='OldWorldEnjoyer', slot_b_username='phielp',
+			        parts=?
+			  WHERE match_id=?`,
+		)
+			.bind(
+				JSON.stringify([
+					{
+						id: "p1",
+						scheduled_at: "2026-07-04T16:00:00Z",
+						casters: [{ user_id: caster.userId, name: "Old World" }],
+						streams: [],
+					},
+				]),
+				match.match_id,
+			)
+			.run();
+		await seedPlaylist([
+			video({
+				id: "vcast000001",
+				title: "OldWorldEnjoyer v phielp",
+				channel: "Old World",
+				aired: "2026-07-04T16:00:00Z",
+				hours: 3,
+			}),
+		]);
+
+		const body = await archive(t.tournamentId);
+		const m = body.matches.find((x) => x.match_number === match.match_number);
+		expect(m?.parts[0]?.angles[0]?.angle).toBe("cast");
 	});
 });

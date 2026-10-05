@@ -36,6 +36,16 @@ declare global {
 			// Declared so a test can clear it and prove forwarding goes dark
 			// (see integration/ssr-trust.test.ts).
 			SSR_TRUSTED_KEY: string;
+			// Optional, exactly as the worker declares it: present or absent is
+			// the difference between the keyed Data API read and the keyless RSS
+			// fallback. Unlike the bindings above it is NOT bound in
+			// vitest.config.mts — it arrives from cloud/.dev.vars via
+			// wrangler.toml, so it is there on a checkout that develops the videos
+			// feature and absent on a fresh one. Declared optional so a test that
+			// turns on its presence sets or deletes it rather than inheriting
+			// whichever machine it runs on (see
+			// integration/tournament/video-archive.test.ts).
+			YOUTUBE_API_KEY?: string;
 		}
 	}
 }

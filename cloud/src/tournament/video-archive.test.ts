@@ -287,6 +287,53 @@ describe("classifyAngle", () => {
 	it("falls back to cast when the channel is unknown", () => {
 		expect(classifyAngle("untitled", "", ["alcaras"])).toBe("cast");
 	});
+
+	it("trusts a recorded caster over the title and the channel name", () => {
+		// No pov/cast tag, and the channel name is a prefix of a player's handle
+		// — the case the channel fallback gets wrong. The part records who cast
+		// it, so the guess never runs.
+		expect(
+			classifyAngle(
+				"Old World Community Tournament",
+				"Old World",
+				["OldWorldEnjoyer", "phielp"],
+				"u-caster",
+				["u-enjoyer", "u-phielp"],
+				["u-caster"],
+			),
+		).toBe("cast");
+	});
+
+	it("calls a player who cast their own match a point of view", () => {
+		// On record as both. They are still watching their own screen, so the
+		// player rule has to win — and the roster here is one where it matters:
+		// casters are often players.
+		expect(
+			classifyAngle(
+				"alcaras v phielp [Cast]",
+				"alcaras",
+				["alcaras", "phielp"],
+				"u-alcaras",
+				["u-alcaras", "u-phielp"],
+				["u-alcaras"],
+			),
+		).toBe("pov");
+	});
+
+	it("still guesses when the uploader is on no record", () => {
+		// A caster who never linked their channel contributes no user_id, so the
+		// title tag is all there is. The recorded ids must not shut that off.
+		expect(
+			classifyAngle(
+				"x [Cast]",
+				"Zeg",
+				["alcaras"],
+				null,
+				["u-alcaras"],
+				["u-konstant"],
+			),
+		).toBe("cast");
+	});
 });
 
 describe("groupIntoParts", () => {
@@ -447,6 +494,7 @@ describe("attributeVideos", () => {
 		match_id: id,
 		players: [a, b],
 		playerUserIds: [null, null],
+		casterUserIds: [],
 		scheduledAt: [],
 		streamUrls: [],
 		...extra,

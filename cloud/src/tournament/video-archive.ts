@@ -2,14 +2,17 @@
 // MATCH -> PART -> ANGLE.
 //
 //   match  one game, one save, one end turn   (tournament_matches)
-//   part   one evening at the board           (parts[])
-//   angle  one recording of that part         (parts[].streams[])
+//   part   one sitting at the board           (parts[])
+//   angle  one recording of that sitting      — this module's own level
 //
-// All three levels already exist in the schema. What the stored data lacks is
-// which video belongs to which match, because most `parts[].streams[]` entries
-// are channel `/live` URLs that stop resolving once the broadcast ends — 103 of
-// 157 on the 2026 tournament. So attribution is computed here, from what the
-// tournament already knows about itself, rather than depended on.
+// The first two already exist in the schema. The third does not: `parts[]`
+// stores `streams[]`, which is an admin's LINK to where a sitting could be
+// watched, and most of those links do not name a video at all. Of the 195
+// stream URLs stored across the 2026 tournament, 47 name an 11-character video
+// id and 148 are bare channel `/live` addresses that stop resolving the moment
+// the broadcast ends (local D1 snapshot, 2026-10-04). An angle is the video
+// itself, resolved here — so attribution is computed from what the tournament
+// already knows about itself rather than read off a stored link.
 //
 // Everything in this module is pure. The handler supplies the rows.
 
@@ -319,14 +322,28 @@ export function videoIdsInUrl(url: string): string[] {
 }
 
 /**
- * Who held the camera. Identity first: a video whose uploader IS one of the two
- * players is that player's point of view, and the uploader's user id is on the
- * payload whenever they have linked their channel.
+ * Who held the camera.
  *
- * Title tags are matched on word boundaries — a bare substring test fires on
- * "broadcast", "podcast" and "castle". The channel-name fallback demands whole
- * equality or a distinctive prefix rather than containment, because containment
- * is unsafe on a real roster: "ant" is a player and "Konstant" is a caster.
+ * Identity first, and from both directions: the match records who played it and
+ * every part records who cast it (`casters[]`, migration 0029 — admin-entered,
+ * with a user_id on an account that linked its channel). So a video whose
+ * uploader IS one of the two players is that player's point of view, and one
+ * whose uploader is on record as a caster is a cast. Those two answers are
+ * stated rather than inferred, and they are checked before anything is read out
+ * of a title or a channel name.
+ *
+ * Players win over casters, because a player who casts their own game is still
+ * watching their own screen; it is their point of view.
+ *
+ * Only once identity says nothing do the guesses run, in descending order of
+ * how much they can be trusted. Title tags are matched on word boundaries — a
+ * bare substring test fires on "broadcast", "podcast" and "castle". The
+ * channel-name fallback demands whole equality or a distinctive prefix rather
+ * than containment, because containment is unsafe on a real roster: "ant" is a
+ * player and "Konstant" is a caster. It is still the weakest rule here, and a
+ * player whose handle begins with a caster's channel name ("OldWorldEnjoyer" on
+ * channel "Old World") reads as a point of view — which a recorded caster or a
+ * linked uploader channel settles before it ever gets this far.
  */
 export function classifyAngle(
 	title: string,
@@ -334,9 +351,12 @@ export function classifyAngle(
 	players: (string | null)[],
 	uploaderUserId: string | null = null,
 	playerUserIds: (string | null)[] = [],
+	casterUserIds: string[] = [],
 ): Angle {
 	if (uploaderUserId != null && playerUserIds.includes(uploaderUserId))
 		return "pov";
+	if (uploaderUserId != null && casterUserIds.includes(uploaderUserId))
+		return "cast";
 	if (/\bpov\b/i.test(title)) return "pov";
 	if (/\bcast\b/i.test(title)) return "cast";
 	const c = squash(channel);
@@ -382,6 +402,7 @@ export function groupIntoParts(
 	players: (string | null)[],
 	playerUserIds: (string | null)[],
 	scheduledAt: (string | null)[] = [],
+	casterUserIds: string[] = [],
 ): { parts: ArchivePart[]; gaps: number } {
 	const timed = videos
 		.filter((v) => !Number.isNaN(ms(v.aired)))
@@ -426,21 +447,20 @@ export function groupIntoParts(
 			aired: c.items[0].aired,
 			seconds: union(c.items.map(window)) / 1000,
 			angles: c.items
-				.map(
-					(v): ArchiveAngle => ({
-						video: v.video,
-						channel: v.channel,
-						angle: classifyAngle(
-							v.video.title,
-							v.channel,
-							players,
-							v.uploaderUserId,
-							playerUserIds,
-						),
-						seconds: v.seconds,
-						aired: v.aired,
-					}),
-				)
+				.map((v): ArchiveAngle => ({
+					video: v.video,
+					channel: v.channel,
+					angle: classifyAngle(
+						v.video.title,
+						v.channel,
+						players,
+						v.uploaderUserId,
+						playerUserIds,
+						casterUserIds,
+					),
+					seconds: v.seconds,
+					aired: v.aired,
+				}))
 				// Longest first; an unpriced angle sorts last.
 				.sort((a, b) => (b.seconds ?? -1) - (a.seconds ?? -1)),
 		};
@@ -455,6 +475,17 @@ export interface ArchiveMatchInput {
 	/** Both occupants, already resolved: snapshot for decided, live for pending. */
 	players: [string | null, string | null];
 	playerUserIds: [string | null, string | null];
+	/**
+	 * Every account on record as having cast any part of this match.
+	 *
+	 * Flattened across the match rather than kept per part, because a part here
+	 * is computed from broadcast windows and a stored part is an admin's
+	 * schedule row — there is no mapping between the two, so a caster can only
+	 * be attributed to the match. Harmless at that width: the question it
+	 * answers is "is this uploader a caster or a player", and a caster of one
+	 * sitting is not a player of another.
+	 */
+	casterUserIds: string[];
 	/** Every scheduled sitting, and every URL stored against them. */
 	scheduledAt: (string | null)[];
 	streamUrls: string[];

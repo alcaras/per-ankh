@@ -8,9 +8,7 @@
 import { env } from "cloudflare:test";
 
 export type ReadEventType =
-	| "tournament_view"
-	| "tournament_list_view"
-	| "tournament_link_view";
+	"tournament_view" | "tournament_list_view" | "tournament_link_view";
 
 /** Spend `count` slots of one per-IP budget. */
 export async function seedEvents(

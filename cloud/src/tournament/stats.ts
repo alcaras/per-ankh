@@ -6,7 +6,7 @@
 // computeStandingsResponse, which it reuses.
 
 import { parseParts, type MatchPart, type MatchRow } from "./data";
-import type { UserIdentity } from "./public";
+import { resolvedOccupant, type UserIdentity } from "./public";
 
 // One row of the caster leaderboard: how many part-appearances a caster racked
 // up across the tournament, with identity resolved for linked users.
@@ -201,7 +201,10 @@ export function computePlayerPicks(
 	}
 
 	const out = [...byKey.values()].map((p) => {
-		const identity = p.user_id ? identityByUserId.get(p.user_id) : undefined;
+		// Same occupant rule as every other snapshot occupant, through the same
+		// owner: `name` stays the handle frozen at report time (it is also the
+		// key above), while `display_name` and the avatar follow the account.
+		const occupant = resolvedOccupant(p.user_id, p.name, identityByUserId);
 		const picks = [...p.nations.entries()]
 			.map(([nation, r]) => ({ nation, games: r.games, wins: r.wins }))
 			// Dominant civ first; nation name as a stable tiebreak.
@@ -210,8 +213,8 @@ export function computePlayerPicks(
 			entry: {
 				user_id: p.user_id,
 				name: p.name,
-				display_name: identity?.display_name ?? p.name,
-				avatar_url: identity?.avatar_url ?? null,
+				display_name: occupant.name,
+				avatar_url: occupant.avatar_url,
 				picks,
 				total_games: p.total_games,
 				total_wins: p.total_wins,
